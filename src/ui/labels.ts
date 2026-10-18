@@ -45,6 +45,8 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
       return { text: '有一株水草溶光了', tone: 'warn' };
     case 'heater_broke':
       return { text: '加熱棒故障了！', tone: 'bad' };
+    case 'heater_stuck':
+      return { text: '加熱棒卡住一直加熱！水溫會一路升高，快到「設備與維護」拔掉插頭', tone: 'bad' };
     case 'power_out':
       return { text: '停電了，所有設備停止運作', tone: 'bad' };
     case 'power_restored':

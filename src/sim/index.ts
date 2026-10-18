@@ -10,3 +10,4 @@ export { computeStressors, crowdingRatio, freeAmmonia } from './processes/fauna'
 export { bacteriaCapacity } from './processes/nitrogen';
 export { currentPar } from './processes/plants';
 export { hidingFactor, MAX_FAUNA, sizeRatio } from './processes/population';
+export { breakHeater } from './processes/thermal';

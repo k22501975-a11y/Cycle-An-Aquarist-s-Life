@@ -133,6 +133,14 @@ export function setHeaterTarget(state: TankState, targetC: number): void {
   if (state.equipment.heater) state.equipment.heater.targetC = targetC;
 }
 
+/** 拔掉卡住的加熱棒插頭：停止加熱，但加熱棒還是壞的，要換一支。 */
+export function unplugHeater(state: TankState): void {
+  const heater = state.equipment.heater;
+  if (!heater) return;
+  heater.stuckOn = false;
+  if (heater.broken) heater.heating = false;
+}
+
 export function setPowerOut(state: TankState, out: boolean): void {
   if (state.environment.powerOut === out) return;
   state.environment.powerOut = out;

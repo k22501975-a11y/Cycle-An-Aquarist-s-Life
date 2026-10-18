@@ -17,6 +17,7 @@ import {
   replaceFilter,
   rinseFilterMedia,
   setHeaterTarget,
+  unplugHeater,
   testWater,
   trimPlant,
   waterChange,
@@ -278,8 +279,20 @@ export function maintenancePanel({ game, toasts }: PanelContext): Node {
       ? h(
           'div.item',
           {},
-          h('div', {}, h('b', {}, `加熱棒 ${eq.heater.targetC}°C`), eq.heater.broken ? h('div.warn-text', {}, '故障中，請到商店換一支') : null),
-          h('div.row', {}, button('−', () => game.act((st) => setHeaterTarget(st, eq.heater!.targetC - 1))), button('+', () => game.act((st) => setHeaterTarget(st, eq.heater!.targetC + 1)))),
+          h(
+            'div',
+            {},
+            h('b', {}, `加熱棒 ${eq.heater.targetC}°C`),
+            eq.heater.broken
+              ? h('div.warn-text', {}, eq.heater.stuckOn ? '卡住一直加熱！先拔掉插頭，再到商店換一支' : '故障中，請到商店換一支')
+              : null,
+          ),
+          eq.heater.stuckOn
+            ? button('拔掉插頭', () => {
+                game.act((st) => unplugHeater(st));
+                toasts.show('拔掉加熱棒了，記得換一支新的', 'warn');
+              }, 'primary')
+            : h('div.row', {}, button('−', () => game.act((st) => setHeaterTarget(st, eq.heater!.targetC - 1))), button('+', () => game.act((st) => setHeaterTarget(st, eq.heater!.targetC + 1)))),
         )
       : null,
     eq.light
