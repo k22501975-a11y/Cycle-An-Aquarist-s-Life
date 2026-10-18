@@ -5,4 +5,4 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /** application.yml 裡 cycle.* 的設定。 */
 @ConfigurationProperties(prefix = "cycle")
-public record CycleProperties(List<String> allowedOrigins, int sessionDays, int maxSaveBytes) {}
+public record CycleProperties(List<String> allowedOrigins, int sessionDays, int maxSaveBytes, int marketMinAccountDays) {}

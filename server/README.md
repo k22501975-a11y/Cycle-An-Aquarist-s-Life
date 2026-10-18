@@ -27,6 +27,7 @@ VITE_API_URL=http://localhost:8080 npm run dev
 | `DATABASE_URL` | `jdbc:postgresql://localhost:5432/cycle` | |
 | `DATABASE_USER`／`DATABASE_PASSWORD` | cycle／cycle | |
 | `ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:4173,https://localhost` | 遊戲網頁的網址，逗號分隔；`https://localhost` 是 Android App 裡的來源，上線時記得保留 |
+| `MARKET_MIN_ACCOUNT_DAYS` | `3` | 新帳號滿幾天才能在市場上架（防開小號洗錢）；本機測試可以設 `0` |
 
 ## API
 
@@ -41,6 +42,15 @@ VITE_API_URL=http://localhost:8080 npm run dev
 | GET | `/api/me/export` | 伺服器上跟這個帳號有關的所有資料（個資法的查詢、複製權） |
 | DELETE | `/api/account` | `{password}`；刪除帳號和所有相關資料，密碼錯回 403 `code: bad_password` |
 | POST | `/api/events` | 不用登入。`{clientId, events: [{name, props}]}` → `{accepted}`；匿名數據分析，一次最多 50 筆、每個代號每天 500 筆，180 天後自動刪除 |
+| GET | `/api/market/listings?species=&sort=price\|new` | 逛市場：別人上架中的商品（看不到基因）和賣家信譽 |
+| POST | `/api/market/listings` | `{kind: fish\|plant, species, title, item, price}` → `{id, fee}`；上架費 1%、格子 5 格起 |
+| PUT / DELETE | `/api/market/listings/{id}` | 更新魚的近況 `{item}`／下架（上架費不退） |
+| POST | `/api/market/listings/{id}/buy` | `{packaging: bag\|oxygen\|box}` → 訂單；款項由市場託管 |
+| GET | `/api/market/mine` | 我的上架、賣出的訂單、買到的貨、格子數 |
+| POST | `/api/market/orders/{id}/ship` | 賣家出貨 `{item, bagTemp, bagPh}`；伺服器決定運輸時間、到貨死亡、緊迫 |
+| POST | `/api/market/orders/{id}/cancel` | 賣家沒辦法出貨（魚死了），退款給買家；超過 24 小時沒出貨也會自動取消 |
+| POST | `/api/market/orders/{id}/collect` | 雙方各領一次：買家拿到貨或退款，賣家拿到貨款（扣 8% 成交稅） |
+| GET | `/api/market/prices?species=` | 近兩週每天的成交中位數 |
 
 需要登入的 API 帶 `Authorization: Bearer <token>`。錯誤一律回 `{code, message}`，`message` 是可以直接給玩家看的中文。
 

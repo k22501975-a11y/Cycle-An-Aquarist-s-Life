@@ -159,6 +159,7 @@ export function sellsLeftToday(state: TankState): number {
 export function buybackRefusal(fish: Fish): string | null {
   if (!fish.alive) return '死魚不收';
   if (fish.gift) return '老闆送的魚不能賣回去';
+  if (fish.listing) return '已經在市場上架了';
   if (fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * 0.5) return '還太小，店家不收';
   if (fish.ich.stage === 'visible' || (fish.infections ?? []).some((i) => i.stage === 'visible') || fish.health < 0.6) return '看起來生病了，店家不收';
   return null;

@@ -1,0 +1,244 @@
+package tw.cycle.server;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.random.RandomGenerator;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+class MarketTest {
+    /** 固定的亂數：roll 決定運輸會不會死（0 一定死、0.99 不會死）。 */
+    static class FixedRandom implements RandomGenerator {
+        double roll = 0.99;
+
+        @Override
+        public long nextLong() {
+            return 0;
+        }
+
+        @Override
+        public int nextInt(int bound) {
+            return 0;
+        }
+
+        @Override
+        public double nextDouble() {
+            return roll;
+        }
+    }
+
+    @TestConfiguration
+    static class Config {
+        @Bean
+        @Primary
+        MutableClock testClock() {
+            return new MutableClock();
+        }
+
+        @Bean
+        @Primary
+        FixedRandom testRandom() {
+            return new FixedRandom();
+        }
+    }
+
+    private static final AtomicInteger SEQ = new AtomicInteger();
+    @Autowired MockMvc mvc;
+    @Autowired ObjectMapper json;
+    @Autowired MutableClock clock;
+    @Autowired FixedRandom random;
+
+    record Player(String name, String token) {}
+
+    @BeforeEach
+    void reset() {
+        random.roll = 0.99;
+    }
+
+    private ResultActions send(MockHttpServletRequestBuilder req, Player p, String body) throws Exception {
+        if (p != null) req.header("Authorization", "Bearer " + p.token());
+        if (body != null) req.contentType(MediaType.APPLICATION_JSON).content(body);
+        return mvc.perform(req);
+    }
+
+    private JsonNode read(ResultActions r) throws Exception {
+        return json.readTree(r.andReturn().getResponse().getContentAsString());
+    }
+
+    private Player player(String prefix) throws Exception {
+        String name = prefix + SEQ.incrementAndGet();
+        JsonNode res = read(send(post("/api/auth/register"), null, "{\"username\":\"" + name + "\",\"password\":\"guppy-1234\"}").andExpect(status().isCreated()));
+        return new Player(name, res.get("token").asText());
+    }
+
+    /** 註冊後過了 3 天（才能上架）。 */
+    private Player seasoned(String prefix) throws Exception {
+        Player p = player(prefix);
+        clock.advance(Duration.ofDays(3));
+        return p;
+    }
+
+    private static String fish(int price, double health) {
+        return "{\"kind\":\"fish\",\"species\":\"guppy\",\"title\":\"藍蛇王孔雀魚 公\",\"price\":" + price
+                + ",\"item\":{\"id\":42,\"species\":\"guppy\",\"sex\":\"male\",\"health\":" + health + ",\"genome\":{\"tail\":80},\"sire\":null}}";
+    }
+
+    private long list(Player p, int price) throws Exception {
+        return read(send(post("/api/market/listings"), p, fish(price, 1)).andExpect(status().isCreated())).get("id").asLong();
+    }
+
+    private JsonNode mine(Player p) throws Exception {
+        return read(send(get("/api/market/mine"), p, null).andExpect(status().isOk()));
+    }
+
+    private long buy(Player p, long listing, String packaging) throws Exception {
+        return read(send(post("/api/market/listings/" + listing + "/buy"), p, "{\"packaging\":\"" + packaging + "\"}").andExpect(status().isOk())).get("id").asLong();
+    }
+
+    private void ship(Player p, long order, double health) throws Exception {
+        send(post("/api/market/orders/" + order + "/ship"), p, "{\"item\":{\"id\":42,\"health\":" + health + "},\"bagTemp\":25.5,\"bagPh\":7.2}").andExpect(status().isOk());
+    }
+
+    @Test
+    void 新帳號三天後才能上架_上架費一成之一() throws Exception {
+        Player p = player("newbie");
+        send(post("/api/market/listings"), p, fish(200, 1)).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("too_new"));
+        clock.advance(Duration.ofDays(3));
+        send(post("/api/market/listings"), p, fish(250, 1)).andExpect(status().isCreated()).andExpect(jsonPath("$.fee").value(3));
+        send(post("/api/market/listings"), p, fish(0, 1)).andExpect(status().isBadRequest());
+        // 格子用完
+        for (int i = 0; i < 4; i++) list(p, 100);
+        send(post("/api/market/listings"), p, fish(100, 1)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("no_slot"));
+        JsonNode m = mine(p);
+        assertThat(m.get("listings")).hasSize(5);
+        assertThat(m.get("slots").asInt()).isEqualTo(5);
+        // 下架後空出格子
+        send(delete("/api/market/listings/" + m.get("listings").get(0).get("id").asLong()), p, null).andExpect(status().isNoContent());
+        list(p, 100);
+    }
+
+    @Test
+    void 買賣流程_託管_出貨_到貨_撥款扣稅() throws Exception {
+        Player amy = seasoned("amy");
+        Player ben = player("ben");
+        long id = list(amy, 300);
+
+        // 逛市場看不到基因型，也看不到自己的商品
+        JsonNode shown = read(send(get("/api/market/listings?species=guppy"), ben, null).andExpect(status().isOk()));
+        JsonNode mineShown = null;
+        for (JsonNode l : shown) if (l.get("id").asLong() == id) mineShown = l;
+        assertThat(mineShown).isNotNull();
+        assertThat(mineShown.get("item").has("genome")).isFalse();
+        assertThat(mineShown.get("item").get("sex").asText()).isEqualTo("male");
+        assertThat(mineShown.get("seller").get("username").asText()).isEqualTo(amy.name());
+        for (JsonNode l : read(send(get("/api/market/listings"), amy, null))) assertThat(l.get("seller").get("username").asText()).isNotEqualTo(amy.name());
+
+        // 賣家更新魚的近況
+        send(put("/api/market/listings/" + id), amy, "{\"item\":{\"id\":42,\"health\":0.9}}").andExpect(status().isNoContent());
+
+        send(post("/api/market/listings/" + id + "/buy"), amy, "{\"packaging\":\"bag\"}").andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("own"));
+        long order = buy(ben, id, "oxygen");
+        send(post("/api/market/listings/" + id + "/buy"), player("cat"), "{\"packaging\":\"bag\"}").andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("gone"));
+
+        // 賣家看得到要出哪條魚
+        JsonNode sale = mine(amy).get("sales").get(0);
+        assertThat(sale.get("status").asText()).isEqualTo("paid");
+        assertThat(sale.get("item").get("id").asInt()).isEqualTo(42);
+        assertThat(sale.get("counterpart").asText()).isEqualTo(ben.name());
+        assertThat(mine(ben).get("purchases").get(0).get("item").isNull()).isTrue();
+
+        ship(amy, order, 0.95);
+        send(post("/api/market/orders/" + order + "/collect"), ben, null).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("not_yet"));
+        send(post("/api/market/orders/" + order + "/collect"), amy, null).andExpect(status().isConflict());
+
+        clock.advance(Duration.ofHours(4));
+        JsonNode got = read(send(post("/api/market/orders/" + order + "/collect"), ben, null).andExpect(status().isOk()));
+        assertThat(got.get("result").asText()).isEqualTo("item");
+        assertThat(got.get("item").get("health").asDouble()).isEqualTo(0.95);
+        assertThat(got.get("stress").asDouble()).isBetween(0.3, 0.6);
+        assertThat(got.get("bagTemp").asDouble()).isEqualTo(25.5);
+        send(post("/api/market/orders/" + order + "/collect"), ben, null).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("done"));
+
+        JsonNode paid = read(send(post("/api/market/orders/" + order + "/collect"), amy, null).andExpect(status().isOk()));
+        assertThat(paid.get("result").asText()).isEqualTo("payout");
+        assertThat(paid.get("amount").asInt()).isEqualTo(276);
+        assertThat(mine(amy).get("sales")).isEmpty();
+        assertThat(mine(ben).get("purchases")).isEmpty();
+
+        JsonNode prices = read(send(get("/api/market/prices?species=guppy"), ben, null).andExpect(status().isOk()));
+        assertThat(prices.get(prices.size() - 1).get("median").asInt()).isEqualTo(300);
+    }
+
+    @Test
+    void 賣家一天沒出貨_自動取消並退款含包裝費() throws Exception {
+        Player amy = seasoned("amy");
+        Player ben = player("ben");
+        long order = buy(ben, list(amy, 200), "box");
+        clock.advance(Duration.ofHours(25));
+        assertThat(mine(amy).get("sales").get(0).get("status").asText()).isEqualTo("cancelled");
+        send(post("/api/market/orders/" + order + "/ship"), amy, "{\"item\":{},\"bagTemp\":25,\"bagPh\":7}").andExpect(status().isConflict());
+        JsonNode refund = read(send(post("/api/market/orders/" + order + "/collect"), ben, null).andExpect(status().isOk()));
+        assertThat(refund.get("result").asText()).isEqualTo("refund");
+        assertThat(refund.get("amount").asInt()).isEqualTo(320);
+        assertThat(read(send(post("/api/market/orders/" + order + "/collect"), amy, null)).get("result").asText()).isEqualTo("cancelled");
+    }
+
+    @Test
+    void 賣家的魚死了_取消訂單() throws Exception {
+        Player amy = seasoned("amy");
+        Player ben = player("ben");
+        long order = buy(ben, list(amy, 200), "bag");
+        send(post("/api/market/orders/" + order + "/cancel"), amy, null).andExpect(status().isNoContent());
+        assertThat(mine(amy).get("sales")).isEmpty();
+        assertThat(read(send(post("/api/market/orders/" + order + "/collect"), ben, null)).get("amount").asInt()).isEqualTo(200);
+    }
+
+    @Test
+    void 到貨死亡_退款給買家_賣家沒錢_信譽記一筆() throws Exception {
+        Player amy = seasoned("amy");
+        Player ben = player("ben");
+        long order = buy(ben, list(amy, 200), "bag");
+        random.roll = 0;
+        ship(amy, order, 0.5);
+        clock.advance(Duration.ofHours(4));
+        JsonNode refund = read(send(post("/api/market/orders/" + order + "/collect"), ben, null));
+        assertThat(refund.get("result").asText()).isEqualTo("refund");
+        assertThat(refund.get("reason").asText()).isEqualTo("doa");
+        assertThat(read(send(post("/api/market/orders/" + order + "/collect"), amy, null)).get("result").asText()).isEqualTo("doa");
+
+        list(amy, 150);
+        JsonNode seen = read(send(get("/api/market/listings?species=guppy&sort=new"), ben, null)).get(0);
+        assertThat(seen.get("seller").get("doaRate").asDouble()).isEqualTo(1.0);
+        assertThat(seen.get("seller").get("deals").asInt()).isEqualTo(0);
+    }
+
+    @Test
+    void 下載我的資料包含市場紀錄() throws Exception {
+        Player amy = seasoned("amy");
+        list(amy, 123);
+        JsonNode data = read(send(get("/api/me/export"), amy, null).andExpect(status().isOk()));
+        assertThat(data.get("marketListings").get(0).get("price").asInt()).isEqualTo(123);
+    }
+}

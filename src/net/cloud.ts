@@ -52,6 +52,67 @@ export type GiftPayload = { kind: 'cuttings'; payload: { species: string; count:
 
 export type Gift = GiftPayload & { id: number; from: string; createdAt: number };
 
+export interface MarketSeller {
+  username: string;
+  /** 成功送到的筆數。 */
+  deals: number;
+  doaRate: number;
+  /** 到貨死亡率偏高。 */
+  warning: boolean;
+}
+
+export interface MarketListing {
+  id: number;
+  kind: 'fish' | 'plant';
+  species: string;
+  title: string;
+  item: Record<string, unknown>;
+  health: number;
+  price: number;
+  seller: MarketSeller;
+  createdAt: number;
+}
+
+export interface MarketOrder {
+  id: number;
+  role: 'buyer' | 'seller';
+  kind: 'fish' | 'plant';
+  species: string;
+  title: string;
+  price: number;
+  packaging: string;
+  /** paid 等出貨、shipped 運送中（或已到）、cancelled 取消。 */
+  status: 'paid' | 'shipped' | 'cancelled';
+  arrived: boolean;
+  counterpart: string | null;
+  createdAt: number;
+  arriveAt: number | null;
+  /** 賣家才看得到：要出哪一件。 */
+  item: Record<string, unknown> | null;
+  listingId: number;
+}
+
+export interface MarketMine {
+  listings: MarketListing[];
+  sales: MarketOrder[];
+  purchases: MarketOrder[];
+  slots: number;
+  /** 從什麼時候開始可以上架（新帳號要等幾天）。 */
+  canListAt: number;
+}
+
+export type MarketCollect =
+  | { result: 'item'; item: Record<string, unknown>; stress: number; bagTemp: number; bagPh: number; kind: 'fish' | 'plant'; title: string; listingId: number }
+  | { result: 'refund'; reason: 'not_shipped' | 'doa'; amount: number; kind: 'fish' | 'plant'; title: string; listingId: number }
+  | { result: 'payout'; amount: number; kind: 'fish' | 'plant'; title: string; listingId: number }
+  | { result: 'doa' | 'cancelled'; kind: 'fish' | 'plant'; title: string; listingId: number };
+
+export interface PricePoint {
+  day: string;
+  median: number;
+  count: number;
+}
+
 export type CloudResult<T> = { ok: true; value: T } | { ok: false; code: string; message: string; revision?: number; savedAt?: number };
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -148,6 +209,50 @@ export class CloudClient {
 
   claimGift(id: number): Promise<CloudResult<Gift>> {
     return this.call('POST', `/api/gifts/${id}/claim`);
+  }
+
+  // ---- 玩家市場（market-and-breeding.md §3） ----
+
+  marketListings(species?: string, sort: 'price' | 'new' = 'price'): Promise<CloudResult<MarketListing[]>> {
+    const q = new URLSearchParams({ sort });
+    if (species) q.set('species', species);
+    return this.call('GET', `/api/market/listings?${q}`);
+  }
+
+  marketList(listing: { kind: 'fish' | 'plant'; species: string; title: string; item: unknown; price: number }): Promise<CloudResult<{ id: number; fee: number }>> {
+    return this.call('POST', '/api/market/listings', JSON.stringify(listing));
+  }
+
+  marketUpdate(id: number, item: unknown): Promise<CloudResult<void>> {
+    return this.call('PUT', `/api/market/listings/${id}`, JSON.stringify({ item }));
+  }
+
+  marketCancel(id: number): Promise<CloudResult<void>> {
+    return this.call('DELETE', `/api/market/listings/${id}`);
+  }
+
+  marketBuy(id: number, packaging: string): Promise<CloudResult<MarketOrder>> {
+    return this.call('POST', `/api/market/listings/${id}/buy`, JSON.stringify({ packaging }));
+  }
+
+  marketMine(): Promise<CloudResult<MarketMine>> {
+    return this.call('GET', '/api/market/mine');
+  }
+
+  marketShip(orderId: number, item: unknown, bagTemp: number, bagPh: number): Promise<CloudResult<MarketOrder>> {
+    return this.call('POST', `/api/market/orders/${orderId}/ship`, JSON.stringify({ item, bagTemp, bagPh }));
+  }
+
+  marketSellerCancel(orderId: number): Promise<CloudResult<void>> {
+    return this.call('POST', `/api/market/orders/${orderId}/cancel`);
+  }
+
+  marketCollect(orderId: number): Promise<CloudResult<MarketCollect>> {
+    return this.call('POST', `/api/market/orders/${orderId}/collect`);
+  }
+
+  marketPrices(species: string): Promise<CloudResult<PricePoint[]>> {
+    return this.call('GET', `/api/market/prices?species=${encodeURIComponent(species)}`);
   }
 
   /** 伺服器上跟這個帳號有關的所有資料（個資法的查詢、複製權）。 */
