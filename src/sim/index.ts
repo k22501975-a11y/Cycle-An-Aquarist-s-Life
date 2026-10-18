@@ -27,3 +27,4 @@ export * from './growth';
 export * from './split';
 export * from './acclimation';
 export * from './snails';
+export * from './parental';

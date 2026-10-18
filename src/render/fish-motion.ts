@@ -16,6 +16,8 @@ const PROFILES: Record<FishSpeciesId, MotionProfile> = {
   guppy: { speed: 38, depth: 0.35, cohesion: 0.3, crawler: false },
   zebrafish: { speed: 62, depth: 0.25, cohesion: 1, crawler: false },
   cherry_shrimp: { speed: 10, depth: 1, cohesion: 0, crawler: true },
+  // 短鯛：底層、在石頭和洞穴附近慢慢巡
+  apisto: { speed: 30, depth: 0.85, cohesion: 0, crawler: false },
 };
 
 export interface Swimmer {
@@ -33,6 +35,8 @@ export interface Swimmer {
   eating?: boolean;
   /** 蝦：受驚往後彈開還剩幾秒（這段時間不轉身）。 */
   startle?: number;
+  /** 跟著哪尾母魚（親魚護幼的仔魚）。 */
+  follow?: number;
 }
 
 /** 蝦受驚彈開的時間（秒）。 */
@@ -49,6 +53,25 @@ export interface FishCondition {
   alive: boolean;
   hungry: boolean;
   symptoms: Symptom[];
+  /** 親魚護幼：這尾仔魚跟著的母魚 id。 */
+  follow?: number;
+  /** 正在帶小孩的母魚：慢慢巡、趕走靠近的魚。 */
+  guarding?: boolean;
+}
+
+/** 靠近母魚的外人（不是自己的小孩、不是蝦）。 */
+function intruderNear(mom: Swimmer, all: Swimmer[], radius: number): Swimmer | null {
+  let best: Swimmer | null = null;
+  let bd = radius * radius;
+  for (const o of all) {
+    if (o === mom || o.follow === mom.id || PROFILES[o.species].crawler) continue;
+    const d = (o.x - mom.x) ** 2 + (o.y - mom.y) ** 2;
+    if (d < bd) {
+      bd = d;
+      best = o;
+    }
+  }
+  return best;
 }
 
 export function spawnSwimmer(id: number, species: FishSpeciesId, bounds: TankBounds, rand: () => number): Swimmer {
@@ -110,13 +133,43 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   const targetY = bounds.surface + 12 * scale + targetDepth * (bounds.bottom - bounds.surface - 24 * scale);
   if (!p.crawler) ay += ((targetY - s.y) / (bounds.bottom - bounds.surface)) * 0.9;
 
+  // 親魚護幼（market-and-breeding.md §1.3.3）：仔魚像一團小雲跟著媽媽，有魚靠近就一下子聚回媽媽身邊；
+  // 母魚慢慢巡，外人靠近就衝過去趕
+  s.follow = cond.follow;
+  const mom = cond.follow !== undefined ? all.find((o) => o.id === cond.follow) : undefined;
+  if (mom) {
+    const threat = intruderNear(mom, all, 70 * scale) !== null;
+    // 每尾仔魚在媽媽身邊有自己的位置；媽媽停下來時散開覓食，有危險時縮成一團
+    const still = Math.hypot(mom.vx, mom.vy) < 8 * scale;
+    const r = (threat ? 7 : still ? 26 : 16) * scale * (0.5 + ((s.id * 0.618) % 1));
+    const a = s.id * 2.399 + s.phase * 0.05;
+    const tx = mom.x - Math.sign(mom.vx || 1) * 6 * scale + Math.cos(a) * r;
+    const ty = mom.y + Math.sin(a) * r * 0.5;
+    ax = ax * 0.3 + ((tx - s.x) / (14 * scale)) * (threat ? 3 : 1.5);
+    ay = ((ty - s.y) / (14 * scale)) * (threat ? 3 : 1.5);
+    speed *= threat ? 2.2 : 1.2;
+  } else if (cond.guarding) {
+    const foe = intruderNear(s, all, 70 * scale);
+    if (foe) {
+      // 衝過去趕走
+      ax += ((foe.x - s.x) / (20 * scale)) * 2;
+      ay += ((foe.y - s.y) / (20 * scale)) * 2;
+      speed *= 2.4;
+    } else {
+      // 帶著小孩慢慢巡，常常停下來讓小孩散開吃東西
+      speed *= Math.sin(s.phase * 0.07 + s.id) > 0.3 ? 0.15 : 0.55;
+      ay += ((bounds.bottom - 30 * scale - s.y) / (bounds.bottom - bounds.surface)) * 3;
+    }
+  }
+
   // 群體：聚集、對齊、分離
   let cx = 0, cy = 0, avx = 0, avy = 0, n = 0;
   for (const o of all) {
     if (o === s) continue;
     const dx = o.x - s.x, dy = o.y - s.y;
     const d2 = dx * dx + dy * dy;
-    const minD = 18 * scale;
+    // 跟著媽媽的仔魚彼此靠得很近也沒關係
+    const minD = mom && (o.follow === s.follow || o === mom) ? 4 * scale : 18 * scale;
     if (d2 < minD * minD && d2 > 0.01) {
       ax -= (dx / Math.sqrt(d2)) * 1.2;
       ay -= (dy / Math.sqrt(d2)) * 1.2;

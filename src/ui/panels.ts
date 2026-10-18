@@ -1,6 +1,12 @@
 import type { SoundId } from '../audio/sounds';
 import {
   addFish,
+  BREED_PH_MAX,
+  CARE_EAT_THRESHOLD,
+  careTarget,
+  guardianOf,
+  hasCave,
+  isCaveSpawner,
   addSnail,
   APPLE_COLOR_LABELS,
   catchPests,
@@ -133,7 +139,7 @@ import {
 } from '../sim';
 import { applySeason, type Game } from '../game/game';
 import { h } from './dom';
-import { DEATH_CAUSE_LABELS, fishName, plantName, SYMPTOM_LABELS } from './labels';
+import { BROOD_ISSUE_LABELS, DEATH_CAUSE_LABELS, fishName, plantName, SYMPTOM_LABELS } from './labels';
 import type { Sheet, Toasts } from './sheet';
 import { READING_TONES, todos } from './status';
 
@@ -373,6 +379,7 @@ export function fishPanel({ game, sheet, toasts }: PanelContext, fishId: number)
     h('p', {}, `${fishName(fish)} · 體長約 ${fish.lengthCm.toFixed(1)} cm · ${ageLabel(fish.ageDays)}`),
     h('p', {}, growthLine(game.state, fish)),
     h('p', {}, habitLine(game.state, fish)),
+    broodLine(game.state, fish),
     fish.genome ? geneticsInfo(fish) : null,
     symptoms.length
       ? h('ul.symptoms', {}, ...symptoms.map((s) => h('li', {}, SYMPTOM_LABELS[s])))
@@ -397,6 +404,27 @@ function cureButton(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish): Node 
       sheet.refresh();
     }),
     h('p.hint', {}, '特效藥只治症狀：水裡的病原和水質問題還在。水質造成的傷，效果只有一半。'),
+  );
+}
+
+/** 親魚護幼（market-and-breeding.md §1.3.3）：母魚在顧哪一窩、護幼值、照顧不好的原因；仔魚跟著誰。 */
+export function broodLine(state: TankState, fish: Fish): Node | null {
+  if (fish.guardian !== undefined && guardianOf(state, fish)) return h('p', {}, '跟著媽媽：被吃的機率小很多，媽媽會帶去找東西吃');
+  if (!isCaveSpawner(fish.species) || fish.sex !== 'female' || !sexVisible(fish)) return null;
+  const b = fish.brood;
+  if (!b) {
+    const why = !hasCave(state) ? '缸裡沒有洞穴：放石頭或沉木才有地方產卵' : state.water.tempC < 25 ? '水溫 25°C 以上才會產卵' : state.water.ph > BREED_PH_MAX ? `水太鹼（pH ${state.water.ph.toFixed(1)}），要偏酸的軟水才會產卵：放沉木或用水草泥` : !state.fish.some((f) => f.alive && f.species === fish.species && f.sex === 'male' && sexVisible(f)) ? '缸裡沒有成熟的公魚' : '條件都有了，餵點紅蟲之類的肉食會比較快產卵';
+    return h('p.hint', {}, `繁殖：${why}`);
+  }
+  const days = Math.floor((state.hours - b.hour) / 24);
+  const stage = b.stage === 'eggs' ? `在洞穴裡顧著約 ${Math.round(b.count)} 顆卵（第 ${days + 1} 天，約 3 天孵化）` : b.stage === 'wigglers' ? `卵孵了，仔魚還在洞裡吸卵黃（約 ${Math.round(b.count)} 尾）` : `帶著 ${state.fish.filter((f) => f.alive && f.guardian === fish.id).length} 尾仔魚巡邏（第 ${days + 1} 天，約 4 週後離巢）`;
+  const { issue } = careTarget(state, fish);
+  const care = Math.round(b.care * 100);
+  return h(
+    'div.stack',
+    {},
+    h('p', {}, `護幼中：${stage}`),
+    h(b.care < CARE_EAT_THRESHOLD + 0.1 ? 'p.warn-text' : 'p.hint', {}, `護幼值 ${care}%${issue ? `：${BROOD_ISSUE_LABELS[issue]}` : '，很安心'}${b.care < CARE_EAT_THRESHOLD + 0.1 ? '，再低下去會把小孩吃掉' : ''}`),
   );
 }
 
@@ -611,6 +639,17 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     );
   };
   // 水草可能夾帶害蟲小螺的卵（看不到）；有檢疫盒的人會先泡過，機率低很多（design/snails.md §2）
+  const buyPair = (species: FishSpeciesId) => () => {
+    const quarantined = !!game.state.quarantine;
+    purchase(
+      ctx,
+      FISH_PRICES[species] * 2,
+      (st) => {
+        for (const sex of ['male', 'female'] as const) (quarantined ? addFishToQuarantine : addFish)(st, species, { sex, drip: shopDrip });
+      },
+      `買了一對${FISH_SPECIES[species].name}（一公一母）${quarantined ? `，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天` : ''}`,
+    );
+  };
   const buyPlant = (species: PlantSpeciesId) => () =>
     purchase(
       ctx,
@@ -660,6 +699,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         : h('p.hint', {}, '店裡的魚可能帶著白點蟲或其他病，直接放進主缸可能傳染整缸。商店的「設備」可以買檢疫盒。'),
       h('p.hint', {}, '新缸還沒養好水就放太多魚，會氨中毒。'),
       h('p.hint', {}, '孔雀魚和櫻花蝦會自己繁殖，但成魚會吃仔魚和仔蝦，水草種密一點才躲得掉。斑馬魚會輕微咬孔雀魚公魚的長尾巴。'),
+      h('p.hint', {}, '鳳尾短鯛會自己帶小孩：要有石頭或沉木當洞穴、水溫 25°C 以上。護幼中的母魚會趕走靠近的魚，缸小的話其他魚會很緊張。'),
       h('p.hint', {}, `孔雀魚（${FISH_SPECIES.guppy.temp.min}–${FISH_SPECIES.guppy.temp.max}°C；pH ${FISH_SPECIES.guppy.phSurvive.min}–${FISH_SPECIES.guppy.phSurvive.max} 都能慢慢適應）照品系賣。同品系配對生出來的大多一樣；不同品系混養會生出各種組合，也可能冒出藏在基因裡的白子。`),
       ...GUPPY_STRAINS.map((strain, i) =>
         h(
@@ -681,7 +721,12 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).filter((id) => id !== 'guppy').map((id) => {
         const sp = FISH_SPECIES[id];
         const note = [`每隻 ${FISH_PRICES[id]} 元`, `${sp.temp.min}–${sp.temp.max}°C`, `pH ${sp.phSurvive.min}–${sp.phSurvive.max} 能適應`, sp.minGroup ? `群游，至少 ${sp.minGroup} 隻` : ''].filter(Boolean).join(' · ');
-        return h('div.item', {}, h('div', {}, h('b', {}, sp.name), h('div.hint', {}, note)), h('div.row', {}, button('+1', buyFish(id, 1)), button('+6', buyFish(id, 6))));
+        // 短鯛成對賣：一公一母才會產卵護幼
+        const buttons =
+          id === 'apisto'
+            ? [button('+1', buyFish(id, 1)), button('一對', buyPair(id))]
+            : [button('+1', buyFish(id, 1)), button('+6', buyFish(id, 6))];
+        return h('div.item', {}, h('div', {}, h('b', {}, sp.name), h('div.hint', {}, note)), h('div.row', {}, ...buttons));
       }),
     );
   } else if (tab === 'snails') {

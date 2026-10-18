@@ -475,7 +475,7 @@ const ART_CACHE = new Map<FishSpeciesId, SpeciesArt>();
 export function speciesArt(species: FishSpeciesId): SpeciesArt {
   let art = ART_CACHE.get(species);
   if (!art) {
-    art = species === 'guppy' ? guppyArt() : species === 'zebrafish' ? zebraArt() : shrimpArt();
+    art = species === 'guppy' ? guppyArt() : species === 'cherry_shrimp' ? shrimpArt() : zebraArt();
     ART_CACHE.set(species, art);
   }
   return art;
@@ -544,7 +544,7 @@ export function appearance(species: FishSpeciesId, form: FishForm, variant: numb
       alpha: juvenile ? 0.82 : 1,
     };
   }
-  if (species === 'zebrafish') {
+  if (species === 'zebrafish' || species === 'apisto') {
     const juvenile = form === 'juvenile';
     return {
       body: juvenile ? 0xe9e6d6 : 0xf1e3b8,

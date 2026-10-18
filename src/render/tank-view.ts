@@ -1,5 +1,5 @@
 import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
-import { FISH_SPECIES, PLANT_SPECIES, colorProgress, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, phenotype, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
+import { FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, phenotype, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
@@ -118,7 +118,7 @@ export interface TankViewEvents {
 }
 
 /** 魚畫得比真實比例大一些（遊戲裡要看得清楚品系花紋）。 */
-const EXAGGERATION: Record<string, number> = { guppy: 1.8, zebrafish: 1.6, cherry_shrimp: 1.8 };
+const EXAGGERATION: Record<string, number> = { guppy: 1.8, zebrafish: 1.6, cherry_shrimp: 1.8, apisto: 1.5 };
 /** 景深切換的門檻（有緩衝，避免在兩層之間跳來跳去）。 */
 const BACK_ENTER = 0.3;
 const BACK_LEAVE = 0.4;
@@ -1151,7 +1151,8 @@ export class TankView {
       const view = this.fish.get(fish.id)!;
       const { swimmer, rig } = view;
       const symptoms = observeSymptoms(state, fish);
-      updateSwimmer(swimmer, living, { alive: fish.alive, hungry: fish.hunger > 0.15, symptoms }, ctx, dt, () => this.rand());
+      const follow = fish.guardian !== undefined && alive.has(fish.guardian) ? fish.guardian : undefined;
+      updateSwimmer(swimmer, living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined, symptoms, follow, guarding: isGuarding(fish) }, ctx, dt, () => this.rand());
 
       // 景深：魚慢慢在前後之間游動；遠的小一點、模糊偏藍，畫在造景後面。
       if (fish.species !== 'cherry_shrimp' && fish.alive) {
@@ -1212,7 +1213,9 @@ export class TankView {
       // 轉色期顏色從淡慢慢變濃，老魚顏色變淡（design/growth.md §1、§5）
       const boost = fish.alive ? Math.round((fish.colorBoost ?? 0) * 4) / 4 : 0;
       const stage = growthStage(fish);
-      const fade = stage === 'coloring' ? (1 - colorProgress(fish)) * 0.8 : stage === 'old' ? 0.5 : 0;
+      // 短鯛母魚平常灰黃，帶小孩時轉成鮮黃加黑紋（漸變）
+      const brood = fish.species === 'apisto' && fish.sex === 'female' && sexVisible(fish) ? (1 - (fish.broodColor ?? 0)) * 0.75 : 0;
+      const fade = Math.min(0.9, (stage === 'coloring' ? (1 - colorProgress(fish)) * 0.8 : stage === 'old' ? 0.5 : 0) + brood);
       const sat = Math.round((boost * 0.45 - fade) * 10) / 10;
       const tone = `${sat}:${boost}`;
       if (tone !== view.tone) {
