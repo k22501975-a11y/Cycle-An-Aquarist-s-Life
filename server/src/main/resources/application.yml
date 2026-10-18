@@ -1,0 +1,26 @@
+server:
+  port: ${PORT:8080}
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/cycle}
+    username: ${DATABASE_USER:cycle}
+    password: ${DATABASE_PASSWORD:cycle}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  servlet:
+    multipart:
+      enabled: false
+cycle:
+  # 允許哪些網頁來源呼叫 API（逗號分隔），例如 https://cycle.example.com
+  allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173}
+  # 登入多久後要重新登入
+  session-days: 30
+  # 一份雲端存檔最大幾 bytes
+  max-save-bytes: 4000000
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

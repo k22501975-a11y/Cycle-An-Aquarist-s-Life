@@ -34,6 +34,9 @@ function day(s: TankState, careful: boolean): void {
   feed(s, meal(s));
   simulate(s, 12);
   if (careful) {
+    // 細心的玩家看到加熱棒卡住或壞掉會馬上處理（待辦卡會提醒）
+    const heater = s.equipment.heater;
+    if (heater && (heater.stuckOn || heater.broken)) s.equipment.heater = { spec: heater.spec, targetC: heater.targetC, broken: false, heating: false };
     const r = useTestKit(s);
     if (r.ammonia >= 0.5 || r.nitrite >= 0.5 || r.kh <= 2) waterChange(s, 0.3);
   }
@@ -43,7 +46,10 @@ describe('新手前幾週（K1）', () => {
   it('照教學只放 3 條魚、每天測水、超標就換水：新缸期間魚都活著', () => {
     for (const seed of [1, 2, 3]) {
       const s = newGameState(seed);
+      // 室溫固定，不跟著跑測試當天的現實日期變（否則結果每天不一樣）
       s.environment.roomTempC = 25;
+      s.environment.roomSwingC = 2;
+      s.water.tempC = s.water.tempAvgC = 25;
       addPlant(s, 'anubias');
       for (let i = 0; i < 3; i++) addFish(s, 'guppy', { carriesIch: false, carries: [] });
       for (let d = 0; d < 21; d++) day(s, true);
@@ -56,6 +62,8 @@ describe('新手前幾週（K1）', () => {
     for (const seed of [4, 5, 6]) {
       const s = newGameState(seed);
       s.environment.roomTempC = 25;
+      s.environment.roomSwingC = 2;
+      s.water.tempC = s.water.tempAvgC = 25;
       for (let i = 0; i < 6; i++) addFish(s, 'guppy', { carriesIch: false, carries: [] });
       for (let d = 0; d < 21; d++) {
         simulate(s, 12);

@@ -1,0 +1,25 @@
+# 本機開發：docker compose up 會起 PostgreSQL 和伺服器（http://localhost:8080）
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: cycle
+      POSTGRES_USER: cycle
+      POSTGRES_PASSWORD: cycle
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  server:
+    build: .
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/cycle
+      DATABASE_USER: cycle
+      DATABASE_PASSWORD: cycle
+      ALLOWED_ORIGINS: http://localhost:5173,http://localhost:4173
+    ports:
+      - "8080:8080"
+volumes:
+  pgdata:
