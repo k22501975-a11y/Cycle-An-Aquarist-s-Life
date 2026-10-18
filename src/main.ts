@@ -5,6 +5,8 @@ import { eventSound } from './audio/sounds';
 import { applySeason, Game, newGameState, SPEED_OPTIONS } from './game/game';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
 import { installCrashGuard } from './ui/crash';
+import { CloudClient } from './net/cloud';
+import { autoUpload, checkCloudOnStart, cloudPanel, type CloudPanelDeps } from './ui/cloud-panel';
 import { canPromptInstall, isInstalled, isIos, promptInstall, setupPwa } from './ui/pwa';
 import { loadPaintedArt } from './render/painted';
 import { defaultQuality, isQuality, type Quality, QUALITY_LABELS, qualitySpec } from './render/quality';
@@ -168,6 +170,27 @@ async function start(): Promise<void> {
     input.click();
   };
   const crash = installCrashGuard({ save, exportSave });
+  // 雲端存檔：有設定伺服器網址（VITE_API_URL）才開放
+  const cloud = new CloudClient(import.meta.env.VITE_API_URL, store);
+  const cloudDeps: CloudPanelDeps = {
+    cloud,
+    sheet,
+    toasts,
+    saveJson: () => serializeSave(game.tanks[0], game.clock.timeScale, Date.now(), undefined, extraTanks()),
+    applyCloud: (file, revision) => {
+      const res = parseSave(JSON.stringify(file));
+      if (!res.ok) return false;
+      catchUp(res.file);
+      game.clock.timeScale = res.file.timeScale;
+      game.load(res.file.state, res.file.tanks ?? [], res.file.active ?? 0);
+      for (const t of game.tanks) applySeason(t);
+      cloud.markSynced(revision);
+      save();
+      select(null);
+      return true;
+    },
+  };
+  debugHandle.cloud = cloud;
   // 可安裝的 App：有新版時提示重新整理（先存檔）
   setupPwa((apply) => toasts.show('有新版本了', 'info', { label: '更新', run: () => (save(), apply()) }));
   const installSection = () => {
@@ -396,6 +419,8 @@ async function start(): Promise<void> {
       h('h3', {}, '存檔'),
       h('div.row', {}, h('button.btn', { onclick: exportSave }, '匯出存檔'), h('button.btn', { onclick: importSave }, '從檔案匯入')),
       h('p.hint', {}, '遊戲每 10 秒自動存檔，每 30 分鐘自動備份一次；存檔壞掉時會自動用備份還原。換手機時可以匯出成檔案帶過去。'),
+      h('h3', {}, '雲端存檔'),
+      h('button.btn', { onclick: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) }, cloud.session ? `雲端存檔（${cloud.session.username}）` : '登入雲端存檔'),
       h('h3', {}, '安裝'),
       ...installSection(),
       h('h3', {}, '開發者'),
@@ -566,6 +591,9 @@ async function start(): Promise<void> {
   }
   if (window.matchMedia('(orientation: portrait)').matches) toasts.show('把手機轉成橫向，水缸會更大');
   setInterval(save, 10_000);
+  // 雲端：開遊戲時看看別的裝置有沒有玩過；之後每 10 分鐘和切到背景時自動上傳
+  void checkCloudOnStart(cloudDeps);
+  setInterval(() => void autoUpload(cloudDeps), 10 * 60_000);
   // 切到背景時畫面停止更新；回來時以 ×7 補算這段時間，和關掉網頁一樣。
   let hiddenAt: number | null = null;
   document.addEventListener('visibilitychange', () => {
@@ -574,6 +602,7 @@ async function start(): Promise<void> {
       app.ticker.stop();
       hiddenAt = Date.now();
       save();
+      void autoUpload(cloudDeps);
     } else if (hiddenAt !== null) {
       app.ticker.start();
       const away = catchUp({ version: 1, savedAt: hiddenAt, timeScale: game.clock.timeScale, state: game.tanks[0], tanks: game.tanks.slice(1) });
