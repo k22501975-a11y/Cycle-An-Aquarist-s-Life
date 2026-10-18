@@ -82,9 +82,15 @@ export function buyTankRefusal(tanks: TankState[], id: TankSizeId): string | nul
 /** 買一個新缸（套缸，還沒養水）。回傳新缸；買不起就回傳 null。 */
 export function buyTank(tanks: TankState[], id: TankSizeId): TankState | null {
   if (buyTankRefusal(tanks, id)) return null;
-  const home = tanks[0];
   linkTanks(tanks);
-  spend(home, newTankCost(tanks, id));
+  spend(tanks[0], newTankCost(tanks, id));
+  return placeTankSet(tanks, id);
+}
+
+/** 把一組套缸擺進房間（不收錢；商城的熟成套缸 matureMedia 是 true）。呼叫前要先確認還有缸位。 */
+export function placeTankSet(tanks: TankState[], id: TankSizeId, matureMedia = false): TankState {
+  linkTanks(tanks);
+  const home = tanks[0];
   const set = TANK_SETS[id];
   const tank = createTank({
     tank: set.tank,
@@ -94,6 +100,7 @@ export function buyTank(tanks: TankState[], id: TankSizeId): TankState | null {
     roomTempC: home.environment.roomTempC,
     tap: home.environment.tap,
     seed: Math.max(1, Math.floor(nextRandom(home.rng) * 2147483646)),
+    matureMedia,
   });
   tank.hours = home.hours;
   const wallet = economy(home);

@@ -21,6 +21,8 @@ cycle:
   max-save-bytes: 4000000
   # 新帳號滿幾天才能在市場上架（防開小號洗錢，market-and-breeding.md §4）
   market-min-account-days: ${MARKET_MIN_ACCOUNT_DAYS:3}
+  # 儲值測試模式：不收錢直接入帳（本機測試用；正式上線前要接金流並關掉）
+  payments-sandbox: ${PAYMENTS_SANDBOX:false}
   push:
     # 推播服務用來聯絡營運者的信箱或網址（mailto: 或 https:）
     subject: ${PUSH_SUBJECT:mailto:admin@localhost}

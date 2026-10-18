@@ -28,6 +28,7 @@ VITE_API_URL=http://localhost:8080 npm run dev
 | `DATABASE_USER`／`DATABASE_PASSWORD` | cycle／cycle | |
 | `ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:4173,https://localhost` | 遊戲網頁的網址，逗號分隔；`https://localhost` 是 Android App 裡的來源，上線時記得保留 |
 | `MARKET_MIN_ACCOUNT_DAYS` | `3` | 新帳號滿幾天才能在市場上架（防開小號洗錢）；本機測試可以設 `0` |
+| `PAYMENTS_SANDBOX` | `false` | 儲值測試模式：不收錢直接入帳。金流還沒接，本機測試商城時設 `true`；正式上線前要接上金流、維持 `false` |
 | `PUSH_SUBJECT` | `mailto:admin@localhost` | 推播服務聯絡營運者用的信箱（`mailto:`）或網址，上線時改成真的 |
 | `VAPID_PUBLIC_KEY`／`VAPID_PRIVATE_KEY` | 空 | 推播的 VAPID 金鑰（base64url）。留空會在第一次啟動時產生並存進資料庫；換金鑰會讓所有裝置的訂閱失效 |
 
@@ -57,6 +58,12 @@ VITE_API_URL=http://localhost:8080 npm run dev
 | PUT | `/api/push/devices/{id}` | 不用登入。`{secret, endpoint, p256dh, auth, categories}`；有帶 token 的話市場、好友通知也會送到這台。只接受 Google、Mozilla、Microsoft、Apple 的推播網址 |
 | PUT | `/api/push/devices/{id}/schedule` | `{secret, items: [{at, category, title, body, tag}]}`；換掉這台排好的預測（最多 20 則、7 天內），空陣列就是取消 |
 | DELETE | `/api/push/devices/{id}` | `{secret}`；關閉通知 |
+| GET | `/api/points` | 點數餘額、儲值方案、商城道具（含今天買了幾個）、是否測試模式、這個月儲值多少 |
+| POST | `/api/points/topup` | `{pack}` → `{balance}`；只有測試模式能用，每月上限 NT$5,000 |
+| POST | `/api/points/buy` | `{item: cure\|tankset}` → `{grant, balance}`；扣點、檢查每日限購 |
+| GET | `/api/points/grants` | 買了還沒領進遊戲的道具 |
+| POST | `/api/points/grants/{id}/claim` | 遊戲已經放進背包（重複領不會出錯） |
+| GET | `/api/points/history` | 最近 50 筆點數明細 |
 
 需要登入的 API 帶 `Authorization: Bearer <token>`。錯誤一律回 `{code, message}`，`message` 是可以直接給玩家看的中文。
 
@@ -67,4 +74,5 @@ VITE_API_URL=http://localhost:8080 npm run dev
 - 匿名數據分析不連帳號、不存 IP，只有玩家在遊戲設定裡同意才會送。看統計的查詢範例：
   `SELECT event_day, name, COUNT(*), COUNT(DISTINCT client_id) FROM analytics_event GROUP BY 1, 2 ORDER BY 1 DESC;`
   魚的死因：`SELECT props::json->>'cause' AS cause, COUNT(*) FROM analytics_event WHERE name = 'fish_died' GROUP BY 1 ORDER BY 2 DESC;`
+- 儲值點數存在 `account.points`，每筆增減記在 `point_ledger`；儲值紀錄 `payment_order` 在刪除帳號後保留（帳務），只是不再對應到人。接金流時在 `MallService.topup` 換成金流回呼（付款成功才入帳）。
 - 下一步（L2）：伺服器權威的模擬與基因，需要決定模擬核心怎麼在伺服器上跑（Node 服務或移植成 Java）。

@@ -6,6 +6,9 @@ import {
   addHardscape,
   addPlant,
   buybackRefusal,
+  cureRefusal,
+  mallBag,
+  useCure,
   GUPPY_STRAIN_PRICES,
   GUPPY_FIN_STRAINS,
   GUPPY_STRAINS,
@@ -332,6 +335,23 @@ export function fishPanel({ game, sheet, toasts }: PanelContext, fishId: number)
     h('p', {}, conditionLine(fish)),
     h('p.hint', {}, '症狀只是線索：先用測試劑檢查水質，再判斷是環境問題還是生病。'),
     game.tanks.length > 1 ? moveFishRow(game, sheet, toasts, fish) : null,
+    cureButton(game, sheet, toasts, fish),
+  );
+}
+
+/** 背包裡有特效藥、這尾魚又用得上時才出現。 */
+function cureButton(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish): Node | null {
+  const left = mallBag(game.tanks).cure;
+  if (left <= 0 || cureRefusal(game.tanks, fish)) return null;
+  return h(
+    'div.stack',
+    {},
+    button(`用特效藥（背包剩 ${left} 瓶）`, () => {
+      if (!game.actAll((tanks) => useCure(tanks, fish))) return;
+      toasts.show('症狀退了一些。特效藥只治症狀，記得找出生病的原因（水質、病原），不然還會再發');
+      sheet.refresh();
+    }),
+    h('p.hint', {}, '特效藥只治症狀：水裡的病原和水質問題還在。水質造成的傷，效果只有一半。'),
   );
 }
 
