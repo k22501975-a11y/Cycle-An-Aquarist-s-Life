@@ -76,6 +76,17 @@ export interface Economy {
   starterPackHours?: number;
   /** 下一個新缸用的 id 區段（每缸的魚和水草 id 從不同區段開始，魚換缸也不會撞號）。 */
   nextTankBlock?: number;
+  /** 用儲值點數買的商城道具（背包）；舊存檔沒有。 */
+  mall?: MallBag;
+}
+
+export interface MallBag {
+  /** 特效藥幾瓶。 */
+  cure: number;
+  /** 熟成套缸幾組（還沒擺出來）。 */
+  tankset: number;
+  /** 已經放進背包的伺服器道具編號（同一個不會領兩次）。 */
+  claimed: number[];
 }
 
 /** 保底起步包：整缸死光又沒錢時，水族店老闆送 3 條孔雀魚（GAME_DESIGN 第 14 節）。 */

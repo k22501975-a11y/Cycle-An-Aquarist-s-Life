@@ -113,6 +113,30 @@ export interface PricePoint {
   count: number;
 }
 
+export interface PointsCatalog {
+  balance: number;
+  /** 測試模式：儲值不收錢（金流還沒接）。 */
+  sandbox: boolean;
+  monthlyLimit: number;
+  toppedUpThisMonth: number;
+  packs: { id: string; twd: number; points: number }[];
+  items: { id: string; name: string; note: string; points: number; daily: number; boughtToday: number }[];
+}
+
+export interface PointsGrant {
+  id: number;
+  item: string;
+  createdAt: number;
+}
+
+export interface PointsEntry {
+  delta: number;
+  balance: number;
+  reason: 'topup' | 'buy';
+  note: string;
+  at: number;
+}
+
 export type CloudResult<T> = { ok: true; value: T } | { ok: false; code: string; message: string; revision?: number; savedAt?: number };
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -253,6 +277,32 @@ export class CloudClient {
 
   marketPrices(species: string): Promise<CloudResult<PricePoint[]>> {
     return this.call('GET', `/api/market/prices?species=${encodeURIComponent(species)}`);
+  }
+
+  // ---- 儲值點數與商城 ----
+
+  points(): Promise<CloudResult<PointsCatalog>> {
+    return this.call('GET', '/api/points');
+  }
+
+  pointsTopup(pack: string): Promise<CloudResult<{ balance: number }>> {
+    return this.call('POST', '/api/points/topup', JSON.stringify({ pack }));
+  }
+
+  pointsBuy(item: string): Promise<CloudResult<{ grant: PointsGrant; balance: number }>> {
+    return this.call('POST', '/api/points/buy', JSON.stringify({ item }));
+  }
+
+  pointsGrants(): Promise<CloudResult<PointsGrant[]>> {
+    return this.call('GET', '/api/points/grants');
+  }
+
+  pointsClaim(id: number): Promise<CloudResult<void>> {
+    return this.call('POST', `/api/points/grants/${id}/claim`);
+  }
+
+  pointsHistory(): Promise<CloudResult<PointsEntry[]>> {
+    return this.call('GET', '/api/points/history');
   }
 
   // ---- 推播（不用登入；有登入時順便讓伺服器知道這台是誰的） ----

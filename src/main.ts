@@ -11,6 +11,7 @@ import { CloudClient } from './net/cloud';
 import { autoUpload, checkCloudOnStart, cloudPanel, type CloudPanelDeps } from './ui/cloud-panel';
 import { friendsPanel, giftPanel, type FriendsDeps } from './ui/friends-panel';
 import { knownArrivals, marketPanel, syncMarket, type MarketDeps } from './ui/market-panel';
+import { mallPanel, syncMall, type MallDeps } from './ui/mall-panel';
 import { CATEGORY_LABELS, nativePlatform, Notifier, planNotices, webPushPlatform, type PlannedNotice } from './net/push';
 import { Forecaster } from './game/forecaster';
 import { canPromptInstall, isInstalled, isIos, promptInstall, setupPwa } from './ui/pwa';
@@ -286,6 +287,7 @@ async function start(): Promise<void> {
     await notifier.plan(plannedNotices());
   };
   const marketDeps: MarketDeps = { cloud, game, sheet, toasts, sound: ctx.sound, openCloud: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) };
+  const mallDeps: MallDeps = marketDeps;
   const checkGifts = async () => {
     if (!cloud.session) return;
     const res = await cloud.gifts();
@@ -626,6 +628,7 @@ async function start(): Promise<void> {
       h('button.btn', { onclick: () => sheet.open('我的水缸', () => tanksPanel(ctx)) }, '我的水缸：切換、加一缸'),
       h('button.btn', { onclick: () => sheet.open('好友', () => friendsPanel(friendsDeps)) }, '好友：參觀、按讚、送禮'),
       h('button.btn', { onclick: () => sheet.open('市場', () => marketPanel(marketDeps)) }, '市場：買賣魚蝦和水草'),
+      h('button.btn', { onclick: () => sheet.open('商城', () => mallPanel(mallDeps)) }, '商城：儲值點數、特效藥、熟成套缸'),
       h('button.btn', { onclick: () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen)) }, '圖鑑：魚蝦、水草、設備、疾病'),
       h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) }, '水質趨勢與事件紀錄'),
       h('button.btn', { onclick: () => (sheet.close(), guide.restart()) }, '重新看阿德老闆的教學'),
@@ -793,7 +796,7 @@ async function start(): Promise<void> {
   if (window.matchMedia('(orientation: portrait)').matches) toasts.show('把手機轉成橫向，水缸會更大');
   setInterval(save, 10_000);
   // 雲端：開遊戲時看看別的裝置有沒有玩過；之後每 10 分鐘和切到背景時自動上傳
-  void checkCloudOnStart(cloudDeps).then(checkGifts).then(() => syncMarket(marketDeps));
+  void checkCloudOnStart(cloudDeps).then(checkGifts).then(() => syncMarket(marketDeps)).then(() => syncMall(mallDeps));
   // 市場：賣出的魚自動出貨、貨款入帳、到貨提醒
   setInterval(() => void syncMarket(marketDeps), 60_000);
   // 推播預測：開著遊戲時每 3 分鐘重算一次，關掉時直接用

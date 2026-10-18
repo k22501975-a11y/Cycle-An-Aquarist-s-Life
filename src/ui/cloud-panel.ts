@@ -104,7 +104,7 @@ export function cloudPanel(deps: CloudPanelDeps, conflict?: CloudConflict): Node
   const pass = h('input.text-input', { type: 'password', placeholder: '再輸入一次密碼', autocomplete: 'current-password', maxlength: '72' }) as HTMLInputElement;
   const deleteStatus = h('p.hint');
   deleteBox.append(
-    h('p.hint', {}, '雲端存檔、好友、禮物會全部刪除，無法復原。這台裝置上的水缸不受影響。'),
+    h('p.hint', {}, '雲端存檔、好友、禮物、市場上架和還沒用完的儲值點數會全部刪除，無法復原。想退還點數請在刪除前來信申請。這台裝置上的水缸不受影響。'),
     pass,
     h(
       'button.btn.danger',
