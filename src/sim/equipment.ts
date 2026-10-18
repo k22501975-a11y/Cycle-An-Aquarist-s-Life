@@ -106,6 +106,55 @@ export const CHILLERS = {
   small: { id: 'small', name: '小型冷水機', coolingWatts: 150 },
 } satisfies Record<string, ChillerSpec>;
 
+/** 底材（hardscape.md §1.2）。用量以「鋪滿一個 40L 缸」為準，效果隨水量換算。 */
+export interface SubstrateSpec {
+  id: string;
+  name: string;
+  /** 含碳酸鈣：把 KH 往 khTarget 拉，rate 是每小時拉近的比例。 */
+  carbonate?: { khTarget: number; rate: number };
+  /** 活性底土吸收 KH：每小時吸收 KH 的比例（乘上剩餘緩衝力）；capacity 是 40L 缸總共吸得了多少 dKH·L。 */
+  khAbsorb?: { rate: number; capacity: number };
+  /** 新土漏氨：40L 缸每小時漏出的 mg，依 decayHours 指數衰減。 */
+  ammoniaLeach?: { mgPerHour: number; decayHours: number };
+  /** 底土養分：根部吸收型水草生長加成（隨緩衝力一起耗盡）。 */
+  plantNutrients?: number;
+  /** 硝化菌附著面積加成（每公升水）。 */
+  bacteriaSurface?: number;
+}
+
+/** 造景石、沉木：一組約 2～3 kg（40L 缸的量）。 */
+export interface HardscapeSpec {
+  id: string;
+  name: string;
+  kind: 'rock' | 'wood';
+  carbonate?: { khTarget: number; rate: number };
+  /** 沉木的單寧酸：每小時消耗多少 KH（40L、一組），水變茶色。 */
+  tanninKhPerHour?: number;
+  bacteriaSurface?: number;
+  /** 白醋測試會不會冒泡（含碳酸鈣）。 */
+  fizzes: boolean;
+}
+
+export const SUBSTRATES = {
+  sand: { id: 'sand', name: '石英砂', bacteriaSurface: 0 },
+  soil: {
+    id: 'soil',
+    name: '水草泥',
+    khAbsorb: { rate: 0.02, capacity: 1700 },
+    ammoniaLeach: { mgPerHour: 0.15, decayHours: 240 },
+    plantNutrients: 0.4,
+    bacteriaSurface: 0.002,
+  },
+  coral: { id: 'coral', name: '珊瑚砂', carbonate: { khTarget: 12, rate: 0.006 }, bacteriaSurface: 0.001 },
+} satisfies Record<string, SubstrateSpec>;
+
+export const HARDSCAPE = {
+  seiryu: { id: 'seiryu', name: '青龍石', kind: 'rock', carbonate: { khTarget: 7, rate: 0.0015 }, fizzes: true },
+  lava: { id: 'lava', name: '火山石', kind: 'rock', bacteriaSurface: 0.003, fizzes: false },
+  slate: { id: 'slate', name: '板岩', kind: 'rock', fizzes: false },
+  driftwood: { id: 'driftwood', name: '沉木', kind: 'wood', tanninKhPerHour: 0.0015, fizzes: false },
+} satisfies Record<string, HardscapeSpec>;
+
 /** 缸的外尺寸；舊存檔沒有記錄時依水量推估（標準缸比例約 1.5 : 1 : 1）。 */
 export function tankSize(tank: TankSpec): { w: number; h: number; d: number } {
   if (tank.sizeCm) return tank.sizeCm;

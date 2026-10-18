@@ -2,8 +2,13 @@ import type { SoundId } from '../audio/sounds';
 import {
   addFish,
   addFishToQuarantine,
+  addHardscape,
   addPlant,
   buyQuarantine,
+  HARDSCAPE,
+  removeHardscape,
+  replaceSubstrate,
+  SUBSTRATES,
   doseAntibiotic,
   doseDewormer,
   doseQuarantine,
@@ -337,6 +342,30 @@ export function shopPanel(ctx: PanelContext, tab: 'fish' | 'plants' | 'gear' = '
       item(AIR_PUMPS.small.name, !!eq.airPump, () => game.act((st) => (st.equipment.airPump = { spec: AIR_PUMPS.small, on: true }))),
       item(CO2_KITS.diy.name, !!eq.co2, () => game.act((st) => (st.equipment.co2 = { spec: CO2_KITS.diy, on: true }))),
       item('檢疫盒', !!game.state.quarantine, () => game.act(buyQuarantine), '獨立的小缸：新魚先在這裡觀察，發病也不會傳染主缸'),
+      h('h3', {}, '底材'),
+      h('p.hint', {}, '換底材要拆缸重鋪：底砂裡的細菌和髒污會翻出來，魚也會很緊迫。'),
+      ...Object.values(SUBSTRATES).map((sub) =>
+        item(sub.name, (eq.substrate?.spec.id ?? 'sand') === sub.id, () => {
+          doUndoable(ctx, () => game.act((st) => replaceSubstrate(st, sub)), `重新鋪了${sub.name}`, 'warn');
+        }, SUBSTRATE_NOTES[sub.id]),
+      ),
+      h('h3', {}, '造景石與沉木'),
+      h('p.hint', {}, '有些石頭會慢慢讓水變硬、pH 變高。不確定的話先滴白醋：冒泡就是含碳酸鈣。'),
+      ...Object.values(HARDSCAPE).map((x) => {
+        const count = (eq.hardscape ?? []).filter((y) => y.id === x.id).length;
+        return h(
+          'div.item',
+          {},
+          h('div', {}, h('b', {}, x.name), count > 0 ? h('div.owned', {}, `缸裡有 ${count} 組`) : null, h('div.hint', {}, HARDSCAPE_NOTES[x.id])),
+          h(
+            'div.row',
+            {},
+            x.kind === 'rock' ? button('白醋', () => toasts.show(x.fizzes ? `${x.name}冒出小氣泡：含碳酸鈣，會讓水變硬` : `${x.name}沒有反應：不會影響水質`, x.fizzes ? 'warn' : 'info')) : null,
+            count > 0 ? button('拿出', () => game.act((st) => removeHardscape(st, x.id))) : null,
+            button('放一組', () => game.act((st) => addHardscape(st, x))),
+          ),
+        );
+      }),
       h('h3', {}, '控溫'),
       item(FANS.clip.name, !!eq.fan, () => game.act((st) => (st.equipment.fan = { spec: FANS.clip, on: true })), `水溫比室溫低約 ${FANS.clip.coolingC}°C，但水蒸發得快很多`),
       item(CHILLERS.small.name, !!eq.chiller, () => game.act((st) => (st.equipment.chiller = { spec: CHILLERS.small, targetC: 26, on: true, cooling: false })), '夏天把水溫壓在設定溫度，不怕停電以外的高溫'),
@@ -345,6 +374,25 @@ export function shopPanel(ctx: PanelContext, tab: 'fish' | 'plants' | 'gear' = '
   }
   return h('div.stack', {}, tabs, content);
 }
+
+function summarizeHardscape(list: { id: string; name: string }[]): string {
+  const counts = new Map<string, { name: string; n: number }>();
+  for (const x of list) counts.set(x.id, { name: x.name, n: (counts.get(x.id)?.n ?? 0) + 1 });
+  return [...counts.values()].map((c) => `${c.name} ${c.n} 組`).join('、');
+}
+
+const SUBSTRATE_NOTES: Record<string, string> = {
+  sand: '不影響水質，也沒有養分',
+  soil: '把 KH 吸低、pH 壓到弱酸，水草長得好；新土前兩週會漏氨，緩衝力約半年到一年用完',
+  coral: '讓水變硬、pH 拉到 8 左右；不適合草缸和水晶蝦',
+};
+
+const HARDSCAPE_NOTES: Record<string, string> = {
+  seiryu: '造景很漂亮，但含碳酸鈣，會慢慢提高 KH 和 pH',
+  lava: '不影響水質；孔隙多，硝化菌住得多',
+  slate: '不影響水質，可以當產卵平台',
+  driftwood: '釋出單寧酸，水變淡茶色、pH 稍微降低',
+};
 
 /** 檢疫盒裡看得到的症狀（盒子的水質不追蹤，只看病）。 */
 export function quarantineSymptoms(fish: Fish): Symptom[] {
@@ -447,6 +495,19 @@ export function maintenancePanel({ game, sheet, toasts, undoable }: PanelContext
         if (missing < 0.05) toasts.show('水是滿的');
         else doUndoable({ toasts, undoable }, () => game.act((st) => topUp(st)), `補了 ${missing.toFixed(1)} L 的水`);
       }, level < 0.9 ? 'primary' : ''),
+    ),
+    h(
+      'div.item',
+      {},
+      h(
+        'div',
+        {},
+        h('b', {}, `底材：${eq.substrate?.spec.name ?? '石英砂'}`),
+        eq.substrate?.spec.khAbsorb
+          ? h(eq.substrate.buffer < 0.15 ? 'div.warn-text' : 'div.hint', {}, `緩衝力剩約 ${Math.round(eq.substrate.buffer * 100)}%${eq.substrate.buffer < 0.15 ? '，KH 會慢慢回升，該換新土了' : ''}`)
+          : null,
+        (eq.hardscape ?? []).length > 0 ? h('div.hint', {}, `造景：${summarizeHardscape(eq.hardscape ?? [])}`) : null,
+      ),
     ),
     h('h3', {}, '設備'),
     eq.heater

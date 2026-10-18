@@ -5,7 +5,7 @@ import { createFish } from './processes/population';
 import { roomTemperature } from './processes/thermal';
 import { nextRandom } from './random';
 import { FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
-import type { FilterSpec } from './equipment';
+import type { FilterSpec, HardscapeSpec, SubstrateSpec } from './equipment';
 import { testWater, type TestKitReading } from './readings';
 import { recordEvent, TEST_LOG_MAX, type DiseaseKind, type Fish, type Plant, type TankState } from './state';
 
@@ -210,4 +210,28 @@ export function setPowerOut(state: TankState, out: boolean): void {
   if (state.environment.powerOut === out) return;
   state.environment.powerOut = out;
   recordEvent(state, { type: out ? 'power_out' : 'power_restored' });
+}
+
+/**
+ * 換底材：要把魚撈出來、拆缸重鋪。底砂裡的細菌和髒污跟著翻出來，魚也會很緊迫。
+ */
+export function replaceSubstrate(state: TankState, spec: SubstrateSpec): void {
+  const share = 0.15;
+  state.bacteria.aob *= 1 - share;
+  state.bacteria.nob *= 1 - share;
+  state.water.organicMg += 30 * (state.equipment.tank.volumeL / 40);
+  for (const f of state.fish) if (f.alive) f.stress = Math.max(f.stress, 0.6);
+  state.equipment.substrate = { spec, sinceHours: state.hours, buffer: 1 };
+}
+
+/** 放一組造景石或沉木。 */
+export function addHardscape(state: TankState, spec: HardscapeSpec): void {
+  (state.equipment.hardscape ??= []).push(spec);
+}
+
+/** 拿出一組造景石或沉木（同種的拿最後放的那組）。 */
+export function removeHardscape(state: TankState, id: string): void {
+  const list = state.equipment.hardscape ?? [];
+  const i = list.map((x) => x.id).lastIndexOf(id);
+  if (i >= 0) list.splice(i, 1);
 }

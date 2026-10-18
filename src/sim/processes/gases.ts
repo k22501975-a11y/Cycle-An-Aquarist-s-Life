@@ -1,5 +1,6 @@
 import { co2Equilibrium, oxygenSaturation, phFromCo2 } from '../chemistry';
 import { isCo2Injecting, isFilterRunning, type TankState } from '../state';
+import { hardscapePhOffset } from './hardscape';
 
 /**
  * 水面氣體交換係數（每小時）。過濾器擾動水面、打氣機都會加快交換：
@@ -29,6 +30,6 @@ export function updateGases(state: TankState, dt: number): void {
   water.o2 = Math.max(0, water.o2);
   water.co2 = Math.max(0, water.co2);
 
-  water.ph = phFromCo2(water.kh, water.co2);
+  water.ph = phFromCo2(water.kh, water.co2) - hardscapePhOffset(state);
   water.phAvg += (water.ph - water.phAvg) * (1 - Math.exp(-dt / 3));
 }

@@ -1,6 +1,7 @@
 import { temperatureFactor } from '../chemistry';
 import { PLANT_SPECIES, type PlantSpecies } from '../species';
 import { isLightOn, recordEvent, type Plant, type TankState } from '../state';
+import { substrateNutrientBoost } from './hardscape';
 
 /** 每 g 新長出的水草（濕重）吸收的氮（mg）。 */
 const NITROGEN_PER_G = 3;
@@ -39,7 +40,8 @@ export function plantRates(state: TankState, plant: Plant, par: number): PlantRa
   // 呼吸作用日夜都在進行，大小與補償點成正比：越需要光的草，光不夠時消耗越快。
   const respiration = sp.maxGrowthPerHour * (sp.compensationPar / sp.lightSaturationPar) * 0.25;
   return {
-    gross: sp.maxGrowthPerHour * limiter * temperatureFactor(state.water.tempC),
+    // 陽性草多半是根部吸收型，吃得到底土養分；綁在石頭上的陰性草吃不到
+    gross: sp.maxGrowthPerHour * limiter * temperatureFactor(state.water.tempC) * (sp.lightType === 'high' ? substrateNutrientBoost(state) : 1),
     respiration: respiration * temperatureFactor(state.water.tempC),
     limiter,
   };
