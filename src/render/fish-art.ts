@@ -691,7 +691,7 @@ export class FishRig extends Container {
 
   /** 死掉或生病時整條魚變灰（不影響金邊等加法圖層的亮度）。 */
   /** 程式繪製版沒有輪廓光，選取時只靠身後的光暈。 */
-  setRim(_color: number | null, _alpha = 1): void {}
+  setRim(_color: number | null, _alpha = 1, _soft = true): void {}
 
   setDim(color: number | null): void {
     for (const s of this.bodySprites) s.tint = color ?? (s === this.bodySprites[this.bodySprites.length - 1] ? this.look.body : this.look.fin);
