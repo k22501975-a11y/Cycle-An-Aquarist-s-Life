@@ -143,3 +143,29 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   s.y = Math.min(bounds.bottom - 3 * scale, Math.max(bounds.surface + 4, s.y + s.vy * dt));
   s.phase += dt * (4 + v / (8 * scale));
 }
+
+/** 死亡演出的長度（秒）：最後幾下抽動、慢慢翻成白肚朝上、顏色褪成灰。 */
+export const DEATH_SECONDS = 4;
+
+export interface DeathPose {
+  /** 身體上下的比例：1 正常，-1 翻成肚子朝上；中間經過 0 看起來像側身翻過去。 */
+  flip: number;
+  /** 翻身時頭稍微往下栽的角度。 */
+  tilt: number;
+  /** 褪色程度 0–1。 */
+  fade: number;
+  /** 尾巴擺動幅度：剛死時還抽動幾下，之後完全不動。 */
+  swing: number;
+}
+
+/** 死了 t 秒的姿勢（design/art-style.md：嚴肅不搞笑，動作慢、沒有彈跳）。 */
+export function deathPose(t: number, crawler = false): DeathPose {
+  const k = Math.max(0, Math.min(1, t / DEATH_SECONDS));
+  const ease = k * k * (3 - 2 * k);
+  const swing = t < 1.2 ? 0.5 * (1 - t / 1.2) * Math.abs(Math.sin(t * 9)) : 0;
+  // 蝦子死了是側躺，不會翻白肚
+  if (crawler) return { flip: 1, tilt: 0.25 * ease, fade: ease, swing: 0 };
+  const roll = Math.max(0, Math.min(1, (t - 0.8) / (DEATH_SECONDS - 0.8)));
+  const r = roll * roll * (3 - 2 * roll);
+  return { flip: Math.cos(Math.PI * r), tilt: 0.35 * Math.sin(Math.PI * r), fade: ease, swing };
+}
