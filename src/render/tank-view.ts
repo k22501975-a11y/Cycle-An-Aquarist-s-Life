@@ -5,6 +5,7 @@ import { PaintedRig, paintedKey, paintedTexture } from './painted';
 import { DEATH_SECONDS, deathPose, sickLook, spawnSwimmer, updateSwimmer, type Swimmer } from './fish-motion';
 import { pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { canvasTexture, makeCanvas, mix, softDotTexture } from './paint';
+import { PlantMesh } from './plant-sway';
 import { type QualitySpec, qualitySpec } from './quality';
 import { causticsTexture, MOCKUP_PX_PER_CM, paintBackdrop, paintDriftwood, paintFront, paintPlant, paintVignette, rayTexture } from './scenery';
 
@@ -22,7 +23,9 @@ interface Bubble {
 }
 
 interface PlantView {
-  sprite: Sprite;
+  /** 放在種植位置（根部）；網格掛在底下。 */
+  holder: Container;
+  rig: PlantMesh | null;
   /** 上次重畫時的狀態，變化夠大才重畫。 */
   drawnBiomass: number;
   drawnAlgae: number;
@@ -275,7 +278,7 @@ export class TankView {
       return;
     }
     for (const [id, view] of this.plants) {
-      const bb = view.sprite.getBounds();
+      const bb = view.holder.getBounds();
       if (x >= bb.minX + bb.width * 0.2 && x <= bb.maxX - bb.width * 0.2 && y >= bb.minY && y <= bb.maxY) {
         this.events.onSelectPlant?.(id);
         return;
@@ -594,17 +597,19 @@ export class TankView {
     const present = new Set(state.plants.map((p) => p.id));
     for (const [id, view] of this.plants) {
       if (!present.has(id)) {
-        if (view.sprite.texture !== Texture.EMPTY) view.sprite.texture.destroy(true);
-        view.sprite.destroy();
+        view.rig?.destroy();
+        view.holder.destroy({ children: true });
         this.plants.delete(id);
       }
     }
     const t = state.hours;
+    // 過濾器開著水流比較強，水草擺得比較明顯
+    const flow = state.equipment.filter?.on ? 1 : 0.35;
     for (const plant of state.plants) {
       let view = this.plants.get(plant.id);
       if (!view) {
-        view = { sprite: new Sprite(), drawnBiomass: -1, drawnAlgae: -1, drawnMelting: false };
-        this.plantLayer.addChild(view.sprite);
+        view = { holder: new Container(), rig: null, drawnBiomass: -1, drawnAlgae: -1, drawnMelting: false };
+        this.plantLayer.addChild(view.holder);
         this.plants.set(plant.id, view);
       }
       const melting = plant.growthRate < -0.0002;
@@ -615,20 +620,21 @@ export class TankView {
         view.drawnMelting !== melting
       ) {
         const painting = paintPlant(plant, this.hs);
-        const old = view.sprite.texture;
-        view.sprite.texture = painting.texture;
-        if (old !== Texture.EMPTY) old.destroy(true);
-        view.sprite.anchor.set(painting.anchorX / painting.texture.width, painting.anchorY / painting.texture.height);
+        view.rig?.destroy();
+        view.rig = new PlantMesh(painting.texture, painting.anchorX, painting.anchorY);
+        view.holder.addChild(view.rig.mesh);
         view.drawnBiomass = plant.biomassG;
         view.drawnAlgae = plant.leafAlgae;
         view.drawnMelting = melting;
       }
       const slot = ((plant.id * 0.618) % 1) * 0.84 + 0.08;
-      view.sprite.position.set(this.bounds.width * slot, this.bounds.bottom + 14 * this.hs);
-      // 水流造成的輕微搖擺
-      view.sprite.skew.x = Math.sin(t * 6 + plant.id + this.time * 1.1) * 0.035;
+      view.holder.position.set(this.bounds.width * slot, this.bounds.bottom + 14 * this.hs);
+      // 水流造成的搖擺：根部不動、葉尖擺最多
+      const tall = view.rig!.mesh.texture.height;
+      view.rig!.sway(t * 6 + plant.id + this.time * 1.1, tall * 0.045 * flow);
     }
   }
+
 
   private updateBubbles(state: TankState, dt: number): void {
     const { width, surface, bottom } = this.bounds;
