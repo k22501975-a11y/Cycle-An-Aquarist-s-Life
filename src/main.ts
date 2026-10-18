@@ -6,6 +6,7 @@ import { Game, newGameState, SPEED_OPTIONS } from './game/game';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
 import { installCrashGuard } from './ui/crash';
 import { loadPaintedArt } from './render/painted';
+import { defaultQuality, isQuality, type Quality, QUALITY_LABELS, qualitySpec } from './render/quality';
 import { TankView } from './render/tank-view';
 import * as sim from './sim';
 import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, useTestKit } from './sim';
@@ -94,21 +95,26 @@ async function start(): Promise<void> {
   };
   // 顯示偏好（放大文字）：和存檔分開
   const UI_KEY = 'cycle.ui.v1';
+  const autoQuality = defaultQuality(window.innerWidth, window.matchMedia?.('(pointer: coarse)').matches ?? false);
   const uiPrefs = (() => {
     try {
-      return { bigText: JSON.parse(store.getItem(UI_KEY) ?? '{}').bigText === true };
+      const raw = JSON.parse(store.getItem(UI_KEY) ?? '{}');
+      return { bigText: raw.bigText === true, quality: isQuality(raw.quality) ? raw.quality : autoQuality };
     } catch {
-      return { bigText: false };
+      return { bigText: false, quality: autoQuality };
     }
   })();
-  const setBigText = (on: boolean) => {
-    uiPrefs.bigText = on;
-    document.documentElement.classList.toggle('big-text', on);
+  const saveUiPrefs = () => {
     try {
       store.setItem(UI_KEY, JSON.stringify(uiPrefs));
     } catch {
       // 存不了就算了
     }
+  };
+  const setBigText = (on: boolean) => {
+    uiPrefs.bigText = on;
+    document.documentElement.classList.toggle('big-text', on);
+    saveUiPrefs();
   };
   setBigText(uiPrefs.bigText);
   const codexSeen = loadCodexSeen(store);
@@ -203,6 +209,16 @@ async function start(): Promise<void> {
     onSelectPlant: (id) => sheet.open('水草', () => plantPanel(ctx, id), { live: true }),
   });
   debugHandle.view = view;
+  // 畫質：低畫質關掉景深模糊、柔光，降低解析度與粒子數量
+  const setQuality = (q: Quality) => {
+    uiPrefs.quality = q;
+    const spec = qualitySpec(q, window.devicePixelRatio || 1);
+    app.renderer.resolution = spec.resolution;
+    app.resize();
+    view.setQuality(spec);
+    saveUiPrefs();
+  };
+  setQuality(uiPrefs.quality);
   app.stage.addChild(view.root);
 
   // ---- 狀態列：時間、水質膠囊（沒測過顯示「?」）、待辦、選單 ----
@@ -282,6 +298,28 @@ async function start(): Promise<void> {
         h('input', { type: 'checkbox', checked: uiPrefs.bigText, onchange: (e: Event) => setBigText((e.target as HTMLInputElement).checked) }),
         h('span', {}, '放大文字'),
       ),
+      h(
+        'div.item',
+        {},
+        h('b', {}, '畫質'),
+        h(
+          'div.tabs',
+          {},
+          ...(['low', 'medium', 'high'] as const).map((q) =>
+            h(
+              `button.tab${uiPrefs.quality === q ? '.active' : ''}`,
+              {
+                onclick: () => {
+                  setQuality(q);
+                  sheet.refresh();
+                },
+              },
+              QUALITY_LABELS[q],
+            ),
+          ),
+        ),
+      ),
+      h('p.hint', {}, '手機發燙或卡頓時調低：低畫質會關掉景深模糊和柔光，水中微粒也會變少。'),
       h('div.item', {}, h('b', {}, '語言'), h('span.owned', {}, '繁體中文')),
       h('p.hint', {}, '燈號除了顏色也用形狀區分：圓形正常、三角形注意、菱形危險。'),
       h('h3', {}, '時間'),
