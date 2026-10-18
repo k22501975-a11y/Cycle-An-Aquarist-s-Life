@@ -102,7 +102,6 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 /* 其他時候：選取卡浮在狀態列下方右側，選了魚才出現 */
 #stage .selcard { position: absolute; z-index: 5; right: calc(env(safe-area-inset-right) + 14px); width: min(240px, 48vw); display: none; }
 #stage .selcard.open { display: block; animation: rise 0.22s ease-out; }
-#stage .selcard.left { right: auto; left: calc(env(safe-area-inset-left) + 14px); }
 @media (max-width: 999px), (max-height: 559px) {
   #stage .selcard { width: min(210px, 46vw); padding: 9px 12px; }
   #stage .selcard .card-title { font-size: 13.5px; }

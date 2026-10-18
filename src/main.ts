@@ -5,6 +5,7 @@ import { eventSound } from './audio/sounds';
 import { Game, newGameState, SPEED_OPTIONS } from './game/game';
 import { browserStore, catchUp, clearSave, readSave, writeSave } from './game/save';
 import { TankView } from './render/tank-view';
+import * as sim from './sim';
 import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, useTestKit } from './sim';
 import { h } from './ui/dom';
 import { ICONS } from './ui/icons';
@@ -23,6 +24,7 @@ import {
 } from './ui/panels';
 import { Sheet, Toasts } from './ui/sheet';
 import { clockLabel, todos, waterCapsules } from './ui/status';
+import { cornerRect, pickCorner, type Corner, type Rect } from './ui/dodge';
 import './ui/styles.css';
 
 /** 寬螢幕（桌機、平板橫向）：待辦卡與選取卡放在下方櫃台兩側；其他時候待辦收進狀態列、選取卡浮在水缸上。 */
@@ -63,7 +65,8 @@ async function start(): Promise<void> {
   const game = new Game(saved?.state ?? newGameState(), saved?.timeScale ?? 7);
   const save = () => writeSave(store, game.state, game.clock.timeScale);
   // 給瀏覽器端的自動化測試與除錯使用。
-  const debugHandle = { game } as Record<string, unknown>;
+  // 開發用：在瀏覽器主控台用 cycle.game、cycle.sim 直接操作（截圖、調平衡）。
+  const debugHandle = { game, sim } as Record<string, unknown>;
   (window as unknown as { cycle: unknown }).cycle = debugHandle;
   const sheet = new Sheet(document.body);
   const toasts = new Toasts(document.body);
@@ -122,6 +125,7 @@ async function start(): Promise<void> {
     view.selectFish(id);
     selCard.classList.toggle('open', id !== null);
     renderSelCard();
+    if (id !== null) requestAnimationFrame(() => placeSelCard());
   };
 
   const view = new TankView(app, {
@@ -262,6 +266,22 @@ async function start(): Promise<void> {
   placeCards();
   WIDE.addEventListener('change', placeCards);
 
+  // 窄螢幕時選取卡浮在水缸上：跟著選取的魚換角落，不要擋住牠。
+  let cardArea: Rect = { x: 0, y: 0, w: 0, h: 0 };
+  let cardCorner: Corner = 'top-right';
+  const placeSelCard = () => {
+    if (WIDE.matches) {
+      selCard.style.top = selCard.style.bottom = selCard.style.left = selCard.style.right = '';
+      return;
+    }
+    const fishPos = selected !== null ? view.fishScreenPos(selected) : null;
+    cardCorner = pickCorner(cardCorner, fishPos, cardArea, selCard.offsetWidth, selCard.offsetHeight);
+    const r = cornerRect(cardCorner, cardArea, selCard.offsetWidth, selCard.offsetHeight, 14);
+    selCard.style.top = `${Math.round(r.y)}px`;
+    selCard.style.left = `${Math.round(r.x)}px`;
+    selCard.style.right = selCard.style.bottom = 'auto';
+  };
+
   // 水缸撐滿整個畫面；告訴畫面狀態列與按鈕列蓋住多少，魚就不會游到它們後面。
   const tankLabel = h('div.tank-label');
   stage.append(tankLabel);
@@ -270,7 +290,10 @@ async function start(): Promise<void> {
     const top = hud.getBoundingClientRect().bottom - stageRect.top;
     const bottom = stageRect.bottom - tools.getBoundingClientRect().top;
     view.setInsets({ top: Math.round(top), bottom: Math.round(bottom) });
-    selCard.style.top = WIDE.matches ? '' : `${Math.round(top + 10)}px`;
+    // 下緣留給左下角的缸名標籤。
+    const dockTop = dock.getBoundingClientRect().top - stageRect.top;
+    cardArea = { x: 0, y: top + 10, w: stageRect.width, h: Math.max(0, dockTop - top - 10 - 34) };
+    placeSelCard();
     tankLabel.style.bottom = `${Math.round(stageRect.bottom - dock.getBoundingClientRect().top + 8)}px`;
     const size = tankSize(game.state.equipment.tank);
     tankLabel.textContent = `${game.state.equipment.tank.name}・${size.w}×${size.h}×${size.d} cm`;
@@ -335,26 +358,9 @@ async function start(): Promise<void> {
     app.ticker.maxFPS = 0;
   };
   for (const type of ['pointerdown', 'pointermove', 'wheel', 'keydown']) window.addEventListener(type, wake, { passive: true });
-  // 浮動的選取卡不要擋住選到的魚：魚游到卡片後面時，卡片換到另一邊。
-  let lastFlip = 0;
-  const dodgeSelectedFish = () => {
-    if (WIDE.matches || selected === null || !selCard.classList.contains('open')) return;
-    const pos = view.fishPosition(selected);
-    if (!pos || performance.now() - lastFlip < 1200) return;
-    const stageRect = stage.getBoundingClientRect();
-    const r = selCard.getBoundingClientRect();
-    const pad = 36;
-    const x = pos.x + stageRect.left;
-    const y = pos.y + stageRect.top;
-    if (x > r.left - pad && x < r.right + pad && y > r.top - pad && y < r.bottom + pad) {
-      selCard.classList.toggle('left');
-      lastFlip = performance.now();
-    }
-  };
   app.ticker.add((ticker) => {
     game.advance(ticker.deltaMS);
     view.update(game.state, ticker.deltaMS / 1000);
-    dodgeSelectedFish();
 
     clockValue.textContent = `${clockLabel(game.state.hours)}${game.clock.timeScale === 0 ? '・暫停' : ''}`;
     netBtn.classList.toggle('alert', game.state.fish.some((f) => !f.alive));
@@ -365,6 +371,7 @@ async function start(): Promise<void> {
       refreshTimer = 0;
       if (sheet.isLive) sheet.refresh();
       renderSelCard();
+      placeSelCard();
       renderTodos();
       renderCaps();
       if (performance.now() - lastInput > IDLE_MS && !sheet.isOpen) app.ticker.maxFPS = 30;

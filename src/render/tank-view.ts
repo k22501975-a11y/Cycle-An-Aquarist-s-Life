@@ -164,10 +164,12 @@ export class TankView {
     this.selectedFish = id;
   }
 
-  /** 魚目前在畫面上的位置（CSS 像素），讓介面避開不要擋住牠。 */
-  fishPosition(id: number): { x: number; y: number } | null {
+  /** 某條魚在畫面上的位置（像素，相對畫布左上角）；找不到就回傳 null。 */
+  fishScreenPos(id: number): { x: number; y: number } | null {
     const view = this.fish.get(id);
-    return view ? { x: view.holder.x, y: view.holder.y } : null;
+    if (!view) return null;
+    const p = view.holder.getGlobalPosition();
+    return { x: p.x, y: p.y };
   }
 
   private rand(): number {
