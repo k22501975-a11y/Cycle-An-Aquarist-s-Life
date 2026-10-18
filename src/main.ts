@@ -5,6 +5,11 @@ import { eventSound } from './audio/sounds';
 import { applySeason, Game, newGameState, SPEED_OPTIONS } from './game/game';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
 import { installCrashGuard } from './ui/crash';
+import { Analytics } from './net/analytics';
+import { isNativeApp, saveTextFile } from './ui/native';
+import { CloudClient } from './net/cloud';
+import { autoUpload, checkCloudOnStart, cloudPanel, type CloudPanelDeps } from './ui/cloud-panel';
+import { friendsPanel, giftPanel, type FriendsDeps } from './ui/friends-panel';
 import { canPromptInstall, isInstalled, isIos, promptInstall, setupPwa } from './ui/pwa';
 import { loadPaintedArt } from './render/painted';
 import { defaultQuality, isQuality, type Quality, QUALITY_LABELS, qualitySpec } from './render/quality';
@@ -137,14 +142,10 @@ async function start(): Promise<void> {
   };
   const ctx: PanelContext = { game, sheet, toasts, sound: (id) => audio.play(id), undoable };
   // 存檔匯出成檔案（換手機、怕瀏覽器清掉資料時用）
-  const exportSave = () => {
-    const blob = new Blob([serializeSave(game.tanks[0], game.clock.timeScale, Date.now(), undefined, extraTanks())], { type: 'application/json' });
-    const a = h('a', { href: URL.createObjectURL(blob), download: `cycle-save-day${Math.floor(game.state.hours / 24) + 1}.json` });
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  };
+  const exportSave = () =>
+    void saveTextFile(`cycle-save-day${Math.floor(game.state.hours / 24) + 1}.json`, serializeSave(game.tanks[0], game.clock.timeScale, Date.now(), undefined, extraTanks())).catch(() =>
+      toasts.show('存檔沒有匯出', 'warn'),
+    );
   const importSave = () => {
     const input = h('input', { type: 'file', accept: 'application/json,.json' }) as HTMLInputElement;
     input.addEventListener('change', async () => {
@@ -168,6 +169,95 @@ async function start(): Promise<void> {
     input.click();
   };
   const crash = installCrashGuard({ save, exportSave });
+  // 雲端存檔：有設定伺服器網址（VITE_API_URL）才開放
+  const cloud = new CloudClient(import.meta.env.VITE_API_URL, store);
+  const cloudDeps: CloudPanelDeps = {
+    cloud,
+    sheet,
+    toasts,
+    saveJson: () => serializeSave(game.tanks[0], game.clock.timeScale, Date.now(), undefined, extraTanks()),
+    applyCloud: (file, revision) => {
+      const res = parseSave(JSON.stringify(file));
+      if (!res.ok) return false;
+      catchUp(res.file);
+      game.clock.timeScale = res.file.timeScale;
+      game.load(res.file.state, res.file.tanks ?? [], res.file.active ?? 0);
+      for (const t of game.tanks) applySeason(t);
+      cloud.markSynced(revision);
+      save();
+      select(null);
+      return true;
+    },
+  };
+  debugHandle.cloud = cloud;
+  // 匿名數據分析：玩家同意才會送（設定 › 隱私）
+  const analytics = new Analytics(import.meta.env.VITE_API_URL, store);
+
+  // ---- 參觀好友的缸：畫面換成朋友的缸（照常游動、會動的模擬），自己的缸在背景繼續跑 ----
+  let visiting: { name: string; state: sim.TankState; likes: number } | null = null;
+  const visitClock = new sim.GameClock(7);
+  const visitBar = h('div.visit-bar.glass');
+  const leaveVisit = () => {
+    visiting = null;
+    document.body.classList.remove('visiting');
+    visitBar.remove();
+    select(null);
+    requestAnimationFrame(() => measure());
+  };
+  const renderVisitBar = () => {
+    if (!visiting) return;
+    const v = visiting;
+    visitBar.replaceChildren(
+      h('div.visit-title', {}, h('span.label', {}, '參觀中'), h('b', {}, `${v.name} 的${v.state.label || v.state.equipment.tank.name}`), h('span.likes', {}, `♥ ${v.likes}`)),
+      h(
+        'div.row',
+        {},
+        h('button.btn', {
+          onclick: async () => {
+            const res = await cloud.like(v.name);
+            if (!res.ok) return toasts.show(res.message, 'warn');
+            v.likes = res.value.likes;
+            renderVisitBar();
+            audio.play('quest');
+            toasts.show(`幫 ${v.name} 的缸按了讚`);
+          },
+        }, '按讚'),
+        h('button.btn', { onclick: () => sheet.open(`送禮給 ${v.name}`, () => giftPanel(friendsDeps, v.name, 20)) }, '送禮'),
+        h('button.btn.primary', { onclick: leaveVisit }, '回家'),
+      ),
+    );
+  };
+  const visit = async (username: string) => {
+    const res = await cloud.visit(username);
+    if (!res.ok) return toasts.show(res.message, 'warn');
+    if (!res.value.save) return toasts.show(`${username} 還沒有把水缸存到雲端`);
+    const parsed = parseSave(JSON.stringify(res.value.save));
+    if (!parsed.ok) return toasts.show('讀不出朋友的水缸，可能要先更新遊戲', 'warn');
+    // 朋友上次存檔之後的時間也照算，看到的是他的缸現在的樣子
+    catchUp(parsed.file);
+    const tanks = [parsed.file.state, ...(parsed.file.tanks ?? [])];
+    const st = tanks[parsed.file.active ?? 0] ?? tanks[0];
+    // 朋友缸裡的 id 和自己的會重複；換到另一段，畫面才不會把朋友的魚當成自己的同一條
+    const VISIT_ID = 1_000_000_000;
+    for (const f of st.fish) f.id += VISIT_ID;
+    for (const p of st.plants) p.id += VISIT_ID;
+    st.nextId += VISIT_ID;
+    visiting = { name: res.value.username, state: st, likes: res.value.likes };
+    sheet.close();
+    select(null);
+    document.body.classList.add('visiting');
+    analytics.track('friend_visit');
+    renderVisitBar();
+    stage.append(visitBar);
+    requestAnimationFrame(() => measure());
+  };
+  const friendsDeps: FriendsDeps = { cloud, game, sheet, toasts, visit: (name) => void visit(name), openCloud: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) };
+  const checkGifts = async () => {
+    if (!cloud.session) return;
+    const res = await cloud.gifts();
+    if (res.ok && res.value.length > 0)
+      toasts.show(`${res.value[0].from}${res.value.length > 1 ? ` 等朋友` : ''}送你禮物`, 'info', { label: '看看', run: () => sheet.open('好友', () => friendsPanel(friendsDeps)) });
+  };
   // 可安裝的 App：有新版時提示重新整理（先存檔）
   setupPwa((apply) => toasts.show('有新版本了', 'info', { label: '更新', run: () => (save(), apply()) }));
   const installSection = () => {
@@ -303,6 +393,58 @@ async function start(): Promise<void> {
       ...list.map((c) => h(`span.cap.${c.tone}${c.stale ? '.stale' : ''}`, { title: c.title }, h('i.dot'), h('span.lbl', {}, c.label), h('b', {}, c.value))),
     );
   };
+  const privacySection = () => [
+    analytics.available
+      ? h(
+          'label.check-row',
+          {},
+          h('input', {
+            type: 'checkbox',
+            checked: analytics.consent === true,
+            onchange: (e: Event) => {
+              analytics.setConsent((e.target as HTMLInputElement).checked);
+              consentCard.remove();
+            },
+          }),
+          h('span', {}, '幫忙改進遊戲：回報匿名的遊戲紀錄'),
+        )
+      : null,
+    h(
+      'p.hint',
+      {},
+      analytics.available
+        ? '只回報像「魚因為氨中毒死掉」「完成教學第 3 步」這類事件，用隨機代號、不連到帳號，180 天後刪除。'
+        : '存檔只放在這台裝置上，不會傳到任何地方。',
+    ),
+    h(
+      'div.row',
+      {},
+      h('a.btn', { href: './legal/privacy.html', target: '_blank', rel: 'noopener' }, '隱私權政策'),
+      h('a.btn', { href: './legal/terms.html', target: '_blank', rel: 'noopener' }, '使用條款'),
+    ),
+  ];
+  // 第一次玩一陣子之後問一次要不要幫忙（不打斷新手引導的第一個畫面）
+  const consentCard = h(
+    'div.consent-card.glass',
+    {},
+    h('div', {}, h('b', {}, '幫忙改進遊戲？'), h('div.hint', {}, '回報匿名的遊戲紀錄（例如魚為什麼死掉），讓我們知道哪裡太難。不連到帳號，隨時能在設定裡關掉。')),
+    h(
+      'div.row',
+      {},
+      h('button.btn.primary', { onclick: () => answerConsent(true) }, '好'),
+      h('button.btn', { onclick: () => answerConsent(false) }, '不要'),
+      h('a.btn.ghost', { href: './legal/privacy.html', target: '_blank', rel: 'noopener' }, '詳細說明'),
+    ),
+  );
+  const answerConsent = (on: boolean) => {
+    analytics.setConsent(on);
+    consentCard.remove();
+    if (on) {
+      analytics.track('session_start', sessionProps());
+      toasts.show('謝謝！可以在設定 › 隱私隨時關掉');
+    }
+  };
+  const sessionProps = () => ({ tanks: game.tanks.length, fish: game.tanks.reduce((n, t) => n + t.fish.filter((f) => f.alive).length, 0), day: Math.floor(game.state.hours / 24) });
   // 設定頁：聲音、顯示、時間、存檔、開發者
   const settings = () =>
     h(
@@ -396,8 +538,12 @@ async function start(): Promise<void> {
       h('h3', {}, '存檔'),
       h('div.row', {}, h('button.btn', { onclick: exportSave }, '匯出存檔'), h('button.btn', { onclick: importSave }, '從檔案匯入')),
       h('p.hint', {}, '遊戲每 10 秒自動存檔，每 30 分鐘自動備份一次；存檔壞掉時會自動用備份還原。換手機時可以匯出成檔案帶過去。'),
-      h('h3', {}, '安裝'),
-      ...installSection(),
+      h('h3', {}, '雲端存檔'),
+      h('button.btn', { onclick: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) }, cloud.session ? `雲端存檔（${cloud.session.username}）` : '登入雲端存檔'),
+      h('h3', {}, '隱私'),
+      ...privacySection(),
+      // App 版本來就是裝好的，不用顯示安裝說明
+      ...(isNativeApp() ? [] : [h('h3', {}, '安裝'), ...installSection()]),
       h('h3', {}, '開發者'),
       h('button.btn', { onclick: () => sheet.open('開發者數值', () => debugPanel(ctx), { live: true }) }, '開發者數值'),
     );
@@ -406,6 +552,7 @@ async function start(): Promise<void> {
       'div.stack',
       {},
       h('button.btn', { onclick: () => sheet.open('我的水缸', () => tanksPanel(ctx)) }, '我的水缸：切換、加一缸'),
+      h('button.btn', { onclick: () => sheet.open('好友', () => friendsPanel(friendsDeps)) }, '好友：參觀、按讚、送禮'),
       h('button.btn', { onclick: () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen)) }, '圖鑑：魚蝦、水草、設備、疾病'),
       h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) }, '水質趨勢與事件紀錄'),
       h('button.btn', { onclick: () => (sheet.close(), guide.restart()) }, '重新看阿德老闆的教學'),
@@ -515,7 +662,8 @@ async function start(): Promise<void> {
   const measure = () => {
     const stageRect = stage.getBoundingClientRect();
     const top = hud.getBoundingClientRect().bottom - stageRect.top;
-    const bottom = stageRect.bottom - tools.getBoundingClientRect().top;
+    // 參觀時底部工具列藏起來，改留參觀列的空間
+    const bottom = visiting ? visitBar.offsetHeight + 24 : stageRect.bottom - tools.getBoundingClientRect().top;
     view.setInsets({ top: Math.round(top), bottom: Math.round(bottom) });
     // 任務小卡在左上角；浮動選取卡排在它下面，下緣留給左下角的缸名標籤。
     guide.pill.style.top = `${Math.round(top + 10)}px`;
@@ -537,6 +685,11 @@ async function start(): Promise<void> {
   // 其他缸的事件也要通知，前面加上缸名
   const tankPrefix = (tank: number) => (game.tanks.length > 1 && tank !== game.active ? `${sim.tankLabel(game.tanks, tank)}：` : '');
   game.onEvent((e, tank) => {
+    if (e.type === 'fish_died') {
+      const t = game.tanks[tank] ?? game.state;
+      const fish = t.fish.find((f) => f.id === e.subjectId);
+      analytics.track('fish_died', { cause: e.cause ?? 'unknown', species: fish?.species ?? 'unknown', day: Math.floor(t.hours / 24) });
+    }
     audio.play(eventSound(e.type));
     const msg = describeEvent(game.tanks[tank] ?? game.state, e);
     if (msg) toasts.show(tankPrefix(tank) + msg.text, msg.tone);
@@ -566,6 +719,13 @@ async function start(): Promise<void> {
   }
   if (window.matchMedia('(orientation: portrait)').matches) toasts.show('把手機轉成橫向，水缸會更大');
   setInterval(save, 10_000);
+  // 雲端：開遊戲時看看別的裝置有沒有玩過；之後每 10 分鐘和切到背景時自動上傳
+  void checkCloudOnStart(cloudDeps).then(checkGifts);
+  setInterval(() => void autoUpload(cloudDeps), 10 * 60_000);
+  analytics.track('session_start', sessionProps());
+  guide.questDone = (step) => analytics.track('quest_done', { step });
+  setInterval(() => void analytics.flush(), 60_000);
+  if (analytics.available && analytics.consent === null) setTimeout(() => stage.append(consentCard), 3 * 60_000);
   // 切到背景時畫面停止更新；回來時以 ×7 補算這段時間，和關掉網頁一樣。
   let hiddenAt: number | null = null;
   document.addEventListener('visibilitychange', () => {
@@ -574,6 +734,8 @@ async function start(): Promise<void> {
       app.ticker.stop();
       hiddenAt = Date.now();
       save();
+      void autoUpload(cloudDeps);
+      void analytics.flush(true);
     } else if (hiddenAt !== null) {
       app.ticker.start();
       const away = catchUp({ version: 1, savedAt: hiddenAt, timeScale: game.clock.timeScale, state: game.tanks[0], tanks: game.tanks.slice(1) });
@@ -612,7 +774,11 @@ async function start(): Promise<void> {
   function tick(deltaMS: number) {
     const ticker = { deltaMS };
     game.advance(ticker.deltaMS);
-    view.update(game.state, ticker.deltaMS / 1000);
+    if (visiting) {
+      const n = Math.min(visitClock.advance(ticker.deltaMS), 60);
+      for (let i = 0; i < n; i++) sim.step(visiting.state);
+    }
+    view.update(visiting?.state ?? game.state, ticker.deltaMS / 1000);
 
     clockValue.textContent = `${clockLabel(game.state.hours)}${game.clock.timeScale === 0 ? '・暫停' : ''}`;
     netBtn.classList.toggle('alert', game.state.fish.some((f) => !f.alive));

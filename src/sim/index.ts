@@ -12,6 +12,7 @@ export * from './quarantine';
 export * from './economy';
 export * from './genetics';
 export * from './household';
+export * from './gifts';
 export { hardscapeBacteriaCapacity, substrateNutrientBoost } from './processes/hardscape';
 export { canCatch, DISEASE_SPECS, hasVisible, infect, STORE_DISEASE_CHANCE } from './processes/disease';
 export { computeStressors, crowdingRatio, ELDERLY_FRACTION, freeAmmonia, lifeFraction } from './processes/fauna';
