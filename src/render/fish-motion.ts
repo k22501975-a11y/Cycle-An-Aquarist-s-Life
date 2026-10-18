@@ -141,5 +141,66 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   const edge = 16 * scale;
   s.x = Math.min(bounds.width - edge, Math.max(edge, s.x + s.vx * dt));
   s.y = Math.min(bounds.bottom - 3 * scale, Math.max(bounds.surface + 4, s.y + s.vy * dt));
-  s.phase += dt * (4 + v / (8 * scale));
+  // 病懨懨的魚尾巴也擺得慢
+  s.phase += dt * (4 + v / (8 * scale)) * (sym.has('lethargic') || sym.has('loss_of_balance') ? 0.5 : 1);
+}
+
+export interface SickLook {
+  /** 整條魚的色調（null 正常）。越虛弱越淡、偏灰。 */
+  dim: number | null;
+  /** 身體上下比例：消瘦時變扁。 */
+  thin: number;
+  /** 磨身（白點、寄生蟲癢）：0–1 的翻身幅度，偶爾突然側身蹭一下。 */
+  flash: number;
+}
+
+/**
+ * 生病的動作語言（D5）：看得出不對勁，但不誇張。
+ * health 0–1；t 是畫面時間（秒），seed 讓每條魚磨身的時機錯開。
+ */
+export function sickLook(symptoms: readonly string[], health: number, t: number, seed: number): SickLook {
+  const sym = new Set(symptoms);
+  let pale = Math.max(0, Math.min(1, (0.6 - health) / 0.6));
+  if (sym.has('lethargic')) pale = Math.max(pale, 0.5);
+  const dim = pale > 0.02 ? mixGray(pale) : null;
+  const thin = sym.has('thin') ? 0.86 : 1;
+  let flash = 0;
+  if (sym.has('flashing')) {
+    // 大約每 5 秒蹭一次，每次 0.5 秒
+    const cycle = (t / 5 + seed * 0.37) % 1;
+    if (cycle < 0.1) flash = Math.sin((cycle / 0.1) * Math.PI);
+  }
+  return { dim, thin, flash };
+}
+
+/** 白色往淡灰藍混：1 是最淡。 */
+function mixGray(k: number): number {
+  const ch = (to: number) => Math.round(255 + (to - 255) * k * 0.7);
+  return (ch(0xa8) << 16) | (ch(0xb4) << 8) | ch(0xb8);
+}
+
+/** 死亡演出的長度（秒）：最後幾下抽動、慢慢翻成白肚朝上、顏色褪成灰。 */
+export const DEATH_SECONDS = 4;
+
+export interface DeathPose {
+  /** 身體上下的比例：1 正常，-1 翻成肚子朝上；中間經過 0 看起來像側身翻過去。 */
+  flip: number;
+  /** 翻身時頭稍微往下栽的角度。 */
+  tilt: number;
+  /** 褪色程度 0–1。 */
+  fade: number;
+  /** 尾巴擺動幅度：剛死時還抽動幾下，之後完全不動。 */
+  swing: number;
+}
+
+/** 死了 t 秒的姿勢（design/art-style.md：嚴肅不搞笑，動作慢、沒有彈跳）。 */
+export function deathPose(t: number, crawler = false): DeathPose {
+  const k = Math.max(0, Math.min(1, t / DEATH_SECONDS));
+  const ease = k * k * (3 - 2 * k);
+  const swing = t < 1.2 ? 0.5 * (1 - t / 1.2) * Math.abs(Math.sin(t * 9)) : 0;
+  // 蝦子死了是側躺，不會翻白肚
+  if (crawler) return { flip: 1, tilt: 0.25 * ease, fade: ease, swing: 0 };
+  const roll = Math.max(0, Math.min(1, (t - 0.8) / (DEATH_SECONDS - 0.8)));
+  const r = roll * roll * (3 - 2 * roll);
+  return { flip: Math.cos(Math.PI * r), tilt: 0.35 * Math.sin(Math.PI * r), fade: ease, swing };
 }
