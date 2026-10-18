@@ -1,0 +1,12 @@
+{
+  // 模擬核心不可依賴瀏覽器或 PixiJS：這份設定沒有 DOM 型別，
+  // src/sim 一旦用到 window / document / pixi.js 就會編譯失敗。
+  // 這樣之後才能原封不動地搬到伺服器端（或對照 Spring Boot 重寫）。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": []
+  },
+  "include": ["src/sim"],
+  "exclude": ["src/sim/**/*.test.ts"]
+}
