@@ -2,7 +2,7 @@ import { Application, BlurFilter, Container, FederatedPointerEvent, Graphics, Sp
 import { FISH_SPECIES, isCo2Injecting, isJuvenile, isLightOn, observeSymptoms, sizeRatio, tankSize, type Fish, type TankState } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture } from './painted';
-import { DEATH_SECONDS, deathPose, sickLook, spawnSwimmer, updateSwimmer, type Swimmer } from './fish-motion';
+import { DEATH_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { BITE_SECONDS, biteKick, pickEaten, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type Mouth, type Pellet } from './feeding';
 import { canvasTexture, flakeTextures, makeCanvas, mix, softDotTexture } from './paint';
@@ -62,6 +62,8 @@ interface FishView {
   biteT: number;
   /** 上一格的嘴巴位置，判斷飼料是誰吃掉的（死魚為 null）。 */
   mouth: Mouth | null;
+  /** 轉身中的面向（壓扁再彈回）。 */
+  turn: TurnState;
 }
 
 interface Mote {
@@ -537,6 +539,7 @@ export class TankView {
       eggsDrawn: false,
       deathT: fish.alive ? -1 : DEATH_SECONDS,
       biteT: BITE_SECONDS,
+      turn: { f: swimmer.vx < 0 ? 1 : -1, v: 0 },
       mouth: null,
       z,
       zTarget: z,
@@ -607,10 +610,12 @@ export class TankView {
       const depth = 0.72 + 0.33 * view.z;
 
       view.holder.position.set(swimmer.x, swimmer.y);
-      const facingLeft = swimmer.vx < 0;
-      // 圖層是頭朝左畫的：往右游時水平翻轉。
+      // 圖層是頭朝左畫的：往右游時水平翻轉。轉身時身體先壓窄再彈回，不是瞬間翻面。
+      if (fish.alive) stepTurn(view.turn, swimmer.vx, dt);
+      const facingLeft = view.turn.f > 0;
+      const turn = turnScale(view.turn.f);
       const k = (this.lengthPx(fish) / rig.lengthPx) * depth;
-      rig.scale.x = facingLeft ? k : -k;
+      rig.scale.x = k * turn.sx;
       if (!fish.alive) {
         // 死亡演出：最後抽動幾下，慢慢翻成白肚朝上、褪成灰色，一邊沉到底
         view.deathT = view.deathT < 0 ? 0 : view.deathT + dt;
@@ -624,7 +629,7 @@ export class TankView {
         view.deathT = -1;
         // 生病的樣子：越虛弱顏色越淡、消瘦變扁、癢的時候突然側身蹭一下
         const sick = sickLook(symptoms, fish.health, this.time, fish.id);
-        rig.scale.y = k * sick.thin * (1 - 0.55 * sick.flash);
+        rig.scale.y = k * turn.sy * sick.thin * (1 - 0.55 * sick.flash);
         rig.alpha = rig.look.alpha;
         rig.setDim(sick.dim);
         const tilt = symptoms.includes('loss_of_balance') ? 1.2 : Math.max(-0.35, Math.min(0.35, Math.atan2(swimmer.vy, Math.abs(swimmer.vx) + 1) * 0.6)) + 0.5 * sick.flash;
