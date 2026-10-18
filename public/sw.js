@@ -1,6 +1,6 @@
 // 離線快取：沒網路也能開遊戲（存檔本來就在本機）。
 // 頁面用「網路優先」，拿不到才用快取；圖片和程式用「先給快取、背景更新」。
-const CACHE = 'cycle-v1';
+const CACHE = 'cycle-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -60,6 +60,36 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => cached);
       return cached || network;
+    }),
+  );
+});
+
+// 推播通知（伺服器用 Web Push 送來，內容已經解密）
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data ? event.data.text() : '' };
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title || '水族人生', {
+      body: data.body || '',
+      tag: data.tag || undefined,
+      icon: './icons/icon-192.png',
+      badge: './icons/icon-192.png',
+      data: { url: './', category: data.category },
+    }),
+  );
+});
+
+// 點通知：已經開著就切過去，沒開就打開遊戲
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      const open = list.find((c) => 'focus' in c);
+      return open ? open.focus() : self.clients.openWindow(event.notification.data?.url || './');
     }),
   );
 });

@@ -28,6 +28,8 @@ VITE_API_URL=http://localhost:8080 npm run dev
 | `DATABASE_USER`／`DATABASE_PASSWORD` | cycle／cycle | |
 | `ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:4173,https://localhost` | 遊戲網頁的網址，逗號分隔；`https://localhost` 是 Android App 裡的來源，上線時記得保留 |
 | `MARKET_MIN_ACCOUNT_DAYS` | `3` | 新帳號滿幾天才能在市場上架（防開小號洗錢）；本機測試可以設 `0` |
+| `PUSH_SUBJECT` | `mailto:admin@localhost` | 推播服務聯絡營運者用的信箱（`mailto:`）或網址，上線時改成真的 |
+| `VAPID_PUBLIC_KEY`／`VAPID_PRIVATE_KEY` | 空 | 推播的 VAPID 金鑰（base64url）。留空會在第一次啟動時產生並存進資料庫；換金鑰會讓所有裝置的訂閱失效 |
 
 ## API
 
@@ -51,6 +53,10 @@ VITE_API_URL=http://localhost:8080 npm run dev
 | POST | `/api/market/orders/{id}/cancel` | 賣家沒辦法出貨（魚死了），退款給買家；超過 24 小時沒出貨也會自動取消 |
 | POST | `/api/market/orders/{id}/collect` | 雙方各領一次：買家拿到貨或退款，賣家拿到貨款（扣 8% 成交稅） |
 | GET | `/api/market/prices?species=` | 近兩週每天的成交中位數 |
+| GET | `/api/push/key` | 不用登入。VAPID 公鑰（瀏覽器訂閱推播用） |
+| PUT | `/api/push/devices/{id}` | 不用登入。`{secret, endpoint, p256dh, auth, categories}`；有帶 token 的話市場、好友通知也會送到這台。只接受 Google、Mozilla、Microsoft、Apple 的推播網址 |
+| PUT | `/api/push/devices/{id}/schedule` | `{secret, items: [{at, category, title, body, tag}]}`；換掉這台排好的預測（最多 20 則、7 天內），空陣列就是取消 |
+| DELETE | `/api/push/devices/{id}` | `{secret}`；關閉通知 |
 
 需要登入的 API 帶 `Authorization: Bearer <token>`。錯誤一律回 `{code, message}`，`message` 是可以直接給玩家看的中文。
 

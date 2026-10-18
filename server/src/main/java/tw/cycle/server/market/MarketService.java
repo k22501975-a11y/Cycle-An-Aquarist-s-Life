@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tw.cycle.server.config.ApiException;
 import tw.cycle.server.config.CycleProperties;
+import tw.cycle.server.push.PushService;
 
 /**
  * 玩家市場（market-and-breeding.md §3）：一口價上架、購買託管、出貨與運輸、到貨收貨、賣家信譽、行情。
@@ -41,13 +42,15 @@ public class MarketService {
     private final Clock clock;
     private final CycleProperties props;
     private final RandomGenerator random;
+    private final PushService push;
 
-    public MarketService(JdbcTemplate db, ObjectMapper json, Clock clock, CycleProperties props, RandomGenerator random) {
+    public MarketService(JdbcTemplate db, ObjectMapper json, Clock clock, CycleProperties props, RandomGenerator random, PushService push) {
         this.db = db;
         this.json = json;
         this.clock = clock;
         this.props = props;
         this.random = random;
+        this.push = push;
     }
 
     public record Seller(String username, int deals, double doaRate, boolean warning) {}
@@ -132,6 +135,7 @@ public class MarketService {
         db.update("insert into market_order(listing_id, buyer_id, seller_id, kind, species, title, item, price, packaging, status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, 'paid', ?)",
                 listingId, me, seller, l.get("kind"), l.get("species"), l.get("title"), l.get("item"), l.get("price"), packaging, now());
         long id = db.queryForObject("select max(id) from market_order where buyer_id = ?", Long.class, me);
+        push.notifyAccount(seller, "market", "有人買了你的「" + l.get("title") + "」，打開遊戲就會自動出貨（24 小時內沒出貨會退款給買家）", "sale-" + id, null);
         return order(me, id);
     }
 
@@ -166,6 +170,8 @@ public class MarketService {
         int transit = MarketRules.MIN_TRANSIT_HOURS + random.nextInt(MarketRules.MAX_TRANSIT_HOURS - MarketRules.MIN_TRANSIT_HOURS + 1);
         boolean doa = random.nextDouble() < MarketRules.doaChance(kind, (String) o.get("species"), health(item), pack, transit);
         long realMinutes = Math.round(transit * 60.0 / MarketRules.TIME_SCALE);
+        if (o.get("buyer_id") != null)
+            push.notifyAccount(((Number) o.get("buyer_id")).longValue(), "market", "「" + o.get("title") + "」到貨了，記得對水再放進缸裡", "arrive-" + id, now().plusMinutes(realMinutes));
         db.update("update market_order set status = 'shipped', item = ?, doa = ?, arrival_stress = ?, bag_temp = ?, bag_ph = ?, shipped_at = ?, arrive_at = ? where id = ?",
                 data, doa, MarketRules.arrivalStress(pack, transit), clamp(bagTemp, 10, 40), clamp(bagPh, 4, 10), now(), now().plusMinutes(realMinutes), id);
         return order(me, id);

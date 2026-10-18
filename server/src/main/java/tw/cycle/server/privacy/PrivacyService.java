@@ -44,6 +44,7 @@ public class PrivacyService {
         out.put("marketOrders", db.queryForList(
                 "SELECT CASE WHEN o.buyer_id = ? THEN 'buy' ELSE 'sell' END AS side, o.kind, o.species, o.title, o.price, o.packaging, o.status, o.doa, o.created_at, o.arrive_at "
                         + "FROM market_order o WHERE o.buyer_id = ? OR o.seller_id = ? ORDER BY o.id", id, id, id));
+        out.put("pushDevices", db.queryForList("SELECT categories, created_at, updated_at FROM push_device WHERE account_id = ? ORDER BY created_at", id));
         out.put("note", "匿名數據分析不會連到帳號，所以不在這份資料裡；在設定裡關掉就不再送。");
         return out;
     }

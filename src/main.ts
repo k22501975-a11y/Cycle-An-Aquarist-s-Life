@@ -10,7 +10,9 @@ import { isNativeApp, saveTextFile } from './ui/native';
 import { CloudClient } from './net/cloud';
 import { autoUpload, checkCloudOnStart, cloudPanel, type CloudPanelDeps } from './ui/cloud-panel';
 import { friendsPanel, giftPanel, type FriendsDeps } from './ui/friends-panel';
-import { marketPanel, syncMarket, type MarketDeps } from './ui/market-panel';
+import { knownArrivals, marketPanel, syncMarket, type MarketDeps } from './ui/market-panel';
+import { CATEGORY_LABELS, nativePlatform, Notifier, planNotices, webPushPlatform, type PlannedNotice } from './net/push';
+import { Forecaster } from './game/forecaster';
 import { canPromptInstall, isInstalled, isIos, promptInstall, setupPwa } from './ui/pwa';
 import { loadPaintedArt } from './render/painted';
 import { defaultQuality, isQuality, type Quality, QUALITY_LABELS, qualitySpec } from './render/quality';
@@ -253,6 +255,34 @@ async function start(): Promise<void> {
     requestAnimationFrame(() => measure());
   };
   const friendsDeps: FriendsDeps = { cloud, game, sheet, toasts, visit: (name) => void visit(name), openCloud: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) };
+  // 推播：關掉遊戲前預測接下來會發生的事，交給伺服器（網頁）或手機（App）到時間提醒
+  const notifier = new Notifier(store, isNativeApp() ? nativePlatform() : webPushPlatform(cloud, store));
+  const forecaster = new Forecaster();
+  let forecastAt = 0;
+  let forecastAlerts: sim.ForecastAlert[] = [];
+  let pushUser = cloud.session?.username ?? null;
+  const refreshForecast = async () => {
+    if (!notifier.enabled || visiting) return;
+    const at = Date.now();
+    forecastAlerts = await forecaster.run(game.tanks, sim.FORECAST_HOURS);
+    forecastAt = at;
+  };
+  const plannedNotices = (): PlannedNotice[] => {
+    const list = planNotices(forecastAlerts, notifier.prefs, forecastAt, game.clock.timeScale > 0 ? sim.DEFAULT_TIME_SCALE : 0);
+    // App 收不到伺服器的通知，到貨時間自己排（網頁版由伺服器送）
+    if (notifier.platform?.kind === 'native' && notifier.prefs.categories.market)
+      list.push(...knownArrivals().map((a) => ({ at: a.at, category: 'market' as const, title: '水族人生', body: `「${a.title}」到貨了，記得對水再放進缸裡`, tag: `arrive-${a.id}` })));
+    return list.sort((a, b) => a.at - b.at).slice(0, 20);
+  };
+  const planPush = async () => {
+    if (!notifier.enabled) return;
+    const user = cloud.session?.username ?? null;
+    if (user !== pushUser) {
+      pushUser = user;
+      await notifier.refresh();
+    }
+    await notifier.plan(plannedNotices());
+  };
   const marketDeps: MarketDeps = { cloud, game, sheet, toasts, sound: ctx.sound, openCloud: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) };
   const checkGifts = async () => {
     if (!cloud.session) return;
@@ -394,6 +424,35 @@ async function start(): Promise<void> {
     caps.replaceChildren(
       ...list.map((c) => h(`span.cap.${c.tone}${c.stale ? '.stale' : ''}`, { title: c.title }, h('i.dot'), h('span.lbl', {}, c.label), h('b', {}, c.value))),
     );
+  };
+  const notifySection = (): Node[] => {
+    if (!notifier.available)
+      return [h('p.hint', {}, isIos() && !isInstalled() ? 'iPhone 要先把遊戲加到主畫面，才收得到通知。' : cloud.available ? '這個瀏覽器收不到通知。' : '通知要等伺服器上線才能用（Android App 版不用等）。')];
+    const reopen = () => sheet.open('設定', settings);
+    const p = notifier.prefs;
+    return [
+      h('p.hint', {}, '關掉遊戲後，水缸照樣在跑。開啟通知後，遊戲會先預測接下來會發生什麼，出事前提醒你。'),
+      p.enabled
+        ? h('button.btn', { onclick: async () => (await notifier.disable(), toasts.show('關掉通知了'), reopen()) }, '關閉通知')
+        : h('button.btn.primary', {
+            onclick: async () => {
+              const err = await notifier.enable();
+              if (err) toasts.show(err, 'warn');
+              else {
+                toasts.show('開啟通知了');
+                void refreshForecast();
+              }
+              reopen();
+            },
+          }, '開啟通知'),
+      ...(p.enabled
+        ? (Object.keys(CATEGORY_LABELS) as (keyof typeof CATEGORY_LABELS)[]).map((c) =>
+            h('label.check-row', {}, h('input', { type: 'checkbox', checked: p.categories[c], onchange: (e: Event) => void notifier.setCategory(c, (e.target as HTMLInputElement).checked) }), h('span', {}, CATEGORY_LABELS[c])),
+          )
+        : []),
+      ...(p.enabled && notifier.platform?.kind === 'web' && !cloud.session ? [h('p.hint', {}, '市場和好友的通知要登入雲端存檔才收得到。')] : []),
+      ...(p.enabled && notifier.platform?.kind === 'native' ? [h('p.hint', {}, 'App 版目前收得到水缸的提醒和到貨通知；有人買了你的東西、好友送禮，要打開遊戲才看得到。')] : []),
+    ];
   };
   const privacySection = () => [
     analytics.available
@@ -542,6 +601,8 @@ async function start(): Promise<void> {
       h('p.hint', {}, '遊戲每 10 秒自動存檔，每 30 分鐘自動備份一次；存檔壞掉時會自動用備份還原。換手機時可以匯出成檔案帶過去。'),
       h('h3', {}, '雲端存檔'),
       h('button.btn', { onclick: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) }, cloud.session ? `雲端存檔（${cloud.session.username}）` : '登入雲端存檔'),
+      h('h3', {}, '通知'),
+      ...notifySection(),
       h('h3', {}, '隱私'),
       ...privacySection(),
       // App 版本來就是裝好的，不用顯示安裝說明
@@ -726,6 +787,10 @@ async function start(): Promise<void> {
   void checkCloudOnStart(cloudDeps).then(checkGifts).then(() => syncMarket(marketDeps));
   // 市場：賣出的魚自動出貨、貨款入帳、到貨提醒
   setInterval(() => void syncMarket(marketDeps), 60_000);
+  // 推播預測：開著遊戲時每 3 分鐘重算一次，關掉時直接用
+  void notifier.refresh().then(() => notifier.clear()).then(() => refreshForecast());
+  setInterval(() => void refreshForecast(), 3 * 60_000);
+  window.addEventListener('pagehide', () => void planPush());
   setInterval(() => void autoUpload(cloudDeps), 10 * 60_000);
   analytics.track('session_start', sessionProps());
   guide.questDone = (step) => analytics.track('quest_done', { step });
@@ -741,7 +806,10 @@ async function start(): Promise<void> {
       save();
       void autoUpload(cloudDeps);
       void analytics.flush(true);
+      // 先送上次的預測，再用現在的狀態重算一次（頁面還活著的話會換掉）
+      void planPush().then(() => refreshForecast()).then(() => planPush());
     } else if (hiddenAt !== null) {
+      void notifier.clear();
       app.ticker.start();
       const away = catchUp({ version: 1, savedAt: hiddenAt, timeScale: game.clock.timeScale, state: game.tanks[0], tanks: game.tanks.slice(1) });
       hiddenAt = null;
