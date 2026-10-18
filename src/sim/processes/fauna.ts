@@ -97,7 +97,8 @@ export function computeStressors(state: TankState, fish: Fish, census: TankCensu
     ammonia: (Math.max(0, census.nh3 - 0.01) / 0.05) * sensitivity,
     nitrite: Math.max(0, water.no2 - 0.2) * sensitivity,
     nitrate: Math.max(0, water.no3 - 50) / 100,
-    oxygen: Math.max(0, 4 - water.o2) / 2,
+    // 鬥魚會到水面吸空氣，缺氧影響小很多
+    oxygen: (Math.max(0, 4 - water.o2) / 2) * (sp.airBreather ? 0.2 : 1),
     co2: Math.max(0, water.co2 - 30) / 15,
     hunger: Math.max(0, fish.hunger - 0.5),
     crowding: Math.max(0, census.crowding - 1) * 0.8,
@@ -120,7 +121,7 @@ function computeDamage(state: TankState, fish: Fish, sp: FishSpecies): Damage[] 
   };
   add((freeAmmonia(state) - 0.04) * 0.3 * sensitivity, 'ammonia');
   add((water.no2 - 1) * 0.004 * sensitivity, 'nitrite');
-  add((2 - water.o2) * 0.05, 'oxygen');
+  add((2 - water.o2) * 0.05 * (sp.airBreather ? 0.15 : 1), 'oxygen');
   add((water.co2 - 45) * 0.004, 'co2');
   add(phBeyondSurvival(state, fish) * 0.01, 'ph');
   const tempOut = Math.max(0, sp.tempLethal.min - water.tempC, water.tempC - sp.tempLethal.max);

@@ -18,6 +18,9 @@ const PROFILES: Record<FishSpeciesId, MotionProfile> = {
   cherry_shrimp: { speed: 10, depth: 1, cohesion: 0, crawler: true },
   // 短鯛：底層、在石頭和洞穴附近慢慢巡
   apisto: { speed: 30, depth: 0.85, cohesion: 0, crawler: false },
+  // 鬥魚：上層慢慢漂，長鰭拖著游不快
+  betta: { speed: 22, depth: 0.2, cohesion: 0, crawler: false },
+  crystal_shrimp: { speed: 10, depth: 1, cohesion: 0, crawler: true },
 };
 
 export interface Swimmer {

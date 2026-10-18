@@ -1,4 +1,4 @@
-import { snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, quarantineDays, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
+import { isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, quarantineDays, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -161,8 +161,8 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
   }
 
   const pregnant = symptoms.filter((x) => x.s.includes('pregnant'));
-  const guppies = pregnant.filter((x) => x.fish.species !== 'cherry_shrimp').length;
-  const shrimp = state.fish.filter((f) => f.alive && f.species === 'cherry_shrimp' && f.pregnancy > 0).length;
+  const guppies = pregnant.filter((x) => !isShrimpSpecies(x.fish.species)).length;
+  const shrimp = state.fish.filter((f) => f.alive && isShrimpSpecies(f.species) && f.pregnancy > 0).length;
   if (guppies > 0) out.push({ text: `${guppies} 條母魚肚子鼓鼓的，快生了`, tone: 'ok' });
   if (shrimp > 0) out.push({ text: `${shrimp} 隻母蝦正在抱卵`, tone: 'ok' });
   if (state.plants.some((p) => p.biomassG - PLANT_SPECIES[p.species].maxBiomassG * 0.5 >= PLANT_SPECIES[p.species].cuttingMassG && p.biomassG >= PLANT_SPECIES[p.species].maxBiomassG))

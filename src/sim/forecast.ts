@@ -56,6 +56,8 @@ function eventAlert(state: TankState, e: SimEvent): Omit<ForecastAlert, 'hours' 
       return { category: 'crisis', key: 'level', body: '水位太低，加熱棒露出水面了，記得加水。' };
     case 'power_out':
       return { category: 'crisis', key: 'power', body: '停電了，過濾和加熱都停了。' };
+    case 'betta_fight':
+      return { category: 'crisis', key: 'fight', body: '兩尾公鬥魚在打架，打輸的撐不了幾天，快把牠們分開。' };
     case 'fry_born':
       return { category: 'breeding', key: 'fry', body: `生了 ${e.count ?? '幾'} 尾仔${speciesOf(state, e.subjectId).includes('蝦') ? '蝦' : '魚'}！成魚會吃小的，記得多種水草讓牠們躲。` };
     default:

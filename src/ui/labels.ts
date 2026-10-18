@@ -1,5 +1,5 @@
 import { guppyLook } from '../render/strains';
-import { FISH_SPECIES, growthStage, SNAILS, phenotype, PLANT_SPECIES, sexVisible, strainName, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
+import { isShrimpSpecies, FISH_SPECIES, growthStage, SNAILS, phenotype, PLANT_SPECIES, sexVisible, strainName, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
 
 export const SYMPTOM_LABELS: Record<Symptom, string> = {
   hiding: '躲在角落',
@@ -30,6 +30,8 @@ export const DEATH_CAUSE_LABELS: Record<string, string> = {
   ich: '白點病',
   chronic_stress: '長期緊迫',
   fin_nip: '被咬鰭',
+  fight: '被另一尾公鬥魚打死（兩尾公鬥魚不能養在同一缸）',
+  betta_attack: '被鬥魚追咬',
   old_age: '老死（壽終正寢）',
   molt: '脫殼失敗（卡殼）：GH 太低或水質一下變太多',
   ph: 'pH 超出牠能撐的範圍',
@@ -47,7 +49,7 @@ export const BROOD_ISSUE_LABELS: Record<string, string> = {
 };
 
 export function fishName(fish: Fish): string {
-  const shrimp = fish.species === 'cherry_shrimp';
+  const shrimp = isShrimpSpecies(fish.species);
   // 轉色前看不出公母：叫仔魚、幼魚（design/growth.md §6）
   const stage = growthStage(fish);
   const young = !sexVisible(fish)
@@ -88,7 +90,7 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
     case 'heater_exposed':
       return { text: '水位太低，加熱棒露出水面空燒壞掉了！記得補水', tone: 'bad' };
     case 'fry_born': {
-      const shrimp = fish?.species === 'cherry_shrimp';
+      const shrimp = !!fish && isShrimpSpecies(fish.species);
       return { text: `${fish ? fishName(fish) : '有隻母魚'} ${shrimp ? '孵出' : '生了'} ${e.count ?? 0} ${shrimp ? '隻仔蝦' : '尾仔魚'}。成魚會吃小魚小蝦，水草越密越好躲`, tone: 'info' };
     }
     case 'snail_died': {
@@ -106,6 +108,10 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
       return { text: `${fish ? fishName(fish) : '短鯛母魚'} 把整窩卵吃掉了：${BROOD_ISSUE_LABELS[e.cause ?? 'stress'] ?? '太緊張了'}。新手第一窩常這樣，下次會好一點`, tone: 'warn' };
     case 'brood_left':
       return { text: `${fish ? fishName(fish) : '短鯛母魚'} 帶大的 ${e.count ?? 0} 尾小魚離巢了，可以分缸了`, tone: 'info' };
+    case 'betta_fight':
+      return { text: `缸裡有 ${e.count ?? 2} 尾公鬥魚在打架！打輸的撐不了幾天，快把牠們分到不同缸`, tone: 'bad' };
+    case 'betta_ate_shrimp':
+      return { text: `${fish ? fishName(fish) : '鬥魚'} 吃掉了一隻蝦。這尾鬥魚會獵蝦，多種水草讓蝦躲，或分開養`, tone: 'warn' };
     case 'trap_rotted':
       return { text: '螺陷阱裡的菜放太久爛掉了，弄髒了水', tone: 'warn' };
   }

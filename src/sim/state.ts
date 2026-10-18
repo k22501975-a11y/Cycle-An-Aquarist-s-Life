@@ -265,6 +265,8 @@ export type SimEventType =
   | 'fry_born'
   | 'controller_cut'
   | 'heater_exposed'
+  | 'betta_fight'
+  | 'betta_ate_shrimp'
   | 'snail_died'
   | 'snail_eggs'
   | 'snail_hatched'
