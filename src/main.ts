@@ -1,5 +1,6 @@
 import { Application } from 'pixi.js';
 import { Game, newGameState, SPEED_OPTIONS } from './game/game';
+import { browserStore, catchUp, clearSave, readSave, writeSave } from './game/save';
 import { TankView } from './render/tank-view';
 import { GAME_SECONDS_PER_DAY, isLightOn, removeDeadFish } from './sim';
 import { h } from './ui/dom';
@@ -27,7 +28,12 @@ async function start(): Promise<void> {
   await app.init({ resizeTo: stage, background: 0x0b1a24, antialias: true, resolution: Math.min(2, window.devicePixelRatio), autoDensity: true });
   stage.appendChild(app.canvas);
 
-  const game = new Game(newGameState(), 7);
+  // 讀取存檔並補算離開期間的時間
+  const store = browserStore();
+  const saved = readSave(store);
+  const offline = saved ? catchUp(saved) : null;
+  const game = new Game(saved?.state ?? newGameState(), saved?.timeScale ?? 7);
+  const save = () => writeSave(store, game.state, game.clock.timeScale);
   // 給瀏覽器端的自動化測試與除錯使用。
   const debugHandle = { game } as Record<string, unknown>;
   (window as unknown as { cycle: unknown }).cycle = debugHandle;
@@ -52,9 +58,33 @@ async function start(): Promise<void> {
   const temp = h('span.temp');
   const speed = h('select', { 'aria-label': '時間倍率' }) as HTMLSelectElement;
   for (const opt of SPEED_OPTIONS) speed.append(h('option', { value: String(opt.scale) }, opt.label));
-  speed.value = '7';
-  speed.addEventListener('change', () => (game.clock.timeScale = Number(speed.value)));
-  const debugBtn = h('button.icon-btn', { onclick: () => sheet.open('開發者數值', () => debugPanel(ctx), { live: true }), 'aria-label': '開發者數值' }, '⚙');
+  speed.value = String(game.clock.timeScale);
+  speed.addEventListener('change', () => {
+    game.clock.timeScale = Number(speed.value);
+    save();
+  });
+  const menu = () =>
+    h(
+      'div.stack',
+      {},
+      h('button.btn', { onclick: () => sheet.open('開發者數值', () => debugPanel(ctx), { live: true }) }, '開發者數值'),
+      h('p.hint', {}, '遊戲每 10 秒自動存檔；關掉網頁期間的時間，下次打開會以 ×7 補算（最多兩週）。'),
+      h(
+        'button.btn',
+        {
+          onclick: () => {
+            if (!confirm('確定要放棄目前的水缸，重新開始嗎？')) return;
+            clearSave(store);
+            game.load(newGameState());
+            save();
+            sheet.close();
+            toasts.show('開了一個新缸');
+          },
+        },
+        '新遊戲',
+      ),
+    );
+  const debugBtn = h('button.icon-btn', { onclick: () => sheet.open('選單', menu), 'aria-label': '選單' }, '⚙');
   hud.append(clock, temp, h('span.spacer'), speed, debugBtn);
 
   // 操作列
@@ -77,7 +107,36 @@ async function start(): Promise<void> {
     const msg = describeEvent(game.state, e);
     if (msg) toasts.show(msg.text, msg.tone);
   });
-  game.onChange(() => sheet.refresh());
+  game.onChange(() => {
+    sheet.refresh();
+    save();
+  });
+
+  if (offline && offline.hours >= 1) {
+    const days = offline.hours / 24;
+    toasts.show(`你不在的期間過了 ${days >= 1 ? `${days.toFixed(1)} 天` : `${Math.round(offline.hours)} 小時`}${offline.capped ? '（只補算到兩週）' : ''}`);
+    for (const e of offline.events) {
+      const msg = describeEvent(game.state, e);
+      if (msg) toasts.show(msg.text, msg.tone);
+    }
+  }
+  setInterval(save, 10_000);
+  // 切到背景時畫面停止更新；回來時以 ×7 補算這段時間，和關掉網頁一樣。
+  let hiddenAt: number | null = null;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      hiddenAt = Date.now();
+      save();
+    } else if (hiddenAt !== null) {
+      const away = catchUp({ version: 1, savedAt: hiddenAt, timeScale: game.clock.timeScale, state: game.state });
+      hiddenAt = null;
+      away.events.forEach((e) => {
+        const msg = describeEvent(game.state, e);
+        if (msg) toasts.show(msg.text, msg.tone);
+      });
+    }
+  });
+  window.addEventListener('pagehide', save);
 
   let refreshTimer = 0;
   app.ticker.add((ticker) => {
