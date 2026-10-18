@@ -22,6 +22,36 @@ export interface CloudSave {
   save: unknown;
 }
 
+export interface FriendInfo {
+  username: string;
+  affinity: number;
+  /** 交情等級：1 魚友、2 熟識、3 好友、4 摯友。 */
+  level: number;
+  visitedToday: boolean;
+  likedToday: boolean;
+}
+
+export interface FriendsOverview {
+  code: string;
+  likes: number;
+  friends: FriendInfo[];
+  incoming: string[];
+  outgoing: string[];
+  sendLeft: number;
+  receiveLeft: number;
+}
+
+export interface FriendTank {
+  username: string;
+  likes: number;
+  savedAt?: number;
+  save?: unknown;
+}
+
+export type GiftPayload = { kind: 'cuttings'; payload: { species: string; count: number } } | { kind: 'media'; payload: { bacteria: number; filter: string; ich: boolean } };
+
+export type Gift = GiftPayload & { id: number; from: string; createdAt: number };
+
 export type CloudResult<T> = { ok: true; value: T } | { ok: false; code: string; message: string; revision?: number; savedAt?: number };
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -76,6 +106,48 @@ export class CloudClient {
     const res = await this.call<{ revision: number; savedAt: number }>('PUT', '/api/save', body);
     if (res.ok) this.markSynced(res.value.revision);
     return res;
+  }
+
+  // ---- 好友（friends.md） ----
+
+  friends(): Promise<CloudResult<FriendsOverview>> {
+    return this.call('GET', '/api/friends');
+  }
+
+  requestFriend(code: string): Promise<CloudResult<{ username: string; status: 'requested' | 'friends' }>> {
+    return this.call('POST', '/api/friends/request', JSON.stringify({ code }));
+  }
+
+  acceptFriend(username: string): Promise<CloudResult<void>> {
+    return this.call('POST', `/api/friends/${encodeURIComponent(username)}/accept`);
+  }
+
+  declineFriend(username: string): Promise<CloudResult<void>> {
+    return this.call('POST', `/api/friends/${encodeURIComponent(username)}/decline`);
+  }
+
+  unfriend(username: string): Promise<CloudResult<void>> {
+    return this.call('DELETE', `/api/friends/${encodeURIComponent(username)}`);
+  }
+
+  visit(username: string): Promise<CloudResult<FriendTank>> {
+    return this.call('GET', `/api/friends/${encodeURIComponent(username)}/tank`);
+  }
+
+  like(username: string): Promise<CloudResult<{ likes: number }>> {
+    return this.call('POST', `/api/friends/${encodeURIComponent(username)}/like`);
+  }
+
+  sendGift(to: string, gift: GiftPayload): Promise<CloudResult<{ sendLeft: number }>> {
+    return this.call('POST', '/api/gifts', JSON.stringify({ to, ...gift }));
+  }
+
+  gifts(): Promise<CloudResult<Gift[]>> {
+    return this.call('GET', '/api/gifts');
+  }
+
+  claimGift(id: number): Promise<CloudResult<Gift>> {
+    return this.call('POST', `/api/gifts/${id}/claim`);
   }
 
   /** 採用了雲端那份（或確認兩邊一樣）之後，記下雲端的版本號。 */
