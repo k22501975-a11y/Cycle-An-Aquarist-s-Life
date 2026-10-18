@@ -44,3 +44,14 @@ describe('依基因上色的公孔雀魚', () => {
     expect((Math.max(r, g, b) + Math.min(r, g, b)) / 2).toBeGreaterThan(0.3);
   });
 });
+
+describe('鰭型的整條魚圖（J18）', () => {
+  it('緞帶、燕尾、半月用花紋＋鰭型的圖，大C 用花紋圖加補畫；改色照花紋判斷', () => {
+    expect(recipeKey(phenotypeRecipe(P({ grass: true, ribbon: true })))).toBe('guppy-male-bluegrass-ribbon');
+    expect(recipeKey(phenotypeRecipe(P({ grass: true, ribbon: true, bigC: true })))).toBe('guppy-male-bluegrass');
+    expect(recipeKey(phenotypeRecipe(P({ tuxedo: true, red: true, swallow: true })))).toBe('guppy-male-tuxedo-swallow~red');
+    expect(recipeKey(phenotypeRecipe(P({ red: true, albino: true, tailShape: 'halfmoon' })))).toBe('guppy-male-albino-red-halfmoon');
+    expect(parseRecipeKey('guppy-male-cobra-swallow~red')).toMatchObject({ from: 'gold', to: 'red' });
+    expect(parseRecipeKey('fin-pectoral-dumbo~red')).toMatchObject({ from: 'blue', to: 'red' });
+  });
+});

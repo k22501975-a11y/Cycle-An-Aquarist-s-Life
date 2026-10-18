@@ -2,7 +2,7 @@ import { Assets, BlurFilter, ColorMatrixFilter, Container, Mesh, MeshPlane, Text
 import type { FishSpeciesId } from '../sim';
 import type { FishForm } from './fish-art';
 import { canvasTexture, makeCanvas } from './paint';
-import { parseRecipeKey, recolorImage } from './phenotype-art';
+import { parseRecipeKey, patternBase, recolorImage } from './phenotype-art';
 import { guppyLook } from './strains';
 
 /**
@@ -38,6 +38,7 @@ export const PAINTED: Record<string, PaintedSpec> = {
   'guppy-male-albino-red': { file: 'fish/guppy-male-albino-red.webp', tail: 0.32, swing: 0.13, body: GUPPY_MALE_BODY },
   'guppy-male-tuxedo': { file: 'fish/guppy-male-tuxedo.webp', tail: 0.32, swing: 0.13, body: GUPPY_MALE_BODY },
   'guppy-male-redcobra': { file: 'fish/guppy-male-redcobra.webp', tail: 0.32, swing: 0.13, body: GUPPY_MALE_BODY },
+  ...finArt(),
   'guppy-fry': { file: 'fish/guppy-fry.webp', tail: 0.24, swing: 0.12, body: FRY_BODY },
   'zebrafish-male': { file: 'fish/zebrafish-male.webp', tail: 0.2, swing: 0.1, body: ZEBRA_BODY },
   'zebrafish-female': { file: 'fish/zebrafish-female.webp', tail: 0.2, swing: 0.09, body: ZEBRA_BODY },
@@ -48,6 +49,30 @@ export const PAINTED: Record<string, PaintedSpec> = {
   'shrimp-cherry-berried': { file: 'shrimp/shrimp-cherry-berried.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY, eggs: true },
   'shrimp-cherry-juvenile': { file: 'shrimp/shrimp-cherry-juvenile.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
 };
+
+/**
+ * 緞帶、燕尾、半月的整條魚圖（5 種花紋各一張，art/fish/fins/）。
+ * 緞帶下面多一大片垂下來的帶子，身體在圖裡偏上；半月的尾巴大，身體偏下。
+ */
+function finArt(): Record<string, PaintedSpec> {
+  const bodyY: Record<string, [number, number, number]> = {
+    // 花紋：緞帶、燕尾、半月的身體中心 y（相對圖高）
+    bluegrass: [-0.05, 0.03, 0.12],
+    cobra: [-0.05, 0.03, 0.1],
+    'albino-red': [-0.2, 0, 0.1],
+    tuxedo: [-0.18, 0.05, 0.09],
+    redcobra: [-0.24, 0.01, 0.13],
+  };
+  const out: Record<string, PaintedSpec> = {};
+  for (const [pat, ys] of Object.entries(bodyY)) {
+    (['ribbon', 'swallow', 'halfmoon'] as const).forEach((fin, i) => {
+      const key = `guppy-male-${pat}-${fin}`;
+      const ry = fin === 'ribbon' ? 0.08 : fin === 'halfmoon' ? 0.1 : 0.1;
+      out[key] = { file: `fish/${key}.webp`, tail: fin === 'halfmoon' ? 0.38 : 0.34, swing: 0.12, body: { x: 0.16, y: ys[i], rx: 0.2, ry } };
+    });
+  }
+  return out;
+}
 
 /** 品系名稱 → 素材。沒列到的品系用程式繪製版。 */
 const GUPPY_MALE_ART: Record<string, string> = {
@@ -94,6 +119,14 @@ export const SCENERY: Record<string, string> = {
   'sub-coral-side': 'substrate/substrate-coral-side.webp',
 };
 
+/**
+ * 單片鰭的圖層（art/fish/fins/parts/）：頭朝右，anchor 是接到身體的那一點（相對圖寬高）。
+ * 大耳的胸鰭根部帶一小塊魚身，要壓在身體下面。
+ */
+export const FIN_PARTS: Record<string, { file: string; anchor: [number, number] }> = {
+  'fin-pectoral-dumbo': { file: 'fish/parts/fin-pectoral-dumbo.webp', anchor: [658 / 659, 455 / 785] },
+};
+
 const textures = new Map<string, Texture>();
 const scenery = new Map<string, Texture>();
 
@@ -106,6 +139,13 @@ export async function loadPaintedArt(base = import.meta.env.BASE_URL): Promise<n
         if (spec.eating) textures.set(`${key}#eating`, await Assets.load<Texture>(`${base}art/${spec.eating}`));
       } catch {
         // 留給程式繪製版
+      }
+    }),
+    ...Object.entries(FIN_PARTS).map(async ([key, part]) => {
+      try {
+        textures.set(key, await Assets.load<Texture>(`${base}art/${part.file}`));
+      } catch {
+        // 改用程式畫的鰭
       }
     }),
     ...Object.entries(SCENERY).map(async ([key, file]) => {
@@ -122,6 +162,16 @@ export async function loadPaintedArt(base = import.meta.env.BASE_URL): Promise<n
 export function paintedTexture(key: string | null): Texture | null {
   if (!key) return null;
   return textures.get(key) ?? derivedTexture(key);
+}
+
+/** 這個鍵實際用到哪張圖：鰭型圖沒載入時退回花紋圖（PaintedRig 要用對應的身體範圍）。 */
+export function resolvePaintedKey(key: string | null): string | null {
+  if (!key || paintedTexture(key)) return key;
+  const [base, rest] = key.split('~');
+  const pat = patternBase(base);
+  if (pat === base) return key;
+  const alt = rest ? `${pat}~${rest}` : pat;
+  return paintedTexture(alt) ? alt : key;
 }
 
 /** 依基因改色的衍生圖（「原圖~顏色」）：第一次用到時從原圖改色，之後重用。 */

@@ -7,7 +7,13 @@ import { nextRandom, type RngState } from './random';
  * - 紅尾 R：顯性，沒有就是藍尾（簡化設定）
  * - 蛇紋 Ss：性聯，大多在公魚的 Y 上，只傳兒子；每次繁殖 1% 機率在 X、Y 之間換位
  * - 草尾 Gr：Y 連鎖，公魚 100% 傳給兒子、女兒 0%
- * - 尾鰭分數：多基因，子代約為父母平均再加上隨機變異；近親繁殖會退化
+ * - 尾鰭分數：多基因，子代約為父母平均再加上隨機變異；近親繁殖會退化。分數也決定尾型（圓尾、三角、半月）
+ * 鰭型（strains.md §1.3）：
+ * - 燕尾 sw：體染色體隱性，所有鰭條拉長；公魚交接器也長，交配成功率只剩 5%
+ * - 緞帶 Ri：體染色體顯性，腹鰭和交接器拉長；公魚實質不育，要用母緞帶 × 正常公
+ * - 大耳：體染色體隱性，胸鰭變大
+ * - 劍尾：Y 連鎖，上劍、下劍、雙劍
+ * - 大C：帶緞帶、而且鰭長（多基因）夠高才表現，背鰭臀鰭拉長成 C 字；約 20 尾挑 1 尾，公魚是長公不能配
  */
 
 /** 一對等位基因，1 表示帶有那個基因。 */
@@ -21,10 +27,23 @@ export interface GuppyGenome {
   /** X 染色體上的蛇紋：母魚兩條、公魚一條。 */
   snakeX: (0 | 1)[];
   /** 公魚的 Y 染色體；母魚是 null。 */
-  y: { snake: 0 | 1; grass: 0 | 1 } | null;
+  y: { snake: 0 | 1; grass: 0 | 1; sword?: Sword } | null;
   /** 尾鰭分數 0–100（大小與形狀），評比和賣價看這個。 */
   tail: number;
+  /** 燕尾、緞帶、大耳（舊存檔沒有，當作都沒帶）。 */
+  swallow?: Pair;
+  ribbon?: Pair;
+  dumbo?: Pair;
+  /** 鰭長 0–100（多基因）：跟緞帶一起決定會不會長成大C。 */
+  fins?: number;
 }
+
+/** 劍尾：0 沒有、1 上劍、2 下劍、3 雙劍。 */
+export type Sword = 0 | 1 | 2 | 3;
+export type TailShape = 'round' | 'delta' | 'halfmoon';
+
+/** 帶緞帶時，鰭長分數到這裡以上才長成大C（店裡的緞帶約 5% 達標）。 */
+export const BIG_C_FINS = 66;
 
 export interface GuppyPhenotype {
   albino: boolean;
@@ -33,7 +52,40 @@ export interface GuppyPhenotype {
   red: boolean;
   snake: boolean;
   grass: boolean;
+  swallow?: boolean;
+  ribbon?: boolean;
+  dumbo?: boolean;
+  bigC?: boolean;
+  sword?: Sword;
+  tailShape?: TailShape;
+  /** 鰭長多基因分數（0–1）：大C 的弧度、劍和拖絲的長度跟著變。 */
+  finLength?: number;
 }
+
+/** 尾型：尾鰭分數越高越大越開，70 分以上展開到接近 180°（半月）。 */
+export function tailShape(tail: number): TailShape {
+  return tail >= 70 ? 'halfmoon' : tail >= 40 ? 'delta' : 'round';
+}
+
+/** 公魚能不能配：緞帶、大C 的交接器太長幾乎不能交配，燕尾只剩一成不到。母魚都可以。 */
+export function matingSuccess(g: GuppyGenome): number {
+  if (!g.y) return 1;
+  const p = phenotype(g);
+  if (p.ribbon || p.bigC) return 0;
+  if (p.swallow) return 0.05;
+  return 1;
+}
+
+/** 店裡賣的鰭型品系（花紋照 GUPPY_STRAINS 的索引）。 */
+export type FinTrait = 'swallow' | 'ribbon' | 'dumbo' | 'sword' | 'halfmoon' | 'bigC';
+export const GUPPY_FIN_STRAINS: Array<{ name: string; strain: number; fin: FinTrait; price: number }> = [
+  { name: '藍尾禮服大耳', strain: 3, fin: 'dumbo', price: 150 },
+  { name: '藍尾禮服燕尾', strain: 3, fin: 'swallow', price: 180 },
+  { name: '藍草雙劍', strain: 0, fin: 'sword', price: 120 },
+  { name: '白子全紅半月', strain: 2, fin: 'halfmoon', price: 160 },
+  { name: '藍尾禮服緞帶', strain: 3, fin: 'ribbon', price: 200 },
+  { name: '藍草大C', strain: 0, fin: 'bigC', price: 380 },
+];
 
 /** 店裡常見的五個品系（順序和畫面的品系外觀表一致）。 */
 export const GUPPY_STRAINS = ['藍草', '黃金蛇王', '白子全紅', '藍尾禮服', '紅蛇王'] as const;
@@ -42,7 +94,10 @@ export const GUPPY_STRAIN_PRICES = [60, 120, 100, 60, 80];
 
 /** 表現型的身價：照最接近的品系，白子、黃金這類隱性品系比較稀有。 */
 export function phenotypeValue(p: GuppyPhenotype): number {
-  return GUPPY_STRAIN_PRICES[lookIndex(p)] * (p.albino && !p.red ? 1.2 : 1);
+  const fin = p.bigC ? 3 : (p.ribbon ? 1.5 : 1) * (p.swallow ? 1.5 : 1) * (p.dumbo ? 1.4 : 1);
+  const sword = p.sword === 3 ? 1.3 : p.sword ? 1.15 : 1;
+  const shape = p.tailShape === 'halfmoon' ? 1.2 : 1;
+  return GUPPY_STRAIN_PRICES[lookIndex(p)] * (p.albino && !p.red ? 1.2 : 1) * fin * sword * shape;
 }
 
 /** 配對預測：模擬很多次配種，統計子代各種外觀的比例（配對預測面板用）。 */
@@ -55,7 +110,7 @@ export function predictOffspring(mother: GuppyGenome, father: GuppyGenome, sampl
     const son = phenotype(cross(rng, mother, father, 'male'));
     sons.set(strainName(son), (sons.get(strainName(son)) ?? 0) + 1);
     const d = phenotype(cross(rng, mother, father, 'female'));
-    const label = [d.albino ? '白子' : '', d.gold ? '黃金' : '', d.tuxedo ? '禮服' : '', d.snake ? '蛇紋' : ''].filter(Boolean).join('、') || '一般';
+    const label = [d.albino ? '白子' : '', d.gold ? '黃金' : '', d.tuxedo ? '禮服' : '', d.snake ? '蛇紋' : '', ...finWords(d)].filter(Boolean).join('、') || '一般';
     daughters.set(label, (daughters.get(label) ?? 0) + 1);
   }
   const sorted = (m: Map<string, number>) => [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, Math.round((v / samples) * 100)] as [string, number]);
@@ -102,12 +157,24 @@ function gaussian(rng: RngState): number {
 }
 
 /** 店裡的魚：大多是純種品系，約兩成偷偷帶著一個白子基因。 */
-export function storeGenome(rng: RngState, sex: 'male' | 'female', strain?: number): GuppyGenome {
+export function storeGenome(rng: RngState, sex: 'male' | 'female', strain?: number, fin?: FinTrait): GuppyGenome {
   const index = strain ?? Math.floor(nextRandom(rng) * GUPPY_STRAINS.length);
   const g = template(index, sex);
   if (g.albino[0] === 0 && nextRandom(rng) < 0.2) g.albino = [0, 1];
   g.tail = Math.round(Math.min(100, Math.max(0, 45 + gaussian(rng) * 10)));
+  if (fin) applyFin(rng, g, fin);
   return g;
+}
+
+/** 鰭型品系：純合（隱性）或帶一個（緞帶）；劍尾在公魚的 Y 上，母魚的兒子才會有。 */
+function applyFin(rng: RngState, g: GuppyGenome, fin: FinTrait): void {
+  g.fins = Math.round(Math.min(100, Math.max(0, 45 + gaussian(rng) * 12)));
+  if (fin === 'swallow') g.swallow = [1, 1];
+  if (fin === 'dumbo') g.dumbo = [1, 1];
+  if (fin === 'ribbon' || fin === 'bigC') g.ribbon = [1, 0];
+  if (fin === 'bigC') g.fins = Math.max(g.fins, BIG_C_FINS + 4);
+  if (fin === 'sword' && g.y) g.y.sword = 3;
+  if (fin === 'halfmoon') g.tail = Math.max(g.tail, 72);
 }
 
 /** 舊存檔的孔雀魚：照原本依編號輪替的外觀補上對應的基因，看起來不會變。 */
@@ -137,7 +204,18 @@ export function cross(rng: RngState, mother: GuppyGenome, father: GuppyGenome, s
   const mid = (mother.tail + father.tail) / 2;
   // 選育的力量來自玩家挑魚：子代平均約為父母平均（略往族群平均 50 回歸），再加上變異
   const tail = mid + (50 - mid) * 0.3 + gaussian(rng) * 8 - inbreeding * 25;
+  // 鰭型基因：舊存檔沒有，當作都沒帶（不多抽亂數，舊魚的子代跟以前一樣）
+  const fins: Partial<GuppyGenome> = {};
+  for (const key of ['swallow', 'ribbon', 'dumbo'] as const) {
+    if (mother[key] || father[key]) fins[key] = inherit(rng, mother[key] ?? [0, 0], father[key] ?? [0, 0]);
+  }
+  if (mother.fins !== undefined || father.fins !== undefined) {
+    const fm = ((mother.fins ?? 45) + (father.fins ?? 45)) / 2;
+    // 大C 很不穩定：鰭長的變異大，二十尾才挑得出一尾
+    fins.fins = Math.round(Math.min(100, Math.max(0, fm + (45 - fm) * 0.4 + gaussian(rng) * 12 - inbreeding * 20)));
+  }
   return {
+    ...fins,
     albino: inherit(rng, mother.albino, father.albino),
     gold: inherit(rng, mother.gold, father.gold),
     tuxedo: inherit(rng, mother.tuxedo, father.tuxedo),
@@ -158,11 +236,34 @@ export function phenotype(g: GuppyGenome): GuppyPhenotype {
     // 母魚兩條 X 都有才看得出蛇紋；公魚 X 或 Y 有一個就會表現
     snake: male ? g.y!.snake === 1 || g.snakeX[0] === 1 : g.snakeX.every((x) => x === 1),
     grass: male && g.y!.grass === 1,
+    swallow: !!g.swallow && g.swallow[0] === 1 && g.swallow[1] === 1,
+    ribbon: !!g.ribbon?.includes(1),
+    dumbo: !!g.dumbo && g.dumbo[0] === 1 && g.dumbo[1] === 1,
+    bigC: !!g.ribbon?.includes(1) && (g.fins ?? 0) >= BIG_C_FINS,
+    sword: male ? (g.y!.sword ?? 0) : 0,
+    tailShape: tailShape(g.tail),
+    finLength: (g.fins ?? 45) / 100,
   };
+}
+
+/** 鰭型的稱呼（品系名的最後一段）。 */
+export function finWords(p: GuppyPhenotype): string[] {
+  const out: string[] = [];
+  if (p.sword) out.push(['', '上劍', '下劍', '雙劍'][p.sword]);
+  if (p.dumbo) out.push('大耳');
+  if (p.swallow) out.push('燕尾');
+  if (p.bigC) out.push('大C');
+  else if (p.ribbon) out.push('緞帶');
+  if (!out.length && p.tailShape === 'halfmoon') out.push('半月');
+  return out;
 }
 
 /** 品系名：[白子][黃金／紅／藍] + 花紋。 */
 export function strainName(p: GuppyPhenotype): string {
+  return baseStrainName(p) + finWords(p).join('');
+}
+
+function baseStrainName(p: GuppyPhenotype): string {
   const pre = p.albino ? '白子' : '';
   const color = p.red ? '紅' : '藍';
   if (p.snake) return `${pre}${p.gold ? '黃金' : color}蛇王`;

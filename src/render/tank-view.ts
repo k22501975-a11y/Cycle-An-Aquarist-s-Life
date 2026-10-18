@@ -1,7 +1,7 @@
 import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
 import { FISH_SPECIES, PLANT_SPECIES, isCo2Injecting, isJuvenile, isLightOn, lookVariant, observeSymptoms, phenotype, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
-import { PaintedRig, paintedKey, paintedTexture } from './painted';
+import { PaintedRig, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { floorAt, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { dirtSpots, floorY, frontLip, sandSurface, substrateLook, SUBSTRATE_PALETTES, type SubstrateLook } from './substrate';
@@ -11,6 +11,7 @@ import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame,
 import { PlantMesh } from './plant-sway';
 import { clawPose, clawRate, pleopods, type Pt } from './shrimp-limbs';
 import { phenotypeRecipe, recipeKey } from './phenotype-art';
+import { drawFinOverlay, finTraitsOf } from './fin-render';
 import { clampPan, fitCamera, maxSpan, zoomAt, type Camera } from './camera';
 import { type QualitySpec, qualitySpec } from './quality';
 import { causticsTexture, MOCKUP_PX_PER_CM, paintBackdrop, paintDriftwood, paintFront, paintPlant, paintVignette, rayTexture } from './scenery';
@@ -1002,8 +1003,10 @@ export class TankView {
     // 魚懷孕後期肚子才看得出來；蝦一抱卵就看得到。
     const gravid = form === 'female' && fish.pregnancy > (fish.species === 'cherry_shrimp' ? 0 : 0.5);
     // 公孔雀魚照基因上色：雜交出來的組合也有自己的花色
-    const painted = fish.species === 'guppy' && form === 'male' && fish.genome ? recipeKey(phenotypeRecipe(phenotype(fish.genome))) : paintedKey(fish.species, form, lookVariant(fish), gravid);
-    const key = `${fish.species}:${form}:${gravid}:${painted ?? ''}`;
+    const painted = resolvePaintedKey(fish.species === 'guppy' && form === 'male' && fish.genome ? recipeKey(phenotypeRecipe(phenotype(fish.genome))) : paintedKey(fish.species, form, lookVariant(fish), gravid));
+    const fins = fish.species === 'guppy' && form !== 'juvenile' && fish.genome ? finTraitsOf(fish, painted) : null;
+    const finKey = fins ? `${+fins.dumboArt}${+!!fins.traits.swallow}${+!!fins.traits.ribbon}${+!!fins.traits.dumbo}${+!!fins.traits.bigC}${fins.traits.sword ?? 0}${+!!fins.traits.halfmoon}` : '';
+    const key = `${fish.species}:${form}:${gravid}:${painted ?? ''}:${finKey}`;
     if (key === view.rigKey) return;
     view.rigKey = key;
     view.rig?.destroy({ children: true });
@@ -1013,6 +1016,7 @@ export class TankView {
     view.boost = 0;
     view.rig.addChildAt(view.eggs, 0);
     view.rig.addChild(view.spots);
+    if (fins) drawFinOverlay(view.rig, fins);
     view.limbs?.destroy();
     view.limbs = null;
     if (fish.species === 'cherry_shrimp' && view.rig instanceof PaintedRig) {
