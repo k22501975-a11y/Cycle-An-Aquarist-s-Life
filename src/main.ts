@@ -22,6 +22,7 @@ import {
   waterChangePanel,
   type PanelContext,
 } from './ui/panels';
+import { Guide } from './ui/guide';
 import { Sheet, Toasts } from './ui/sheet';
 import { clockLabel, todos, waterCapsules } from './ui/status';
 import { cornerRect, pickCorner, type Corner, type Rect } from './ui/dodge';
@@ -211,6 +212,8 @@ async function start(): Promise<void> {
           ),
         ),
       ),
+      h('h3', {}, '新手引導'),
+      h('button.btn', { onclick: () => (sheet.close(), guide.restart()) }, '重新看阿德老闆的教學'),
       h('button.btn', { onclick: () => sheet.open('開發者數值', () => debugPanel(ctx), { live: true }) }, '開發者數值'),
       h('p.hint', {}, '遊戲每 10 秒自動存檔；關掉網頁期間的時間，下次打開會以 ×7 補算（最多兩週）。'),
       h(
@@ -285,15 +288,19 @@ async function start(): Promise<void> {
   // 水缸撐滿整個畫面；告訴畫面狀態列與按鈕列蓋住多少，魚就不會游到它們後面。
   const tankLabel = h('div.tank-label');
   stage.append(tankLabel);
+  const guide = new Guide(stage, store, (id) => audio.play(id), () => requestAnimationFrame(() => measure()));
   const measure = () => {
     const stageRect = stage.getBoundingClientRect();
     const top = hud.getBoundingClientRect().bottom - stageRect.top;
     const bottom = stageRect.bottom - tools.getBoundingClientRect().top;
     view.setInsets({ top: Math.round(top), bottom: Math.round(bottom) });
-    // 下緣留給左下角的缸名標籤。
+    // 任務小卡在左上角；浮動選取卡排在它下面，下緣留給左下角的缸名標籤。
+    guide.pill.style.top = `${Math.round(top + 10)}px`;
+    const pillH = guide.pillVisible ? guide.pill.offsetHeight + 8 : 0;
     const dockTop = dock.getBoundingClientRect().top - stageRect.top;
-    cardArea = { x: 0, y: top + 10, w: stageRect.width, h: Math.max(0, dockTop - top - 10 - 34) };
+    cardArea = { x: 0, y: top + 10 + pillH, w: stageRect.width, h: Math.max(0, dockTop - top - 10 - pillH - 34) };
     placeSelCard();
+    stage.style.setProperty('--dock-top', `${Math.round(stageRect.bottom - dockTop - stageRect.top)}px`);
     tankLabel.style.bottom = `${Math.round(stageRect.bottom - dock.getBoundingClientRect().top + 8)}px`;
     const size = tankSize(game.state.equipment.tank);
     tankLabel.textContent = `${game.state.equipment.tank.name}・${size.w}×${size.h}×${size.d} cm`;
@@ -350,6 +357,7 @@ async function start(): Promise<void> {
   renderSelCard();
   renderTodos();
   renderCaps();
+  guide.start();
   let refreshTimer = 0;
   // 一段時間沒操作就降到 30 fps，省電；一碰螢幕馬上恢復
   let lastInput = performance.now();
@@ -374,6 +382,7 @@ async function start(): Promise<void> {
       placeSelCard();
       renderTodos();
       renderCaps();
+      guide.update(game.state);
       if (performance.now() - lastInput > IDLE_MS && !sheet.isOpen) app.ticker.maxFPS = 30;
       const st = game.state;
       audio.setAmbience({

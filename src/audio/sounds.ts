@@ -14,7 +14,8 @@ export type SoundId =
   | 'death'
   | 'alarm'
   | 'warn'
-  | 'restore';
+  | 'restore'
+  | 'quest';
 
 /** 模擬事件對應的音效：嚴重的用警報，好事用輕快的和弦。 */
 export function eventSound(type: SimEventType): SoundId {

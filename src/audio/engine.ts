@@ -178,6 +178,12 @@ export class AudioEngine {
         this.tone(t, 587, 0.25, 0.12, 'triangle');
         this.tone(t + 0.2, 466, 0.35, 0.12, 'triangle');
         break;
+      case 'quest':
+        // 任務完成：明亮的撥弦雙音＋泛音
+        this.pluck(t, 74, 0.6, this.sfxBus);
+        this.pluck(t + 0.12, 78, 0.6, this.sfxBus);
+        this.pluck(t + 0.24, 86, 0.45, this.sfxBus);
+        break;
       case 'restore':
         this.tone(t, 523, 0.2, 0.1, 'sine');
         this.tone(t + 0.15, 784, 0.35, 0.1, 'sine');
