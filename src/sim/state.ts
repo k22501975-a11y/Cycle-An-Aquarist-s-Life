@@ -1,6 +1,7 @@
 import { co2Equilibrium, oxygenSaturation, phFromCo2 } from './chemistry';
 import type { AirPumpSpec, ChillerSpec, Co2Spec, FanSpec, FilterSpec, HardscapeSpec, HeaterSpec, LightSpec, SubstrateSpec, TankSpec } from './equipment';
 import type { Region } from './season';
+import type { Economy } from './economy';
 import type { RngState } from './random';
 import type { TestKitReading } from './readings';
 import { FISH_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
@@ -32,6 +33,8 @@ export interface TankState {
   tempLog?: { hours: number; tempC: number }[];
   /** 最近一次換水的時間（遊戲小時）。 */
   lastWaterChangeHours?: number;
+  /** 魚幣、電費、手上的插枝。舊存檔沒有，第一次用到時給起始資金。 */
+  economy?: Economy;
   /** 檢疫盒：買了才有。 */
   quarantine?: Quarantine | null;
 }
@@ -195,6 +198,7 @@ export type SimEventType =
   | 'fish_died'
   | 'ich_visible'
   | 'disease_visible'
+  | 'power_bill'
   | 'plant_died'
   | 'heater_broke'
   | 'heater_stuck'

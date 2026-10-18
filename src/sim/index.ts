@@ -8,6 +8,7 @@ export * from './actions';
 export * from './readings';
 export * from './season';
 export * from './quarantine';
+export * from './economy';
 export { hardscapeBacteriaCapacity, substrateNutrientBoost } from './processes/hardscape';
 export { canCatch, DISEASE_SPECS, hasVisible, infect, STORE_DISEASE_CHANCE } from './processes/disease';
 export { computeStressors, crowdingRatio, ELDERLY_FRACTION, freeAmmonia, lifeFraction } from './processes/fauna';

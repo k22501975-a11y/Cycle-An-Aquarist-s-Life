@@ -226,6 +226,14 @@ async function start(): Promise<void> {
   // ---- 狀態列：時間、水質膠囊（沒測過顯示「?」）、待辦、選單 ----
   const clockValue = h('span.value');
   const clock = h('div.time', {}, h('span.label', {}, '水族人生'), clockValue);
+  const coinsValue = h('b');
+  const coinsBtn = h('button.coins', { 'aria-label': '錢包', title: '錢包：點一下打開商店', onclick: () => sheet.open('商店', () => shopPanel(ctx)) }, h('i.coin'), coinsValue);
+  const renderCoins = () => {
+    const coins = sim.economy(game.state).coins;
+    const text = coins.toLocaleString('zh-TW');
+    if (coinsValue.textContent !== text) coinsValue.textContent = text;
+    coinsBtn.classList.toggle('debt', coins < 0);
+  };
   const caps = h('button.caps', { 'aria-label': '水質趨勢', title: '點一下看水質趨勢', onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) });
   const todoBadge = h('span.badge');
   const todoCard = h('div.card.glass.todo');
@@ -380,7 +388,7 @@ async function start(): Promise<void> {
     );
   const menuBtn = h('button.hud-btn', { onclick: () => sheet.open('選單', menu), 'aria-label': '選單' }, icon(ICONS.menu));
   hud.classList.add('glass');
-  hud.append(clock, h('span.hud-sep'), caps, todoBtn, menuBtn);
+  hud.append(clock, coinsBtn, h('span.hud-sep'), caps, todoBtn, menuBtn);
 
   // ---- 下方櫃台：待辦卡｜圓形工具列｜選取卡 ----
   const tools = h('div.tools.glass');
@@ -415,7 +423,15 @@ async function start(): Promise<void> {
   tool('feed', '餵食', '#e8a24a', () => sheet.open('餵食', () => feedPanel(ctx)));
   tool('water', '換水', '#4fb8e0', () => sheet.open('換水', () => waterChangePanel(ctx)));
   tool('test', '測試', '#a98be8', () => {
-    game.act(useTestKit);
+    const cost = sim.price('use:test');
+    if (!sim.canAfford(game.state, cost)) {
+      toasts.show(`錢不夠買試劑（一次 ${cost} 元）`, 'warn');
+      return;
+    }
+    game.act((st) => {
+      sim.spend(st, cost);
+      useTestKit(st);
+    });
     renderCaps();
     sheet.open('水質測試', () => testKitPanel(ctx), { live: true });
   });
@@ -527,6 +543,7 @@ async function start(): Promise<void> {
   renderSelCard();
   renderTodos();
   renderCaps();
+  renderCoins();
   guide.start();
   let refreshTimer = 0;
   // 一段時間沒操作就降到 30 fps，省電；一碰螢幕馬上恢復
@@ -562,6 +579,7 @@ async function start(): Promise<void> {
       placeSelCard();
       renderTodos();
       renderCaps();
+      renderCoins();
       guide.update(game.state);
       for (const entry of unlockCodex(codexSeen, game.state)) {
         saveCodexSeen(store, codexSeen);

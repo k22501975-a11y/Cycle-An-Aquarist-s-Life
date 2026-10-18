@@ -96,6 +96,8 @@ export function todos(state: TankState): Todo[] {
   if (symptoms.some((x) => x.s.includes('white_spots'))) out.push({ text: '有魚身上出現白點', tone: 'bad' });
   if (symptoms.some((x) => x.s.includes('gasping'))) out.push({ text: '魚在水面喘氣', tone: 'bad' });
   if (symptoms.some((x) => x.s.includes('white_patches'))) out.push({ text: '有魚身上長出白色棉絮狀的斑', tone: 'bad' });
+  const coins = state.economy?.coins ?? 0;
+  if (coins < 0) out.push({ text: `錢包透支 ${-coins} 元，賣些魚或插枝吧`, tone: 'warn' });
   const sub = eq.substrate;
   if (sub?.spec.khAbsorb && sub.buffer < 0.15) out.push({ text: '水草泥老化了，KH 慢慢回升', tone: 'warn' });
   const q = state.quarantine;
