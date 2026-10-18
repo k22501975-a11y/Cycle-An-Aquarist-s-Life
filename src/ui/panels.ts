@@ -1,5 +1,6 @@
 import type { SoundId } from '../audio/sounds';
 import {
+  isShrimpSpecies,
   addFish,
   BREED_PH_MAX,
   CARE_EAT_THRESHOLD,
@@ -55,6 +56,7 @@ import {
   chargeMeal,
   economy,
   FISH_PRICES,
+  BETTA_FEMALE_PRICE,
   fishBuybackPrice,
   PLANT_PRICES,
   plantBuybackPrice,
@@ -440,7 +442,7 @@ export function growthLine(state: TankState, fish: Fish): string {
     if (slow.length) parts.push(`長得慢：${slow.join('、')}`);
   }
   if ((fish.stunted ?? 0) >= 0.15) parts.push('小時候太擠或吃不好，長大會比別人小（永久）');
-  if (fish.species === 'cherry_shrimp' && fish.lengthCm < maxLengthCm(fish) * 0.97) parts.push('靠脫殼長大');
+  if (isShrimpSpecies(fish.species) && fish.lengthCm < maxLengthCm(fish) * 0.97) parts.push('靠脫殼長大');
   return parts.join(' · ');
 }
 
@@ -640,6 +642,14 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       !shopDrip && Math.abs(farmHabit(species).ph - game.state.water.ph) > 0.6 ? 'warn' : 'info',
     );
   };
+  // 鬥魚公母分開賣：公魚是長鰭的漂亮魚，母魚短鰭便宜很多
+  const buyOne = (species: FishSpeciesId, sex: 'male' | 'female', price: number) => () => {
+    const quarantined = !!game.state.quarantine;
+    const name = `${FISH_SPECIES[species].name}${sex === 'male' ? '公魚' : '母魚'}`;
+    const males = game.state.fish.filter((f) => f.alive && f.species === species && f.sex === 'male' && !isJuvenile(f)).length;
+    if (species === 'betta' && sex === 'male' && males > 0 && !quarantined && !confirm('缸裡已經有公鬥魚了，兩尾公鬥魚放在一起會打到一尾死掉。還是要買嗎？')) return;
+    purchase(ctx, price, (st) => (quarantined ? addFishToQuarantine : addFish)(st, species, { sex, drip: shopDrip }), `買了一隻${name}${quarantined ? `，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天` : ''}`);
+  };
   // 水草可能夾帶害蟲小螺的卵（看不到）；有檢疫盒的人會先泡過，機率低很多（design/snails.md §2）
   const buyPair = (species: FishSpeciesId) => () => {
     const quarantined = !!game.state.quarantine;
@@ -701,6 +711,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         : h('p.hint', {}, '店裡的魚可能帶著白點蟲或其他病，直接放進主缸可能傳染整缸。商店的「設備」可以買檢疫盒。'),
       h('p.hint', {}, '新缸還沒養好水就放太多魚，會氨中毒。'),
       h('p.hint', {}, '孔雀魚和櫻花蝦會自己繁殖，但成魚會吃仔魚和仔蝦，水草種密一點才躲得掉。斑馬魚會輕微咬孔雀魚公魚的長尾巴。'),
+      h('p.hint', {}, '鬥魚會到水面吸空氣，不怕缺氧；但兩尾公鬥魚不能同缸，公鬥魚也會去咬孔雀魚公魚的長尾巴，約三成的鬥魚會獵蝦。水晶蝦很嬌貴：要偏酸的軟水、水溫 24°C 以下，26°C 以上很危險，夏天要開冷氣。'),
       h('p.hint', {}, '鳳尾短鯛會自己帶小孩：要有石頭或沉木當洞穴、水溫 25°C 以上。護幼中的母魚會趕走靠近的魚，缸小的話其他魚會很緊張。'),
       h('p.hint', {}, `孔雀魚（${FISH_SPECIES.guppy.temp.min}–${FISH_SPECIES.guppy.temp.max}°C；pH ${FISH_SPECIES.guppy.phSurvive.min}–${FISH_SPECIES.guppy.phSurvive.max} 都能慢慢適應）照品系賣。同品系配對生出來的大多一樣；不同品系混養會生出各種組合，也可能冒出藏在基因裡的白子。`),
       ...GUPPY_STRAINS.map((strain, i) =>
@@ -722,12 +733,14 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       ),
       ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).filter((id) => id !== 'guppy').map((id) => {
         const sp = FISH_SPECIES[id];
-        const note = [`每隻 ${FISH_PRICES[id]} 元`, `${sp.temp.min}–${sp.temp.max}°C`, `pH ${sp.phSurvive.min}–${sp.phSurvive.max} 能適應`, sp.minGroup ? `群游，至少 ${sp.minGroup} 隻` : ''].filter(Boolean).join(' · ');
+        const note = [id === 'betta' ? `公魚 ${FISH_PRICES.betta} 元、母魚 ${BETTA_FEMALE_PRICE} 元` : `每隻 ${FISH_PRICES[id]} 元`, `${sp.temp.min}–${sp.temp.max}°C`, `pH ${sp.phSurvive.min}–${sp.phSurvive.max} 能適應`, sp.minGroup ? `群游，至少 ${sp.minGroup} 隻` : ''].filter(Boolean).join(' · ');
         // 短鯛成對賣：一公一母才會產卵護幼
         const buttons =
           id === 'apisto'
             ? [button('+1', buyFish(id, 1)), button('一對', buyPair(id))]
-            : [button('+1', buyFish(id, 1)), button('+6', buyFish(id, 6))];
+            : id === 'betta'
+              ? [button(`公 ${FISH_PRICES.betta}`, buyOne(id, 'male', FISH_PRICES.betta)), button(`母 ${BETTA_FEMALE_PRICE}`, buyOne(id, 'female', BETTA_FEMALE_PRICE))]
+              : [button('+1', buyFish(id, 1)), button('+6', buyFish(id, 6))];
         return h('div.item', {}, h('div', {}, h('b', {}, sp.name), h('div.hint', {}, note)), h('div.row', {}, ...buttons));
       }),
     );
@@ -1285,7 +1298,7 @@ export function snailPanel(ctx: PanelContext): Node {
   const pests = PEST_ORDER.map((k) => [k, Math.round(pestCount(st, k) * (k === 'mts' && lit ? 0.1 : 1))] as const).filter(([, n]) => n > 0);
   const young = Math.round(s?.appleYoung ?? 0);
   const trapAge = s?.trapHour !== undefined ? st.hours - s.trapHour : null;
-  const hasShrimp = st.fish.some((f) => f.alive && f.species === 'cherry_shrimp');
+  const hasShrimp = st.fish.some((f) => f.alive && isShrimpSpecies(f.species));
   return h(
     'div.stack',
     {},

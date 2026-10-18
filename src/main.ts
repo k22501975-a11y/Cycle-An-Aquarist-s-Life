@@ -16,6 +16,7 @@ import { CATEGORY_LABELS, nativePlatform, Notifier, planNotices, webPushPlatform
 import { Forecaster } from './game/forecaster';
 import { canPromptInstall, isInstalled, isIos, promptInstall, setupPwa } from './ui/pwa';
 import { loadPaintedArt } from './render/painted';
+import { FrameMonitor, lowerQuality } from './game/frame-monitor';
 import { defaultQuality, isQuality, type Quality, QUALITY_LABELS, qualitySpec } from './render/quality';
 import { TankView } from './render/tank-view';
 import { ScapeBar } from './ui/scape-bar';
@@ -116,9 +117,9 @@ async function start(): Promise<void> {
   const uiPrefs = (() => {
     try {
       const raw = JSON.parse(store.getItem(UI_KEY) ?? '{}');
-      return { bigText: raw.bigText === true, quality: isQuality(raw.quality) ? raw.quality : autoQuality };
+      return { bigText: raw.bigText === true, quality: isQuality(raw.quality) ? raw.quality : autoQuality, qualityManual: raw.qualityManual === true };
     } catch {
-      return { bigText: false, quality: autoQuality };
+      return { bigText: false, quality: autoQuality, qualityManual: false };
     }
   })();
   const saveUiPrefs = () => {
@@ -400,6 +401,15 @@ async function start(): Promise<void> {
     saveUiPrefs();
   };
   setQuality(uiPrefs.quality);
+  // 卡頓時自動降一級畫質（玩家自己選過就不動）
+  const frameMonitor = new FrameMonitor();
+  app.ticker.add(() => {
+    if (uiPrefs.qualityManual || !frameMonitor.sample(app.ticker.deltaMS, performance.now())) return;
+    const lower = lowerQuality(uiPrefs.quality);
+    if (!lower) return;
+    setQuality(lower);
+    toasts.show(`畫面有點卡，畫質自動調成「${QUALITY_LABELS[lower]}」。可以在設定裡改回來`, 'info');
+  });
   app.stage.addChild(view.root);
 
   // ---- 狀態列：時間、水質膠囊（沒測過顯示「?」）、待辦、選單 ----
@@ -602,6 +612,7 @@ async function start(): Promise<void> {
               `button.tab${uiPrefs.quality === q ? '.active' : ''}`,
               {
                 onclick: () => {
+                  uiPrefs.qualityManual = true;
                   setQuality(q);
                   sheet.refresh();
                 },

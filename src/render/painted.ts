@@ -1,3 +1,4 @@
+import { isShrimpSpecies } from '../sim';
 import { Assets, BlurFilter, ColorMatrixFilter, Container, Mesh, MeshPlane, Texture } from 'pixi.js';
 import type { FishSpeciesId, GrowthStage } from '../sim';
 import type { FishForm } from './fish-art';
@@ -55,6 +56,15 @@ export const PAINTED: Record<string, PaintedSpec> = {
   'apisto-male': { file: 'fish/apisto-male.webp', tail: 0.26, swing: 0.08, body: { x: 0.02, y: 0.1, rx: 0.26, ry: 0.11 } },
   'apisto-female': { file: 'fish/apisto-female.webp', tail: 0.24, swing: 0.08, body: { x: 0.06, y: 0.0, rx: 0.3, ry: 0.11 } },
   'apisto-fry': { file: 'fish/apisto-fry.webp', tail: 0.26, swing: 0.12, body: FRY_BODY },
+  // 鬥魚（betta.ts）：公魚半月大尾，紅藍兩色；尾巴佔圖的四成，擺動慢而大
+  'betta-male-red': { file: 'fish/betta-male-red.webp', tail: 0.42, swing: 0.1, body: { x: 0.16, y: 0.0, rx: 0.22, ry: 0.1 } },
+  'betta-male-blue': { file: 'fish/betta-male-blue.webp', tail: 0.42, swing: 0.1, body: { x: 0.16, y: 0.0, rx: 0.22, ry: 0.1 } },
+  'betta-female': { file: 'fish/betta-female.webp', tail: 0.24, swing: 0.1, body: { x: 0.1, y: 0.0, rx: 0.3, ry: 0.11 } },
+  // 水晶蝦：紅白相間（和櫻花蝦同樣的姿勢與身體範圍）
+  'shrimp-crystal-male': { file: 'shrimp/shrimp-crystal-male.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
+  'shrimp-crystal-female': { file: 'shrimp/shrimp-crystal-female.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
+  'shrimp-crystal-berried': { file: 'shrimp/shrimp-crystal-berried.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY, eggs: true },
+  'shrimp-crystal-juvenile': { file: 'shrimp/shrimp-crystal-juvenile.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
 };
 
 /**
@@ -92,7 +102,13 @@ const GUPPY_MALE_ART: Record<string, string> = {
 
 /** 這條魚該用哪張精繪圖；沒有就回傳 null（還沒畫的品系）。 */
 export function paintedKey(species: FishSpeciesId, form: FishForm, variant: number, gravid: boolean, stage?: GrowthStage, stuckMolt = false): string | null {
-  if (species === 'cherry_shrimp') {
+  if (species === 'crystal_shrimp') {
+    if (stuckMolt) return 'shrimp-molt-stuck';
+    if (form === 'juvenile') return 'shrimp-crystal-juvenile';
+    if (form === 'female') return gravid ? 'shrimp-crystal-berried' : 'shrimp-crystal-female';
+    return 'shrimp-crystal-male';
+  }
+  if (isShrimpSpecies(species)) {
     // 卡殼死掉的蝦：身上一圈白線
     if (stuckMolt) return 'shrimp-molt-stuck';
     if (stage === 'subadult' && form === 'juvenile') return 'shrimp-cherry-subadult';
@@ -100,6 +116,8 @@ export function paintedKey(species: FishSpeciesId, form: FishForm, variant: numb
     if (form === 'female') return gravid ? 'shrimp-cherry-berried' : 'shrimp-cherry-female';
     return 'shrimp-cherry-male';
   }
+  // 鬥魚：公魚紅藍兩色（跟著個體固定）；仔魚是半透明的小魚，和孔雀魚共用
+  if (species === 'betta') return form === 'juvenile' ? 'guppy-fry' : form === 'female' ? 'betta-female' : variant % 2 === 1 ? 'betta-male-blue' : 'betta-male-red';
   if (species === 'apisto') return form === 'juvenile' ? 'apisto-fry' : form === 'female' ? 'apisto-female' : 'apisto-male';
   // 孔雀魚和斑馬魚的仔魚都是半透明的小魚，共用一張；長到幼魚身體有底色、尾巴變大
   if (form === 'juvenile') return stage && stage !== 'fry' ? 'guppy-juvenile' : 'guppy-fry';

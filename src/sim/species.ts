@@ -4,7 +4,7 @@ import type { FoodKind } from './food';
  * 魚種與水草資料。數值是 Phase 0 的初版，之後會依真實資料再調整。
  */
 
-export type FishSpeciesId = 'guppy' | 'zebrafish' | 'cherry_shrimp' | 'apisto';
+export type FishSpeciesId = 'guppy' | 'zebrafish' | 'cherry_shrimp' | 'apisto' | 'betta' | 'crystal_shrimp';
 
 export interface FishSpecies {
   id: FishSpeciesId;
@@ -42,6 +42,8 @@ export interface FishSpecies {
   medicationSensitive: boolean;
   /** 無脊椎動物（蝦）：不會得魚的細菌病和寄生蟲。 */
   invertebrate?: boolean;
+  /** 迷鰓魚（鬥魚）：會到水面吸空氣，缺氧的影響小很多。 */
+  airBreather?: boolean;
   /** 剛出生的體長（cm）。 */
   birthLengthCm: number;
   /** 從出生長到成體（約九成體長）的天數。 */
@@ -146,6 +148,66 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     // 洞穴產卵、母魚護幼（parental.ts）：一窩約 40 顆卵；gestationDays 不用
     breeding: { gestationDays: 0, broodMean: 40, broodMin: 15, broodMax: 80 },
   },
+  betta: {
+    id: 'betta',
+    name: '鬥魚',
+    temp: { min: 24, max: 30 },
+    tempLethal: { min: 20, max: 34 },
+    ph: { min: 6.0, max: 7.5 },
+    phSurvive: { min: 5.5, max: 8.0 },
+    farmWater: { ph: 7.0, gh: 6 },
+    adultLengthCm: 6,
+    bodyMassMg: 2000,
+    dailyFoodMg: 15,
+    // 上層肉食魚：愛吃紅蟲、豐年蝦，不太吃沉底的（design/food.md）
+    diet: { floating: 0.9, sinking: 0.4, sticky: 0.5, meat: 1.5 },
+    o2UseMgPerHour: 0.25,
+    hardiness: 0.7,
+    minGroup: 0,
+    susceptibleToIch: true,
+    medicationSensitive: false,
+    airBreather: true,
+    birthLengthCm: 0.3,
+    daysToAdult: 100,
+    lifespanDays: 1095,
+    mouthRatio: 0.35,
+    juvenilePredationPerDay: 0.3,
+    finNipPerDay: 0,
+    // 公魚的長鰭也是斑馬魚咬鰭的目標
+    longFinnedMales: true,
+    // 泡巢繁殖之後再做（要隔離缸、公魚護巢）；兩尾公魚同缸會打架（betta.ts）
+    breeding: null,
+  },
+  crystal_shrimp: {
+    id: 'crystal_shrimp',
+    name: '水晶蝦',
+    // 怕熱：26°C 以上就危險，台灣夏天要冷水機或冷氣房（design/temperature.md）
+    temp: { min: 20, max: 24 },
+    tempLethal: { min: 16, max: 27 },
+    ph: { min: 6.0, max: 7.0 },
+    phSurvive: { min: 5.4, max: 7.2 },
+    farmWater: { ph: 6.4, gh: 5 },
+    adultLengthCm: 2.2,
+    bodyMassMg: 160,
+    dailyFoodMg: 2,
+    diet: { floating: 0.35, sinking: 1, sticky: 0.6, meat: 0.7 },
+    o2UseMgPerHour: 0.035,
+    // 比櫻花蝦嬌貴很多：水質一點點不穩就會出事
+    hardiness: 0.3,
+    minGroup: 0,
+    susceptibleToIch: false,
+    medicationSensitive: true,
+    invertebrate: true,
+    birthLengthCm: 0.15,
+    daysToAdult: 70,
+    lifespanDays: 500,
+    mouthRatio: 0,
+    juvenilePredationPerDay: 0.15,
+    finNipPerDay: 0,
+    longFinnedMales: false,
+    // 抱卵約 30 天，一窩比櫻花蝦少
+    breeding: { gestationDays: 30, broodMean: 15, broodMin: 5, broodMax: 25 },
+  },
   cherry_shrimp: {
     id: 'cherry_shrimp',
     name: '櫻花蝦',
@@ -176,6 +238,11 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     breeding: { gestationDays: 30, broodMean: 20, broodMin: 5, broodMax: 30 },
   },
 };
+
+/** 蝦（櫻花蝦、水晶蝦）：貼底爬、脫殼長大、抱卵。 */
+export function isShrimpSpecies(id: FishSpeciesId): boolean {
+  return FISH_SPECIES[id].invertebrate === true;
+}
 
 export type PlantSpeciesId = 'anubias' | 'rotala';
 
