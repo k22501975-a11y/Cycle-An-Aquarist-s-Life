@@ -2,7 +2,7 @@ import { Application, BlurFilter, Container, FederatedPointerEvent, Graphics, Sp
 import { FISH_SPECIES, isCo2Injecting, isJuvenile, isLightOn, observeSymptoms, sizeRatio, tankSize, type Fish, type TankState } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture } from './painted';
-import { DEATH_SECONDS, deathPose, spawnSwimmer, updateSwimmer, type Swimmer } from './fish-motion';
+import { DEATH_SECONDS, deathPose, sickLook, spawnSwimmer, updateSwimmer, type Swimmer } from './fish-motion';
 import { pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { canvasTexture, makeCanvas, mix, softDotTexture } from './paint';
 import { type QualitySpec, qualitySpec } from './quality';
@@ -551,10 +551,12 @@ export class TankView {
         if (view.deathT < DEATH_SECONDS) rig.animate(view.deathT * 9, pose.swing, 0.6, fish.finDamage);
       } else {
         view.deathT = -1;
-        rig.scale.y = k;
+        // 生病的樣子：越虛弱顏色越淡、消瘦變扁、癢的時候突然側身蹭一下
+        const sick = sickLook(symptoms, fish.health, this.time, fish.id);
+        rig.scale.y = k * sick.thin * (1 - 0.55 * sick.flash);
         rig.alpha = rig.look.alpha;
-        rig.setDim(symptoms.includes('lethargic') ? 0xb8b8b8 : null);
-        const tilt = symptoms.includes('loss_of_balance') ? 1.2 : Math.max(-0.35, Math.min(0.35, Math.atan2(swimmer.vy, Math.abs(swimmer.vx) + 1) * 0.6));
+        rig.setDim(sick.dim);
+        const tilt = symptoms.includes('loss_of_balance') ? 1.2 : Math.max(-0.35, Math.min(0.35, Math.atan2(swimmer.vy, Math.abs(swimmer.vx) + 1) * 0.6)) + 0.5 * sick.flash;
         rig.rotation = facingLeft ? tilt : -tilt;
         const clamped = symptoms.includes('clamped_fins');
         rig.animate(swimmer.phase, clamped ? 0.25 : 1, clamped ? 0.55 : 1, fish.finDamage);
