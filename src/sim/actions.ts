@@ -39,6 +39,7 @@ export function waterChange(state: TankState, fraction: number, options: WaterCh
   water.no2 = mix(water.no2, 0);
   water.no3 = mix(water.no3, tap.no3);
   water.kh = mix(water.kh, tap.kh);
+  water.gh = mix(water.gh ?? tap.gh ?? 6, tap.gh ?? 6);
   water.o2 = mix(water.o2, oxygenSaturation(newTemp));
   water.co2 = mix(water.co2, Math.max(tap.co2, co2Equilibrium(newTemp)));
   water.medication = mix(water.medication, 0);
@@ -71,6 +72,7 @@ export function topUp(state: TankState, tempC?: number): number {
   const tap = environment.tap;
   const newTemp = tempC ?? roomTemperature(state);
   water.kh = water.kh * keep + tap.kh * fresh;
+  water.gh = (water.gh ?? tap.gh ?? 6) * keep + (tap.gh ?? 6) * fresh;
   water.no3 = water.no3 * keep + tap.no3 * fresh;
   water.tan *= keep;
   water.no2 *= keep;

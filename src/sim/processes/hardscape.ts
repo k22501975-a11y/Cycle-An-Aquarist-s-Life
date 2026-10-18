@@ -12,7 +12,11 @@ export function updateHardscape(state: TankState, dt: number): void {
   // CO₂ 讓水變酸，碳酸鈣溶得更快（開 CO₂ 的草缸放青龍石，pH 降不下去）
   const acid = 1 + water.co2 / 30;
   const dissolve = (c: { khTarget: number; rate: number }, scale: number) => {
-    if (water.kh < c.khTarget) water.kh += (c.khTarget - water.kh) * (1 - Math.exp(-c.rate * scale * acid * dt));
+    const k = 1 - Math.exp(-c.rate * scale * acid * dt);
+    if (water.kh < c.khTarget) water.kh += (c.khTarget - water.kh) * k;
+    // 碳酸鈣溶出的鈣也讓 GH 上升（珊瑚砂缸的水偏硬）
+    const gh = water.gh ?? state.environment.tap.gh ?? 6;
+    if (gh < c.khTarget + 2) water.gh = gh + (c.khTarget + 2 - gh) * k;
   };
 
   const sub = equipment.substrate;

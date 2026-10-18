@@ -85,6 +85,10 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .todo-item.bad::before { background: var(--bad); box-shadow: 0 0 8px var(--bad); }
 .todo-item.warn::before { background: var(--warn); }
 .todo-item.ok::before { background: var(--ok); }
+/* 分缸提示：可以點，右邊一個分缸小圖示 */
+button.todo-item.split { width: 100%; text-align: left; background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; }
+button.todo-item.split:hover { color: var(--accent, #f0c96a); }
+.todo-icon { order: 2; margin-left: auto; width: 22px; height: 22px; align-self: center; border-radius: 6px; }
 .selcard .bar-row { display: flex; align-items: center; gap: 10px; margin: 7px 0; font-size: 12px; color: var(--muted); }
 .selcard .bar { flex: 1; height: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; overflow: hidden; }
 .selcard .bar i { display: block; height: 100%; border-radius: 3px; }

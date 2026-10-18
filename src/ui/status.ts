@@ -1,4 +1,4 @@
-import { canClaimStarterPack, tankLabel, crowdingRatio, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, quarantineDays, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
+import { canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, quarantineDays, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -80,6 +80,8 @@ export function clockLabel(hours: number): string {
 export interface Todo {
   text: string;
   tone: 'bad' | 'warn' | 'ok';
+  /** 點了可以照這個分法一鍵分缸。 */
+  split?: SplitPlan;
 }
 
 /** 待辦卡：今天該做的事，嚴重的排前面。只用玩家看得到的資訊（症狀、死魚、設備狀態、自己做過的事）。 */
@@ -106,9 +108,8 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
     if (reading.ph < phMin - 0.1) out.push({ text: `pH 太低（${reading.ph}），魚會緊迫`, tone: 'warn' });
     else if (reading.ph > phMax + 0.1) out.push({ text: `pH 太高（${reading.ph}），魚會緊迫`, tone: 'warn' });
   }
-  const crowd = crowdingRatio(state);
-  if (crowd > 1) out.push({ text: `缸裡太擠了（${living.length} 條），賣掉一些或換大缸`, tone: 'bad' });
-  else if (crowd > 0.8) out.push({ text: `魚快養滿了（${living.length} 條），可以開始賣一些`, tone: 'warn' });
+  // 分缸提示：太擠、成魚會吃小魚、小魚轉色後公母混著（點一下照建議分缸）
+  for (const a of splitAdvice(state)) out.push({ text: a.text, tone: a.tone, split: a.plan });
   if (canClaimStarterPack(state, others)) out.push({ text: '整缸都沒了？到商店領老闆送的起步包', tone: 'warn' });
   const coins = state.economy?.coins ?? 0;
   if (coins < 0) out.push({ text: `錢包透支 ${-coins} 元，賣些魚或插枝吧`, tone: 'warn' });

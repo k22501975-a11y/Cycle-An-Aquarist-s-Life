@@ -1,5 +1,5 @@
 import { Assets, BlurFilter, ColorMatrixFilter, Container, Mesh, MeshPlane, Texture } from 'pixi.js';
-import type { FishSpeciesId } from '../sim';
+import type { FishSpeciesId, GrowthStage } from '../sim';
 import type { FishForm } from './fish-art';
 import { canvasTexture, makeCanvas } from './paint';
 import { parseRecipeKey, patternBase, recolorImage } from './phenotype-art';
@@ -47,6 +47,9 @@ export const PAINTED: Record<string, PaintedSpec> = {
   'shrimp-cherry-male': { file: 'shrimp/shrimp-cherry-male.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
   'shrimp-cherry-female': { file: 'shrimp/shrimp-cherry-female.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
   'shrimp-cherry-berried': { file: 'shrimp/shrimp-cherry-berried.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY, eggs: true },
+  'shrimp-cherry-subadult': { file: 'shrimp/shrimp-cherry-subadult.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
+  'shrimp-molt-stuck': { file: 'shrimp/shrimp-molt-stuck.webp', tail: 0.18, swing: 0.0, body: SHRIMP_BODY },
+  'guppy-juvenile': { file: 'fish/guppy-juvenile.webp', tail: 0.3, swing: 0.12, body: { x: 0.14, y: 0.0, rx: 0.22, ry: 0.12 } },
   'shrimp-cherry-juvenile': { file: 'shrimp/shrimp-cherry-juvenile.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
 };
 
@@ -84,14 +87,17 @@ const GUPPY_MALE_ART: Record<string, string> = {
 };
 
 /** 這條魚該用哪張精繪圖；沒有就回傳 null（還沒畫的品系）。 */
-export function paintedKey(species: FishSpeciesId, form: FishForm, variant: number, gravid: boolean): string | null {
+export function paintedKey(species: FishSpeciesId, form: FishForm, variant: number, gravid: boolean, stage?: GrowthStage, stuckMolt = false): string | null {
   if (species === 'cherry_shrimp') {
-    if (form === 'juvenile') return 'shrimp-cherry-juvenile';
+    // 卡殼死掉的蝦：身上一圈白線
+    if (stuckMolt) return 'shrimp-molt-stuck';
+    if (stage === 'subadult' && form === 'juvenile') return 'shrimp-cherry-subadult';
+    if (form === 'juvenile') return stage === 'subadult' ? 'shrimp-cherry-subadult' : 'shrimp-cherry-juvenile';
     if (form === 'female') return gravid ? 'shrimp-cherry-berried' : 'shrimp-cherry-female';
     return 'shrimp-cherry-male';
   }
-  // 孔雀魚和斑馬魚的仔魚都是半透明的小魚，共用一張
-  if (form === 'juvenile') return 'guppy-fry';
+  // 孔雀魚和斑馬魚的仔魚都是半透明的小魚，共用一張；長到幼魚身體有底色、尾巴變大
+  if (form === 'juvenile') return stage && stage !== 'fry' ? 'guppy-juvenile' : 'guppy-fry';
   if (species === 'zebrafish') return form === 'female' ? 'zebrafish-female' : 'zebrafish-male';
   if (form === 'female') return gravid ? 'guppy-female-pregnant' : 'guppy-female-base';
   return GUPPY_MALE_ART[guppyLook(variant).strain] ?? null;
@@ -123,6 +129,9 @@ export const SCENERY: Record<string, string> = {
  * 單片鰭的圖層（art/fish/fins/parts/）：頭朝右，anchor 是接到身體的那一點（相對圖寬高）。
  * 大耳的胸鰭根部帶一小塊魚身，要壓在身體下面。
  */
+/** 蝦脫下來的空殼。 */
+const PROPS: Record<string, string> = { 'shrimp-molt': 'shrimp/shrimp-molt.webp' };
+
 export const FIN_PARTS: Record<string, { file: string; anchor: [number, number] }> = {
   'fin-pectoral-dumbo': { file: 'fish/parts/fin-pectoral-dumbo.webp', anchor: [658 / 659, 455 / 785] },
 };
@@ -139,6 +148,13 @@ export async function loadPaintedArt(base = import.meta.env.BASE_URL): Promise<n
         if (spec.eating) textures.set(`${key}#eating`, await Assets.load<Texture>(`${base}art/${spec.eating}`));
       } catch {
         // 留給程式繪製版
+      }
+    }),
+    ...Object.entries(PROPS).map(async ([key, file]) => {
+      try {
+        textures.set(key, await Assets.load<Texture>(`${base}art/${file}`));
+      } catch {
+        // 沒有圖就不畫殼
       }
     }),
     ...Object.entries(FIN_PARTS).map(async ([key, part]) => {

@@ -47,6 +47,18 @@ import {
   doseQuarantine,
   hasVisible,
   isJuvenile,
+  crowdingRatio,
+  SPLIT_PLAN_LABELS,
+  splitAdvice,
+  splitGroup,
+  splitTank,
+  type SplitPlan,
+  daysUntilSexVisible,
+  growthFactors,
+  growthStage,
+  maxLengthCm,
+  sexVisible,
+  stageLabel,
   phenotype,
   strainName,
   QUARANTINE_DAYS,
@@ -272,8 +284,11 @@ function geneticsInfo(fish: Fish): Node {
   const p = phenotype(g);
   const rows: [string, string][] = [];
   // 仔魚和母魚的品系特徵不明顯，只有成年公魚看得出完整品系
-  if (fish.sex === 'male' && !isJuvenile(fish)) rows.push(['品系', strainName(p)]);
-  else rows.push(['看得出的特徵', [p.albino ? '紅眼（白子）' : '', p.gold ? '金色身體' : '', p.tuxedo ? '後半身深色（禮服）' : '', ...(isJuvenile(fish) ? [] : finWords(p))].filter(Boolean).join('、') || '還看不出來']);
+  // 白子一出生就看得出來（紅眼）；花紋要轉色才浮現，鰭型要到亞成魚
+  const stage = growthStage(fish);
+  const finsShown = stage === 'subadult' || stage === 'adult' || stage === 'old';
+  if (fish.sex === 'male' && sexVisible(fish) && finsShown) rows.push(['品系', strainName(p)]);
+  else rows.push(['看得出的特徵', [p.albino ? '紅眼（白子）' : '', sexVisible(fish) && p.gold ? '金色身體' : '', sexVisible(fish) && p.tuxedo ? '後半身深色（禮服）' : '', ...(finsShown ? finWords(p) : [])].filter(Boolean).join('、') || '還看不出來']);
   if (!isJuvenile(fish)) rows.push(['尾鰭', `${g.tail} 分・${TAIL_SHAPE_LABELS[p.tailShape ?? 'delta']}`]);
   if (fish.sex === 'male' && !isJuvenile(fish) && matingSuccess(g) < 1) rows.push(['繁殖', matingSuccess(g) === 0 ? '交接器太長，不能交配（長公）' : '交接器偏長，很難配成']);
   rows.push(['來源', fish.generation ? `自家繁殖第 ${fish.generation} 代` : '水族店']);
@@ -325,6 +340,7 @@ export function fishPanel({ game, sheet, toasts }: PanelContext, fishId: number)
     'div.stack',
     {},
     h('p', {}, `${fishName(fish)} · 體長約 ${fish.lengthCm.toFixed(1)} cm · ${ageLabel(fish.ageDays)}`),
+    h('p', {}, growthLine(game.state, fish)),
     fish.genome ? geneticsInfo(fish) : null,
     symptoms.length
       ? h('ul.symptoms', {}, ...symptoms.map((s) => h('li', {}, SYMPTOM_LABELS[s])))
@@ -333,6 +349,20 @@ export function fishPanel({ game, sheet, toasts }: PanelContext, fishId: number)
     h('p.hint', {}, '症狀只是線索：先用測試劑檢查水質，再判斷是環境問題還是生病。'),
     game.tanks.length > 1 ? moveFishRow(game, sheet, toasts, fish) : null,
   );
+}
+
+/** 成長：階段、還要幾天看得出公母、為什麼長得慢、小時候沒養好的後遺症。 */
+export function growthLine(state: TankState, fish: Fish): string {
+  const parts = [`${stageLabel(fish)}`];
+  if (!sexVisible(fish)) parts.push(`公母還看不出來（約 ${daysUntilSexVisible(fish)} 天後）`);
+  if (fish.lengthCm < maxLengthCm(fish) * 0.97) {
+    const f = growthFactors(state, fish, crowdingRatio(state));
+    const slow = [f.space < 0.9 ? '缸太擠' : '', f.water < 0.9 ? '水質差（該換水了）' : '', f.food < 0.75 ? '吃不夠或營養差' : ''].filter(Boolean);
+    if (slow.length) parts.push(`長得慢：${slow.join('、')}`);
+  }
+  if ((fish.stunted ?? 0) >= 0.15) parts.push('小時候太擠或吃不好，長大會比別人小（永久）');
+  if (fish.species === 'cherry_shrimp' && fish.lengthCm < maxLengthCm(fish) * 0.97) parts.push('靠脫殼長大');
+  return parts.join(' · ');
 }
 
 /** 吃得怎麼樣：長期營養、發色、繁殖意願（看最近餵的飼料）。 */
@@ -369,6 +399,47 @@ function moveFishRow(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish): Node
       ),
     ),
   );
+}
+
+/**
+ * 一鍵分缸（design/growth.md §4.1）：照建議選一種分法和目標缸，系統把那群魚撈過去。
+ * 換缸有一點緊迫（兩缸水質差越多越緊迫），但遠比不分好。沒有別的缸就提醒先加一缸或賣掉一些。
+ */
+export function splitPanel(ctx: PanelContext, suggested: SplitPlan): Node {
+  const { game, sheet, toasts } = ctx;
+  const state = game.state;
+  const advice = splitAdvice(state);
+  const plans: SplitPlan[] = [suggested, ...(['by_size', 'by_sex', 'half'] as SplitPlan[]).filter((p) => p !== suggested)].filter((p) => splitGroup(state, p).length > 0);
+  let plan = plans[0] ?? suggested;
+  const others = game.tanks.map((t, i) => ({ t, i })).filter(({ i }) => i !== game.active);
+  const body = h('div.stack');
+  const render = () => {
+    const group = splitGroup(state, plan);
+    body.replaceChildren(
+      ...advice.map((a) => h(`p.${a.tone === 'bad' ? 'warn-text' : 'hint'}`, {}, a.text)),
+      h('h3', {}, '怎麼分'),
+      h('div.row.wrap', {}, ...plans.map((p) => h(`button.btn.small${p === plan ? '.primary' : ''}`, { onclick: () => ((plan = p), render()) }, SPLIT_PLAN_LABELS[p]))),
+      h('p', {}, `要移的魚：${group.length} 條（${[...new Set(group.map((f) => fishName(f).replace(/ #\d+$/, '')))].join('、')}）`),
+      h('h3', {}, '移到哪一缸'),
+      others.length === 0
+        ? h('div.stack', {}, h('p.hint', {}, '沒有別的缸。先加一缸（大缸比較穩，但設備要夠），或把一部分賣掉、送朋友。'), button('去加一缸', () => sheet.open('我的水缸', () => tanksPanel(ctx))))
+        : h(
+            'div.row.wrap',
+            {},
+            ...others.map(({ t, i }) =>
+              button(`${tankLabel(game.tanks, i)}（擁擠度 ${Math.round(crowdingRatio(t) * 100)}%）`, () => {
+                const n = game.actAll((tanks) => splitTank(tanks[game.active], tanks[i], plan));
+                if (!n) return;
+                toasts.show(`分缸完成：${n} 條撈到${tankLabel(game.tanks, i)}`);
+                sheet.close();
+              }),
+            ),
+          ),
+      h('p.hint', {}, '換缸前兩缸的水溫、pH 差越多，魚越緊迫。'),
+    );
+  };
+  render();
+  return body;
 }
 
 export function plantPanel({ game, sheet, toasts, sound }: PanelContext, plantId: number): Node {
