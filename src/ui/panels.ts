@@ -3,30 +3,37 @@ import {
   addFish,
   addPlant,
   AIR_PUMPS,
+  CHILLERS,
   CO2_KITS,
   doseIchMedication,
   feed,
+  FANS,
   FILTERS,
   FISH_SPECIES,
   freeAmmonia,
   HEATERS,
   hidingFactor,
   LIGHTS,
+  monthOf,
   observeSymptoms,
   PLANT_SPECIES,
+  REGION_LABELS,
   removeDeadFish,
   replaceFilter,
   rinseFilterMedia,
+  seasonName,
   setHeaterTarget,
+  topUp,
   unplugHeater,
   trimPlant,
   waterChange,
   type FishSpeciesId,
   type PlantSpeciesId,
+  type Region,
   type TankState,
   type TestKitReading,
 } from '../sim';
-import type { Game } from '../game/game';
+import { applySeason, type Game } from '../game/game';
 import { h } from './dom';
 import { DEATH_CAUSE_LABELS, fishName, plantName, SYMPTOM_LABELS } from './labels';
 import type { Sheet, Toasts } from './sheet';
@@ -306,6 +313,10 @@ export function shopPanel(ctx: PanelContext, tab: 'fish' | 'plants' | 'gear' = '
       ),
       item(AIR_PUMPS.small.name, !!eq.airPump, () => game.act((st) => (st.equipment.airPump = { spec: AIR_PUMPS.small, on: true }))),
       item(CO2_KITS.diy.name, !!eq.co2, () => game.act((st) => (st.equipment.co2 = { spec: CO2_KITS.diy, on: true }))),
+      h('h3', {}, '控溫'),
+      item(FANS.clip.name, !!eq.fan, () => game.act((st) => (st.equipment.fan = { spec: FANS.clip, on: true })), `水溫比室溫低約 ${FANS.clip.coolingC}°C，但水蒸發得快很多`),
+      item(CHILLERS.small.name, !!eq.chiller, () => game.act((st) => (st.equipment.chiller = { spec: CHILLERS.small, targetC: 26, on: true, cooling: false })), '夏天把水溫壓在設定溫度，不怕停電以外的高溫'),
+      item('控溫器', !!eq.controller, () => game.act((st) => (st.equipment.controller = { maxC: 30, tripped: false })), '水溫超過上限就切斷加熱棒，防止卡住的加熱棒把魚煮熟'),
     );
   }
   return h('div.stack', {}, tabs, content);
@@ -316,9 +327,49 @@ export function maintenancePanel({ game, toasts, undoable }: PanelContext): Node
   const eq = s.equipment;
   const toggle = (label: string, on: boolean, flip: (st: TankState) => void) =>
     h('div.item', {}, h('b', {}, label), button(on ? '開' : '關', () => game.act(flip), on ? 'primary' : ''));
+  const env = s.environment;
+  const month = monthOf(new Date());
+  const volume = eq.tank.volumeL;
+  const level = (s.water.levelL ?? volume) / volume;
+  const setClimate = (change: (st: TankState) => void) =>
+    game.act((st) => {
+      change(st);
+      applySeason(st);
+    });
   return h(
     'div.stack',
     {},
+    h('h3', {}, '室溫與水位'),
+    h(
+      'div.item',
+      {},
+      h('div', {}, h('b', {}, `${seasonName(month)}・室溫約 ${env.roomTempC.toFixed(1)}°C`), h('div.hint', {}, `日夜差 ±${(env.roomSwingC ?? 1.5).toFixed(1)}°C，季節跟著現實日曆走`)),
+      h(
+        'select.select',
+        {
+          'aria-label': '地區',
+          onchange: (e: Event) => setClimate((st) => (st.environment.region = (e.target as HTMLSelectElement).value as Region)),
+        },
+        ...(Object.keys(REGION_LABELS) as Region[]).map((r) => h('option', { value: r, selected: (env.region ?? 'north') === r }, REGION_LABELS[r])),
+      ),
+    ),
+    toggle('放在冷氣房（夏天約 26.5°C）', !!env.airConditioned, () => setClimate((st) => (st.environment.airConditioned = !st.environment.airConditioned))),
+    h(
+      'div.item',
+      {},
+      h(
+        'div',
+        {},
+        h('b', {}, `水位 ${Math.round(level * 100)}%`),
+        h(level < 0.9 ? 'div.warn-text' : 'div.hint', {}, level < 0.8 ? '水位太低，加熱棒可能露出水面空燒！' : level < 0.9 ? '蒸發掉的水要補回來，水質才不會越來越濃' : '水蒸發只帶走水，溶在水裡的東西會越來越濃'),
+      ),
+      button('補水', () => {
+        const missing = volume - (game.state.water.levelL ?? volume);
+        if (missing < 0.05) toasts.show('水是滿的');
+        else doUndoable({ toasts, undoable }, () => game.act((st) => topUp(st)), `補了 ${missing.toFixed(1)} L 的水`);
+      }, level < 0.9 ? 'primary' : ''),
+    ),
+    h('h3', {}, '設備'),
     eq.heater
       ? h(
           'div.item',
@@ -356,6 +407,36 @@ export function maintenancePanel({ game, toasts, undoable }: PanelContext): Node
     eq.co2 ? toggle('CO₂（跟著燈光時程）', eq.co2.on, (st) => {
       st.equipment.co2!.on = !st.equipment.co2!.on;
     }) : null,
+    eq.fan ? toggle('降溫風扇', eq.fan.on, (st) => {
+      st.equipment.fan!.on = !st.equipment.fan!.on;
+    }) : null,
+    eq.chiller
+      ? h(
+          'div.item',
+          {},
+          h('div', {}, h('b', {}, `冷水機 ${eq.chiller.targetC}°C`), h('div.hint', {}, eq.chiller.on ? (eq.chiller.cooling ? '製冷中' : '待機') : '關閉')),
+          h(
+            'div.row',
+            {},
+            button('−', () => game.act((st) => (st.equipment.chiller!.targetC = Math.max(18, eq.chiller!.targetC - 1)))),
+            button('+', () => game.act((st) => (st.equipment.chiller!.targetC = Math.min(30, eq.chiller!.targetC + 1)))),
+            button(eq.chiller.on ? '開' : '關', () => game.act((st) => (st.equipment.chiller!.on = !st.equipment.chiller!.on)), eq.chiller.on ? 'primary' : ''),
+          ),
+        )
+      : null,
+    eq.controller
+      ? h(
+          'div.item',
+          {},
+          h('div', {}, h('b', {}, `控溫器上限 ${eq.controller.maxC}°C`), eq.controller.tripped ? h('div.warn-text', {}, '水溫過高，已切斷加熱棒電源') : h('div.hint', {}, '超過就切斷加熱棒')),
+          h(
+            'div.row',
+            {},
+            button('−', () => game.act((st) => (st.equipment.controller!.maxC = Math.max(24, eq.controller!.maxC - 1)))),
+            button('+', () => game.act((st) => (st.equipment.controller!.maxC = Math.min(34, eq.controller!.maxC + 1)))),
+          ),
+        )
+      : null,
     h('h3', {}, '清潔與用藥'),
     h(
       'div.row.wrap',

@@ -176,6 +176,8 @@ p { margin: 0; line-height: 1.65; }
 .item .btn { flex: 0 0 auto; min-width: 56px; }
 .item .row { flex: 0 0 auto; }
 .owned { color: var(--gold); font-size: 13px; }
+.select { flex: 0 0 auto; background: rgba(255, 255, 255, 0.06); color: var(--text); border: 1px solid rgba(243, 234, 216, 0.22); border-radius: 12px; padding: 8px 10px; font-size: 14px; min-height: 44px; font-family: inherit; }
+.select option { background: #1d2a2e; color: var(--text); }
 .field { display: flex; align-items: center; gap: 8px; }
 .field input[type='range'] { flex: 1; accent-color: var(--gold); }
 .check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; }

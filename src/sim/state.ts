@@ -1,5 +1,6 @@
 import { co2Equilibrium, oxygenSaturation, phFromCo2 } from './chemistry';
-import type { AirPumpSpec, Co2Spec, FilterSpec, HeaterSpec, LightSpec, TankSpec } from './equipment';
+import type { AirPumpSpec, ChillerSpec, Co2Spec, FanSpec, FilterSpec, HeaterSpec, LightSpec, TankSpec } from './equipment';
+import type { Region } from './season';
 import type { RngState } from './random';
 import type { TestKitReading } from './readings';
 import { FISH_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
@@ -34,8 +35,14 @@ export interface TankState {
 }
 
 export interface Environment {
-  /** 室溫日平均（°C），一天內會上下波動。 */
+  /** 室溫日平均（°C），一天內會上下波動。由遊戲依現實季節與地區設定。 */
   roomTempC: number;
+  /** 室溫日夜溫差（±°C）。舊存檔沒有，預設 1.5。 */
+  roomSwingC?: number;
+  /** 地區（決定季節室溫曲線），預設台灣北部。 */
+  region?: Region;
+  /** 魚缸放在冷氣房：夏天室溫固定在 26～27°C。 */
+  airConditioned?: boolean;
   /** 停電時所有設備停止運作。 */
   powerOut: boolean;
   /** 自來水的水質（換水時加入的水）。 */
@@ -63,6 +70,12 @@ export interface Equipment {
   light: { spec: LightSpec; startHour: number; photoperiodHours: number } | null;
   /** CO₂ 跟著燈光的時程注入（夜間關閉）。 */
   co2: { spec: Co2Spec; on: boolean } | null;
+  /** 降溫風扇：吹水面靠蒸發降溫，水也蒸發得很快。 */
+  fan?: { spec: FanSpec; on: boolean } | null;
+  /** 冷水機：製冷到設定溫度。 */
+  chiller?: { spec: ChillerSpec; targetC: number; on: boolean; cooling: boolean } | null;
+  /** 控溫器：水溫超過上限時切斷加熱棒電源，防止加熱棒卡住把魚煮熟。 */
+  controller?: { maxC: number; tripped: boolean } | null;
 }
 
 export interface Water {
@@ -88,6 +101,8 @@ export interface Water {
   /** 用於偵測水溫、pH 驟變的移動平均（約數小時）。 */
   tempAvgC: number;
   phAvg: number;
+  /** 目前水量（L）。蒸發會讓水位下降、溶解物濃縮；沒有這個欄位表示滿水位。 */
+  levelL?: number;
 }
 
 /** 硝化菌族群，以「每小時可處理的 mg 數」表示其規模。 */
@@ -146,7 +161,9 @@ export type SimEventType =
   | 'heater_stuck'
   | 'power_out'
   | 'power_restored'
-  | 'fry_born';
+  | 'fry_born'
+  | 'controller_cut'
+  | 'heater_exposed';
 
 export interface SimEvent {
   hours: number;

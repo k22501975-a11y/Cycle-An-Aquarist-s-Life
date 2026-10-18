@@ -44,6 +44,22 @@ export interface LightSpec {
   heatC?: number;
 }
 
+export interface FanSpec {
+  id: string;
+  name: string;
+  /** 水溫比室溫低幾度（蒸發散熱）。 */
+  coolingC: number;
+  /** 蒸發量是平常的幾倍。 */
+  evaporationFactor: number;
+}
+
+export interface ChillerSpec {
+  id: string;
+  name: string;
+  /** 製冷能力（W）。 */
+  coolingWatts: number;
+}
+
 export interface Co2Spec {
   id: string;
   name: string;
@@ -81,6 +97,14 @@ export const LIGHTS = {
 export const CO2_KITS = {
   diy: { id: 'diy', name: 'CO₂ 鋼瓶組', mgPerHour: 100 },
 } satisfies Record<string, Co2Spec>;
+
+export const FANS = {
+  clip: { id: 'clip', name: '夾式降溫風扇', coolingC: 2.5, evaporationFactor: 6 },
+} satisfies Record<string, FanSpec>;
+
+export const CHILLERS = {
+  small: { id: 'small', name: '小型冷水機', coolingWatts: 150 },
+} satisfies Record<string, ChillerSpec>;
 
 /** 缸的外尺寸；舊存檔沒有記錄時依水量推估（標準缸比例約 1.5 : 1 : 1）。 */
 export function tankSize(tank: TankSpec): { w: number; h: number; d: number } {

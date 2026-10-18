@@ -2,7 +2,7 @@ import { Application } from 'pixi.js';
 import { AudioEngine } from './audio/engine';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
 import { eventSound } from './audio/sounds';
-import { Game, newGameState, SPEED_OPTIONS } from './game/game';
+import { applySeason, Game, newGameState, SPEED_OPTIONS } from './game/game';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
 import { installCrashGuard } from './ui/crash';
 import { loadPaintedArt } from './render/painted';
@@ -69,8 +69,10 @@ async function start(): Promise<void> {
   const store = browserStore();
   const loaded = loadSave(store);
   const saved = loaded.file;
+  if (saved) applySeason(saved.state);
   const offline = saved ? catchUp(saved) : null;
   const game = new Game(saved?.state ?? newGameState(), saved?.timeScale ?? 7);
+  applySeason(game.state);
   const save = () => writeSave(store, game.state, game.clock.timeScale);
   // 開發用：在瀏覽器主控台用 cycle.game、cycle.sim 直接操作（截圖、調平衡）。
   const debugHandle = { game, sim } as Record<string, unknown>;
@@ -495,6 +497,7 @@ async function start(): Promise<void> {
     refreshTimer += ticker.deltaMS;
     if (refreshTimer > 500) {
       refreshTimer = 0;
+      applySeason(game.state);
       if (sheet.isLive) sheet.refresh();
       renderSelCard();
       placeSelCard();

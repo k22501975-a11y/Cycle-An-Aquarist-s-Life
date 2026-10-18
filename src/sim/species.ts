@@ -7,8 +7,10 @@ export type FishSpeciesId = 'guppy' | 'zebrafish' | 'cherry_shrimp';
 export interface FishSpecies {
   id: FishSpeciesId;
   name: string;
-  /** 適溫範圍（°C）。超出越多，壓力越大。 */
+  /** 適溫範圍（°C）。超出越多，壓力越大；低於下限不繁殖。 */
   temp: { min: number; max: number };
+  /** 耐受上下限（°C）：超過就開始傷身體，越超過傷得越快（temperature.md §2–3）。 */
+  tempLethal: { min: number; max: number };
   ph: { min: number; max: number };
   /** 成體體長（cm），用於「每公升 1 cm」的擁擠度估算。 */
   adultLengthCm: number;
@@ -47,6 +49,7 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     id: 'guppy',
     name: '孔雀魚',
     temp: { min: 22, max: 28 },
+    tempLethal: { min: 18, max: 32 },
     ph: { min: 6.8, max: 8.0 },
     adultLengthCm: 4,
     bodyMassMg: 500,
@@ -69,6 +72,7 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     id: 'zebrafish',
     name: '斑馬魚',
     temp: { min: 18, max: 26 },
+    tempLethal: { min: 14, max: 30 },
     ph: { min: 6.5, max: 7.8 },
     adultLengthCm: 4,
     bodyMassMg: 600,
@@ -92,6 +96,7 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     id: 'cherry_shrimp',
     name: '櫻花蝦',
     temp: { min: 18, max: 28 },
+    tempLethal: { min: 14, max: 31 },
     ph: { min: 6.5, max: 8.0 },
     adultLengthCm: 2,
     bodyMassMg: 150,

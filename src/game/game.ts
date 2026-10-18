@@ -1,5 +1,7 @@
 import {
   createTank,
+  monthOf,
+  roomClimate,
   FILTERS,
   GameClock,
   HEATERS,
@@ -23,6 +25,14 @@ export const SPEED_OPTIONS = [
 /** 每個畫面最多跑幾個 tick，避免分頁切回來時一次補算太多而卡住。 */
 const MAX_TICKS_PER_FRAME = 1500;
 
+/** 依現實日期、地區、冷氣房設定更新室溫（季節跟著現實日曆走，不隨遊戲時間加速）。 */
+export function applySeason(state: TankState, date = new Date()): void {
+  const env = state.environment;
+  const climate = roomClimate(monthOf(date), env.region ?? 'north', env.airConditioned ?? false);
+  env.roomTempC = climate.meanC;
+  env.roomSwingC = climate.swingC;
+}
+
 /** 新遊戲：一個 40L 新缸、基本設備，還沒養水（真實的起點）。 */
 export function newGameState(seed = Date.now() % 2147483647): TankState {
   const state = createTank({
@@ -34,6 +44,8 @@ export function newGameState(seed = Date.now() % 2147483647): TankState {
   });
   // 從第一天早上 8 點開始，玩家很快就能看到開燈。
   state.hours = 8;
+  applySeason(state);
+  state.water.tempC = state.water.tempAvgC = state.environment.roomTempC;
   return state;
 }
 
