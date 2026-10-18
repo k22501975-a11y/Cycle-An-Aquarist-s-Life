@@ -23,3 +23,7 @@ export { currentPar } from './processes/plants';
 export { hidingFactor, MAX_FAUNA, sizeRatio } from './processes/population';
 export { breakHeater, HEATER_EXPOSED_LEVEL, lightHeatC, waterLevelL } from './processes/thermal';
 export * from './mall';
+export * from './growth';
+export * from './split';
+export * from './acclimation';
+export * from './snails';

@@ -1,3 +1,4 @@
+import { farmHabit, releaseShock } from './acclimation';
 import { co2Equilibrium, oxygenSaturation } from './chemistry';
 import { filterBacteriaShare } from './processes/nitrogen';
 import { infect, STORE_DISEASE_CHANCE } from './processes/disease';
@@ -39,11 +40,13 @@ export function waterChange(state: TankState, fraction: number, options: WaterCh
   water.no2 = mix(water.no2, 0);
   water.no3 = mix(water.no3, tap.no3);
   water.kh = mix(water.kh, tap.kh);
+  water.gh = mix(water.gh ?? tap.gh ?? 6, tap.gh ?? 6);
   water.o2 = mix(water.o2, oxygenSaturation(newTemp));
   water.co2 = mix(water.co2, Math.max(tap.co2, co2Equilibrium(newTemp)));
   water.medication = mix(water.medication, 0);
   water.antibiotic = mix(water.antibiotic ?? 0, 0);
   water.dewormer = mix(water.dewormer ?? 0, 0);
+  if (water.copper) water.copper = mix(water.copper, 0);
   water.ichPathogen = mix(water.ichPathogen, 0);
   water.ichCysts *= 1 - f * 0.3;
   // 換水時順便虹吸底砂，帶走部分殘餌與髒污。
@@ -71,12 +74,14 @@ export function topUp(state: TankState, tempC?: number): number {
   const tap = environment.tap;
   const newTemp = tempC ?? roomTemperature(state);
   water.kh = water.kh * keep + tap.kh * fresh;
+  water.gh = (water.gh ?? tap.gh ?? 6) * keep + (tap.gh ?? 6) * fresh;
   water.no3 = water.no3 * keep + tap.no3 * fresh;
   water.tan *= keep;
   water.no2 *= keep;
   water.medication *= keep;
   water.antibiotic = (water.antibiotic ?? 0) * keep;
   water.dewormer = (water.dewormer ?? 0) * keep;
+  if (water.copper) water.copper *= keep;
   water.tempC = water.tempC * keep + newTemp * fresh;
   water.levelL = undefined;
   return add;
@@ -122,6 +127,8 @@ export interface AddFishOptions {
   strain?: number;
   /** 鰭型品系（GUPPY_FIN_STRAINS）。 */
   fin?: FinTrait;
+  /** 慢慢滴水對水（預設）；false 是直接倒進缸裡，水質差很多會休克（design/acclimation.md §2）。 */
+  drip?: boolean;
   /** 帶著哪些潛伏的病（柱狀病、鰓吸蟲）。不指定時依店家機率決定。 */
   carries?: DiseaseKind[];
 }
@@ -147,6 +154,14 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
     ich: carries ? { stage: 'incubating', progress: 0 } : { stage: 'none', progress: 0 },
   });
   if (species === 'guppy') fish.genome = storeGenome(state.rng, fish.sex, options.strain, options.fin);
+  // 店裡的魚習慣魚場的水；直接倒進差很多的缸會休克
+  fish.acclimated = farmHabit(species);
+  const shock = releaseShock(state, fish.acclimated, options.drip ?? true);
+  fish.stress = Math.min(1, fish.stress + shock.stress);
+  if (shock.harm > 0) {
+    fish.health = Math.max(0.01, fish.health - shock.harm);
+    fish.recentDamage.ph_shock = shock.harm;
+  }
   fish.lineage = fish.id;
   fish.generation = 0;
   fish.inbreeding = 0;

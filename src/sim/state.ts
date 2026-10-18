@@ -1,3 +1,4 @@
+import type { SnailState } from './snails';
 import type { FoodLot } from './food';
 import { co2Equilibrium, oxygenSaturation, phFromCo2 } from './chemistry';
 import type { AirPumpSpec, ChillerSpec, Co2Spec, FanSpec, FilterSpec, HardscapeSpec, HeaterSpec, LightSpec, SubstrateSpec, TankSpec } from './equipment';
@@ -37,8 +38,12 @@ export interface TankState {
   tempLog?: { hours: number; tempC: number }[];
   /** 最近一次換水的時間（遊戲小時）。 */
   lastWaterChangeHours?: number;
+  /** 蝦脫下來的殼（畫面上留在缸底一兩天）：哪隻蝦、什麼時候、脫完的體長。 */
+  molts?: Array<{ id: number; hour: number; lengthCm: number }>;
   /** 魚幣、電費、手上的插枝。舊存檔沒有，第一次用到時給起始資金。 */
   economy?: Economy;
+  /** 螺（design/snails.md）：買的螺和跟著水草混進來的小螺。舊存檔沒有。 */
+  snails?: SnailState;
   /** 檢疫盒：買了才有。 */
   quarantine?: Quarantine | null;
 }
@@ -84,6 +89,8 @@ export interface Environment {
 
 export interface TapWater {
   kh: number;
+  /** 總硬度（dGH）：舊存檔沒有，當 6（台灣自來水大約 4–8）。 */
+  gh?: number;
   no3: number;
   co2: number;
 }
@@ -122,6 +129,8 @@ export interface Water {
   no2: number;
   no3: number;
   kh: number;
+  /** 總硬度（dGH）：鈣鎂離子，蝦長新殼要用。舊存檔沒有，當成自來水的值。 */
+  gh?: number;
   ph: number;
   o2: number;
   co2: number;
@@ -141,6 +150,8 @@ export interface Water {
   antibiotic?: number;
   /** 驅蟲藥（治鰓吸蟲，對蝦安全）。 */
   dewormer?: number;
+  /** 銅（除螺藥）：螺和蝦都怕。 */
+  copper?: number;
   /** 用於偵測水溫、pH 驟變的移動平均（約數小時）。 */
   tempAvgC: number;
   phAvg: number;
@@ -208,6 +219,18 @@ export interface Fish {
   colorBoost?: number;
   /** 繁殖意願 0–1（標準約 0.5）：肉食和好飼料讓魚準備繁殖。 */
   breedingCondition?: number;
+  /** 個體成長速度（約 0.8–1.2）：同一胎有快有慢。舊存檔與店裡的魚當 1。 */
+  growthRate?: number;
+  /** 仔魚期吃不好、太擠留下的永久影響 0–1：長到頂的體長最多少兩成。 */
+  stunted?: number;
+  /** 蝦：已經長了、還沒脫殼兌現的體長（cm）。 */
+  pendingCm?: number;
+  /** 蝦：離下次脫殼還有幾小時。 */
+  moltTimerH?: number;
+  /** 蝦：脫殼卡住死掉（畫面上身體有一圈白線）。 */
+  stuckMolt?: boolean;
+  /** 這尾魚習慣的水（舒適中心，design/acclimation.md）：會慢慢往牠住的水移動。舊存檔沒有，當成習慣目前的缸。 */
+  acclimated?: { ph: number; gh: number; tempC: number };
 }
 
 export interface Plant {
@@ -232,7 +255,11 @@ export type SimEventType =
   | 'power_restored'
   | 'fry_born'
   | 'controller_cut'
-  | 'heater_exposed';
+  | 'heater_exposed'
+  | 'snail_died'
+  | 'snail_eggs'
+  | 'snail_hatched'
+  | 'trap_rotted';
 
 export interface SimEvent {
   hours: number;

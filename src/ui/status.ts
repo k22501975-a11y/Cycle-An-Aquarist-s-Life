@@ -1,4 +1,4 @@
-import { canClaimStarterPack, tankLabel, crowdingRatio, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, quarantineDays, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
+import { snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, quarantineDays, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -80,6 +80,10 @@ export function clockLabel(hours: number): string {
 export interface Todo {
   text: string;
   tone: 'bad' | 'warn' | 'ok';
+  /** 點了可以照這個分法一鍵分缸。 */
+  split?: SplitPlan;
+  /** 點了打開螺的管理。 */
+  snails?: true;
 }
 
 /** 待辦卡：今天該做的事，嚴重的排前面。只用玩家看得到的資訊（症狀、死魚、設備狀態、自己做過的事）。 */
@@ -101,14 +105,26 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
   if (reading && living.length > 0) {
     if (reading.kh <= 1) out.push({ text: `KH 只剩 ${reading.kh}，pH 隨時會崩，多換點水`, tone: 'bad' });
     else if (reading.kh <= 2) out.push({ text: `KH 偏低（${reading.kh}），換水把它補回來`, tone: 'warn' });
-    const phMin = Math.max(...living.map((f) => FISH_SPECIES[f.species].ph.min));
-    const phMax = Math.min(...living.map((f) => FISH_SPECIES[f.species].ph.max));
-    if (reading.ph < phMin - 0.1) out.push({ text: `pH 太低（${reading.ph}），魚會緊迫`, tone: 'warn' });
-    else if (reading.ph > phMax + 0.1) out.push({ text: `pH 太高（${reading.ph}），魚會緊迫`, tone: 'warn' });
+    // 超出物種的存活範圍才危險；在範圍內只看跟魚習慣的水差多少（會慢慢適應，design/acclimation.md）
+    const phMin = Math.max(...living.map((f) => FISH_SPECIES[f.species].phSurvive.min));
+    const phMax = Math.min(...living.map((f) => FISH_SPECIES[f.species].phSurvive.max));
+    const unused = living.filter((f) => Math.abs(reading.ph - habitOf(state, f).ph) > COMFORT_BAND.ph).length;
+    if (reading.ph < phMin) out.push({ text: `pH 太低（${reading.ph}），超出魚能撐的範圍`, tone: 'bad' });
+    else if (reading.ph > phMax) out.push({ text: `pH 太高（${reading.ph}），超出魚能撐的範圍`, tone: 'bad' });
+    else if (unused > 0) out.push({ text: `pH ${reading.ph} 跟 ${unused} 條魚習慣的水差很多，別一次調太多，牠們會慢慢適應`, tone: 'warn' });
   }
-  const crowd = crowdingRatio(state);
-  if (crowd > 1) out.push({ text: `缸裡太擠了（${living.length} 條），賣掉一些或換大缸`, tone: 'bad' });
-  else if (crowd > 0.8) out.push({ text: `魚快養滿了（${living.length} 條），可以開始賣一些`, tone: 'warn' });
+  // 分缸提示：太擠、成魚會吃小魚、小魚轉色後公母混著（點一下照建議分缸）
+  for (const a of splitAdvice(state)) out.push({ text: a.text, tone: a.tone, split: a.plan });
+  // 螺：看得到的才提醒（尖螺白天躲在沙裡）
+  const sn = state.snails;
+  if (sn) {
+    const deadSnails = sn.snails.filter((x) => !x.alive).length;
+    if (deadSnails > 0) out.push({ text: `撈出 ${deadSnails} 隻死掉的大螺，爛了很髒`, tone: 'bad', snails: true });
+    const bloom = isLightOn(state) && sn.pests.mts > sn.pests.bladder + sn.pests.ramshorn ? 'none' : snailBloom(state);
+    if (bloom !== 'none') out.push({ text: bloom === 'plague' ? '滿缸都是小螺：餵太多了，少餵並清一清' : '小螺變多了，是不是餵太多？', tone: bloom === 'plague' ? 'bad' : 'warn', snails: true });
+    if (sn.clutches.length > 0) out.push({ text: `水面上方有 ${sn.clutches.length} 團蘋果螺卵塊，不想要一堆小螺就摘掉`, tone: 'warn', snails: true });
+    if (sn.trapHour !== undefined && state.hours - sn.trapHour >= 8) out.push({ text: '螺陷阱可以收了，放太久菜會爛', tone: state.hours - sn.trapHour > 36 ? 'bad' : 'warn', snails: true });
+  }
   if (canClaimStarterPack(state, others)) out.push({ text: '整缸都沒了？到商店領老闆送的起步包', tone: 'warn' });
   const coins = state.economy?.coins ?? 0;
   if (coins < 0) out.push({ text: `錢包透支 ${-coins} 元，賣些魚或插枝吧`, tone: 'warn' });

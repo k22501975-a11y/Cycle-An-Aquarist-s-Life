@@ -27,6 +27,8 @@ import {
   debugPanel,
   feedPanel,
   fishPanel,
+  splitPanel,
+  snailPanel,
   maintenancePanel,
   plantPanel,
   shopPanel,
@@ -41,7 +43,7 @@ import { recordsPanel } from './ui/records';
 import { loadCodexSeen, saveCodexSeen, unlockCodex } from './ui/codex';
 import { codexPanel } from './ui/codex-panel';
 import { Sheet, Toasts } from './ui/sheet';
-import { clockLabel, householdTodos, waterCapsules } from './ui/status';
+import { clockLabel, householdTodos, waterCapsules, type Todo } from './ui/status';
 import { cornerRect, pickCorner, type Corner, type Rect } from './ui/dodge';
 import './ui/styles.css';
 
@@ -396,6 +398,13 @@ async function start(): Promise<void> {
     tankBtn.classList.toggle('alert', alarm);
   };
   const caps = h('button.caps', { 'aria-label': '水質趨勢', title: '點一下看水質趨勢', onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) });
+  // 分缸提示可以點：打開一鍵分缸
+  const todoRow = (t: Todo) =>
+    t.split
+      ? h(`button.todo-item.${t.tone}.split`, { onclick: () => sheet.open('分缸', () => splitPanel(ctx, t.split!)) }, h('img.todo-icon', { src: `${import.meta.env.BASE_URL}art/ui/icon-split.webp`, alt: '' }), t.text)
+      : t.snails
+        ? h(`button.todo-item.${t.tone}.split`, { onclick: () => sheet.open('螺', () => snailPanel(ctx)) }, h('img.todo-icon', { src: `${import.meta.env.BASE_URL}art/snail/snail-bladder.webp`, alt: '' }), t.text)
+        : h(`div.todo-item.${t.tone}`, {}, t.text);
   const todoBadge = h('span.badge');
   const todoCard = h('div.card.glass.todo');
   const todosChanged = memo();
@@ -405,7 +414,7 @@ async function start(): Promise<void> {
     todoCard.replaceChildren(
       h('button.card-link', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx, 'events')) }, '紀錄 ›'),
       h('div.card-title', {}, '今日待辦'),
-      ...list.slice(0, 3).map((t) => h(`div.todo-item.${t.tone}`, {}, t.text)),
+      ...list.slice(0, 3).map(todoRow),
     );
     const urgent = list.filter((t) => t.tone !== 'ok').length;
     todoBadge.textContent = urgent > 0 ? String(urgent) : '';
@@ -415,7 +424,7 @@ async function start(): Promise<void> {
     h(
       'div.stack',
       {},
-      ...householdTodos(game.tanks, game.active).map((t) => h(`div.todo-item.${t.tone}`, {}, t.text)),
+      ...householdTodos(game.tanks, game.active).map(todoRow),
       h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx, 'events')) }, '看事件紀錄'),
     );
   const todoBtn = h('button.hud-btn.todo-btn', { 'aria-label': '待辦', onclick: () => sheet.open('待辦', todoSheet, { live: true }) }, icon(ICONS.todo), todoBadge);

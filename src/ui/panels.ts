@@ -1,6 +1,24 @@
 import type { SoundId } from '../audio/sounds';
 import {
   addFish,
+  addSnail,
+  APPLE_COLOR_LABELS,
+  catchPests,
+  collectTrap,
+  doseMolluscicide,
+  hitchhike,
+  isLightOn,
+  PESTS,
+  pestCount,
+  removeClutches,
+  removeDeadSnails,
+  scrapeNeriteEggs,
+  setTrap,
+  snailBloom,
+  SNAILS,
+  type AppleColor,
+  type PestKind,
+  type SnailKind,
   addFishToQuarantine,
   addCuttings,
   addHardscape,
@@ -50,6 +68,25 @@ import {
   doseQuarantine,
   hasVisible,
   isJuvenile,
+  crowdingRatio,
+  COMFORT_BAND,
+  dripMinutes,
+  farmHabit,
+  habitGap,
+  habitOf,
+  phBeyondSurvival,
+  waterGh,
+  SPLIT_PLAN_LABELS,
+  splitAdvice,
+  splitGroup,
+  splitTank,
+  type SplitPlan,
+  daysUntilSexVisible,
+  growthFactors,
+  growthStage,
+  maxLengthCm,
+  sexVisible,
+  stageLabel,
   phenotype,
   strainName,
   QUARANTINE_DAYS,
@@ -267,6 +304,9 @@ export function trimListPanel(ctx: PanelContext): Node {
   );
 }
 
+/** 商店放魚的方式：預設慢慢滴水對水。 */
+let shopDrip = true;
+
 const TAIL_SHAPE_LABELS = { round: '圓尾', delta: '三角尾', halfmoon: '半月尾' } as const;
 
 /** 孔雀魚的品系、尾鰭分數、代數與近親程度（玩家看得到的外觀與紀錄，看不到隱性基因）。 */
@@ -275,8 +315,11 @@ function geneticsInfo(fish: Fish): Node {
   const p = phenotype(g);
   const rows: [string, string][] = [];
   // 仔魚和母魚的品系特徵不明顯，只有成年公魚看得出完整品系
-  if (fish.sex === 'male' && !isJuvenile(fish)) rows.push(['品系', strainName(p)]);
-  else rows.push(['看得出的特徵', [p.albino ? '紅眼（白子）' : '', p.gold ? '金色身體' : '', p.tuxedo ? '後半身深色（禮服）' : '', ...(isJuvenile(fish) ? [] : finWords(p))].filter(Boolean).join('、') || '還看不出來']);
+  // 白子一出生就看得出來（紅眼）；花紋要轉色才浮現，鰭型要到亞成魚
+  const stage = growthStage(fish);
+  const finsShown = stage === 'subadult' || stage === 'adult' || stage === 'old';
+  if (fish.sex === 'male' && sexVisible(fish) && finsShown) rows.push(['品系', strainName(p)]);
+  else rows.push(['看得出的特徵', [p.albino ? '紅眼（白子）' : '', sexVisible(fish) && p.gold ? '金色身體' : '', sexVisible(fish) && p.tuxedo ? '後半身深色（禮服）' : '', ...(finsShown ? finWords(p) : [])].filter(Boolean).join('、') || '還看不出來']);
   if (!isJuvenile(fish)) rows.push(['尾鰭', `${g.tail} 分・${TAIL_SHAPE_LABELS[p.tailShape ?? 'delta']}`]);
   if (fish.sex === 'male' && !isJuvenile(fish) && matingSuccess(g) < 1) rows.push(['繁殖', matingSuccess(g) === 0 ? '交接器太長，不能交配（長公）' : '交接器偏長，很難配成']);
   rows.push(['來源', fish.generation ? `自家繁殖第 ${fish.generation} 代` : '水族店']);
@@ -328,6 +371,8 @@ export function fishPanel({ game, sheet, toasts }: PanelContext, fishId: number)
     'div.stack',
     {},
     h('p', {}, `${fishName(fish)} · 體長約 ${fish.lengthCm.toFixed(1)} cm · ${ageLabel(fish.ageDays)}`),
+    h('p', {}, growthLine(game.state, fish)),
+    h('p', {}, habitLine(game.state, fish)),
     fish.genome ? geneticsInfo(fish) : null,
     symptoms.length
       ? h('ul.symptoms', {}, ...symptoms.map((s) => h('li', {}, SYMPTOM_LABELS[s])))
@@ -353,6 +398,30 @@ function cureButton(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish): Node 
     }),
     h('p.hint', {}, '特效藥只治症狀：水裡的病原和水質問題還在。水質造成的傷，效果只有一半。'),
   );
+}
+
+/** 成長：階段、還要幾天看得出公母、為什麼長得慢、小時候沒養好的後遺症。 */
+export function growthLine(state: TankState, fish: Fish): string {
+  const parts = [`${stageLabel(fish)}`];
+  if (!sexVisible(fish)) parts.push(`公母還看不出來（約 ${daysUntilSexVisible(fish)} 天後）`);
+  if (fish.lengthCm < maxLengthCm(fish) * 0.97) {
+    const f = growthFactors(state, fish, crowdingRatio(state));
+    const slow = [f.space < 0.9 ? '缸太擠' : '', f.water < 0.9 ? '水質差（該換水了）' : '', f.food < 0.75 ? '吃不夠或營養差' : ''].filter(Boolean);
+    if (slow.length) parts.push(`長得慢：${slow.join('、')}`);
+  }
+  if ((fish.stunted ?? 0) >= 0.15) parts.push('小時候太擠或吃不好，長大會比別人小（永久）');
+  if (fish.species === 'cherry_shrimp' && fish.lengthCm < maxLengthCm(fish) * 0.97) parts.push('靠脫殼長大');
+  return parts.join(' · ');
+}
+
+/** 習慣的水質（design/acclimation.md §4）：跟目前的水差多少，差太多會緊迫，慢慢就會適應。 */
+export function habitLine(state: TankState, fish: Fish): string {
+  const h = habitOf(state, fish);
+  const g = habitGap(state, fish);
+  const off = Math.abs(g.ph) > COMFORT_BAND.ph || Math.abs(g.gh) > COMFORT_BAND.gh;
+  const base = `習慣的水質：pH ${h.ph.toFixed(1)}、GH ${Math.round(h.gh)}、${h.tempC.toFixed(0)}°C`;
+  if (phBeyondSurvival(state, fish) > 0) return `${base} · 現在的 pH 超出牠能撐的範圍，要盡快調回來`;
+  return off ? `${base} · 跟現在的水差比較多，會緊迫一陣子，一兩週會慢慢適應` : `${base} · 跟現在的水差不多`;
 }
 
 /** 吃得怎麼樣：長期營養、發色、繁殖意願（看最近餵的飼料）。 */
@@ -389,6 +458,47 @@ function moveFishRow(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish): Node
       ),
     ),
   );
+}
+
+/**
+ * 一鍵分缸（design/growth.md §4.1）：照建議選一種分法和目標缸，系統把那群魚撈過去。
+ * 換缸有一點緊迫（兩缸水質差越多越緊迫），但遠比不分好。沒有別的缸就提醒先加一缸或賣掉一些。
+ */
+export function splitPanel(ctx: PanelContext, suggested: SplitPlan): Node {
+  const { game, sheet, toasts } = ctx;
+  const state = game.state;
+  const advice = splitAdvice(state);
+  const plans: SplitPlan[] = [suggested, ...(['by_size', 'by_sex', 'half'] as SplitPlan[]).filter((p) => p !== suggested)].filter((p) => splitGroup(state, p).length > 0);
+  let plan = plans[0] ?? suggested;
+  const others = game.tanks.map((t, i) => ({ t, i })).filter(({ i }) => i !== game.active);
+  const body = h('div.stack');
+  const render = () => {
+    const group = splitGroup(state, plan);
+    body.replaceChildren(
+      ...advice.map((a) => h(`p.${a.tone === 'bad' ? 'warn-text' : 'hint'}`, {}, a.text)),
+      h('h3', {}, '怎麼分'),
+      h('div.row.wrap', {}, ...plans.map((p) => h(`button.btn.small${p === plan ? '.primary' : ''}`, { onclick: () => ((plan = p), render()) }, SPLIT_PLAN_LABELS[p]))),
+      h('p', {}, `要移的魚：${group.length} 條（${[...new Set(group.map((f) => fishName(f).replace(/ #\d+$/, '')))].join('、')}）`),
+      h('h3', {}, '移到哪一缸'),
+      others.length === 0
+        ? h('div.stack', {}, h('p.hint', {}, '沒有別的缸。先加一缸（大缸比較穩，但設備要夠），或把一部分賣掉、送朋友。'), button('去加一缸', () => sheet.open('我的水缸', () => tanksPanel(ctx))))
+        : h(
+            'div.row.wrap',
+            {},
+            ...others.map(({ t, i }) =>
+              button(`${tankLabel(game.tanks, i)}（擁擠度 ${Math.round(crowdingRatio(t) * 100)}%）`, () => {
+                const n = game.actAll((tanks) => splitTank(tanks[game.active], tanks[i], plan));
+                if (!n) return;
+                toasts.show(`分缸完成：${n} 條撈到${tankLabel(game.tanks, i)}`);
+                sheet.close();
+              }),
+            ),
+          ),
+      h('p.hint', {}, '換缸前兩缸的水溫、pH 差越多，魚越緊迫。'),
+    );
+  };
+  render();
+  return body;
 }
 
 export function plantPanel({ game, sheet, toasts, sound }: PanelContext, plantId: number): Node {
@@ -442,7 +552,7 @@ export function plantPanel({ game, sheet, toasts, sound }: PanelContext, plantId
   );
 }
 
-export type ShopTab = 'fish' | 'plants' | 'gear' | 'sell';
+export type ShopTab = 'fish' | 'snails' | 'plants' | 'gear' | 'sell';
 
 /** 付錢做一件事；錢不夠就提示、不做。回傳有沒有買成。 */
 function purchase(ctx: PanelContext, cost: number, run: (st: TankState) => void, done: string, tone: 'info' | 'warn' = 'info', undo = false): boolean {
@@ -475,8 +585,8 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
   const tabs = h(
     'div.tabs',
     {},
-    ...(['fish', 'plants', 'gear', 'sell'] as const).map((t) =>
-      h(`button.tab${t === tab ? '.active' : ''}`, { onclick: () => sheet.open('商店', () => shopPanel(ctx, t)) }, { fish: '魚', plants: '水草', gear: '設備', sell: '賣給店家' }[t]),
+    ...(['fish', 'snails', 'plants', 'gear', 'sell'] as const).map((t) =>
+      h(`button.tab${t === tab ? '.active' : ''}`, { onclick: () => sheet.open('商店', () => shopPanel(ctx, t)) }, { fish: '魚', snails: '螺', plants: '水草', gear: '設備', sell: '賣給店家' }[t]),
     ),
   );
   const wallet = h('p.wallet', {}, `錢包：${yuan(coins)}`);
@@ -485,23 +595,53 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     const quarantined = !!game.state.quarantine;
     const name = finStrain ? `${finStrain.name}孔雀魚` : strain !== undefined ? `${GUPPY_STRAINS[strain]}孔雀魚` : FISH_SPECIES[species].name;
     const each = finStrain ? finStrain.price : strain !== undefined ? GUPPY_STRAIN_PRICES[strain] : FISH_PRICES[species];
-    const options = finStrain ? { strain: finStrain.strain, fin: finStrain.fin } : { strain };
+    const options = { ...(finStrain ? { strain: finStrain.strain, fin: finStrain.fin } : { strain }), drip: shopDrip };
     purchase(
       ctx,
       each * count,
       (st) => {
         for (let i = 0; i < count; i++) (quarantined ? addFishToQuarantine : addFish)(st, species, options);
       },
-      quarantined ? `買了 ${count} 隻${name}，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天` : `買了 ${count} 隻${name}，剛運到會有點緊迫`,
+      quarantined
+        ? `買了 ${count} 隻${name}，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天`
+        : shopDrip
+          ? `買了 ${count} 隻${name}，慢慢滴水對水後放進缸裡`
+          : `買了 ${count} 隻${name}，直接倒進缸裡${Math.abs(farmHabit(species).ph - game.state.water.ph) > 0.6 ? '，水質差很多，牠們嚇壞了' : ''}`,
+      !shopDrip && Math.abs(farmHabit(species).ph - game.state.water.ph) > 0.6 ? 'warn' : 'info',
     );
   };
-  const buyPlant = (species: PlantSpeciesId) => () => purchase(ctx, PLANT_PRICES[species], (st) => addPlant(st, species), `種下一株${PLANT_SPECIES[species].name}`);
+  // 水草可能夾帶害蟲小螺的卵（看不到）；有檢疫盒的人會先泡過，機率低很多（design/snails.md §2）
+  const buyPlant = (species: PlantSpeciesId) => () =>
+    purchase(
+      ctx,
+      PLANT_PRICES[species],
+      (st) => {
+        addPlant(st, species);
+        hitchhike(st, st.quarantine ? 0.08 : 0.25);
+      },
+      `種下一株${PLANT_SPECIES[species].name}`,
+    );
+  const buySnail = (kind: SnailKind, color?: AppleColor) => () =>
+    purchase(ctx, SNAILS[kind].price, (st) => addSnail(st, kind, color), `放了一隻${color ? APPLE_COLOR_LABELS[color] : ''}${SNAILS[kind].name}`);
 
   let content: Node;
   if (tab === 'fish') {
+    const farm = farmHabit('guppy');
+    const dripRow = h(
+      'div.stack',
+      {},
+      h('p.hint', {}, `店裡的魚習慣魚場的水（孔雀魚 pH ${farm.ph}、GH ${farm.gh}），你的缸現在 pH ${game.state.water.ph.toFixed(1)}、GH ${Math.round(waterGh(game.state))}。魚怕的是水質突然改變，不是 pH 數字本身。`),
+      h(
+        'div.row.wrap',
+        {},
+        h(`button.btn.small${shopDrip ? '.primary' : ''}`, { onclick: () => ((shopDrip = true), sheet.refresh?.()) }, `慢慢滴水對水（約 ${dripMinutes(game.state, farm)} 分鐘）`),
+        h(`button.btn.small${shopDrip ? '' : '.primary'}`, { onclick: () => ((shopDrip = false), sheet.refresh?.()) }, '直接倒進缸裡'),
+      ),
+    );
     content = h(
       'div.stack',
       {},
+      dripRow,
       canClaimStarterPack(game.state, game.others)
         ? h(
             'div.item.gift',
@@ -520,7 +660,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         : h('p.hint', {}, '店裡的魚可能帶著白點蟲或其他病，直接放進主缸可能傳染整缸。商店的「設備」可以買檢疫盒。'),
       h('p.hint', {}, '新缸還沒養好水就放太多魚，會氨中毒。'),
       h('p.hint', {}, '孔雀魚和櫻花蝦會自己繁殖，但成魚會吃仔魚和仔蝦，水草種密一點才躲得掉。斑馬魚會輕微咬孔雀魚公魚的長尾巴。'),
-      h('p.hint', {}, `孔雀魚（${FISH_SPECIES.guppy.temp.min}–${FISH_SPECIES.guppy.temp.max}°C、pH ${FISH_SPECIES.guppy.ph.min}–${FISH_SPECIES.guppy.ph.max}）照品系賣。同品系配對生出來的大多一樣；不同品系混養會生出各種組合，也可能冒出藏在基因裡的白子。`),
+      h('p.hint', {}, `孔雀魚（${FISH_SPECIES.guppy.temp.min}–${FISH_SPECIES.guppy.temp.max}°C；pH ${FISH_SPECIES.guppy.phSurvive.min}–${FISH_SPECIES.guppy.phSurvive.max} 都能慢慢適應）照品系賣。同品系配對生出來的大多一樣；不同品系混養會生出各種組合，也可能冒出藏在基因裡的白子。`),
       ...GUPPY_STRAINS.map((strain, i) =>
         h(
           'div.item',
@@ -540,9 +680,21 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       ),
       ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).filter((id) => id !== 'guppy').map((id) => {
         const sp = FISH_SPECIES[id];
-        const note = [`每隻 ${FISH_PRICES[id]} 元`, `${sp.temp.min}–${sp.temp.max}°C`, `pH ${sp.ph.min}–${sp.ph.max}`, sp.minGroup ? `群游，至少 ${sp.minGroup} 隻` : ''].filter(Boolean).join(' · ');
+        const note = [`每隻 ${FISH_PRICES[id]} 元`, `${sp.temp.min}–${sp.temp.max}°C`, `pH ${sp.phSurvive.min}–${sp.phSurvive.max} 能適應`, sp.minGroup ? `群游，至少 ${sp.minGroup} 隻` : ''].filter(Boolean).join(' · ');
         return h('div.item', {}, h('div', {}, h('b', {}, sp.name), h('div.hint', {}, note)), h('div.row', {}, button('+1', buyFish(id, 1)), button('+6', buyFish(id, 6))));
       }),
+    );
+  } else if (tab === 'snails') {
+    const item = (name: string, note: string, buy: () => void) => h('div.item', {}, h('div', {}, h('b', {}, name), h('div.hint', {}, note)), button('+1', buy));
+    content = h(
+      'div.stack',
+      {},
+      h('p.hint', {}, '螺是清潔隊也是麻煩：吃殘餌、刮藻，但餵太多就會爆量。小螺多寡直接反映你有沒有餵太多。'),
+      ...(['gold', 'blue'] as AppleColor[]).map((c) =>
+        item(`蘋果螺・${APPLE_COLOR_LABELS[c]}`, `每隻 ${SNAILS.apple.price} 元 · 吃殘餌和藻，公母都有會在水面上方產粉紅卵塊；餓了會啃水草，死了沒撈很髒`, buySnail('apple', c)),
+      ),
+      item(SNAILS.nerite.name, `每隻 ${SNAILS.nerite.price} 元 · 除藻最強，不會爆量；但會在造景上產白色卵點，刮不乾淨`, buySnail('nerite')),
+      item(SNAILS.assassin.name, `每隻 ${SNAILS.assassin.price} 元 · 專吃其他小螺，用來長期控制爆螺；螺吃光了自己會餓，也會吃小蘋果螺`, buySnail('assassin')),
     );
   } else if (tab === 'plants') {
     const cuttings = economy(game.state).cuttings;
@@ -550,6 +702,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       'div.stack',
       {},
       h('p.hint', {}, '陰性草弱光就能長；陽性草需要強光加 CO₂。'),
+      h('p.hint', {}, game.state.quarantine ? '新水草會先在檢疫盒泡過，比較不會夾帶小螺的卵。' : '新水草有時夾帶看不到的小螺卵，過幾週才發現缸裡多了螺。有檢疫盒的話會先泡過。'),
       ...(Object.keys(PLANT_SPECIES) as PlantSpeciesId[]).map((id) =>
         h('div.item', {}, h('div', {}, h('b', {}, plantName(id)), h('div.hint', {}, `一盆 ${PLANT_PRICES[id]} 元`)), button('種一株', buyPlant(id))),
       ),
@@ -785,6 +938,8 @@ export function maintenancePanel({ game, sheet, toasts, undoable }: PanelContext
   return h(
     'div.stack',
     {},
+    h('h3', {}, '螺'),
+    h('div.item', {}, h('div', {}, h('b', {}, s.snails ? `大螺 ${s.snails.snails.filter((x) => x.alive).length} 隻、小螺約 ${pestCount(s)} 隻` : '螺'), h('div.hint', {}, '卵塊、陷阱、手撈、除螺藥')), button('管理', () => sheet.open('螺', () => snailPanel({ game, sheet, toasts, undoable })))),
     h('h3', {}, '室溫與水位'),
     h(
       'div.item',
@@ -1050,3 +1205,72 @@ export function tanksPanel(ctx: PanelContext): Node {
     ...offers,
   );
 }
+
+const PEST_ORDER: PestKind[] = ['bladder', 'ramshorn', 'mts'];
+
+/** 螺的管理：看看缸裡有多少螺，各種清除方法各有代價（design/snails.md §3）。 */
+export function snailPanel(ctx: PanelContext): Node {
+  const { game, sheet, toasts } = ctx;
+  const st = game.state;
+  const s = st.snails;
+  const lit = isLightOn(st);
+  const living = s?.snails.filter((x) => x.alive) ?? [];
+  const dead = (s?.snails.length ?? 0) - living.length;
+  const bloom = snailBloom(st);
+  const refresh = () => sheet.open('螺', () => snailPanel(ctx));
+  const act = (run: (st: TankState) => string, tone: 'info' | 'warn' = 'info') => () => {
+    let text = '';
+    game.act((x) => (text = run(x)));
+    toasts.show(text, tone);
+    refresh();
+  };
+  const counts = (Object.keys(SNAILS) as SnailKind[])
+    .map((k) => [k, living.filter((x) => x.kind === k).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) => `${SNAILS[k].name} ${n} 隻`);
+  // 尖螺白天躲在沙裡：玩家只看得到一兩成
+  const pests = PEST_ORDER.map((k) => [k, Math.round(pestCount(st, k) * (k === 'mts' && lit ? 0.1 : 1))] as const).filter(([, n]) => n > 0);
+  const young = Math.round(s?.appleYoung ?? 0);
+  const trapAge = s?.trapHour !== undefined ? st.hours - s.trapHour : null;
+  const hasShrimp = st.fish.some((f) => f.alive && f.species === 'cherry_shrimp');
+  return h(
+    'div.stack',
+    {},
+    h('p.hint', {}, '小螺吃殘餌和有機物：餵太多幾週內就會爆量，少餵一陣子自然變少。'),
+    h(
+      'div.item',
+      {},
+      h(
+        'div',
+        {},
+        h('b', {}, counts.length ? counts.join('、') : '沒有養螺'),
+        h('div.hint', {}, pests.length ? `看得到的小螺：${pests.map(([k, n]) => `${PESTS[k].name} ${n}`).join('、')}${lit && pestCount(st, 'mts') > 0 ? '（尖螺白天躲在沙裡，關燈才爬出來）' : ''}` : '沒看到害蟲小螺'),
+        young > 0 ? h('div.hint', {}, `剛孵出的小蘋果螺約 ${young} 隻`) : null,
+        bloom !== 'none' ? h('div.warn-text', {}, bloom === 'plague' ? '滿缸都是小螺！一定是餵太多了' : '小螺變多了，少餵一點') : null,
+      ),
+    ),
+    s && s.clutches.length > 0
+      ? h('div.item', {}, h('div', {}, h('b', {}, `蘋果螺卵塊 ${s.clutches.length} 團`), h('div.hint', {}, '在水面上方的缸壁上，一團 50～200 顆，三週左右孵化')), button('摘掉', act((x) => `摘掉 ${removeClutches(x)} 團卵塊`)))
+      : null,
+    dead > 0 ? h('div.item', {}, h('div', {}, h('b.warn-text', {}, `死掉的大螺 ${dead} 隻`), h('div.hint', {}, '大螺死了很快就爛，水會臭、氨會升高')), button('撈出來', act((x) => `撈出 ${removeDeadSnails(x)} 隻死螺`), 'primary')) : null,
+    pestCount(st) > 0 || young > 0
+      ? h('div.item', {}, h('div', {}, h('b', {}, '手撈小螺'), h('div.hint', {}, '只抓得到看得見的，一次大約四分之一；尖螺要關燈後撈')), button('撈', act((x) => `撈掉 ${catchPests(x, isLightOn(x))} 隻小螺`)))
+      : null,
+    h(
+      'div.item',
+      {},
+      h('div', {}, h('b', {}, '螺陷阱'), h('div.hint', {}, trapAge === null ? '放一片燙過的菜過夜，隔天收能抓走一批；忘了收菜會爛' : `放了 ${Math.floor(trapAge)} 小時${trapAge < 8 ? '，再等一下比較多' : trapAge > 36 ? '，快爛了趕快收' : ''}`)),
+      trapAge === null ? button('放菜葉', act((x) => (setTrap(x), '放了一片燙過的菜葉，隔夜再收'))) : button('收陷阱', act((x) => `收起陷阱，抓到 ${Math.max(0, collectTrap(x))} 隻小螺`), 'primary'),
+    ),
+    s && s.neriteEggs >= 1 ? h('div.item', {}, h('div', {}, h('b', {}, `斑馬螺卵點約 ${Math.round(s.neriteEggs)} 顆`), h('div.hint', {}, '淡水孵不出來，只是難看')), button('刮掉', act((x) => `刮掉 ${scrapeNeriteEggs(x)} 顆卵點`))) : null,
+    h(
+      'div.item',
+      {},
+      h('div', {}, h('b', {}, '除螺藥（含銅）'), h(hasShrimp ? 'div.warn-text' : 'div.hint', {}, `${price('med:snail')} 元 · 一兩天內螺幾乎死光，但${hasShrimp ? '缸裡的蝦也會中毒死掉！' : '對蝦有毒'}；死螺一起爛，氨會暴衝，記得換水`)),
+      button('下藥', () => {
+        if (purchase(ctx, price('med:snail'), (x) => doseMolluscicide(x), '下了除螺藥，記得這幾天多換水', 'warn', true)) refresh();
+      }, hasShrimp ? 'danger' : ''),
+    ),
+  );
+}
+

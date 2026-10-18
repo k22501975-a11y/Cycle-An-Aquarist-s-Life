@@ -189,6 +189,12 @@ export function receiveFish(state: TankState, item: Record<string, unknown>, arr
   fish.infections = infections
     .filter((i) => i && (i.kind === 'columnaris' || i.kind === 'flukes'))
     .map((i) => ({ kind: i.kind, stage: i.stage === 'visible' ? ('visible' as const) : ('latent' as const), progress: num(i.progress, 0, 1, 0) }));
+  // 賣家缸裡習慣的水跟著魚過來（舊資料沒有就用袋子裡的水）
+  const habit = item.acclimated as Fish['acclimated'];
+  fish.acclimated =
+    habit && typeof habit === 'object'
+      ? { ph: num(habit.ph, 4, 10, arrival.bagPh), gh: num(habit.gh, 0, 30, 6), tempC: num(habit.tempC, 10, 35, arrival.bagTemp) }
+      : { ph: arrival.bagPh, gh: 6, tempC: arrival.bagTemp };
   fish.stress = Math.min(1, num(arrival.stress, 0, 1, 0.4) + (arrival.drip ? 0 : dumpShock(state, arrival.bagTemp, arrival.bagPh)));
   const q = state.quarantine;
   if (q) {

@@ -1,5 +1,5 @@
 import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
-import { FISH_SPECIES, PLANT_SPECIES, isCo2Injecting, isJuvenile, isLightOn, lookVariant, observeSymptoms, phenotype, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
+import { FISH_SPECIES, PLANT_SPECIES, colorProgress, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, phenotype, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
@@ -9,6 +9,7 @@ import { applyFoodLook, BITE_SECONDS, biteKick, pickEaten, pickFoodKind, ripple,
 import { canvasTexture, flakeTextures, makeCanvas, mix, pelletTextures, softDotTexture, tabletTexture, wormTextures } from './paint';
 import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame, TEST_SECONDS, WATER_CHANGE_SECONDS, type KitParam } from './ops-fx';
 import { PlantMesh } from './plant-sway';
+import { SnailView } from './snail-view';
 import { clawPose, clawRate, pleopods, type Pt } from './shrimp-limbs';
 import { phenotypeRecipe, recipeKey } from './phenotype-art';
 import { drawFinOverlay, finTraitsOf } from './fin-render';
@@ -92,7 +93,8 @@ interface FishView {
   /** 蝦的小螯與腹足（程式畫的細線）。 */
   limbs: Graphics | null;
   /** 目前套用的發色加成（分四段，變了才換濾鏡）。 */
-  boost: number;
+  /** 目前套用的色調（發色加成、轉色、老魚褪色），變了才重建濾鏡。 */
+  tone: string;
 }
 
 interface Mote {
@@ -201,6 +203,10 @@ export class TankView {
   /** 沙面髒點：重畫的依據（數量、版面）。 */
   private dirtKey = '';
   private readonly dirt = new Graphics();
+  /** 蝦脫下來的殼：半透明的空殼躺在沙面上，一兩天後被吃掉（淡出）。 */
+  private readonly moltLayer = new Container();
+  private readonly moltSprites = new Map<string, Sprite>();
+  private readonly snails = new SnailView();
   private lastFoodMg = 0;
   private bubbles: Bubble[] = [];
   private motes: Mote[] = [];
@@ -230,6 +236,8 @@ export class TankView {
       this.plantLayer,
       this.front,
       this.dirt,
+      this.moltLayer,
+      this.snails.layer,
       this.causticsLayer,
       this.gear,
       this.gearGlow,
@@ -407,6 +415,8 @@ export class TankView {
     this.detectOps(state, dt);
     this.syncFood(state, dt);
     this.drawDirt(state);
+    this.syncMolts(state);
+    this.snails.sync(state, { bounds: this.bounds, look: this.look, ppc: this.ppc, hs: this.hs, lit: isLightOn(state), time: this.time });
     this.syncFish(state, dt);
     this.syncPlants(state);
     this.drawOps(dt);
@@ -925,6 +935,38 @@ export class TankView {
     }
   }
 
+  private syncMolts(state: TankState): void {
+    const tex = paintedTexture('shrimp-molt');
+    const live = new Set<string>();
+    for (const m of state.molts ?? []) {
+      const age = state.hours - m.hour;
+      if (!tex || age >= 48) continue;
+      const key = `${m.id}:${m.hour}`;
+      live.add(key);
+      let sp = this.moltSprites.get(key);
+      if (!sp) {
+        sp = new Sprite(tex);
+        sp.anchor.set(0.5, 0.8);
+        this.moltSprites.set(key, sp);
+        this.moltLayer.addChild(sp);
+      }
+      // 位置跟著殼固定（同一個殼每次都在同一處）
+      const { width, bottom } = this.bounds;
+      const u = ((m.id * 7919 + Math.round(m.hour) * 104729) % 1000) / 1000;
+      const x = width * (0.08 + 0.84 * u);
+      const len = this.ppc * m.lengthCm * (EXAGGERATION.cherry_shrimp ?? 1.6);
+      sp.position.set(x, floorY(this.look, x, width, bottom, this.hs) - 2 * this.hs);
+      sp.scale.set(((u > 0.5 ? 1 : -1) * len) / tex.width, len / tex.width);
+      sp.rotation = (u - 0.5) * 0.5;
+      sp.alpha = 0.75 * Math.min(1, (48 - age) / 12);
+    }
+    for (const [key, sp] of this.moltSprites) {
+      if (live.has(key)) continue;
+      sp.destroy();
+      this.moltSprites.delete(key);
+    }
+  }
+
   /** 黏缸壁錠：還有碎屑黏著就畫一塊圓餅，越吃越小，吃完就消失。 */
   private drawTablet(): void {
     const stuck = this.food.filter((p) => p.stuck).length;
@@ -951,8 +993,12 @@ export class TankView {
     return Math.max(0.5, this.ppc / 11);
   }
 
+  /** 畫成哪個樣子：轉色前公母都是幼魚的樣子，看得出公母以後才換成公魚、母魚的圖。 */
   private formOf(fish: Fish): FishForm {
-    return isJuvenile(fish) ? 'juvenile' : fish.sex;
+    const stage = growthStage(fish);
+    if (stage === 'fry' || stage === 'juvenile') return 'juvenile';
+    if (fish.species === 'cherry_shrimp') return stage === 'subadult' && !sexVisible(fish) ? 'juvenile' : fish.sex;
+    return sexVisible(fish) ? fish.sex : 'juvenile';
   }
 
   /** 這隻魚畫面上的全長（像素，未含景深）。 */
@@ -987,7 +1033,7 @@ export class TankView {
       biteT: BITE_SECONDS,
       turn: { f: swimmer.vx < 0 ? 1 : -1, v: 0 },
       limbs: null,
-      boost: 0,
+      tone: '',
       mouth: null,
       z,
       zTarget: z,
@@ -1003,8 +1049,10 @@ export class TankView {
     // 魚懷孕後期肚子才看得出來；蝦一抱卵就看得到。
     const gravid = form === 'female' && fish.pregnancy > (fish.species === 'cherry_shrimp' ? 0 : 0.5);
     // 公孔雀魚照基因上色：雜交出來的組合也有自己的花色
-    const painted = resolvePaintedKey(fish.species === 'guppy' && form === 'male' && fish.genome ? recipeKey(phenotypeRecipe(phenotype(fish.genome))) : paintedKey(fish.species, form, lookVariant(fish), gravid));
-    const fins = fish.species === 'guppy' && form !== 'juvenile' && fish.genome ? finTraitsOf(fish, painted) : null;
+    const painted = resolvePaintedKey(fish.species === 'guppy' && form === 'male' && fish.genome ? recipeKey(phenotypeRecipe(phenotype(fish.genome))) : paintedKey(fish.species, form, lookVariant(fish), gravid, growthStage(fish), !!fish.stuckMolt));
+    // 鰭型到亞成魚才慢慢長出來（design/growth.md §1）
+    const stage = growthStage(fish);
+    const fins = fish.species === 'guppy' && form !== 'juvenile' && fish.genome && stage !== 'coloring' ? finTraitsOf(fish, painted) : null;
     const finKey = fins ? `${+fins.dumboArt}${+!!fins.traits.swallow}${+!!fins.traits.ribbon}${+!!fins.traits.dumbo}${+!!fins.traits.bigC}${fins.traits.sword ?? 0}${+!!fins.traits.halfmoon}` : '';
     const key = `${fish.species}:${form}:${gravid}:${painted ?? ''}:${finKey}`;
     if (key === view.rigKey) return;
@@ -1013,7 +1061,7 @@ export class TankView {
     const look = appearance(fish.species, form, lookVariant(fish), gravid);
     const tex = paintedTexture(painted);
     view.rig = tex && painted ? new PaintedRig(painted, tex, look) : new FishRig(fish.species, look);
-    view.boost = 0;
+    view.tone = '';
     view.rig.addChildAt(view.eggs, 0);
     view.rig.addChild(view.spots);
     if (fins) drawFinOverlay(view.rig, fins);
@@ -1161,13 +1209,18 @@ export class TankView {
       if (rig instanceof PaintedRig) rig.setMouthOpen(kick > 0.15 && fish.species !== 'cherry_shrimp');
       if (fish.species === 'cherry_shrimp') this.drawShrimpLimbs(view, fish, dt);
       // 長期餵好飼料：顏色更飽和、更亮（只是表現，停餵會退）
+      // 轉色期顏色從淡慢慢變濃，老魚顏色變淡（design/growth.md §1、§5）
       const boost = fish.alive ? Math.round((fish.colorBoost ?? 0) * 4) / 4 : 0;
-      if (boost !== view.boost) {
-        view.boost = boost;
-        if (boost > 0) {
+      const stage = growthStage(fish);
+      const fade = stage === 'coloring' ? (1 - colorProgress(fish)) * 0.8 : stage === 'old' ? 0.5 : 0;
+      const sat = Math.round((boost * 0.45 - fade) * 10) / 10;
+      const tone = `${sat}:${boost}`;
+      if (tone !== view.tone) {
+        view.tone = tone;
+        if (sat !== 0 || boost > 0) {
           const f = new ColorMatrixFilter();
-          f.saturate(boost * 0.45, false);
-          f.brightness(1 + boost * 0.08, true);
+          f.saturate(sat, false);
+          f.brightness(1 + boost * 0.08 - (stage === 'old' ? 0.06 : 0), true);
           view.rig.filters = [f];
         } else view.rig.filters = [];
       }

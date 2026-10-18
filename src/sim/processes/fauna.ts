@@ -1,3 +1,4 @@
+import { driftAcclimation, habitStress, phBeyondSurvival } from '../acclimation';
 import { freeAmmoniaFraction, temperatureFactor } from '../chemistry';
 import { DEFAULT_BREEDING_CONDITION, DEFAULT_NUTRITION, foodLots, foodQuality, nutritionFactor, pruneFood } from '../food';
 import { chance } from '../random';
@@ -73,7 +74,8 @@ export function computeStressors(state: TankState, fish: Fish): Stressors {
 
   return {
     temperature: outside(water.tempC, sp.temp) / 6,
-    ph: outside(water.ph, sp.ph) / 0.8,
+    // 超出存活範圍很危險；在範圍內只看離這尾魚習慣的水多遠（慢慢適應就沒事）
+    ph: phBeyondSurvival(state, fish) / 0.4 + habitStress(state, fish),
     // 測試劑讀到 0 的微量不構成壓力。
     ammonia: (Math.max(0, freeAmmonia(state) - 0.01) / 0.05) * sensitivity,
     nitrite: Math.max(0, water.no2 - 0.2) * sensitivity,
@@ -85,7 +87,7 @@ export function computeStressors(state: TankState, fish: Fish): Stressors {
     group: sp.minGroup > 0 && sameSpecies < sp.minGroup ? 0.1 + (0.3 * (sp.minGroup - sameSpecies)) / sp.minGroup : 0,
     suddenChange:
       Math.max(0, Math.abs(water.tempC - water.tempAvgC) - 1) / 2 + Math.max(0, Math.abs(water.ph - water.phAvg) - 0.3) / 0.5,
-    medication: sp.medicationSensitive ? water.medication * 2 : 0,
+    medication: (sp.medicationSensitive ? water.medication * 2 : 0) + (sp.invertebrate ? (water.copper ?? 0) * 3 : (water.copper ?? 0) * 0.5),
     disease: Math.max(fish.ich.stage === 'visible' ? 0.3 : 0, diseaseStress(fish)),
     injury: fish.finDamage * 0.3,
   };
@@ -102,6 +104,7 @@ function computeDamage(state: TankState, fish: Fish, sp: FishSpecies): Damage[] 
   add((water.no2 - 1) * 0.004 * sensitivity, 'nitrite');
   add((2 - water.o2) * 0.05, 'oxygen');
   add((water.co2 - 45) * 0.004, 'co2');
+  add(phBeyondSurvival(state, fish) * 0.01, 'ph');
   const tempOut = Math.max(0, sp.tempLethal.min - water.tempC, water.tempC - sp.tempLethal.max);
   add(tempOut * 0.01, 'temperature');
   if (fish.hunger >= 1) add(0.004, 'starvation');
@@ -109,6 +112,8 @@ function computeDamage(state: TankState, fish: Fish, sp: FishSpecies): Damage[] 
   const life = lifeFraction(fish);
   if (life > 1) add(0.002 + (life - 1) * 0.02, 'old_age');
   if (sp.medicationSensitive) add(water.medication * 0.02, 'medication');
+  // 除螺藥的銅對蝦是毒（螺也是軟體動物，蝦是甲殼類但一樣怕銅）
+  if (sp.invertebrate) add((water.copper ?? 0) * 0.08, 'copper');
   if (fish.ich.stage === 'visible') add(0.004 * (1 - 0.5 * immunity(fish, sp)), 'ich');
   // 長期高壓力本身就會耗損身體。
   add((fish.stress - 0.7) * 0.01, 'chronic_stress');
@@ -133,6 +138,7 @@ export function updateFauna(state: TankState, dt: number): void {
     const metabolic = sizeRatio(fish) ** 2;
     // 變溫動物：水溫高代謝快、老得快（孔雀魚長期 28°C 壽命約少兩成）
     fish.ageDays = (fish.ageDays ?? 0) + (dt / 24) * Math.min(1.5, Math.max(0.7, Math.sqrt(tf)));
+    driftAcclimation(state, fish, dt);
 
     // 代謝：飢餓、耗氧、排出 CO₂。
     fish.hunger = Math.min(1, fish.hunger + (dt / 24 / DAYS_TO_STARVING) * Math.sqrt(tf));
