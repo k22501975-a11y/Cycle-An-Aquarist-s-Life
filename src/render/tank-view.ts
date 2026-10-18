@@ -8,6 +8,7 @@ import { BITE_SECONDS, biteKick, pickEaten, ripple, RIPPLE_SECONDS, scatterPelle
 import { canvasTexture, flakeTextures, makeCanvas, mix, softDotTexture } from './paint';
 import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame, TEST_SECONDS, WATER_CHANGE_SECONDS, type KitParam } from './ops-fx';
 import { PlantMesh } from './plant-sway';
+import { clampPan, fitCamera, maxSpan, zoomAt, type Camera } from './camera';
 import { type QualitySpec, qualitySpec } from './quality';
 import { causticsTexture, MOCKUP_PX_PER_CM, paintBackdrop, paintDriftwood, paintFront, paintPlant, paintVignette, rayTexture } from './scenery';
 
@@ -144,6 +145,8 @@ export class TankView {
   private readonly opsFx = new Graphics();
   private readonly cuttingLayer = new Container();
   private readonly tubeLabels = new Container();
+  /** 大缸滑動時的位置條（固定在畫面上）。 */
+  private readonly scrollBar = new Graphics();
   private readonly overlay = new Graphics();
   private readonly vignette = new Sprite();
 
@@ -171,6 +174,14 @@ export class TankView {
   private seenWc = -1;
   private seenNo3 = 0;
   private seenTest = -1;
+  /** 鏡頭（90 cm 以上的缸可以左右滑、縮放）。 */
+  private cam: Camera = { span: 1, pan: 0 };
+  private camTankW = -1;
+  private maxSpan = 1;
+  /** 最近一次滑動、縮放的時間（位置條顯示一下再淡出）。 */
+  private camMovedAt = -10;
+  /** 這次按下後拖動過，放開時不算點選。 */
+  private dragged = false;
   private ripples: Array<{ x: number; t: number }> = [];
   private crumbs: Crumb[] = [];
   /** 飼料剛因重新排版清空：補回去時不演撒飼料。 */
@@ -216,10 +227,16 @@ export class TankView {
       this.tubeLabels,
       this.overlay,
       this.vignette,
+      this.scrollBar,
     );
     this.root.eventMode = 'static';
-    this.root.on('pointertap', (e: FederatedPointerEvent) => this.handleTap(e.global.x, e.global.y));
+    this.root.on('pointertap', (e: FederatedPointerEvent) => {
+      if (this.dragged) return;
+      const p = e.getLocalPosition(this.root);
+      this.handleTap(p.x, p.y);
+    });
     app.renderer.on('resize', () => (this.sceneKey = ''));
+    this.bindCameraInput(app.canvas);
   }
 
   /** 狀態列與按鈕列蓋住的高度（像素）。 */
@@ -258,10 +275,22 @@ export class TankView {
   private layout(state: TankState): void {
     const screen = this.app.screen;
     const size = tankSize(state.equipment.tank);
-    const key = `${screen.width}x${screen.height}:${this.insets.top},${this.insets.bottom}:${size.w}x${size.h}`;
+    const tankChanged = size.w !== this.camTankW;
+    if (tankChanged || this.cam.span > maxSpan(size.w)) {
+      this.cam = fitCamera(this.cam, size.w, screen.width, tankChanged);
+      this.camTankW = size.w;
+      this.maxSpan = maxSpan(size.w);
+      if (this.maxSpan > 1) this.camMovedAt = this.time;
+    }
+    this.cam.pan = clampPan(this.cam.pan, this.cam.span, screen.width);
+    this.root.x = -this.cam.pan;
+    const key = `${screen.width}x${screen.height}:${this.insets.top},${this.insets.bottom}:${size.w}x${size.h}:${this.cam.span}`;
     if (key === this.sceneKey) return;
     this.sceneKey = key;
-    const b = (this.bounds = sceneBounds(screen.width, screen.height, this.insets));
+    const oldWidth = this.bounds.width;
+    // 大缸畫得比畫面寬（span 倍），整個場景用 root.x 左右移動
+    const b = (this.bounds = sceneBounds(screen.width * this.cam.span, screen.height, this.insets));
+    if (oldWidth > 0 && oldWidth !== b.width) for (const v of this.fish.values()) v.swimmer.x *= b.width / oldWidth;
     this.ppc = pxPerCm(b, size);
     this.hs = this.ppc / MOCKUP_PX_PER_CM;
     this.root.hitArea = { contains: (x: number, y: number) => x >= 0 && y >= 0 && x <= b.width && y <= b.height };
@@ -603,7 +632,7 @@ export class TankView {
         }
       }
       const tw = 16 * hs, th = 70 * hs, gap = 30 * hs;
-      const x0 = width - 50 * hs - (TUBES.length - 1) * gap;
+      const x0 = this.cam.pan + this.app.screen.width - 50 * hs - (TUBES.length - 1) * gap;
       const y0 = surface + 24 * hs;
       const reading = this.testReading;
       TUBES.forEach((tb, i) => {
@@ -639,6 +668,108 @@ export class TankView {
       c.s.alpha = Math.min(1, (CUTTING_SECONDS - c.t) / 0.8);
       return true;
     });
+    this.drawScrollBar();
+  }
+
+  /** 位置條：畫面上方中間一條細線，亮的那段是目前看到的範圍；滑動後顯示一下再淡出。 */
+  private drawScrollBar(): void {
+    const g = this.scrollBar;
+    g.clear();
+    if (this.cam.span <= 1) return;
+    const alpha = Math.max(0, Math.min(1, 2.5 - (this.time - this.camMovedAt)));
+    if (alpha <= 0) return;
+    const sw = this.app.screen.width;
+    const track = Math.min(240, sw * 0.3);
+    const x = this.cam.pan + (sw - track) / 2;
+    const y = this.bounds.surface + 10;
+    const thumb = track / this.cam.span;
+    const tx = x + (track - thumb) * (this.cam.pan / (sw * (this.cam.span - 1)));
+    g.roundRect(x, y, track, 4, 2).fill({ color: 0x0b1820, alpha: 0.45 * alpha });
+    g.roundRect(tx, y, thumb, 4, 2).fill({ color: 0xeaf6f8, alpha: 0.85 * alpha });
+  }
+
+  private panBy(dx: number): void {
+    const pan = clampPan(this.cam.pan + dx, this.cam.span, this.app.screen.width);
+    if (pan === this.cam.pan) return;
+    this.cam = { ...this.cam, pan };
+    this.root.x = -pan;
+    this.camMovedAt = this.time;
+  }
+
+  private zoomBy(factor: number, anchorX: number): void {
+    const next = zoomAt(this.cam, factor, anchorX, this.app.screen.width, this.maxSpan);
+    if (next === this.cam) return;
+    this.cam = next;
+    this.root.x = -next.pan;
+    this.camMovedAt = this.time;
+  }
+
+  /** 拖曳左右滑、雙指縮放；電腦上用滾輪或觸控板（按 Ctrl 或觸控板捏合縮放）。 */
+  private bindCameraInput(canvas: HTMLCanvasElement): void {
+    // 拖曳、捏合都自己處理，不讓瀏覽器拿去捲動或放大網頁
+    canvas.style.touchAction = 'none';
+    const pointers = new Map<number, { x: number; y: number }>();
+    let downX = 0;
+    let pinchBase = 0;
+    canvas.addEventListener('pointerdown', (e) => {
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 1) {
+        downX = e.clientX;
+        this.dragged = false;
+      }
+      if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        pinchBase = Math.hypot(a.x - b.x, a.y - b.y);
+      }
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      const prev = pointers.get(e.pointerId);
+      if (!prev || this.maxSpan <= 1) return;
+      const rect = canvas.getBoundingClientRect();
+      const k = this.app.screen.width / Math.max(1, rect.width);
+      if (pointers.size === 1) {
+        if (Math.abs(e.clientX - downX) > 8) this.dragged = true;
+        if (this.dragged) this.panBy(-(e.clientX - prev.x) * k);
+      } else if (pointers.size === 2) {
+        this.dragged = true;
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        const [a, b] = [...pointers.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        const mid = ((a.x + b.x) / 2 - rect.left) * k;
+        // 手指距離變化超過兩成才跳一格（每格都要重畫造景）
+        if (pinchBase > 0 && (d / pinchBase > 1.2 || d / pinchBase < 0.83)) {
+          this.zoomBy(d > pinchBase ? 1.25 : 0.8, mid);
+          pinchBase = d;
+        }
+      }
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    });
+    const up = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
+      pinchBase = 0;
+    };
+    canvas.addEventListener('pointerup', up);
+    canvas.addEventListener('pointercancel', up);
+    let wheelZoom = 0;
+    canvas.addEventListener(
+      'wheel',
+      (e) => {
+        if (this.maxSpan <= 1) return;
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const k = this.app.screen.width / Math.max(1, rect.width);
+        if (e.ctrlKey) {
+          wheelZoom += e.deltaY;
+          if (Math.abs(wheelZoom) > 40) {
+            this.zoomBy(wheelZoom < 0 ? 1.25 : 0.8, (e.clientX - rect.left) * k);
+            wheelZoom = 0;
+          }
+        } else {
+          this.panBy((Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * k);
+        }
+      },
+      { passive: false },
+    );
   }
 
   private syncFood(state: TankState, dt: number): void {
