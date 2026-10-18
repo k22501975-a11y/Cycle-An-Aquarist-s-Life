@@ -1,5 +1,5 @@
 import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
-import { isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, phenotype, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
+import { isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
@@ -10,9 +10,11 @@ import { canvasTexture, flakeTextures, makeCanvas, mix, pelletTextures, softDotT
 import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame, TEST_SECONDS, WATER_CHANGE_SECONDS, type KitParam } from './ops-fx';
 import { PlantMesh } from './plant-sway';
 import { SnailView } from './snail-view';
+import { LAYER_LOOK, ScapeView, type Rect, type ScapeEdit, type ScapeTarget } from './scape-view';
 import { clawPose, clawRate, pleopods, type Pt } from './shrimp-limbs';
 import { phenotypeRecipe, recipeKey } from './phenotype-art';
 import { drawFinOverlay, finTraitsOf } from './fin-render';
+import { quantizeTone } from './tone';
 import { clampPan, fitCamera, maxSpan, zoomAt, type Camera } from './camera';
 import { type QualitySpec, qualitySpec } from './quality';
 import { causticsTexture, MOCKUP_PX_PER_CM, paintBackdrop, paintDriftwood, paintFront, paintPlant, paintVignette, rayTexture } from './scenery';
@@ -115,6 +117,9 @@ interface Ray {
 export interface TankViewEvents {
   onSelectFish?: (id: number | null) => void;
   onSelectPlant?: (id: number) => void;
+  /** 造景模式：點選、放開拖曳的物件（x 是 0–1 的橫向位置）。 */
+  onScapeSelect?: (target: ScapeTarget | null) => void;
+  onScapeDrop?: (target: ScapeTarget, x: number) => void;
 }
 
 /** 魚畫得比真實比例大一些（遊戲裡要看得清楚品系花紋）。 */
@@ -136,7 +141,10 @@ export class TankView {
   private readonly backdrop = new Sprite();
   private readonly backFish = new Container();
   private readonly driftwood = new Sprite();
-  private readonly plantLayer = new Container();
+  /** 造景三層（石頭、沉木、水草）與造景模式的輔助線。 */
+  private readonly scape = new ScapeView();
+  /** 造景模式正在拖的物件：按下時跟物件中心的距離。 */
+  private scapeDrag: { target: ScapeTarget; offset: number; startX: number; moved: boolean } | null = null;
   private readonly front = new Sprite();
   private readonly causticsLayer = new Container();
   private readonly causticsA: TilingSprite;
@@ -233,9 +241,14 @@ export class TankView {
     this.gearGlow.blendMode = 'add';
     this.root.addChild(
       this.backdrop,
+      this.scape.rocks.back,
+      this.scape.plants.back,
       this.backFish,
       this.driftwood,
-      this.plantLayer,
+      this.scape.rocks.mid,
+      this.scape.plants.mid,
+      this.scape.rocks.front,
+      this.scape.plants.front,
       this.front,
       this.dirt,
       this.moltLayer,
@@ -253,12 +266,14 @@ export class TankView {
       this.opsFx,
       this.tubeLabels,
       this.overlay,
+      this.scape.overlay,
       this.vignette,
       this.scrollBar,
     );
     this.root.eventMode = 'static';
     this.root.on('pointertap', (e: FederatedPointerEvent) => {
       if (this.dragged) return;
+      if (this.scape.editing) return;
       const p = e.getLocalPosition(this.root);
       this.handleTap(p.x, p.y);
     });
@@ -312,7 +327,9 @@ export class TankView {
     this.cam.pan = clampPan(this.cam.pan, this.cam.span, screen.width);
     this.root.x = -this.cam.pan;
     const look = substrateLook(state.equipment.substrate?.spec.id);
-    const key = `${screen.width}x${screen.height}:${this.insets.top},${this.insets.bottom}:${size.w}x${size.h}:${this.cam.span}:${look}`;
+    // 還沒放任何造景材料的缸畫預設的裝飾石與沉木；放了以後依玩家擺的位置畫（scape-view.ts）
+    const decor = (state.equipment.hardscape ?? []).length === 0;
+    const key = `${screen.width}x${screen.height}:${this.insets.top},${this.insets.bottom}:${size.w}x${size.h}:${this.cam.span}:${look}:${decor}`;
     if (key === this.sceneKey) return;
     this.sceneKey = key;
     const oldWidth = this.bounds.width;
@@ -335,8 +352,8 @@ export class TankView {
       if (old !== Texture.EMPTY && old !== tex) old.destroy(true);
     };
     swap(this.backdrop, paintBackdrop(b, this.hs));
-    swap(this.driftwood, paintDriftwood(b, this.hs));
-    swap(this.front, paintFront(b, this.hs, look));
+    swap(this.driftwood, paintDriftwood(b, this.hs, decor));
+    swap(this.front, paintFront(b, this.hs, look, decor));
     swap(this.vignette, paintVignette(b.width, b.height));
 
     // 焦散：主要照在底沙上，往上漸漸消失
@@ -400,7 +417,7 @@ export class TankView {
       return;
     }
     for (const [id, view] of this.plants) {
-      const bb = view.holder.getBounds();
+      const bb = this.plantRect(view);
       if (x >= bb.minX + bb.width * 0.2 && x <= bb.maxX - bb.width * 0.2 && y >= bb.minY && y <= bb.maxY) {
         this.events.onSelectPlant?.(id);
         return;
@@ -414,6 +431,7 @@ export class TankView {
     const dt = Math.min(0.1, realDt);
     this.time += dt;
     this.layout(state);
+    this.scape.sync(state, { bounds: this.bounds, hs: this.hs, look: this.look, sceneKey: this.sceneKey });
     this.detectOps(state, dt);
     this.syncFood(state, dt);
     this.drawDirt(state);
@@ -426,6 +444,49 @@ export class TankView {
     this.animateLight(state, dt);
     this.updateBubbles(state, dt);
     this.drawOverlay(state);
+    this.scape.drawEdit(state, this.bounds, (x) => this.bounds.floor?.(x) ?? this.bounds.bottom, this.selectedScapeRect());
+  }
+
+  /** 進入、離開造景模式（null = 一般模式）。 */
+  setScapeEdit(edit: ScapeEdit | null): void {
+    this.scape.setEdit(edit);
+    if (!edit) this.scapeDrag = null;
+  }
+
+  /** 水草在畫面上的範圍（root 座標；getBounds 是畫布座標，要扣掉鏡頭的平移）。 */
+  private plantRect(view: PlantView): { minX: number; maxX: number; minY: number; maxY: number; width: number } {
+    const bb = view.holder.getBounds();
+    return { minX: bb.minX - this.root.x, maxX: bb.maxX - this.root.x, minY: bb.minY - this.root.y, maxY: bb.maxY - this.root.y, width: bb.width };
+  }
+
+  private selectedScapeRect(): Rect | null {
+    const sel = this.scape.editing?.selected;
+    if (!sel) return null;
+    if (sel.kind === 'hardscape') return this.scape.hardscapeRect(sel.index);
+    const view = this.plants.get(sel.id);
+    if (!view) return null;
+    const r = this.plantRect(view);
+    return { x0: r.minX + r.width * 0.15, y0: r.minY, x1: r.maxX - r.width * 0.15, y1: r.maxY };
+  }
+
+  /** 造景模式：按到哪個物件（目前編輯的那層；水草優先，因為常常種在石頭前面）。 */
+  private hitScape(x: number, y: number): ScapeTarget | null {
+    const edit = this.scape.editing;
+    if (!edit) return null;
+    for (const [id, view] of this.plants) {
+      if (view.holder.parent !== this.scape.plants[edit.layer]) continue;
+      const bb = this.plantRect(view);
+      if (x >= bb.minX + bb.width * 0.2 && x <= bb.maxX - bb.width * 0.2 && y >= bb.minY && y <= bb.maxY) return { kind: 'plant', id };
+    }
+    const index = this.scape.hitHardscape(x, y, edit.layer);
+    return index === null ? null : { kind: 'hardscape', index };
+  }
+
+  /** 拖曳開始時物件中心的 x（像素）。 */
+  private scapeItemX(target: ScapeTarget): number {
+    if (target.kind === 'plant') return this.plants.get(target.id)?.holder.x ?? 0;
+    const r = this.scape.hardscapeRect(target.index);
+    return r ? (r.x0 + r.x1) / 2 : 0;
   }
 
   /** 光束緩慢飄移、焦散流動、粒子漂浮。關燈時光束和焦散消失。 */
@@ -746,8 +807,26 @@ export class TankView {
     const pointers = new Map<number, { x: number; y: number }>();
     let downX = 0;
     let pinchBase = 0;
+    const local = (e: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const k = this.app.screen.width / Math.max(1, rect.width);
+      return { x: (e.clientX - rect.left) * k - this.root.x, y: (e.clientY - rect.top) * k - this.root.y };
+    };
     canvas.addEventListener('pointerdown', (e) => {
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      // 造景模式：按到物件就開始拖，按到空白處取消選取
+      if (this.scape.editing && pointers.size === 1) {
+        const p = local(e);
+        const hit = this.hitScape(p.x, p.y);
+        this.events.onScapeSelect?.(hit);
+        if (hit) {
+          const cx = this.scapeItemX(hit);
+          this.scapeDrag = { target: hit, offset: cx - p.x, startX: p.x, moved: false };
+          this.scape.setDrag(hit, cx);
+          this.dragged = true;
+          return;
+        }
+      }
       if (pointers.size === 1) {
         downX = e.clientX;
         this.dragged = false;
@@ -759,6 +838,13 @@ export class TankView {
     });
     canvas.addEventListener('pointermove', (e) => {
       const prev = pointers.get(e.pointerId);
+      if (prev && this.scapeDrag) {
+        const p = local(e);
+        if (Math.abs(p.x - this.scapeDrag.startX) > 4) this.scapeDrag.moved = true;
+        const w = this.bounds.width;
+        this.scape.setDrag(this.scapeDrag.target, Math.min(w * 0.96, Math.max(w * 0.04, p.x + this.scapeDrag.offset)));
+        return;
+      }
       if (!prev || this.maxSpan <= 1) return;
       const rect = canvas.getBoundingClientRect();
       const k = this.app.screen.width / Math.max(1, rect.width);
@@ -782,6 +868,14 @@ export class TankView {
     const up = (e: PointerEvent) => {
       pointers.delete(e.pointerId);
       pinchBase = 0;
+      const drag = this.scapeDrag;
+      if (drag) {
+        this.scapeDrag = null;
+        const x = this.scape.dragX(drag.target);
+        // 先通知（狀態更新成新位置），下一格才放掉拖曳中的位置，避免物件閃回原位
+        if (drag.moved && x !== null) this.events.onScapeDrop?.(drag.target, x / this.bounds.width);
+        this.scape.setDrag(null);
+      }
     };
     canvas.addEventListener('pointerup', up);
     canvas.addEventListener('pointercancel', up);
@@ -1066,7 +1160,7 @@ export class TankView {
     view.tone = '';
     view.rig.addChildAt(view.eggs, 0);
     view.rig.addChild(view.spots);
-    if (fins) drawFinOverlay(view.rig, fins);
+    if (fins) drawFinOverlay(view.rig, fins, this.app.renderer);
     view.limbs?.destroy();
     view.limbs = null;
     if (isShrimpSpecies(fish.species) && view.rig instanceof PaintedRig) {
@@ -1223,7 +1317,11 @@ export class TankView {
       const tone = `${sat}:${boost}`;
       if (tone !== view.tone) {
         view.tone = tone;
-        if (sat !== 0 || boost > 0) {
+        if (rig instanceof PaintedRig) {
+          // 精繪圖：色調烘進快取的貼圖，不掛濾鏡（I1）
+          const q = quantizeTone(sat, 1 + boost * 0.08 - (stage === 'old' ? 0.06 : 0));
+          rig.setTone(q.sat, q.bright);
+        } else if (sat !== 0 || boost > 0) {
           const f = new ColorMatrixFilter();
           f.saturate(sat, false);
           f.brightness(1 + boost * 0.08 - (stage === 'old' ? 0.06 : 0), true);
@@ -1276,7 +1374,6 @@ export class TankView {
       let view = this.plants.get(plant.id);
       if (!view) {
         view = { holder: new Container(), rig: null, drawnBiomass: -1, drawnAlgae: -1, drawnMelting: false, seenBiomass: -1 };
-        this.plantLayer.addChild(view.holder);
         this.plants.set(plant.id, view);
       }
       // 剛剪過：從目前的圖切下葉尖當插枝飄走（要在重畫、舊圖被銷毀之前）
@@ -1298,8 +1395,14 @@ export class TankView {
         view.drawnAlgae = plant.leafAlgae;
         view.drawnMelting = melting;
       }
-      const slot = ((plant.id * 0.618) % 1) * 0.84 + 0.08;
-      view.holder.position.set(this.bounds.width * slot, this.bounds.bottom + 14 * this.hs);
+      // 種在哪一層、哪個位置（造景編輯）：後景小一點、淡一點，前景大一點
+      const place = plantPlacement(plant);
+      const look = LAYER_LOOK[place.layer];
+      const layer = this.scape.plants[place.layer];
+      if (view.holder.parent !== layer) layer.addChild(view.holder);
+      const x = this.scape.dragX({ kind: 'plant', id: plant.id }) ?? this.bounds.width * place.x;
+      view.holder.position.set(x, this.bounds.bottom + (14 + look.dy) * this.hs);
+      view.holder.scale.set(place.flip ? -look.scale : look.scale, look.scale);
       // 水流造成的搖擺：根部不動、葉尖擺最多
       const tall = view.rig!.mesh.texture.height;
       view.rig!.sway(t * 6 + plant.id + this.time * 1.1, tall * 0.045 * flow);
@@ -1376,6 +1479,12 @@ export class TankView {
     // 混濁：有機物與細菌濃度高時水變黃綠
     const turbidity = Math.min(0.35, state.water.organicMg / 4000 + state.water.tan / 20);
     if (turbidity > 0.02) g.rect(0, 0, width, height).fill({ color: 0x8a8a3a, alpha: turbidity });
+    // 剛動過造景：攪起來的細沙讓水白濁，底下最濃，慢慢沉澱
+    const silt = state.water.turbidity ?? 0;
+    if (silt > 0.01) {
+      g.rect(0, surface, width, bottom - surface).fill({ color: 0xc9c1a4, alpha: Math.min(0.5, silt * 0.55) });
+      g.rect(0, surface + (bottom - surface) * 0.55, width, (bottom - surface) * 0.6).fill({ color: 0xb8ad8a, alpha: Math.min(0.35, silt * 0.4) });
+    }
     // 缸壁藻類：四周與角落較濃
     if (state.algae > 0.02) {
       const a = state.algae;

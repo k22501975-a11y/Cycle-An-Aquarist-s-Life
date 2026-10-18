@@ -2,6 +2,7 @@ import { temperatureFactor } from '../chemistry';
 import { PLANT_SPECIES, type PlantSpecies } from '../species';
 import { isLightOn, recordEvent, type Plant, type TankState } from '../state';
 import { substrateNutrientBoost } from './hardscape';
+import { plantLight } from '../aquascape';
 
 /** 每 g 新長出的水草（濕重）吸收的氮（mg）。 */
 const NITROGEN_PER_G = 3;
@@ -55,7 +56,9 @@ export function updatePlants(state: TankState, dt: number): void {
 
   for (const plant of state.plants) {
     const sp = PLANT_SPECIES[plant.species];
-    const { gross, respiration } = plantRates(state, plant, par);
+    // 種在石頭、沉木陰影下的草照到的光比較少（造景擺放，aquascape.ts）
+    const litPar = par * plantLight(state, plant);
+    const { gross, respiration } = plantRates(state, plant, litPar);
     // 生物量超過上限兩倍後就長不動了（要修剪）。
     const crowding = Math.max(0, 1 - plant.biomassG / (sp.maxBiomassG * 2));
     const net = gross * crowding - respiration;
@@ -81,7 +84,7 @@ export function updatePlants(state: TankState, dt: number): void {
     water.o2 += ((grossG - respG) * O2_PER_G) / volume;
     water.co2 = Math.max(0, water.co2 - ((grossG - respG) * CO2_PER_G) / volume);
 
-    updateLeafAlgae(plant, sp, par, dt);
+    updateLeafAlgae(plant, sp, litPar, dt);
   }
 
   for (const plant of state.plants) {

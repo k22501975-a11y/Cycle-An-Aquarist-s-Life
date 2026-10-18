@@ -22,16 +22,18 @@ function imageSize(img: CanvasImageSource): { w: number; h: number } {
  * 把一張去背素材畫成水裡的物件：底部中心對齊 (cx, baseY)，高度 height。
  * 先在小畫布上疊上方受光、下方陰影與水的藍色（越遠 haze 越重），再畫到場景上，底下加接觸陰影。
  */
-function drawSceneryArt(ctx: Ctx, img: CanvasImageSource, cx: number, baseY: number, height: number, haze: number, flip = false): void {
+function drawSceneryArt(ctx: Ctx, img: CanvasImageSource, cx: number, baseY: number, height: number, haze: number, flip = false, look: { aspect?: number; filter?: string } = {}): void {
   const { w: iw, h: ih } = imageSize(img);
   const h = height;
-  const w = (iw / ih) * h;
+  const w = (iw / ih) * h * (look.aspect ?? 1);
   const { canvas: tmp, ctx: t } = makeCanvas(w, h);
   if (flip) {
     t.translate(w, 0);
     t.scale(-1, 1);
   }
+  if (look.filter) t.filter = look.filter;
   t.drawImage(img, 0, 0, w, h);
+  t.filter = 'none';
   t.setTransform(1, 0, 0, 1, 0, 0);
   t.globalCompositeOperation = 'source-atop';
   const light = t.createLinearGradient(0, 0, 0, h);
@@ -219,8 +221,9 @@ function paintSeiryu(ctx: Ctx, x: number, y: number, s: number, pts: number[], c
   ctx.restore();
 }
 
-/** 中景：沉木＋莫絲。畫在水草後面。 */
-export function paintDriftwood(b: TankBounds, hs: number): Texture {
+/** 中景：沉木＋莫絲。畫在水草後面。decor = false（玩家自己擺了造景）時是空的。 */
+export function paintDriftwood(b: TankBounds, hs: number, decor = true): Texture {
+  if (!decor) return canvasTexture(makeCanvas(2, 2).canvas, false);
   const { canvas, ctx } = makeCanvas(b.width, b.height);
   const ox = b.width * 0.38;
   const oy = b.bottom + 12 * hs;
@@ -298,12 +301,17 @@ export function paintDriftwood(b: TankBounds, hs: number): Texture {
 }
 
 /** 前景：三顆青龍石與底沙（底沙蓋住石頭底部）。底沙依底材換外觀，裸缸就是玻璃缸底。 */
-export function paintFront(b: TankBounds, hs: number, look: SubstrateLook = 'sand'): Texture {
+export function paintFront(b: TankBounds, hs: number, look: SubstrateLook = 'sand', decor = true): Texture {
   const { canvas, ctx } = makeCanvas(b.width, b.height);
   const { width: w, bottom } = b;
   // 裸缸：石頭直接放在玻璃上
   const y = look === 'bare' ? bottom + 8 * hs : bottom + 22 * hs;
   if (look === 'bare') paintGlassFloor(ctx, b, hs);
+  // 玩家自己擺了造景：只畫底沙，石頭沉木由造景圖層畫（scape-view.ts）
+  if (!decor) {
+    if (look !== 'bare') paintSubstrate(ctx, b, hs, look);
+    return canvasTexture(canvas, false);
+  }
   const rocks = (['rock-1', 'rock-4', 'rock-3'] as const).map((k) => sceneryImage(k));
   if (look === 'bare') {
     // 石頭底下的接觸陰影
@@ -727,4 +735,36 @@ export function paintPlant(plant: Plant, hs: number): PlantPainting {
     paintSeiryu(ctx, 0, 4 * hs, hs * 0.5, [-55, 0, -32, -50, 8, -60, 40, -34, 55, 0], [[8, -60, 2, -4]], plant.id);
   }
   return { texture: canvasTexture(canvas), anchorX: ax, anchorY: ay };
+}
+
+/** 造景材料的外觀：沒有專屬素材的石頭用青龍石素材換顏色、比例（火山石偏紅黑、板岩扁平偏灰）。 */
+const HARDSCAPE_ART: Record<string, { keys: string[]; height: number; aspect?: number; filter?: string }> = {
+  seiryu: { keys: ['rock-1', 'rock-4', 'rock-3', 'rock-5', 'rock-2'], height: 150 },
+  lava: { keys: ['rock-3', 'rock-5', 'rock-1'], height: 120, filter: 'grayscale(0.6) sepia(0.7) hue-rotate(-25deg) saturate(1.6) brightness(0.55) contrast(1.15)' },
+  slate: { keys: ['rock-3', 'rock-4'], height: 70, aspect: 1.9, filter: 'grayscale(0.85) brightness(0.72) contrast(1.2)' },
+  driftwood: { keys: ['wood-1', 'wood-2', 'wood-3'], height: 300 },
+};
+/** 同一種石頭每塊大小不太一樣（依形狀種子）。 */
+const VARIANT_SIZE = [1, 0.82, 0.66, 0.92, 0.74];
+
+export interface HardscapePainting {
+  texture: Texture;
+  /** 底部中心（落在底沙上的點）在貼圖裡的比例位置。 */
+  anchorX: number;
+  anchorY: number;
+}
+
+/** 一組造景材料畫成一張貼圖（含接觸陰影、水的藍色）。height 是畫面上的高度（px）。 */
+export function paintHardscapeItem(id: string, seed: number, hs: number, scale: number, haze: number, flip: boolean): HardscapePainting {
+  const art = HARDSCAPE_ART[id] ?? HARDSCAPE_ART.seiryu;
+  const variant = Math.abs(seed) % art.keys.length;
+  const img = sceneryImage(art.keys[variant]);
+  const height = art.height * hs * scale * (id === 'driftwood' ? 1 : VARIANT_SIZE[Math.abs(seed) % VARIANT_SIZE.length]);
+  const w = Math.max(8, height * (art.aspect ?? 1) * 1.45);
+  const ch = Math.max(8, height * 1.2);
+  const { canvas, ctx } = makeCanvas(w, ch);
+  const baseY = height * 1.03;
+  if (img) drawSceneryArt(ctx, img, w / 2, baseY, height, haze, flip, art);
+  else paintSeiryu(ctx, w / 2, baseY, height / 127, [-85, 0, -51, -110, 8.5, -126.5, 59.5, -77, 85, 0], [[8.5, -126.5, 0, -10]], seed);
+  return { texture: canvasTexture(canvas, false), anchorX: 0.5, anchorY: baseY / ch };
 }
