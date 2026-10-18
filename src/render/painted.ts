@@ -22,6 +22,8 @@ interface PaintedSpec {
   body: { x: number; y: number; rx: number; ry: number };
   /** 圖裡已經畫了卵（抱卵蝦），不用再用程式畫。 */
   eggs?: boolean;
+  /** 張嘴吃東西的那一格（咬下去時換上）。 */
+  eating?: string;
 }
 
 const GUPPY_MALE_BODY = { x: 0.14, y: 0.02, rx: 0.2, ry: 0.11 };
@@ -31,7 +33,7 @@ const ZEBRA_BODY = { x: 0.1, y: 0.0, rx: 0.3, ry: 0.11 };
 const FRY_BODY = { x: 0.12, y: 0.0, rx: 0.25, ry: 0.1 };
 
 export const PAINTED: Record<string, PaintedSpec> = {
-  'guppy-male-bluegrass': { file: 'fish/guppy-male-bluegrass.webp', tail: 0.34, swing: 0.13, body: GUPPY_MALE_BODY },
+  'guppy-male-bluegrass': { file: 'fish/guppy-male-bluegrass.webp', tail: 0.34, swing: 0.13, body: GUPPY_MALE_BODY, eating: 'fish/guppy-male-bluegrass-eating.webp' },
   'guppy-male-cobra': { file: 'fish/guppy-male-cobra.webp', tail: 0.3, swing: 0.13, body: GUPPY_MALE_BODY },
   'guppy-male-albino-red': { file: 'fish/guppy-male-albino-red.webp', tail: 0.32, swing: 0.13, body: GUPPY_MALE_BODY },
   'guppy-male-tuxedo': { file: 'fish/guppy-male-tuxedo.webp', tail: 0.32, swing: 0.13, body: GUPPY_MALE_BODY },
@@ -39,7 +41,7 @@ export const PAINTED: Record<string, PaintedSpec> = {
   'guppy-fry': { file: 'fish/guppy-fry.webp', tail: 0.24, swing: 0.12, body: FRY_BODY },
   'zebrafish-male': { file: 'fish/zebrafish-male.webp', tail: 0.2, swing: 0.1, body: ZEBRA_BODY },
   'zebrafish-female': { file: 'fish/zebrafish-female.webp', tail: 0.2, swing: 0.09, body: ZEBRA_BODY },
-  'guppy-female-base': { file: 'fish/guppy-female-base.webp', tail: 0.26, swing: 0.1, body: GUPPY_FEMALE_BODY },
+  'guppy-female-base': { file: 'fish/guppy-female-base.webp', tail: 0.26, swing: 0.1, body: GUPPY_FEMALE_BODY, eating: 'fish/guppy-female-base-eating.webp' },
   'guppy-female-pregnant': { file: 'fish/guppy-female-pregnant.webp', tail: 0.24, swing: 0.09, body: GUPPY_FEMALE_BODY },
   'shrimp-cherry-male': { file: 'shrimp/shrimp-cherry-male.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
   'shrimp-cherry-female': { file: 'shrimp/shrimp-cherry-female.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
@@ -95,6 +97,7 @@ export async function loadPaintedArt(base = import.meta.env.BASE_URL): Promise<n
     ...Object.entries(PAINTED).map(async ([key, spec]) => {
       try {
         textures.set(key, await Assets.load<Texture>(`${base}art/${spec.file}`));
+        if (spec.eating) textures.set(`${key}#eating`, await Assets.load<Texture>(`${base}art/${spec.eating}`));
       } catch {
         // 留給程式繪製版
       }
@@ -148,9 +151,13 @@ export class PaintedRig extends Container {
   readonly art: { R: number; bodyEllipse: { x: number; y: number; rx: number; ry: number } };
   readonly lengthPx: number;
   readonly drawsEggs: boolean;
+  /** 蝦走路的快慢 0–1：步足交替擺動的幅度。 */
+  walk = 0;
   private readonly mesh: MeshPlane;
   private readonly rest: Float32Array;
   private readonly spec: PaintedSpec;
+  private readonly restTexture: Texture;
+  private readonly eatingTexture: Texture | null;
   private rim: Mesh | null = null;
   private rimFill: ColorMatrixFilter | null = null;
   private rimColor = -1;
@@ -165,6 +172,8 @@ export class PaintedRig extends Container {
     const h = texture.height;
     this.lengthPx = w;
     this.drawsEggs = !!spec.eggs;
+    this.restTexture = texture;
+    this.eatingTexture = textures.get(`${key}#eating`) ?? null;
     // 圖是頭朝右，魚的座標是頭朝左：水平翻轉，原點放在圖中心。
     this.mesh = new MeshPlane({ texture, verticesX: MESH_X, verticesY: MESH_Y });
     this.mesh.scale.x = -1;
@@ -174,6 +183,16 @@ export class PaintedRig extends Container {
     const b = spec.body;
     this.art = { R: 1, bodyEllipse: { x: -b.x * w, y: b.y * h, rx: b.rx * w, ry: b.ry * h } };
     this.alpha = look.alpha;
+  }
+
+  /** 咬下去的那幾格換成張嘴的圖（只有原圖有這張時；改色的衍生圖照舊）。 */
+  setMouthOpen(open: boolean): void {
+    const tex = open ? this.eatingTexture : this.restTexture;
+    if (tex && this.mesh.texture !== tex) this.mesh.texture = tex;
+  }
+
+  get heightPx(): number {
+    return this.mesh.texture.height;
   }
 
   /** 跟 FishRig.animate 一樣的參數：相位、擺幅、夾鰭、鰭破損。 */
@@ -192,7 +211,8 @@ export class PaintedRig extends Container {
       if (x >= tailX) {
         // 身體前段跟著輕輕擺，看起來是整條魚在游
         const body = (x - tailX) / (w - tailX);
-        data[i] = x;
+        // 蝦走路：最下面一排（步足）前後交替擺
+        data[i] = this.walk > 0 && y >= h * 0.99 && x > w * 0.45 ? x + Math.sin(phase * 2.5 + x * 0.08) * this.walk * w * 0.03 : x;
         data[i + 1] = y + Math.sin(phase + 1.2) * swing * (1 - body) * h * 0.012;
         continue;
       }
