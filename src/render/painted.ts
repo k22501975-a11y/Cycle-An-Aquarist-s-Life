@@ -1,6 +1,8 @@
 import { Assets, BlurFilter, ColorMatrixFilter, Container, Mesh, MeshPlane, Texture } from 'pixi.js';
 import type { FishSpeciesId } from '../sim';
 import type { FishForm } from './fish-art';
+import { canvasTexture, makeCanvas } from './paint';
+import { parseRecipeKey, recolorImage } from './phenotype-art';
 import { guppyLook } from './strains';
 
 /**
@@ -109,7 +111,24 @@ export async function loadPaintedArt(base = import.meta.env.BASE_URL): Promise<n
 }
 
 export function paintedTexture(key: string | null): Texture | null {
-  return key ? (textures.get(key) ?? null) : null;
+  if (!key) return null;
+  return textures.get(key) ?? derivedTexture(key);
+}
+
+/** 依基因改色的衍生圖（「原圖~顏色」）：第一次用到時從原圖改色，之後重用。 */
+function derivedTexture(key: string): Texture | null {
+  const recipe = parseRecipeKey(key);
+  const src = recipe && textures.get(recipe.base);
+  if (!recipe || !src) return null;
+  const img = src.source.resource as CanvasImageSource & { width: number; height: number };
+  const { canvas, ctx } = makeCanvas(img.width, img.height);
+  ctx.drawImage(img, 0, 0);
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  recolorImage(data.data, recipe);
+  ctx.putImageData(data, 0, 0);
+  const tex = canvasTexture(canvas);
+  textures.set(key, tex);
+  return tex;
 }
 
 /** 造景素材的原圖（給 Canvas 的 drawImage 用）；沒載入就回傳 null，改用程式繪製。 */
@@ -140,7 +159,7 @@ export class PaintedRig extends Container {
 
   constructor(key: string, texture: Texture, readonly look: { alpha: number }) {
     super();
-    const spec = PAINTED[key];
+    const spec = PAINTED[key.split('~')[0]];
     this.spec = spec;
     const w = texture.width;
     const h = texture.height;
