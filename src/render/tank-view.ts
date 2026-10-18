@@ -1,11 +1,12 @@
-import { Application, BlurFilter, Container, FederatedPointerEvent, Graphics, Sprite, Texture, TilingSprite } from 'pixi.js';
-import { FISH_SPECIES, isCo2Injecting, isJuvenile, isLightOn, lookVariant, observeSymptoms, sizeRatio, tankSize, type Fish, type TankState } from '../sim';
+import { Application, BlurFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
+import { FISH_SPECIES, PLANT_SPECIES, isCo2Injecting, isJuvenile, isLightOn, lookVariant, observeSymptoms, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture } from './painted';
 import { DEATH_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { BITE_SECONDS, biteKick, pickEaten, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type Mouth, type Pellet } from './feeding';
 import { canvasTexture, flakeTextures, makeCanvas, mix, softDotTexture } from './paint';
+import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame, TEST_SECONDS, WATER_CHANGE_SECONDS, type KitParam } from './ops-fx';
 import { PlantMesh } from './plant-sway';
 import { type QualitySpec, qualitySpec } from './quality';
 import { causticsTexture, MOCKUP_PX_PER_CM, paintBackdrop, paintDriftwood, paintFront, paintPlant, paintVignette, rayTexture } from './scenery';
@@ -38,7 +39,26 @@ interface PlantView {
   drawnBiomass: number;
   drawnAlgae: number;
   drawnMelting: boolean;
+  /** 上一格的生物量（判斷是不是剛剪過）。 */
+  seenBiomass: number;
 }
+
+/** 剪下來的插枝：往上飄、慢慢淡出（玩家把它撈起來）。 */
+interface Cutting {
+  s: Sprite;
+  vx: number;
+  vy: number;
+  spin: number;
+  t: number;
+}
+
+const TUBES: Array<{ param: KitParam; label: string }> = [
+  { param: 'ph', label: 'pH' },
+  { param: 'ammonia', label: '氨' },
+  { param: 'nitrite', label: '亞硝' },
+  { param: 'nitrate', label: '硝酸' },
+];
+const CUTTING_SECONDS = 2.6;
 
 interface FishView {
   swimmer: Swimmer;
@@ -120,6 +140,10 @@ export class TankView {
   private readonly bubbleLayer = new Graphics();
   private readonly moteLayer = new Container();
   private readonly rayLayer = new Container();
+  /** 換水、測水、修剪的演出。 */
+  private readonly opsFx = new Graphics();
+  private readonly cuttingLayer = new Container();
+  private readonly tubeLabels = new Container();
   private readonly overlay = new Graphics();
   private readonly vignette = new Sprite();
 
@@ -135,6 +159,18 @@ export class TankView {
   private fish = new Map<number, FishView>();
   private plants = new Map<number, PlantView>();
   private food: FoodParticle[] = [];
+  private cuttings: Cutting[] = [];
+  /** 換水演出進行了幾秒（-1 沒在演）與這次換掉的比例。 */
+  private wcT = -1;
+  private wcFrac = 0.3;
+  private testT = -1;
+  private testReading: TestKitReading | null = null;
+  private snips: Array<{ x: number; y: number; t: number }> = [];
+  /** 上一格看到的狀態，用來發現玩家剛換水、測水。 */
+  private seenState: TankState | null = null;
+  private seenWc = -1;
+  private seenNo3 = 0;
+  private seenTest = -1;
   private ripples: Array<{ x: number; t: number }> = [];
   private crumbs: Crumb[] = [];
   /** 飼料剛因重新排版清空：補回去時不演撒飼料。 */
@@ -175,6 +211,9 @@ export class TankView {
       this.bubbleLayer,
       this.moteLayer,
       this.rayLayer,
+      this.cuttingLayer,
+      this.opsFx,
+      this.tubeLabels,
       this.overlay,
       this.vignette,
     );
@@ -314,9 +353,11 @@ export class TankView {
     const dt = Math.min(0.1, realDt);
     this.time += dt;
     this.layout(state);
+    this.detectOps(state, dt);
     this.syncFood(state, dt);
     this.syncFish(state, dt);
     this.syncPlants(state);
+    this.drawOps(dt);
     this.drawGear(state);
     this.animateLight(state, dt);
     this.updateBubbles(state, dt);
@@ -430,8 +471,178 @@ export class TankView {
     });
   }
 
-  private syncFood(state: TankState, dt: number): void {
+  /** 水位：換水抽水時水面往下降。魚和飼料都待在水裡。 */
+  private get drainPx(): number {
+    if (this.wcT < 0) return 0;
+    return waterChangeFrame(this.wcT).drop * this.wcFrac * (this.bounds.bottom - this.bounds.surface) * 0.9;
+  }
+
+  private get waterBounds(): TankBounds {
+    const d = this.drainPx;
+    return d > 0 ? { ...this.bounds, surface: this.bounds.surface + d } : this.bounds;
+  }
+
+  /** 比對上一格的狀態，發現玩家剛換水或測水就開始演。讀檔、復原換成另一份狀態時不演。 */
+  private detectOps(state: TankState, dt: number): void {
+    const wc = state.lastWaterChangeHours ?? -1;
+    const test = state.lastTest?.hours ?? -1;
+    if (state === this.seenState) {
+      if (wc > this.seenWc) {
+        this.wcT = 0;
+        this.wcFrac = inferFraction(this.seenNo3, state.water.no3, state.environment.tap.no3);
+      }
+      if (test > this.seenTest && state.lastTest) {
+        this.testT = 0;
+        this.testReading = state.lastTest.reading;
+      }
+    }
+    this.seenState = state;
+    this.seenWc = wc;
+    this.seenNo3 = state.water.no3;
+    this.seenTest = test;
+    if (this.wcT >= 0 && (this.wcT += dt) >= WATER_CHANGE_SECONDS) this.wcT = -1;
+    if (this.testT >= 0 && (this.testT += dt) >= TEST_SECONDS) this.testT = -1;
+  }
+
+  private spawnCuttings(view: PlantView, n: number): void {
+    const tex = view.rig!.mesh.texture;
+    const src = tex.source.resource as HTMLCanvasElement;
+    // 找出圖裡真的有葉子的範圍，插枝從葉頂往下切一段
+    const data = src.getContext('2d')!.getImageData(0, 0, src.width, src.height).data;
+    let top = src.height, left = src.width, right = 0;
+    for (let y = 0; y < src.height; y += 2) {
+      for (let x = 0; x < src.width; x += 2) {
+        if (data[(y * src.width + x) * 4 + 3] > 40) {
+          top = Math.min(top, y);
+          left = Math.min(left, x);
+          right = Math.max(right, x);
+        }
+      }
+    }
+    if (top >= src.height) return;
+    const h = Math.max(4, Math.round((src.height - top) * 0.4));
+    const tall = 64 * this.hs;
+    const plantH = tex.height;
+    const baseX = view.holder.x;
+    for (let i = 0; i < n; i++) {
+      // 每根插枝取葉頂的一段（左右錯開）
+      const cw = Math.max(4, Math.round((right - left) * 0.35));
+      const sx = Math.round(left + (right - left - cw) * this.rand());
+      const { canvas, ctx } = makeCanvas(cw, h);
+      ctx.drawImage(src, sx, top, cw, h, 0, 0, cw, h);
+      const s = new Sprite(canvasTexture(canvas));
+      s.anchor.set(0.5, 1);
+      const k = tall / h;
+      s.scale.set(k);
+      const x = baseX + view.rig!.mesh.x + sx + cw / 2;
+      const y = view.holder.y - (plantH - top) * 0.55;
+      s.position.set(x, y);
+      this.cuttingLayer.addChild(s);
+      this.cuttings.push({ s, vx: (this.rand() - 0.5) * 30 * this.hs, vy: -(28 + this.rand() * 20) * this.hs, spin: (this.rand() - 0.5) * 1.6, t: 0 });
+      this.snips.push({ x, y, t: 0 });
+    }
+  }
+
+  /** 換水的水位、虹吸管、加水水柱，測試劑試管，修剪的插枝。 */
+  private drawOps(dt: number): void {
+    const g = this.opsFx;
+    g.clear();
     const { width, surface, bottom } = this.bounds;
+    const hs = this.hs;
+    const t = this.time;
+
+    if (this.wcT >= 0) {
+      const f = waterChangeFrame(this.wcT);
+      const level = this.drainPx;
+      const y = surface + level;
+      if (level > 0.5) {
+        // 抽掉水的那一段：只剩空氣，玻璃上留著水痕
+        g.rect(0, surface - 8 * hs, width, level + 8 * hs).fill({ color: 0x0b1820, alpha: 0.78 });
+        for (let x = 30 * hs; x < width; x += 90 * hs) {
+          g.rect(x + Math.sin(x) * 10 * hs, surface, 1.5 * hs, level * (0.3 + 0.5 * Math.abs(Math.sin(x * 1.7)))).fill({ color: 0xbfe6f0, alpha: 0.12 });
+        }
+        g.moveTo(0, y);
+        for (let x = 0; x <= width; x += 20) g.lineTo(x, y + Math.sin(x * 0.03 + t * 3) * 1.5 * hs);
+        g.stroke({ color: 0xe8f8ff, alpha: 0.55, width: 2 * hs });
+      }
+      if (f.siphon) {
+        // 虹吸管：從缸外伸進來，管口貼近底砂吸走髒污
+        const x0 = width * 0.16, x1 = width * 0.2;
+        g.moveTo(x0 - 40 * hs, surface - 60 * hs).bezierCurveTo(x0, surface - 80 * hs, x1, surface, x1, bottom - 26 * hs);
+        g.stroke({ color: 0xa9c2ca, alpha: 0.55, width: 12 * hs, cap: 'round' });
+        g.moveTo(x0 - 40 * hs, surface - 60 * hs).bezierCurveTo(x0, surface - 80 * hs, x1, surface, x1, bottom - 26 * hs);
+        g.stroke({ color: 0x3d5a63, alpha: 0.5, width: 6 * hs, cap: 'round' });
+        g.roundRect(x1 - 11 * hs, bottom - 70 * hs, 22 * hs, 48 * hs, 6 * hs).fill({ color: 0xcfe4ea, alpha: 0.25 }).stroke({ color: 0xe0f2f6, alpha: 0.5, width: 1.5 * hs });
+        for (let i = 0; i < 6; i++) {
+          const k = (t * 1.6 + i / 6) % 1;
+          g.circle(x1 + Math.sin(i * 2.3 + t * 4) * 6 * hs, bottom - 24 * hs - k * 40 * hs, 1.8 * hs).fill({ color: 0x8a6a4a, alpha: 0.7 * (1 - k) });
+        }
+      }
+      if (f.pour) {
+        // 加水：一道水柱打進缸裡，落點冒泡
+        const x = width * 0.72;
+        g.rect(x - 6 * hs, surface - 60 * hs, 12 * hs, level + 60 * hs).fill({ color: 0xe8f6ff, alpha: 0.28 });
+        g.rect(x - 2 * hs, surface - 60 * hs, 3 * hs, level + 60 * hs).fill({ color: 0xffffff, alpha: 0.35 });
+        g.ellipse(x, y + 2 * hs, 26 * hs, 5 * hs).fill({ color: 0xffffff, alpha: 0.3 });
+        for (let i = 0; i < 10; i++) {
+          const k = (t * 1.3 + i / 10) % 1;
+          g.circle(x + Math.sin(i * 1.9 + t * 3) * 22 * hs * k, y + 10 * hs + k * 70 * hs, (1.5 + 2 * (1 - k)) * hs).stroke({ color: 0xffffff, alpha: 0.6 * (1 - k), width: 1 });
+        }
+      }
+    }
+
+    // 測試劑：四支試管在右上角，裝水、滴試劑、慢慢變成比色卡上的顏色
+    const tube = tubeFrame(this.testT);
+    this.tubeLabels.visible = this.testT >= 0 && !!this.testReading;
+    if (this.testT >= 0 && this.testReading) {
+      if (this.tubeLabels.children.length === 0) {
+        for (const tb of TUBES) {
+          const label = new Text({ text: tb.label, style: { fill: 0xeaf6f8, fontSize: 12, fontWeight: '600', fontFamily: 'system-ui, sans-serif' } });
+          label.anchor.set(0.5, 0);
+          this.tubeLabels.addChild(label);
+        }
+      }
+      const tw = 16 * hs, th = 70 * hs, gap = 30 * hs;
+      const x0 = width - 50 * hs - (TUBES.length - 1) * gap;
+      const y0 = surface + 24 * hs;
+      const reading = this.testReading;
+      TUBES.forEach((tb, i) => {
+        const x = x0 + i * gap;
+        const color = mix(0xd8ecef, kitColor(tb.param, reading[tb.param]), tube.tint);
+        const liquid = th * 0.72 * tube.fill;
+        g.roundRect(x - tw / 2 - 3 * hs, y0 - 3 * hs, tw + 6 * hs, th + 6 * hs, tw / 2 + 3 * hs).fill({ color: 0x0b1820, alpha: 0.35 * tube.alpha });
+        g.roundRect(x - tw / 2, y0 + th - liquid, tw, liquid, tw / 2).fill({ color, alpha: 0.92 * tube.alpha });
+        g.roundRect(x - tw / 2, y0, tw, th, tw / 2).stroke({ color: 0xffffff, alpha: 0.75 * tube.alpha, width: 1.5 * hs });
+        g.rect(x - tw / 2 + 3 * hs, y0 + 6 * hs, 2.5 * hs, th - 16 * hs).fill({ color: 0xffffff, alpha: 0.35 * tube.alpha });
+        const label = this.tubeLabels.children[i] as Text;
+        label.position.set(x, y0 + th + 6 * hs);
+        label.scale.set(Math.max(0.8, hs));
+        label.alpha = tube.alpha;
+      });
+    }
+
+    // 修剪：剪刀剪下的地方閃一下，插枝往上飄走
+    this.snips = this.snips.filter((p) => (p.t += dt) < 0.35);
+    for (const p of this.snips) {
+      const k = p.t / 0.35;
+      g.circle(p.x, p.y, (4 + 14 * k) * hs).stroke({ color: 0xffffff, alpha: 0.8 * (1 - k), width: 2 * hs });
+    }
+    this.cuttings = this.cuttings.filter((c) => {
+      c.t += dt;
+      if (c.t >= CUTTING_SECONDS) {
+        c.s.destroy({ texture: true, textureSource: true });
+        return false;
+      }
+      c.s.x += c.vx * dt;
+      c.s.y = Math.max(surface + 10 * hs, c.s.y + c.vy * dt);
+      c.s.rotation += c.spin * dt;
+      c.s.alpha = Math.min(1, (CUTTING_SECONDS - c.t) / 0.8);
+      return true;
+    });
+  }
+
+  private syncFood(state: TankState, dt: number): void {
+    const { width, surface, bottom } = this.waterBounds;
     const scale = this.motionScale;
     const target = Math.min(80, Math.ceil(state.water.foodMg / 2));
     const r = Math.max(4, 9 * this.hs);
@@ -590,7 +801,7 @@ export class TankView {
     const all = [...this.fish.values()].map((v) => v.swimmer);
     const alive = new Set(state.fish.filter((f) => f.alive).map((f) => f.id));
     const living = all.filter((s) => alive.has(s.id));
-    const ctx = { bounds: this.bounds, scale: this.motionScale, food: this.food };
+    const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food };
     for (const fish of state.fish) {
       const view = this.fish.get(fish.id)!;
       const { swimmer, rig } = view;
@@ -692,10 +903,14 @@ export class TankView {
     for (const plant of state.plants) {
       let view = this.plants.get(plant.id);
       if (!view) {
-        view = { holder: new Container(), rig: null, drawnBiomass: -1, drawnAlgae: -1, drawnMelting: false };
+        view = { holder: new Container(), rig: null, drawnBiomass: -1, drawnAlgae: -1, drawnMelting: false, seenBiomass: -1 };
         this.plantLayer.addChild(view.holder);
         this.plants.set(plant.id, view);
       }
+      // 剛剪過：從目前的圖切下葉尖當插枝飄走（要在重畫、舊圖被銷毀之前）
+      const cut = view.seenBiomass < 0 ? 0 : cuttingsFromDrop(view.seenBiomass, plant.biomassG, PLANT_SPECIES[plant.species].cuttingMassG);
+      view.seenBiomass = plant.biomassG;
+      if (cut > 0 && view.rig) this.spawnCuttings(view, cut);
       const melting = plant.growthRate < -0.0002;
       if (
         view.drawnBiomass < 0 ||
