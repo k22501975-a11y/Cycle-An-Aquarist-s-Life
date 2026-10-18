@@ -46,6 +46,7 @@ function evaporate(state: TankState, dt: number): void {
   water.medication *= k;
   if (water.antibiotic) water.antibiotic *= k;
   if (water.dewormer) water.dewormer *= k;
+  if (water.copper) water.copper *= k;
   water.levelL = next;
 }
 

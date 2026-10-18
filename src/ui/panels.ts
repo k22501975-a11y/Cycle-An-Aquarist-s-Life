@@ -1,6 +1,24 @@
 import type { SoundId } from '../audio/sounds';
 import {
   addFish,
+  addSnail,
+  APPLE_COLOR_LABELS,
+  catchPests,
+  collectTrap,
+  doseMolluscicide,
+  hitchhike,
+  isLightOn,
+  PESTS,
+  pestCount,
+  removeClutches,
+  removeDeadSnails,
+  scrapeNeriteEggs,
+  setTrap,
+  snailBloom,
+  SNAILS,
+  type AppleColor,
+  type PestKind,
+  type SnailKind,
   addFishToQuarantine,
   addCuttings,
   addHardscape,
@@ -514,7 +532,7 @@ export function plantPanel({ game, sheet, toasts, sound }: PanelContext, plantId
   );
 }
 
-export type ShopTab = 'fish' | 'plants' | 'gear' | 'sell';
+export type ShopTab = 'fish' | 'snails' | 'plants' | 'gear' | 'sell';
 
 /** 付錢做一件事；錢不夠就提示、不做。回傳有沒有買成。 */
 function purchase(ctx: PanelContext, cost: number, run: (st: TankState) => void, done: string, tone: 'info' | 'warn' = 'info', undo = false): boolean {
@@ -547,8 +565,8 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
   const tabs = h(
     'div.tabs',
     {},
-    ...(['fish', 'plants', 'gear', 'sell'] as const).map((t) =>
-      h(`button.tab${t === tab ? '.active' : ''}`, { onclick: () => sheet.open('商店', () => shopPanel(ctx, t)) }, { fish: '魚', plants: '水草', gear: '設備', sell: '賣給店家' }[t]),
+    ...(['fish', 'snails', 'plants', 'gear', 'sell'] as const).map((t) =>
+      h(`button.tab${t === tab ? '.active' : ''}`, { onclick: () => sheet.open('商店', () => shopPanel(ctx, t)) }, { fish: '魚', snails: '螺', plants: '水草', gear: '設備', sell: '賣給店家' }[t]),
     ),
   );
   const wallet = h('p.wallet', {}, `錢包：${yuan(coins)}`);
@@ -572,7 +590,19 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       !shopDrip && Math.abs(farmHabit(species).ph - game.state.water.ph) > 0.6 ? 'warn' : 'info',
     );
   };
-  const buyPlant = (species: PlantSpeciesId) => () => purchase(ctx, PLANT_PRICES[species], (st) => addPlant(st, species), `種下一株${PLANT_SPECIES[species].name}`);
+  // 水草可能夾帶害蟲小螺的卵（看不到）；有檢疫盒的人會先泡過，機率低很多（design/snails.md §2）
+  const buyPlant = (species: PlantSpeciesId) => () =>
+    purchase(
+      ctx,
+      PLANT_PRICES[species],
+      (st) => {
+        addPlant(st, species);
+        hitchhike(st, st.quarantine ? 0.08 : 0.25);
+      },
+      `種下一株${PLANT_SPECIES[species].name}`,
+    );
+  const buySnail = (kind: SnailKind, color?: AppleColor) => () =>
+    purchase(ctx, SNAILS[kind].price, (st) => addSnail(st, kind, color), `放了一隻${color ? APPLE_COLOR_LABELS[color] : ''}${SNAILS[kind].name}`);
 
   let content: Node;
   if (tab === 'fish') {
@@ -634,12 +664,25 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         return h('div.item', {}, h('div', {}, h('b', {}, sp.name), h('div.hint', {}, note)), h('div.row', {}, button('+1', buyFish(id, 1)), button('+6', buyFish(id, 6))));
       }),
     );
+  } else if (tab === 'snails') {
+    const item = (name: string, note: string, buy: () => void) => h('div.item', {}, h('div', {}, h('b', {}, name), h('div.hint', {}, note)), button('+1', buy));
+    content = h(
+      'div.stack',
+      {},
+      h('p.hint', {}, '螺是清潔隊也是麻煩：吃殘餌、刮藻，但餵太多就會爆量。小螺多寡直接反映你有沒有餵太多。'),
+      ...(['gold', 'blue'] as AppleColor[]).map((c) =>
+        item(`蘋果螺・${APPLE_COLOR_LABELS[c]}`, `每隻 ${SNAILS.apple.price} 元 · 吃殘餌和藻，公母都有會在水面上方產粉紅卵塊；餓了會啃水草，死了沒撈很髒`, buySnail('apple', c)),
+      ),
+      item(SNAILS.nerite.name, `每隻 ${SNAILS.nerite.price} 元 · 除藻最強，不會爆量；但會在造景上產白色卵點，刮不乾淨`, buySnail('nerite')),
+      item(SNAILS.assassin.name, `每隻 ${SNAILS.assassin.price} 元 · 專吃其他小螺，用來長期控制爆螺；螺吃光了自己會餓，也會吃小蘋果螺`, buySnail('assassin')),
+    );
   } else if (tab === 'plants') {
     const cuttings = economy(game.state).cuttings;
     content = h(
       'div.stack',
       {},
       h('p.hint', {}, '陰性草弱光就能長；陽性草需要強光加 CO₂。'),
+      h('p.hint', {}, game.state.quarantine ? '新水草會先在檢疫盒泡過，比較不會夾帶小螺的卵。' : '新水草有時夾帶看不到的小螺卵，過幾週才發現缸裡多了螺。有檢疫盒的話會先泡過。'),
       ...(Object.keys(PLANT_SPECIES) as PlantSpeciesId[]).map((id) =>
         h('div.item', {}, h('div', {}, h('b', {}, plantName(id)), h('div.hint', {}, `一盆 ${PLANT_PRICES[id]} 元`)), button('種一株', buyPlant(id))),
       ),
@@ -875,6 +918,8 @@ export function maintenancePanel({ game, sheet, toasts, undoable }: PanelContext
   return h(
     'div.stack',
     {},
+    h('h3', {}, '螺'),
+    h('div.item', {}, h('div', {}, h('b', {}, s.snails ? `大螺 ${s.snails.snails.filter((x) => x.alive).length} 隻、小螺約 ${pestCount(s)} 隻` : '螺'), h('div.hint', {}, '卵塊、陷阱、手撈、除螺藥')), button('管理', () => sheet.open('螺', () => snailPanel({ game, sheet, toasts, undoable })))),
     h('h3', {}, '室溫與水位'),
     h(
       'div.item',
@@ -1140,3 +1185,72 @@ export function tanksPanel(ctx: PanelContext): Node {
     ...offers,
   );
 }
+
+const PEST_ORDER: PestKind[] = ['bladder', 'ramshorn', 'mts'];
+
+/** 螺的管理：看看缸裡有多少螺，各種清除方法各有代價（design/snails.md §3）。 */
+export function snailPanel(ctx: PanelContext): Node {
+  const { game, sheet, toasts } = ctx;
+  const st = game.state;
+  const s = st.snails;
+  const lit = isLightOn(st);
+  const living = s?.snails.filter((x) => x.alive) ?? [];
+  const dead = (s?.snails.length ?? 0) - living.length;
+  const bloom = snailBloom(st);
+  const refresh = () => sheet.open('螺', () => snailPanel(ctx));
+  const act = (run: (st: TankState) => string, tone: 'info' | 'warn' = 'info') => () => {
+    let text = '';
+    game.act((x) => (text = run(x)));
+    toasts.show(text, tone);
+    refresh();
+  };
+  const counts = (Object.keys(SNAILS) as SnailKind[])
+    .map((k) => [k, living.filter((x) => x.kind === k).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) => `${SNAILS[k].name} ${n} 隻`);
+  // 尖螺白天躲在沙裡：玩家只看得到一兩成
+  const pests = PEST_ORDER.map((k) => [k, Math.round(pestCount(st, k) * (k === 'mts' && lit ? 0.1 : 1))] as const).filter(([, n]) => n > 0);
+  const young = Math.round(s?.appleYoung ?? 0);
+  const trapAge = s?.trapHour !== undefined ? st.hours - s.trapHour : null;
+  const hasShrimp = st.fish.some((f) => f.alive && f.species === 'cherry_shrimp');
+  return h(
+    'div.stack',
+    {},
+    h('p.hint', {}, '小螺吃殘餌和有機物：餵太多幾週內就會爆量，少餵一陣子自然變少。'),
+    h(
+      'div.item',
+      {},
+      h(
+        'div',
+        {},
+        h('b', {}, counts.length ? counts.join('、') : '沒有養螺'),
+        h('div.hint', {}, pests.length ? `看得到的小螺：${pests.map(([k, n]) => `${PESTS[k].name} ${n}`).join('、')}${lit && pestCount(st, 'mts') > 0 ? '（尖螺白天躲在沙裡，關燈才爬出來）' : ''}` : '沒看到害蟲小螺'),
+        young > 0 ? h('div.hint', {}, `剛孵出的小蘋果螺約 ${young} 隻`) : null,
+        bloom !== 'none' ? h('div.warn-text', {}, bloom === 'plague' ? '滿缸都是小螺！一定是餵太多了' : '小螺變多了，少餵一點') : null,
+      ),
+    ),
+    s && s.clutches.length > 0
+      ? h('div.item', {}, h('div', {}, h('b', {}, `蘋果螺卵塊 ${s.clutches.length} 團`), h('div.hint', {}, '在水面上方的缸壁上，一團 50～200 顆，三週左右孵化')), button('摘掉', act((x) => `摘掉 ${removeClutches(x)} 團卵塊`)))
+      : null,
+    dead > 0 ? h('div.item', {}, h('div', {}, h('b.warn-text', {}, `死掉的大螺 ${dead} 隻`), h('div.hint', {}, '大螺死了很快就爛，水會臭、氨會升高')), button('撈出來', act((x) => `撈出 ${removeDeadSnails(x)} 隻死螺`), 'primary')) : null,
+    pestCount(st) > 0 || young > 0
+      ? h('div.item', {}, h('div', {}, h('b', {}, '手撈小螺'), h('div.hint', {}, '只抓得到看得見的，一次大約四分之一；尖螺要關燈後撈')), button('撈', act((x) => `撈掉 ${catchPests(x, isLightOn(x))} 隻小螺`)))
+      : null,
+    h(
+      'div.item',
+      {},
+      h('div', {}, h('b', {}, '螺陷阱'), h('div.hint', {}, trapAge === null ? '放一片燙過的菜過夜，隔天收能抓走一批；忘了收菜會爛' : `放了 ${Math.floor(trapAge)} 小時${trapAge < 8 ? '，再等一下比較多' : trapAge > 36 ? '，快爛了趕快收' : ''}`)),
+      trapAge === null ? button('放菜葉', act((x) => (setTrap(x), '放了一片燙過的菜葉，隔夜再收'))) : button('收陷阱', act((x) => `收起陷阱，抓到 ${Math.max(0, collectTrap(x))} 隻小螺`), 'primary'),
+    ),
+    s && s.neriteEggs >= 1 ? h('div.item', {}, h('div', {}, h('b', {}, `斑馬螺卵點約 ${Math.round(s.neriteEggs)} 顆`), h('div.hint', {}, '淡水孵不出來，只是難看')), button('刮掉', act((x) => `刮掉 ${scrapeNeriteEggs(x)} 顆卵點`))) : null,
+    h(
+      'div.item',
+      {},
+      h('div', {}, h('b', {}, '除螺藥（含銅）'), h(hasShrimp ? 'div.warn-text' : 'div.hint', {}, `${price('med:snail')} 元 · 一兩天內螺幾乎死光，但${hasShrimp ? '缸裡的蝦也會中毒死掉！' : '對蝦有毒'}；死螺一起爛，氨會暴衝，記得換水`)),
+      button('下藥', () => {
+        if (purchase(ctx, price('med:snail'), (x) => doseMolluscicide(x), '下了除螺藥，記得這幾天多換水', 'warn', true)) refresh();
+      }, hasShrimp ? 'danger' : ''),
+    ),
+  );
+}
+

@@ -1,5 +1,5 @@
 import { guppyLook } from '../render/strains';
-import { FISH_SPECIES, growthStage, phenotype, PLANT_SPECIES, sexVisible, strainName, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
+import { FISH_SPECIES, growthStage, SNAILS, phenotype, PLANT_SPECIES, sexVisible, strainName, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
 
 export const SYMPTOM_LABELS: Record<Symptom, string> = {
   hiding: '躲在角落',
@@ -26,6 +26,7 @@ export const DEATH_CAUSE_LABELS: Record<string, string> = {
   temperature: '水溫不適',
   starvation: '餓死',
   medication: '藥物中毒',
+  copper: '除螺藥（銅）中毒',
   ich: '白點病',
   chronic_stress: '長期緊迫',
   fin_nip: '被咬鰭',
@@ -83,6 +84,17 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
       const shrimp = fish?.species === 'cherry_shrimp';
       return { text: `${fish ? fishName(fish) : '有隻母魚'} ${shrimp ? '孵出' : '生了'} ${e.count ?? 0} ${shrimp ? '隻仔蝦' : '尾仔魚'}。成魚會吃小魚小蝦，水草越密越好躲`, tone: 'info' };
     }
+    case 'snail_died': {
+      const snail = state.snails?.snails.find((x) => x.id === e.subjectId);
+      const name = snail ? SNAILS[snail.kind].name : '一隻螺';
+      return { text: `${name}死了（${DEATH_CAUSE_LABELS[e.cause ?? 'unknown'] ?? e.cause}）。大螺死了很髒，記得撈出來`, tone: 'warn' };
+    }
+    case 'snail_eggs':
+      return { text: '蘋果螺在水面上方的缸壁產了一團卵。不想要一堆小螺就摘掉', tone: 'info' };
+    case 'snail_hatched':
+      return { text: `蘋果螺的卵孵出 ${e.count ?? 0} 隻小螺`, tone: 'info' };
+    case 'trap_rotted':
+      return { text: '螺陷阱裡的菜放太久爛掉了，弄髒了水', tone: 'warn' };
   }
 }
 

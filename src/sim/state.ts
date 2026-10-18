@@ -1,3 +1,4 @@
+import type { SnailState } from './snails';
 import type { FoodLot } from './food';
 import { co2Equilibrium, oxygenSaturation, phFromCo2 } from './chemistry';
 import type { AirPumpSpec, ChillerSpec, Co2Spec, FanSpec, FilterSpec, HardscapeSpec, HeaterSpec, LightSpec, SubstrateSpec, TankSpec } from './equipment';
@@ -41,6 +42,8 @@ export interface TankState {
   molts?: Array<{ id: number; hour: number; lengthCm: number }>;
   /** 魚幣、電費、手上的插枝。舊存檔沒有，第一次用到時給起始資金。 */
   economy?: Economy;
+  /** 螺（design/snails.md）：買的螺和跟著水草混進來的小螺。舊存檔沒有。 */
+  snails?: SnailState;
   /** 檢疫盒：買了才有。 */
   quarantine?: Quarantine | null;
 }
@@ -147,6 +150,8 @@ export interface Water {
   antibiotic?: number;
   /** 驅蟲藥（治鰓吸蟲，對蝦安全）。 */
   dewormer?: number;
+  /** 銅（除螺藥）：螺和蝦都怕。 */
+  copper?: number;
   /** 用於偵測水溫、pH 驟變的移動平均（約數小時）。 */
   tempAvgC: number;
   phAvg: number;
@@ -250,7 +255,11 @@ export type SimEventType =
   | 'power_restored'
   | 'fry_born'
   | 'controller_cut'
-  | 'heater_exposed';
+  | 'heater_exposed'
+  | 'snail_died'
+  | 'snail_eggs'
+  | 'snail_hatched'
+  | 'trap_rotted';
 
 export interface SimEvent {
   hours: number;

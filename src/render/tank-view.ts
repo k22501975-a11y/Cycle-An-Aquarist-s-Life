@@ -9,6 +9,7 @@ import { applyFoodLook, BITE_SECONDS, biteKick, pickEaten, pickFoodKind, ripple,
 import { canvasTexture, flakeTextures, makeCanvas, mix, pelletTextures, softDotTexture, tabletTexture, wormTextures } from './paint';
 import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame, TEST_SECONDS, WATER_CHANGE_SECONDS, type KitParam } from './ops-fx';
 import { PlantMesh } from './plant-sway';
+import { SnailView } from './snail-view';
 import { clawPose, clawRate, pleopods, type Pt } from './shrimp-limbs';
 import { phenotypeRecipe, recipeKey } from './phenotype-art';
 import { drawFinOverlay, finTraitsOf } from './fin-render';
@@ -205,6 +206,7 @@ export class TankView {
   /** 蝦脫下來的殼：半透明的空殼躺在沙面上，一兩天後被吃掉（淡出）。 */
   private readonly moltLayer = new Container();
   private readonly moltSprites = new Map<string, Sprite>();
+  private readonly snails = new SnailView();
   private lastFoodMg = 0;
   private bubbles: Bubble[] = [];
   private motes: Mote[] = [];
@@ -235,6 +237,7 @@ export class TankView {
       this.front,
       this.dirt,
       this.moltLayer,
+      this.snails.layer,
       this.causticsLayer,
       this.gear,
       this.gearGlow,
@@ -413,6 +416,7 @@ export class TankView {
     this.syncFood(state, dt);
     this.drawDirt(state);
     this.syncMolts(state);
+    this.snails.sync(state, { bounds: this.bounds, look: this.look, ppc: this.ppc, hs: this.hs, lit: isLightOn(state), time: this.time });
     this.syncFish(state, dt);
     this.syncPlants(state);
     this.drawOps(dt);

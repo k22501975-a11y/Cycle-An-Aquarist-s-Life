@@ -129,8 +129,14 @@ export const SCENERY: Record<string, string> = {
  * 單片鰭的圖層（art/fish/fins/parts/）：頭朝右，anchor 是接到身體的那一點（相對圖寬高）。
  * 大耳的胸鰭根部帶一小塊魚身，要壓在身體下面。
  */
-/** 蝦脫下來的空殼。 */
-const PROPS: Record<string, string> = { 'shrimp-molt': 'shrimp/shrimp-molt.webp' };
+/** 小道具：蝦脫下來的空殼、螺。 */
+const PROPS: Record<string, string> = {
+  'shrimp-molt': 'shrimp/shrimp-molt.webp',
+  // 螺（design/snails.md）
+  ...Object.fromEntries(
+    ['snail-apple-gold', 'snail-apple-blue', 'snail-apple-babies', 'snail-apple-eggs', 'snail-nerite-zebra', 'snail-assassin', 'snail-ramshorn-red', 'snail-bladder', 'snail-mts'].map((k) => [k, `snail/${k}.webp`]),
+  ),
+};
 
 export const FIN_PARTS: Record<string, { file: string; anchor: [number, number] }> = {
   'fin-pectoral-dumbo': { file: 'fish/parts/fin-pectoral-dumbo.webp', anchor: [658 / 659, 455 / 785] },

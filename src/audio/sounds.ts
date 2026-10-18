@@ -38,7 +38,12 @@ export function eventSound(type: SimEventType): SoundId {
     case 'ich_visible':
     case 'disease_visible':
     case 'plant_died':
+    case 'snail_died':
+    case 'trap_rotted':
       return 'warn';
+    case 'snail_eggs':
+    case 'snail_hatched':
+      return 'birth';
   }
 }
 

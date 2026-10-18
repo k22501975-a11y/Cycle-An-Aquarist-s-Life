@@ -27,6 +27,7 @@ import {
   feedPanel,
   fishPanel,
   splitPanel,
+  snailPanel,
   maintenancePanel,
   plantPanel,
   shopPanel,
@@ -399,7 +400,9 @@ async function start(): Promise<void> {
   const todoRow = (t: Todo) =>
     t.split
       ? h(`button.todo-item.${t.tone}.split`, { onclick: () => sheet.open('分缸', () => splitPanel(ctx, t.split!)) }, h('img.todo-icon', { src: `${import.meta.env.BASE_URL}art/ui/icon-split.webp`, alt: '' }), t.text)
-      : h(`div.todo-item.${t.tone}`, {}, t.text);
+      : t.snails
+        ? h(`button.todo-item.${t.tone}.split`, { onclick: () => sheet.open('螺', () => snailPanel(ctx)) }, h('img.todo-icon', { src: `${import.meta.env.BASE_URL}art/snail/snail-bladder.webp`, alt: '' }), t.text)
+        : h(`div.todo-item.${t.tone}`, {}, t.text);
   const todoBadge = h('span.badge');
   const todoCard = h('div.card.glass.todo');
   const todosChanged = memo();

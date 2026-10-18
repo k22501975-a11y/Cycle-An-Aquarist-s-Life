@@ -25,3 +25,4 @@ export { breakHeater, HEATER_EXPOSED_LEVEL, lightHeatC, waterLevelL } from './pr
 export * from './growth';
 export * from './split';
 export * from './acclimation';
+export * from './snails';
