@@ -1,5 +1,5 @@
 import { Application, BlurFilter, Container, FederatedPointerEvent, Graphics, Sprite, Texture, TilingSprite } from 'pixi.js';
-import { FISH_SPECIES, isCo2Injecting, isJuvenile, isLightOn, observeSymptoms, sizeRatio, tankSize, type Fish, type TankState } from '../sim';
+import { FISH_SPECIES, isCo2Injecting, isJuvenile, isLightOn, lookVariant, observeSymptoms, sizeRatio, tankSize, type Fish, type TankState } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture } from './painted';
 import { DEATH_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
@@ -554,12 +554,12 @@ export class TankView {
     const form = this.formOf(fish);
     // 魚懷孕後期肚子才看得出來；蝦一抱卵就看得到。
     const gravid = form === 'female' && fish.pregnancy > (fish.species === 'cherry_shrimp' ? 0 : 0.5);
-    const painted = paintedKey(fish.species, form, fish.id, gravid);
+    const painted = paintedKey(fish.species, form, lookVariant(fish), gravid);
     const key = `${fish.species}:${form}:${gravid}:${painted ?? ''}`;
     if (key === view.rigKey) return;
     view.rigKey = key;
     view.rig?.destroy({ children: true });
-    const look = appearance(fish.species, form, fish.id, gravid);
+    const look = appearance(fish.species, form, lookVariant(fish), gravid);
     const tex = paintedTexture(painted);
     view.rig = tex && painted ? new PaintedRig(painted, tex, look) : new FishRig(fish.species, look);
     view.rig.addChildAt(view.eggs, 0);

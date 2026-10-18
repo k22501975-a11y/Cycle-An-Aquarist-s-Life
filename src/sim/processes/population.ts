@@ -3,6 +3,7 @@ import { chance, nextRandom } from '../random';
 import { FISH_SPECIES, type FishSpeciesId } from '../species';
 import { isJuvenile, recordEvent, type Fish, type TankState } from '../state';
 import { lifeFraction } from './fauna';
+import { childInbreeding, cross, type GuppyGenome } from '../genetics';
 
 /**
  * 族群：成長、Phase 0 的簡化繁殖、混養互動（吃仔魚／仔蝦、咬鰭）。
@@ -19,6 +20,7 @@ export interface NewFishInit {
   hunger?: number;
   ich?: Fish['ich'];
   ageDays?: number;
+  genome?: GuppyGenome;
 }
 
 export function createFish(state: TankState, species: FishSpeciesId, init: NewFishInit = {}): Fish {
@@ -39,6 +41,8 @@ export function createFish(state: TankState, species: FishSpeciesId, init: NewFi
     lengthCm: init.lengthCm ?? sp.adultLengthCm,
     finDamage: 0,
     pregnancy: 0,
+    genome: init.genome,
+    lineage: undefined,
     ageDays: init.ageDays ?? (init.lengthCm !== undefined && init.lengthCm < sp.adultLengthCm * 0.9 ? 0 : sp.daysToAdult),
   };
 }
@@ -174,8 +178,15 @@ function breed(state: TankState, tf: number, dt: number): void {
     const warmEnough = state.water.tempC >= sp.temp.min;
     // 太老的母魚不再懷孕
     const relaxed = warmEnough && lifeFraction(mother) < 0.9 && mother.health > 0.7 && mother.stress < 0.4 && mother.hunger < 0.7;
-    const mate = relaxed && living.some((f) => f.species === mother.species && f.sex === 'male' && !isJuvenile(f));
-    if (mate && chance(state.rng, 0.5 / 24, dt)) mother.pregnancy = 0.001;
+    const males = relaxed ? living.filter((f) => f.species === mother.species && f.sex === 'male' && !isJuvenile(f)) : [];
+    if (males.length > 0 && chance(state.rng, 0.5 / 24, dt)) {
+      mother.pregnancy = 0.001;
+      // 尾鰭越大的公魚越受母魚青睞（性擇），但誰當爸爸還是有運氣成分
+      const weights = males.map((m) => 0.5 + (m.genome?.tail ?? 50) / 100);
+      let r = nextRandom(state.rng) * weights.reduce((a, b) => a + b, 0);
+      const father = males.find((_, i) => (r -= weights[i]) <= 0) ?? males[males.length - 1];
+      if (father.genome) mother.sire = { genome: father.genome, lineage: father.lineage ?? father.id, inbreeding: father.inbreeding ?? 0 };
+    }
   }
 }
 
@@ -189,8 +200,20 @@ function giveBirth(state: TankState, mother: Fish, population: number): void {
   n = Math.max(0, Math.min(n, MAX_FAUNA - population));
   if (n === 0) return;
   const sp = FISH_SPECIES[mother.species];
+  const sire = mother.sire;
+  const line = mother.lineage ?? mother.id;
+  const inbreeding = sire && mother.genome ? childInbreeding(mother.inbreeding ?? 0, sire.inbreeding, sire.lineage === line) : 0;
   for (let i = 0; i < n; i++) {
-    state.fish.push(createFish(state, mother.species, { lengthCm: sp.birthLengthCm, stress: 0.1, hunger: 0.2 }));
+    const fry = createFish(state, mother.species, { lengthCm: sp.birthLengthCm, stress: 0.1, hunger: 0.2 });
+    if (mother.genome && sire) {
+      fry.genome = cross(state.rng, mother.genome, sire.genome, fry.sex, inbreeding);
+      fry.lineage = line;
+      fry.generation = (mother.generation ?? 0) + 1;
+      fry.inbreeding = inbreeding;
+      // 近親繁殖讓體質變差
+      fry.constitution *= 1 - 0.4 * inbreeding;
+    }
+    state.fish.push(fry);
   }
   recordEvent(state, { type: 'fry_born', subjectId: mother.id, count: n });
 }

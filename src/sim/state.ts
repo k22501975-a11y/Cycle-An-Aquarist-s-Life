@@ -2,6 +2,7 @@ import { co2Equilibrium, oxygenSaturation, phFromCo2 } from './chemistry';
 import type { AirPumpSpec, ChillerSpec, Co2Spec, FanSpec, FilterSpec, HardscapeSpec, HeaterSpec, LightSpec, SubstrateSpec, TankSpec } from './equipment';
 import type { Region } from './season';
 import type { Economy } from './economy';
+import { legacyGenome, type GuppyGenome } from './genetics';
 import type { RngState } from './random';
 import type { TestKitReading } from './readings';
 import { FISH_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
@@ -165,6 +166,16 @@ export interface Fish {
   /** 持續處於飢餓狀態的小時數。 */
   starvingHours: number;
   ich: { stage: IchStage; progress: number };
+  /** 基因（目前只有孔雀魚有）。 */
+  genome?: GuppyGenome;
+  /** 母魚儲存的精子：孔雀魚交配一次可以連生好幾胎，這是那條公魚的基因與血統。 */
+  sire?: { genome: GuppyGenome; lineage: number; inbreeding: number } | null;
+  /** 血統編號：店裡買的每條魚自成一個血統，子代跟著媽媽。 */
+  lineage?: number;
+  /** 第幾代（店裡買的是 0）。 */
+  generation?: number;
+  /** 近交係數 0–1：同血統互配會升高，體質和尾鰭跟著退化。 */
+  inbreeding?: number;
   /** 保底起步包送的魚：不能賣回店裡。 */
   gift?: boolean;
   /** 白點以外的病（柱狀病、鰓吸蟲）。 */
@@ -338,6 +349,7 @@ export function normalizeState(state: TankState): TankState {
     fish.lengthCm ??= sp.adultLengthCm;
     fish.finDamage ??= 0;
     fish.pregnancy ??= 0;
+    if (fish.species === 'guppy' && !fish.genome) fish.genome = legacyGenome(fish.id, fish.sex);
     fish.ageDays ??= Math.min(1, fish.lengthCm / sp.adultLengthCm) >= 0.9 ? sp.daysToAdult : sp.daysToAdult * (fish.lengthCm / sp.adultLengthCm);
   }
   return state;

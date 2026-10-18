@@ -1,5 +1,6 @@
 import { isJuvenile, isLightOn, recordEvent, type Fish, type TankState } from './state';
 import { FISH_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
+import { phenotype, phenotypeValue } from './genetics';
 
 /**
  * 經濟（GAME_DESIGN 第 7 節、market-and-breeding.md §3.1）：
@@ -162,7 +163,9 @@ export function buybackRefusal(fish: Fish): string | null {
 
 /** 成魚店價三成；還沒長大的中魚只算一半。 */
 export function fishBuybackPrice(fish: Fish): number {
-  return Math.max(1, Math.round(FISH_PRICES[fish.species] * BUYBACK_SHARE * (isJuvenile(fish) ? 0.5 : 1)));
+  // 孔雀魚看品系和尾鰭：尾鰭 50 分是一般價，80 分多三成
+  const base = fish.genome ? phenotypeValue(phenotype(fish.genome)) * (0.5 + fish.genome.tail / 100) : FISH_PRICES[fish.species];
+  return Math.max(1, Math.round(base * BUYBACK_SHARE * (isJuvenile(fish) ? 0.5 : 1)));
 }
 
 export function plantBuybackPrice(species: PlantSpeciesId): number {
