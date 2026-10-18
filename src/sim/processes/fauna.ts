@@ -1,3 +1,4 @@
+import { driftAcclimation, habitStress, phBeyondSurvival } from '../acclimation';
 import { freeAmmoniaFraction, temperatureFactor } from '../chemistry';
 import { DEFAULT_BREEDING_CONDITION, DEFAULT_NUTRITION, foodLots, foodQuality, nutritionFactor, pruneFood } from '../food';
 import { chance } from '../random';
@@ -73,7 +74,8 @@ export function computeStressors(state: TankState, fish: Fish): Stressors {
 
   return {
     temperature: outside(water.tempC, sp.temp) / 6,
-    ph: outside(water.ph, sp.ph) / 0.8,
+    // 超出存活範圍很危險；在範圍內只看離這尾魚習慣的水多遠（慢慢適應就沒事）
+    ph: phBeyondSurvival(state, fish) / 0.4 + habitStress(state, fish),
     // 測試劑讀到 0 的微量不構成壓力。
     ammonia: (Math.max(0, freeAmmonia(state) - 0.01) / 0.05) * sensitivity,
     nitrite: Math.max(0, water.no2 - 0.2) * sensitivity,
@@ -102,6 +104,7 @@ function computeDamage(state: TankState, fish: Fish, sp: FishSpecies): Damage[] 
   add((water.no2 - 1) * 0.004 * sensitivity, 'nitrite');
   add((2 - water.o2) * 0.05, 'oxygen');
   add((water.co2 - 45) * 0.004, 'co2');
+  add(phBeyondSurvival(state, fish) * 0.01, 'ph');
   const tempOut = Math.max(0, sp.tempLethal.min - water.tempC, water.tempC - sp.tempLethal.max);
   add(tempOut * 0.01, 'temperature');
   if (fish.hunger >= 1) add(0.004, 'starvation');
@@ -133,6 +136,7 @@ export function updateFauna(state: TankState, dt: number): void {
     const metabolic = sizeRatio(fish) ** 2;
     // 變溫動物：水溫高代謝快、老得快（孔雀魚長期 28°C 壽命約少兩成）
     fish.ageDays = (fish.ageDays ?? 0) + (dt / 24) * Math.min(1.5, Math.max(0.7, Math.sqrt(tf)));
+    driftAcclimation(state, fish, dt);
 
     // 代謝：飢餓、耗氧、排出 CO₂。
     fish.hunger = Math.min(1, fish.hunger + (dt / 24 / DAYS_TO_STARVING) * Math.sqrt(tf));

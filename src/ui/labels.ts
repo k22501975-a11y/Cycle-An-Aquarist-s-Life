@@ -31,6 +31,8 @@ export const DEATH_CAUSE_LABELS: Record<string, string> = {
   fin_nip: '被咬鰭',
   old_age: '老死（壽終正寢）',
   molt: '脫殼失敗（卡殼）：GH 太低或水質一下變太多',
+  ph: 'pH 超出牠能撐的範圍',
+  ph_shock: '沒對水直接放進去，水質差太多休克',
   columnaris: '柱狀病（爛嘴爛身）',
   flukes: '鰓吸蟲',
   unknown: '原因不明',

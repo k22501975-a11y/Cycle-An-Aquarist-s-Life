@@ -1,3 +1,4 @@
+import { farmHabit, releaseShock } from './acclimation';
 import { co2Equilibrium, oxygenSaturation } from './chemistry';
 import { filterBacteriaShare } from './processes/nitrogen';
 import { infect, STORE_DISEASE_CHANCE } from './processes/disease';
@@ -124,6 +125,8 @@ export interface AddFishOptions {
   strain?: number;
   /** 鰭型品系（GUPPY_FIN_STRAINS）。 */
   fin?: FinTrait;
+  /** 慢慢滴水對水（預設）；false 是直接倒進缸裡，水質差很多會休克（design/acclimation.md §2）。 */
+  drip?: boolean;
   /** 帶著哪些潛伏的病（柱狀病、鰓吸蟲）。不指定時依店家機率決定。 */
   carries?: DiseaseKind[];
 }
@@ -149,6 +152,14 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
     ich: carries ? { stage: 'incubating', progress: 0 } : { stage: 'none', progress: 0 },
   });
   if (species === 'guppy') fish.genome = storeGenome(state.rng, fish.sex, options.strain, options.fin);
+  // 店裡的魚習慣魚場的水；直接倒進差很多的缸會休克
+  fish.acclimated = farmHabit(species);
+  const shock = releaseShock(state, fish.acclimated, options.drip ?? true);
+  fish.stress = Math.min(1, fish.stress + shock.stress);
+  if (shock.harm > 0) {
+    fish.health = Math.max(0.01, fish.health - shock.harm);
+    fish.recentDamage.ph_shock = shock.harm;
+  }
   fish.lineage = fish.id;
   fish.generation = 0;
   fish.inbreeding = 0;

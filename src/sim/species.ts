@@ -13,7 +13,15 @@ export interface FishSpecies {
   temp: { min: number; max: number };
   /** 耐受上下限（°C）：超過就開始傷身體，越超過傷得越快（temperature.md §2–3）。 */
   tempLethal: { min: number; max: number };
+  /** 一般建議的 pH（教科書範圍，圖鑑和商店顯示用）。 */
   ph: { min: number; max: number };
+  /**
+   * 存活範圍（design/acclimation.md §1）：慢慢適應的話這裡面都能活，超出就算適應了也撐不住。
+   * 真正造成壓力的是「離這尾魚習慣的水差多少」，不是離教科書數值多遠。
+   */
+  phSurvive: { min: number; max: number };
+  /** 店家（魚場）養殖的水質：店裡買來的魚習慣這種水。 */
+  farmWater: { ph: number; gh: number };
   /** 成體體長（cm），用於「每公升 1 cm」的擁擠度估算。 */
   adultLengthCm: number;
   /** 濕重（mg），死亡腐爛時全部變成有機廢物。 */
@@ -59,6 +67,8 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     temp: { min: 22, max: 28 },
     tempLethal: { min: 18, max: 32 },
     ph: { min: 6.8, max: 8.0 },
+    phSurvive: { min: 5.8, max: 8.6 },
+    farmWater: { ph: 7.4, gh: 8 },
     adultLengthCm: 4,
     bodyMassMg: 500,
     dailyFoodMg: 15,
@@ -84,6 +94,8 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     temp: { min: 18, max: 26 },
     tempLethal: { min: 14, max: 30 },
     ph: { min: 6.5, max: 7.8 },
+    phSurvive: { min: 6.0, max: 8.2 },
+    farmWater: { ph: 7.2, gh: 6 },
     adultLengthCm: 4,
     bodyMassMg: 600,
     dailyFoodMg: 18,
@@ -111,6 +123,8 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     temp: { min: 18, max: 28 },
     tempLethal: { min: 14, max: 31 },
     ph: { min: 6.5, max: 8.0 },
+    phSurvive: { min: 6.2, max: 8.2 },
+    farmWater: { ph: 7.2, gh: 7 },
     adultLengthCm: 2,
     bodyMassMg: 150,
     dailyFoodMg: 2,

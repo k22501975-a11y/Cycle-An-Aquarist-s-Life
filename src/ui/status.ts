@@ -1,4 +1,4 @@
-import { canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, quarantineDays, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
+import { COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, quarantineDays, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -103,10 +103,13 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
   if (reading && living.length > 0) {
     if (reading.kh <= 1) out.push({ text: `KH 只剩 ${reading.kh}，pH 隨時會崩，多換點水`, tone: 'bad' });
     else if (reading.kh <= 2) out.push({ text: `KH 偏低（${reading.kh}），換水把它補回來`, tone: 'warn' });
-    const phMin = Math.max(...living.map((f) => FISH_SPECIES[f.species].ph.min));
-    const phMax = Math.min(...living.map((f) => FISH_SPECIES[f.species].ph.max));
-    if (reading.ph < phMin - 0.1) out.push({ text: `pH 太低（${reading.ph}），魚會緊迫`, tone: 'warn' });
-    else if (reading.ph > phMax + 0.1) out.push({ text: `pH 太高（${reading.ph}），魚會緊迫`, tone: 'warn' });
+    // 超出物種的存活範圍才危險；在範圍內只看跟魚習慣的水差多少（會慢慢適應，design/acclimation.md）
+    const phMin = Math.max(...living.map((f) => FISH_SPECIES[f.species].phSurvive.min));
+    const phMax = Math.min(...living.map((f) => FISH_SPECIES[f.species].phSurvive.max));
+    const unused = living.filter((f) => Math.abs(reading.ph - habitOf(state, f).ph) > COMFORT_BAND.ph).length;
+    if (reading.ph < phMin) out.push({ text: `pH 太低（${reading.ph}），超出魚能撐的範圍`, tone: 'bad' });
+    else if (reading.ph > phMax) out.push({ text: `pH 太高（${reading.ph}），超出魚能撐的範圍`, tone: 'bad' });
+    else if (unused > 0) out.push({ text: `pH ${reading.ph} 跟 ${unused} 條魚習慣的水差很多，別一次調太多，牠們會慢慢適應`, tone: 'warn' });
   }
   // 分缸提示：太擠、成魚會吃小魚、小魚轉色後公母混著（點一下照建議分缸）
   for (const a of splitAdvice(state)) out.push({ text: a.text, tone: a.tone, split: a.plan });
