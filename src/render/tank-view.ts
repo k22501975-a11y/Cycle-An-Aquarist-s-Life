@@ -1,5 +1,5 @@
 import { Application, BlurFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
-import { FISH_SPECIES, PLANT_SPECIES, isCo2Injecting, isJuvenile, isLightOn, lookVariant, observeSymptoms, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
+import { FISH_SPECIES, PLANT_SPECIES, isCo2Injecting, isJuvenile, isLightOn, lookVariant, observeSymptoms, phenotype, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture } from './painted';
 import { DEATH_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
@@ -8,6 +8,7 @@ import { BITE_SECONDS, biteKick, pickEaten, ripple, RIPPLE_SECONDS, scatterPelle
 import { canvasTexture, flakeTextures, makeCanvas, mix, softDotTexture } from './paint';
 import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame, TEST_SECONDS, WATER_CHANGE_SECONDS, type KitParam } from './ops-fx';
 import { PlantMesh } from './plant-sway';
+import { phenotypeRecipe, recipeKey } from './phenotype-art';
 import { clampPan, fitCamera, maxSpan, zoomAt, type Camera } from './camera';
 import { type QualitySpec, qualitySpec } from './quality';
 import { causticsTexture, MOCKUP_PX_PER_CM, paintBackdrop, paintDriftwood, paintFront, paintPlant, paintVignette, rayTexture } from './scenery';
@@ -896,7 +897,8 @@ export class TankView {
     const form = this.formOf(fish);
     // 魚懷孕後期肚子才看得出來；蝦一抱卵就看得到。
     const gravid = form === 'female' && fish.pregnancy > (fish.species === 'cherry_shrimp' ? 0 : 0.5);
-    const painted = paintedKey(fish.species, form, lookVariant(fish), gravid);
+    // 公孔雀魚照基因上色：雜交出來的組合也有自己的花色
+    const painted = fish.species === 'guppy' && form === 'male' && fish.genome ? recipeKey(phenotypeRecipe(phenotype(fish.genome))) : paintedKey(fish.species, form, lookVariant(fish), gravid);
     const key = `${fish.species}:${form}:${gravid}:${painted ?? ''}`;
     if (key === view.rigKey) return;
     view.rigKey = key;
