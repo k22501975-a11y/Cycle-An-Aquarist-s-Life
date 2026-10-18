@@ -1,4 +1,4 @@
-import { BlurFilter, Graphics, Sprite } from 'pixi.js';
+import { BlurFilter, Graphics, Rectangle, Sprite, type Renderer, type Texture } from 'pixi.js';
 import { phenotype, type Fish } from '../sim';
 import type { FishRig } from './fish-art';
 import { FIN_COLORS, finShapes, type FinShape, type FinTraits } from './fin-overlay';
@@ -34,7 +34,41 @@ export function finTraitsOf(fish: Fish, painted: string | null): FinLook | null 
   return male ? { traits, color: FIN_COLORS[family], alpha: 0.82, dumboArt, family } : { traits, color: FIN_COLORS.pale, alpha: 0.4, dumboArt, family: 'blue' };
 }
 
-export function drawFinOverlay(rig: FishRig | PaintedRig, fins: FinLook): void {
+/** 烘好的鰭（每種鰭型、顏色、魚圖大小一張），所有同樣的魚共用（I1 貼圖快取）。 */
+const bakedFins = new Map<string, { tex: Texture; x: number; y: number } | null>();
+
+/** 鰭的快取鍵：鰭型、顏色、透明度、身體範圍都一樣，畫出來就一樣。 */
+export function finCacheKey(fins: FinLook, body: { x: number; y: number; rx: number; ry: number }, lengthPx: number, layer: 'back' | 'front'): string {
+  const t = fins.traits;
+  const round = (v: number) => Math.round(v);
+  return [layer, +!!t.swallow, +!!t.ribbon, +!!t.dumbo, +!!t.bigC, t.sword ?? 0, +!!t.halfmoon, Math.round((t.length ?? 0) * 20), fins.color, fins.alpha, round(body.x), round(body.y), round(body.rx), round(body.ry), round(lengthPx)].join(':');
+}
+
+export function finCacheSize(): number {
+  return bakedFins.size;
+}
+
+/** 把模糊過的鰭烘成貼圖：濾鏡只跑一次，之後每格只畫一張圖。 */
+function bake(renderer: Renderer, g: Graphics, key: string, pad: number): Sprite | null {
+  let hit = bakedFins.get(key);
+  if (hit === undefined) {
+    const b = g.getLocalBounds();
+    if (b.width <= 0 || b.height <= 0) hit = null;
+    else {
+      const frame = new Rectangle(Math.floor(b.x - pad), Math.floor(b.y - pad), Math.ceil(b.width + pad * 2), Math.ceil(b.height + pad * 2));
+      hit = { tex: renderer.generateTexture({ target: g, frame, antialias: true }), x: frame.x, y: frame.y };
+    }
+    bakedFins.set(key, hit);
+  }
+  g.destroy();
+  if (!hit) return null;
+  const s = new Sprite(hit.tex);
+  s.position.set(hit.x, hit.y);
+  return s;
+}
+
+/** renderer 有給就把鰭烘成共用的貼圖（遊戲裡）；沒給就直接掛著模糊的 Graphics。 */
+export function drawFinOverlay(rig: FishRig | PaintedRig, fins: FinLook, renderer?: Renderer): void {
   const { bodyEllipse: e, R } = rig.art;
   const body = { x: e.x * R, y: e.y * R, rx: e.rx * R, ry: e.ry * R };
   const shapes = finShapes(fins.traits, body, rig.lengthPx);
@@ -58,10 +92,19 @@ export function drawFinOverlay(rig: FishRig | PaintedRig, fins: FinLook): void {
   paint(back, shapes.filter((sh) => !sh.front));
   paint(front, shapes.filter((sh) => sh.front));
   // 邊緣柔一點，不像剪紙
-  back.filters = [new BlurFilter({ strength: Math.max(0.4, body.ry * 0.015), quality: 2 })];
-  front.filters = [new BlurFilter({ strength: Math.max(0.4, body.ry * 0.015), quality: 2 })];
-  rig.addChildAt(back, 0);
-  rig.addChild(front);
+  const blur = Math.max(0.4, body.ry * 0.015);
+  back.filters = [new BlurFilter({ strength: blur, quality: 2 })];
+  front.filters = [new BlurFilter({ strength: blur, quality: 2 })];
+  if (renderer) {
+    const pad = Math.ceil(blur * 4 + 2);
+    const b = bake(renderer, back, finCacheKey(fins, body, rig.lengthPx, 'back'), pad);
+    const f = bake(renderer, front, finCacheKey(fins, body, rig.lengthPx, 'front'), pad);
+    if (b) rig.addChildAt(b, 0);
+    if (f) rig.addChild(f);
+  } else {
+    rig.addChildAt(back, 0);
+    rig.addChild(front);
+  }
   const tex = fins.dumboArt ? paintedTexture(fins.family === 'blue' ? 'fin-pectoral-dumbo' : `fin-pectoral-dumbo~${fins.family}`) : null;
   if (tex) {
     // 大耳的胸鰭圖：根部接在鰓後面、扇面往後下方張開，壓在身體下面（圖頭朝右，魚的圖層頭朝左，所以水平翻）

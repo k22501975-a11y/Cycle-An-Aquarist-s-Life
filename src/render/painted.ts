@@ -5,6 +5,7 @@ import type { FishForm } from './fish-art';
 import { canvasTexture, makeCanvas } from './paint';
 import { parseRecipeKey, patternBase, recolorImage } from './phenotype-art';
 import { guppyLook } from './strains';
+import { toneImage, toneKey } from './tone';
 
 /**
  * 精繪素材（AI 生圖，design/art-assets-ai.md）。
@@ -167,6 +168,7 @@ export const FIN_PARTS: Record<string, { file: string; anchor: [number, number] 
 
 const textures = new Map<string, Texture>();
 const scenery = new Map<string, Texture>();
+const toned = new Map<string, Texture>();
 
 /** 開遊戲前載入素材。個別檔案失敗只會讓那張圖退回程式繪製，不會擋住遊戲。 */
 export async function loadPaintedArt(base = import.meta.env.BASE_URL): Promise<number> {
@@ -235,6 +237,32 @@ function derivedTexture(key: string): Texture | null {
   return tex;
 }
 
+/**
+ * 套上色調的圖（「原圖@飽和度:亮度」）：第一次用到時算一次，之後所有同樣的魚共用（I1 貼圖快取）。
+ * 取代每條魚各掛一個 ColorMatrixFilter（每格都要離屏重畫）。
+ */
+export function tonedTexture(key: string, sat: number, bright: number, eating = false): Texture | null {
+  const base = eating ? (textures.get(`${key}#eating`) ?? null) : paintedTexture(key);
+  if (!base || (sat === 0 && bright === 1)) return base;
+  const cacheKey = `${key}${eating ? '#eating' : ''}@${toneKey(sat, bright)}`;
+  const hit = toned.get(cacheKey);
+  if (hit) return hit;
+  const img = base.source.resource as CanvasImageSource & { width: number; height: number };
+  const { canvas, ctx } = makeCanvas(img.width, img.height);
+  ctx.drawImage(img, 0, 0);
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  toneImage(data.data, sat, bright);
+  ctx.putImageData(data, 0, 0);
+  const tex = canvasTexture(canvas);
+  toned.set(cacheKey, tex);
+  return tex;
+}
+
+/** 快取裡有幾張貼圖（開發者數值、測試用）。 */
+export function textureCacheStats(): { painted: number; toned: number } {
+  return { painted: textures.size, toned: toned.size };
+}
+
 /** 造景素材的原圖（給 Canvas 的 drawImage 用）；沒載入就回傳 null，改用程式繪製。 */
 export function sceneryImage(key: string): CanvasImageSource | null {
   const tex = scenery.get(key);
@@ -257,8 +285,11 @@ export class PaintedRig extends Container {
   private readonly mesh: MeshPlane;
   private readonly rest: Float32Array;
   private readonly spec: PaintedSpec;
-  private readonly restTexture: Texture;
-  private readonly eatingTexture: Texture | null;
+  private readonly key: string;
+  private restTexture: Texture;
+  private eatingTexture: Texture | null;
+  private mouthOpen = false;
+  private tone = '0:1';
   private rim: Mesh | null = null;
   private rimFill: ColorMatrixFilter | null = null;
   private rimColor = -1;
@@ -269,6 +300,7 @@ export class PaintedRig extends Container {
     super();
     const spec = PAINTED[key.split('~')[0]];
     this.spec = spec;
+    this.key = key;
     const w = texture.width;
     const h = texture.height;
     this.lengthPx = w;
@@ -288,8 +320,19 @@ export class PaintedRig extends Container {
 
   /** 咬下去的那幾格換成張嘴的圖（只有原圖有這張時；改色的衍生圖照舊）。 */
   setMouthOpen(open: boolean): void {
+    this.mouthOpen = open;
     const tex = open ? this.eatingTexture : this.restTexture;
     if (tex && this.mesh.texture !== tex) this.mesh.texture = tex;
+  }
+
+  /** 色調（飽和度、亮度）：換成快取裡調好色的圖，不用濾鏡。 */
+  setTone(sat: number, bright: number): void {
+    const tone = `${sat}:${bright}`;
+    if (tone === this.tone) return;
+    this.tone = tone;
+    this.restTexture = tonedTexture(this.key, sat, bright) ?? this.restTexture;
+    this.eatingTexture = textures.has(`${this.key}#eating`) ? tonedTexture(this.key, sat, bright, true) : null;
+    this.setMouthOpen(this.mouthOpen);
   }
 
   get heightPx(): number {

@@ -14,6 +14,7 @@ import { LAYER_LOOK, ScapeView, type Rect, type ScapeEdit, type ScapeTarget } fr
 import { clawPose, clawRate, pleopods, type Pt } from './shrimp-limbs';
 import { phenotypeRecipe, recipeKey } from './phenotype-art';
 import { drawFinOverlay, finTraitsOf } from './fin-render';
+import { quantizeTone } from './tone';
 import { clampPan, fitCamera, maxSpan, zoomAt, type Camera } from './camera';
 import { type QualitySpec, qualitySpec } from './quality';
 import { causticsTexture, MOCKUP_PX_PER_CM, paintBackdrop, paintDriftwood, paintFront, paintPlant, paintVignette, rayTexture } from './scenery';
@@ -1157,7 +1158,7 @@ export class TankView {
     view.tone = '';
     view.rig.addChildAt(view.eggs, 0);
     view.rig.addChild(view.spots);
-    if (fins) drawFinOverlay(view.rig, fins);
+    if (fins) drawFinOverlay(view.rig, fins, this.app.renderer);
     view.limbs?.destroy();
     view.limbs = null;
     if (isShrimpSpecies(fish.species) && view.rig instanceof PaintedRig) {
@@ -1313,7 +1314,11 @@ export class TankView {
       const tone = `${sat}:${boost}`;
       if (tone !== view.tone) {
         view.tone = tone;
-        if (sat !== 0 || boost > 0) {
+        if (rig instanceof PaintedRig) {
+          // 精繪圖：色調烘進快取的貼圖，不掛濾鏡（I1）
+          const q = quantizeTone(sat, 1 + boost * 0.08 - (stage === 'old' ? 0.06 : 0));
+          rig.setTone(q.sat, q.bright);
+        } else if (sat !== 0 || boost > 0) {
           const f = new ColorMatrixFilter();
           f.saturate(sat, false);
           f.brightness(1 + boost * 0.08 - (stage === 'old' ? 0.06 : 0), true);
