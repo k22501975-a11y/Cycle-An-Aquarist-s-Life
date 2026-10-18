@@ -1,1 +1,11 @@
 export * from './clock';
+export * from './chemistry';
+export * from './species';
+export * from './equipment';
+export * from './state';
+export * from './step';
+export * from './actions';
+export * from './readings';
+export { computeStressors, crowdingRatio, freeAmmonia } from './processes/fauna';
+export { bacteriaCapacity } from './processes/nitrogen';
+export { currentPar } from './processes/plants';
