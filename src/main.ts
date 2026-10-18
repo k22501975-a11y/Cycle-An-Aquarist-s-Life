@@ -346,8 +346,29 @@ async function start(): Promise<void> {
 
   // ---- 下方櫃台：待辦卡｜圓形工具列｜選取卡 ----
   const tools = h('div.tools.glass');
+  // 精繪圖示（AI 生圖，圓角方框款）：放大裁成圓形放進按鈕；載入失敗就露出原本的線條圖示
+  const TOOL_ART: Partial<Record<keyof typeof ICONS, string>> = {
+    feed: 'icon-feed',
+    water: 'icon-waterchange',
+    test: 'icon-testkit',
+    trim: 'icon-trim',
+    shop: 'icon-shop',
+    gear: 'icon-gear',
+    net: 'icon-net',
+  };
   const tool = (key: keyof typeof ICONS, label: string, color: string, onclick: () => void) => {
-    const b = h('button.tool', { onclick }, h('span.disc', {}, icon(ICONS[key])), h('span.lbl', {}, label));
+    const disc = h('span.disc', {}, icon(ICONS[key]));
+    const art = TOOL_ART[key];
+    if (art) {
+      const img = h('img.art', { src: `${import.meta.env.BASE_URL}art/ui/${art}.webp`, alt: '', draggable: 'false' });
+      img.addEventListener('error', () => {
+        img.remove();
+        disc.classList.remove('has-art');
+      });
+      disc.classList.add('has-art');
+      disc.append(img);
+    }
+    const b = h('button.tool', { onclick }, disc, h('span.lbl', {}, label));
     b.addEventListener('click', () => audio.play(key === 'net' ? 'net' : key === 'test' ? 'test' : 'open'));
     b.style.setProperty('--c', color);
     tools.append(b);
