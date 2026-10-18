@@ -25,6 +25,8 @@ import {
 } from './ui/panels';
 import { Guide } from './ui/guide';
 import { recordsPanel } from './ui/records';
+import { loadCodexSeen, saveCodexSeen, unlockCodex } from './ui/codex';
+import { codexPanel } from './ui/codex-panel';
 import { Sheet, Toasts } from './ui/sheet';
 import { clockLabel, todos, waterCapsules } from './ui/status';
 import { cornerRect, pickCorner, type Corner, type Rect } from './ui/dodge';
@@ -107,6 +109,7 @@ async function start(): Promise<void> {
     }
   };
   setBigText(uiPrefs.bigText);
+  const codexSeen = loadCodexSeen(store);
   const ctx: PanelContext = { game, sheet, toasts, sound: (id) => audio.play(id) };
   debugHandle.audio = audio;
 
@@ -245,6 +248,7 @@ async function start(): Promise<void> {
         ),
       ),
       h('h3', {}, '紀錄與顯示'),
+      h('button.btn', { onclick: () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen)) }, '圖鑑：魚蝦、水草、設備、疾病'),
       h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) }, '水質趨勢與事件紀錄'),
       h(
         'label.check-row',
@@ -423,6 +427,10 @@ async function start(): Promise<void> {
       renderTodos();
       renderCaps();
       guide.update(game.state);
+      for (const entry of unlockCodex(codexSeen, game.state)) {
+        saveCodexSeen(store, codexSeen);
+        toasts.show(`圖鑑新增了「${entry.name}」`);
+      }
       if (performance.now() - lastInput > IDLE_MS && !sheet.isOpen) app.ticker.maxFPS = 30;
       const st = game.state;
       audio.setAmbience({

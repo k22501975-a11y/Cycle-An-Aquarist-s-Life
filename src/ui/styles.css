@@ -266,3 +266,12 @@ button.caps { background: none; border: 0; padding: 0; margin: 0; color: inherit
 .event.warn::before { background: var(--warn); }
 .event.bad::before { background: var(--bad); }
 .event-time { flex: 0 0 auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* 圖鑑 */
+.codex-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.codex-item { flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; color: var(--text); font: inherit; cursor: pointer; }
+.codex-item.locked { opacity: 0.5; cursor: default; }
+.codex-sub { font-size: 12px; color: var(--muted); }
+.codex-name { margin: 4px 0 0; font-size: 18px; }
+.codex-text { font-size: 14px; line-height: 1.7; margin: 0; }
+.btn.back { align-self: flex-start; flex: 0 0 auto; width: auto; padding: 6px 14px; }
