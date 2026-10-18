@@ -4,7 +4,7 @@ import { chance, nextRandom } from '../random';
 import { FISH_SPECIES, type FishSpeciesId } from '../species';
 import { isJuvenile, recordEvent, type Fish, type TankState } from '../state';
 import { lifeFraction } from './fauna';
-import { childInbreeding, cross, type GuppyGenome } from '../genetics';
+import { childInbreeding, cross, matingSuccess, type GuppyGenome } from '../genetics';
 
 /**
  * 族群：成長、Phase 0 的簡化繁殖、混養互動（吃仔魚／仔蝦、咬鰭）。
@@ -180,10 +180,13 @@ function breed(state: TankState, tf: number, dt: number): void {
     // 太老的母魚不再懷孕
     const relaxed = warmEnough && lifeFraction(mother) < 0.9 && mother.health > 0.7 && mother.stress < 0.4 && mother.hunger < 0.7;
     const males = relaxed ? living.filter((f) => f.species === mother.species && f.sex === 'male' && !isJuvenile(f)) : [];
-    if (males.length > 0 && chance(state.rng, (0.5 / 24) * breedingFactor(mother.breedingCondition), dt)) {
+    // 緞帶、大C 的公魚交接器太長配不了，燕尾的也很難配（strains.md §1.3）
+    const fertility = males.map((m) => (m.genome ? matingSuccess(m.genome) : 1));
+    const best = Math.max(0, ...fertility);
+    if (males.length > 0 && best > 0 && chance(state.rng, (0.5 / 24) * breedingFactor(mother.breedingCondition) * best, dt)) {
       mother.pregnancy = 0.001;
       // 尾鰭越大的公魚越受母魚青睞（性擇），但誰當爸爸還是有運氣成分
-      const weights = males.map((m) => 0.5 + (m.genome?.tail ?? 50) / 100);
+      const weights = males.map((m, i) => (0.5 + (m.genome?.tail ?? 50) / 100) * fertility[i]);
       let r = nextRandom(state.rng) * weights.reduce((a, b) => a + b, 0);
       const father = males.find((_, i) => (r -= weights[i]) <= 0) ?? males[males.length - 1];
       if (father.genome) mother.sire = { genome: father.genome, lineage: father.lineage ?? father.id, inbreeding: father.inbreeding ?? 0 };

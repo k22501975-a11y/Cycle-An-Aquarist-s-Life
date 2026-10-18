@@ -1,7 +1,7 @@
 import { co2Equilibrium, oxygenSaturation } from './chemistry';
 import { filterBacteriaShare } from './processes/nitrogen';
 import { infect, STORE_DISEASE_CHANCE } from './processes/disease';
-import { lookIndex, phenotype, storeGenome } from './genetics';
+import { lookIndex, phenotype, storeGenome, type FinTrait } from './genetics';
 import { createFish } from './processes/population';
 import { roomTemperature } from './processes/thermal';
 import { addFood, DEFAULT_FOOD, type FoodGrade, type FoodKind } from './food';
@@ -120,6 +120,8 @@ export interface AddFishOptions {
   pregnant?: boolean;
   /** 孔雀魚品系（GUPPY_STRAINS 的索引）。不指定時隨機。 */
   strain?: number;
+  /** 鰭型品系（GUPPY_FIN_STRAINS）。 */
+  fin?: FinTrait;
   /** 帶著哪些潛伏的病（柱狀病、鰓吸蟲）。不指定時依店家機率決定。 */
   carries?: DiseaseKind[];
 }
@@ -144,7 +146,7 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
     ageDays: sp.daysToAdult * (1 + 0.6 * nextRandom(state.rng)),
     ich: carries ? { stage: 'incubating', progress: 0 } : { stage: 'none', progress: 0 },
   });
-  if (species === 'guppy') fish.genome = storeGenome(state.rng, fish.sex, options.strain);
+  if (species === 'guppy') fish.genome = storeGenome(state.rng, fish.sex, options.strain, options.fin);
   fish.lineage = fish.id;
   fish.generation = 0;
   fish.inbreeding = 0;
@@ -153,7 +155,13 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
     if (pregnant) {
       fish.pregnancy = 0.05 + 0.85 * nextRandom(state.rng);
       // 在店裡跟同品系的公魚配過
-      if (fish.genome) fish.sire = { genome: storeGenome(state.rng, 'male', options.strain ?? lookIndex(phenotype(fish.genome))), lineage: -fish.id, inbreeding: 0 };
+      // 鰭型品系在店裡是用帶因的正常公魚配的（緞帶、燕尾公魚配不了）
+      if (fish.genome) {
+        const fin = options.fin === 'sword' || options.fin === 'dumbo' || options.fin === 'halfmoon' ? options.fin : undefined;
+        const sire = storeGenome(state.rng, 'male', options.strain ?? lookIndex(phenotype(fish.genome)), fin);
+        if (options.fin === 'swallow') sire.swallow = [1, 0];
+        fish.sire = { genome: sire, lineage: -fish.id, inbreeding: 0 };
+      }
     }
   }
   // 指定不帶白點（carriesIch: false）視為確認過健康的魚，也不帶其他病

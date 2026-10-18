@@ -7,7 +7,10 @@ import {
   addPlant,
   buybackRefusal,
   GUPPY_STRAIN_PRICES,
+  GUPPY_FIN_STRAINS,
   GUPPY_STRAINS,
+  finWords,
+  matingSuccess,
   predictOffspring,
   canClaimStarterPack,
   claimStarterPack,
@@ -261,6 +264,8 @@ export function trimListPanel(ctx: PanelContext): Node {
   );
 }
 
+const TAIL_SHAPE_LABELS = { round: '圓尾', delta: '三角尾', halfmoon: '半月尾' } as const;
+
 /** 孔雀魚的品系、尾鰭分數、代數與近親程度（玩家看得到的外觀與紀錄，看不到隱性基因）。 */
 function geneticsInfo(fish: Fish): Node {
   const g = fish.genome!;
@@ -268,8 +273,9 @@ function geneticsInfo(fish: Fish): Node {
   const rows: [string, string][] = [];
   // 仔魚和母魚的品系特徵不明顯，只有成年公魚看得出完整品系
   if (fish.sex === 'male' && !isJuvenile(fish)) rows.push(['品系', strainName(p)]);
-  else rows.push(['看得出的特徵', [p.albino ? '紅眼（白子）' : '', p.gold ? '金色身體' : '', p.tuxedo ? '後半身深色（禮服）' : ''].filter(Boolean).join('、') || '還看不出來']);
-  if (!isJuvenile(fish)) rows.push(['尾鰭', `${g.tail} 分`]);
+  else rows.push(['看得出的特徵', [p.albino ? '紅眼（白子）' : '', p.gold ? '金色身體' : '', p.tuxedo ? '後半身深色（禮服）' : '', ...(isJuvenile(fish) ? [] : finWords(p))].filter(Boolean).join('、') || '還看不出來']);
+  if (!isJuvenile(fish)) rows.push(['尾鰭', `${g.tail} 分・${TAIL_SHAPE_LABELS[p.tailShape ?? 'delta']}`]);
+  if (fish.sex === 'male' && !isJuvenile(fish) && matingSuccess(g) < 1) rows.push(['繁殖', matingSuccess(g) === 0 ? '交接器太長，不能交配（長公）' : '交接器偏長，很難配成']);
   rows.push(['來源', fish.generation ? `自家繁殖第 ${fish.generation} 代` : '水族店']);
   const inbred = fish.inbreeding ?? 0;
   if (inbred >= 0.2) rows.push(['血緣', inbred >= 0.45 ? '近親繁殖太多代，體質和尾鰭在退化' : '有點近親，記得引進新血']);
@@ -455,15 +461,16 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
   );
   const wallet = h('p.wallet', {}, `錢包：${yuan(coins)}`);
 
-  const buyFish = (species: FishSpeciesId, count: number, strain?: number) => () => {
+  const buyFish = (species: FishSpeciesId, count: number, strain?: number, finStrain?: (typeof GUPPY_FIN_STRAINS)[number]) => () => {
     const quarantined = !!game.state.quarantine;
-    const name = strain !== undefined ? `${GUPPY_STRAINS[strain]}孔雀魚` : FISH_SPECIES[species].name;
-    const each = strain !== undefined ? GUPPY_STRAIN_PRICES[strain] : FISH_PRICES[species];
+    const name = finStrain ? `${finStrain.name}孔雀魚` : strain !== undefined ? `${GUPPY_STRAINS[strain]}孔雀魚` : FISH_SPECIES[species].name;
+    const each = finStrain ? finStrain.price : strain !== undefined ? GUPPY_STRAIN_PRICES[strain] : FISH_PRICES[species];
+    const options = finStrain ? { strain: finStrain.strain, fin: finStrain.fin } : { strain };
     purchase(
       ctx,
       each * count,
       (st) => {
-        for (let i = 0; i < count; i++) (quarantined ? addFishToQuarantine : addFish)(st, species, { strain });
+        for (let i = 0; i < count; i++) (quarantined ? addFishToQuarantine : addFish)(st, species, options);
       },
       quarantined ? `買了 ${count} 隻${name}，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天` : `買了 ${count} 隻${name}，剛運到會有點緊迫`,
     );
@@ -500,6 +507,15 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
           {},
           h('div', {}, h('b', {}, `孔雀魚・${strain}`), h('div.hint', {}, `每隻 ${GUPPY_STRAIN_PRICES[i]} 元`)),
           h('div.row', {}, button('+1', buyFish('guppy', 1, i)), button('+3', buyFish('guppy', 3, i))),
+        ),
+      ),
+      h('p.hint', {}, '鰭型品系：燕尾、大耳是隱性，要兩邊都帶才長得出來；緞帶、大C 的公魚交接器太長不能配，要用母魚配一般公魚；劍尾只會傳給兒子。'),
+      ...GUPPY_FIN_STRAINS.map((fs) =>
+        h(
+          'div.item',
+          {},
+          h('div', {}, h('b', {}, `孔雀魚・${fs.name}`), h('div.hint', {}, `每隻 ${fs.price} 元`)),
+          h('div.row', {}, button('+1', buyFish('guppy', 1, undefined, fs)), button('+3', buyFish('guppy', 3, undefined, fs))),
         ),
       ),
       ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).filter((id) => id !== 'guppy').map((id) => {

@@ -14,8 +14,26 @@ export type ColorFamily = 'red' | 'gold' | 'blue';
 /** 各色系的代表色相（度）。 */
 const HUE: Record<ColorFamily, number> = { red: 4, gold: 46, blue: 212 };
 
+/** 有整條魚精繪圖的鰭型（緞帶、燕尾、半月）；其他鰭型在花紋圖上用程式補畫。 */
+export type WholeFin = 'ribbon' | 'swallow' | 'halfmoon';
+export const WHOLE_FINS: WholeFin[] = ['ribbon', 'swallow', 'halfmoon'];
+
+export function wholeFin(p: GuppyPhenotype): WholeFin | null {
+  // 大C 是緞帶加上超長的背鰭臀鰭，緞帶圖的鰭不夠長，改用補畫
+  if (p.ribbon && !p.bigC) return 'ribbon';
+  if (p.swallow) return 'swallow';
+  if (p.tailShape === 'halfmoon') return 'halfmoon';
+  return null;
+}
+
+/** 去掉鰭型後綴，回到花紋圖本身。 */
+export function patternBase(base: string): string {
+  for (const f of WHOLE_FINS) if (base.endsWith(`-${f}`)) return base.slice(0, -f.length - 1);
+  return base;
+}
+
 export interface PhenotypeRecipe {
-  /** 花紋來源的精繪圖。 */
+  /** 花紋來源的精繪圖（有鰭型圖時帶「-鰭型」後綴）。 */
   base: string;
   from: ColorFamily;
   to: ColorFamily;
@@ -24,6 +42,12 @@ export interface PhenotypeRecipe {
 }
 
 export function phenotypeRecipe(p: GuppyPhenotype): PhenotypeRecipe {
+  const r = patternRecipe(p);
+  const fin = wholeFin(p);
+  return fin ? { ...r, base: `${r.base}-${fin}` } : r;
+}
+
+function patternRecipe(p: GuppyPhenotype): PhenotypeRecipe {
   const to: ColorFamily = p.gold && !p.tuxedo ? 'gold' : p.red ? 'red' : 'blue';
   if (p.snake) {
     if (to === 'gold') return { base: 'guppy-male-cobra', from: 'gold', to, albino: p.albino };
@@ -45,7 +69,9 @@ export function parseRecipeKey(key: string): PhenotypeRecipe | null {
   const [base, rest] = key.split('~');
   if (!rest) return null;
   const [to, albino] = rest.split('-') as [ColorFamily, string | undefined];
-  const from: ColorFamily = base.endsWith('cobra') && !base.endsWith('redcobra') ? 'gold' : base.endsWith('bluegrass') || base.endsWith('tuxedo') ? 'blue' : 'red';
+  const pat = patternBase(base);
+  // 單片鰭圖（fin-…）都是藍色的
+  const from: ColorFamily = pat.startsWith('fin-') ? 'blue' : pat.endsWith('cobra') && !pat.endsWith('redcobra') ? 'gold' : pat.endsWith('bluegrass') || pat.endsWith('tuxedo') ? 'blue' : 'red';
   return { base, from, to, albino: albino === 'albino' };
 }
 
