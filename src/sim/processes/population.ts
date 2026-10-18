@@ -1,3 +1,4 @@
+import { breedingFactor, nutritionFactor } from '../food';
 import { temperatureFactor } from '../chemistry';
 import { chance, nextRandom } from '../random';
 import { FISH_SPECIES, type FishSpeciesId } from '../species';
@@ -85,7 +86,7 @@ function grow(fish: Fish, tf: number, dt: number): void {
   const sp = FISH_SPECIES[fish.species];
   if (fish.lengthCm >= sp.adultLengthCm) return;
   const k = Math.log(10) / (sp.daysToAdult * 24);
-  const food = fish.hunger < 0.8 ? 1 : 0.2;
+  const food = (fish.hunger < 0.8 ? 1 : 0.2) * nutritionFactor(fish.nutrition);
   fish.lengthCm += k * tf * food * (sp.adultLengthCm - fish.lengthCm) * dt;
 }
 
@@ -179,7 +180,7 @@ function breed(state: TankState, tf: number, dt: number): void {
     // 太老的母魚不再懷孕
     const relaxed = warmEnough && lifeFraction(mother) < 0.9 && mother.health > 0.7 && mother.stress < 0.4 && mother.hunger < 0.7;
     const males = relaxed ? living.filter((f) => f.species === mother.species && f.sex === 'male' && !isJuvenile(f)) : [];
-    if (males.length > 0 && chance(state.rng, 0.5 / 24, dt)) {
+    if (males.length > 0 && chance(state.rng, (0.5 / 24) * breedingFactor(mother.breedingCondition), dt)) {
       mother.pregnancy = 0.001;
       // 尾鰭越大的公魚越受母魚青睞（性擇），但誰當爸爸還是有運氣成分
       const weights = males.map((m) => 0.5 + (m.genome?.tail ?? 50) / 100);
