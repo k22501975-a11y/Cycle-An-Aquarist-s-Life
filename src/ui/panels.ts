@@ -38,6 +38,17 @@ export interface PanelContext {
   toasts: Toasts;
   /** 播放音效（沒有聲音引擎時不做事）。 */
   sound?: (id: SoundId) => void;
+  /** 做一件可能後悔的事，通知上附「復原」按鈕。 */
+  undoable?: (run: () => void, text: string, tone?: 'warn' | 'info') => void;
+}
+
+/** 沒有復原機制時（例如測試）就直接做並顯示通知。 */
+function doUndoable(ctx: Pick<PanelContext, 'toasts' | 'undoable'>, run: () => void, text: string, tone: 'warn' | 'info' = 'info'): void {
+  if (ctx.undoable) ctx.undoable(run, text, tone);
+  else {
+    run();
+    ctx.toasts.show(text, tone);
+  }
 }
 
 const alive = (s: TankState) => s.fish.filter((f) => f.alive);
@@ -75,7 +86,7 @@ export function feedPanel({ game, sheet, toasts, sound }: PanelContext): Node {
   );
 }
 
-export function waterChangePanel({ game, sheet, toasts, sound }: PanelContext): Node {
+export function waterChangePanel({ game, sheet, toasts, sound, undoable }: PanelContext): Node {
   let fraction = 0.3;
   let matchTemp = true;
   const label = h('span', {}, '30%');
@@ -93,9 +104,8 @@ export function waterChangePanel({ game, sheet, toasts, sound }: PanelContext): 
     h('label.field', {}, '換水量 ', label, slider),
     h('label.check', {}, check, ' 新水對好溫度（沒對溫，水溫驟變會讓魚緊迫）'),
     button('開始換水', () => {
-      game.act((st) => waterChange(st, fraction, matchTemp ? { tempC: st.water.tempC } : {}));
+      doUndoable({ toasts, undoable }, () => game.act((st) => waterChange(st, fraction, matchTemp ? { tempC: st.water.tempC } : {})), `換了 ${Math.round(fraction * 100)}% 的水`);
       sound?.('water');
-      toasts.show(`換了 ${Math.round(fraction * 100)}% 的水`);
       sheet.close();
     }, 'primary'),
   );
@@ -277,8 +287,7 @@ export function shopPanel(ctx: PanelContext, tab: 'fish' | 'plants' | 'gear' = '
       h('p.warn-text', {}, '換過濾器會失去舊濾材上的硝化菌！'),
       ...Object.values(FILTERS).map((f) =>
         item(f.name, eq.filter?.spec.id === f.id, () => {
-          game.act((st) => replaceFilter(st, f));
-          toasts.show(`換上${f.name}，濾材要重新養菌`, 'warn');
+          doUndoable(ctx, () => game.act((st) => replaceFilter(st, f)), `換上${f.name}，濾材要重新養菌`, 'warn');
         }, `濾材容量 ${f.bacteriaCapacityMgPerHour}`),
       ),
       ...Object.values(HEATERS).map((x) =>
@@ -302,7 +311,7 @@ export function shopPanel(ctx: PanelContext, tab: 'fish' | 'plants' | 'gear' = '
   return h('div.stack', {}, tabs, content);
 }
 
-export function maintenancePanel({ game, toasts }: PanelContext): Node {
+export function maintenancePanel({ game, toasts, undoable }: PanelContext): Node {
   const s = game.state;
   const eq = s.equipment;
   const toggle = (label: string, on: boolean, flip: (st: TankState) => void) =>
@@ -352,16 +361,13 @@ export function maintenancePanel({ game, toasts }: PanelContext): Node {
       'div.row.wrap',
       {},
       button('用缸水洗濾材', () => {
-        game.act((st) => rinseFilterMedia(st, 'tank'));
-        toasts.show('用換出來的缸水洗了濾材');
+        doUndoable({ toasts, undoable }, () => game.act((st) => rinseFilterMedia(st, 'tank')), '用換出來的缸水洗了濾材');
       }),
       button('用自來水洗濾材', () => {
-        game.act((st) => rinseFilterMedia(st, 'tap'));
-        toasts.show('用自來水洗了濾材', 'warn');
+        doUndoable({ toasts, undoable }, () => game.act((st) => rinseFilterMedia(st, 'tap')), '用自來水洗了濾材：自來水的氯會殺死硝化菌', 'warn');
       }),
       button('下白點藥', () => {
-        game.act((st) => doseIchMedication(st));
-        toasts.show('下了一份白點藥（對蝦有毒）', 'warn');
+        doUndoable({ toasts, undoable }, () => game.act((st) => doseIchMedication(st)), '下了一份白點藥（對蝦有毒）', 'warn');
       }),
     ),
   );

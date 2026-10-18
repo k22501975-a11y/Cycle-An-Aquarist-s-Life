@@ -57,11 +57,23 @@ export class Toasts {
     parent.append(this.host);
   }
 
-  show(text: string, tone: 'bad' | 'warn' | 'info' = 'info'): void {
-    const el = h(`div.toast.${tone}`, {}, text);
+  /** action：通知上的按鈕（例如「復原」），有按鈕的通知停留久一點。 */
+  show(text: string, tone: 'bad' | 'warn' | 'info' = 'info', action?: { label: string; run: () => void }): void {
+    const el = h(`div.toast.${tone}`, {}, h('span', {}, text));
+    if (action) {
+      el.append(
+        h('button.toast-action', {
+          onclick: () => {
+            action.run();
+            el.remove();
+          },
+        }, action.label),
+      );
+    }
     this.host.append(el);
-    setTimeout(() => el.classList.add('fade'), 4500);
-    setTimeout(() => el.remove(), 5200);
+    const stay = action ? 8000 : 4500;
+    setTimeout(() => el.classList.add('fade'), stay);
+    setTimeout(() => el.remove(), stay + 700);
     while (this.host.children.length > 4) this.host.firstElementChild?.remove();
   }
 }

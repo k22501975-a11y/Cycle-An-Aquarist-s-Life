@@ -3,7 +3,8 @@ import { AudioEngine } from './audio/engine';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
 import { eventSound } from './audio/sounds';
 import { Game, newGameState, SPEED_OPTIONS } from './game/game';
-import { browserStore, catchUp, clearSave, readSave, writeSave } from './game/save';
+import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
+import { installCrashGuard } from './ui/crash';
 import { loadPaintedArt } from './render/painted';
 import { TankView } from './render/tank-view';
 import * as sim from './sim';
@@ -66,7 +67,8 @@ async function start(): Promise<void> {
 
   // 讀取存檔並補算離開期間的時間
   const store = browserStore();
-  const saved = readSave(store);
+  const loaded = loadSave(store);
+  const saved = loaded.file;
   const offline = saved ? catchUp(saved) : null;
   const game = new Game(saved?.state ?? newGameState(), saved?.timeScale ?? 7);
   const save = () => writeSave(store, game.state, game.clock.timeScale);
@@ -110,7 +112,50 @@ async function start(): Promise<void> {
   };
   setBigText(uiPrefs.bigText);
   const codexSeen = loadCodexSeen(store);
-  const ctx: PanelContext = { game, sheet, toasts, sound: (id) => audio.play(id) };
+  // 會後悔的操作（換水、洗濾材、換過濾器、下藥）：先記下整缸狀態，通知上可以按「復原」。
+  const undoable = (run: () => void, text: string, tone: 'warn' | 'info' = 'info') => {
+    const before = structuredClone(game.state);
+    run();
+    toasts.show(text, tone, {
+      label: '復原',
+      run: () => {
+        game.load(before);
+        toasts.show('已經復原');
+      },
+    });
+  };
+  const ctx: PanelContext = { game, sheet, toasts, sound: (id) => audio.play(id), undoable };
+  // 存檔匯出成檔案（換手機、怕瀏覽器清掉資料時用）
+  const exportSave = () => {
+    const blob = new Blob([serializeSave(game.state, game.clock.timeScale)], { type: 'application/json' });
+    const a = h('a', { href: URL.createObjectURL(blob), download: `cycle-save-day${Math.floor(game.state.hours / 24) + 1}.json` });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  const importSave = () => {
+    const input = h('input', { type: 'file', accept: 'application/json,.json' }) as HTMLInputElement;
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const res = parseSave(await file.text());
+      if (!res.ok) {
+        toasts.show(res.reason === 'newer' ? '這個存檔來自比較新的版本，請先更新遊戲' : '讀不出這個存檔檔案', 'bad');
+        return;
+      }
+      if (!confirm('要用這個檔案取代目前的水缸嗎？目前的進度會被覆蓋。')) return;
+      const before = structuredClone(game.state);
+      game.clock.timeScale = res.file.timeScale;
+      game.load(res.file.state);
+      save();
+      sheet.close();
+      select(null);
+      toasts.show('匯入了存檔', 'info', { label: '復原', run: () => (game.load(before), save()) });
+    });
+    input.click();
+  };
+  const crash = installCrashGuard({ save, exportSave });
   debugHandle.audio = audio;
 
   // ---- 選取卡：點一條魚，顯示名字、品系、健康與壓力 ----
@@ -195,7 +240,8 @@ async function start(): Promise<void> {
       ...list.map((c) => h(`span.cap.${c.tone}${c.stale ? '.stale' : ''}`, { title: c.title }, h('i.dot'), h('span.lbl', {}, c.label), h('b', {}, c.value))),
     );
   };
-  const menu = () =>
+  // 設定頁：聲音、顯示、時間、存檔、開發者
+  const settings = () =>
     h(
       'div.stack',
       {},
@@ -229,37 +275,53 @@ async function start(): Promise<void> {
         h('span', {}, '靜音'),
       ),
       h('p.hint', {}, '背景音樂是即時彈奏的指彈吉他，每次都不一樣；晚上關燈後會彈得比較輕。'),
-      h('h3', {}, '時間倍率（開發用）'),
-      h(
-        'div.tabs',
-        {},
-        ...SPEED_OPTIONS.map((opt) =>
-          h(
-            `button.tab${game.clock.timeScale === opt.scale ? '.active' : ''}`,
-            {
-              onclick: () => {
-                game.clock.timeScale = opt.scale;
-                save();
-                sheet.refresh();
-              },
-            },
-            opt.label,
-          ),
-        ),
-      ),
-      h('h3', {}, '紀錄與顯示'),
-      h('button.btn', { onclick: () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen)) }, '圖鑑：魚蝦、水草、設備、疾病'),
-      h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) }, '水質趨勢與事件紀錄'),
+      h('h3', {}, '顯示'),
       h(
         'label.check-row',
         {},
         h('input', { type: 'checkbox', checked: uiPrefs.bigText, onchange: (e: Event) => setBigText((e.target as HTMLInputElement).checked) }),
         h('span', {}, '放大文字'),
       ),
-      h('h3', {}, '新手引導'),
-      h('button.btn', { onclick: () => (sheet.close(), guide.restart()) }, '重新看阿德老闆的教學'),
+      h('div.item', {}, h('b', {}, '語言'), h('span.owned', {}, '繁體中文')),
+      h('p.hint', {}, '燈號除了顏色也用形狀區分：圓形正常、三角形注意、菱形危險。'),
+      h('h3', {}, '時間'),
+      h('p.hint', {}, '遊戲時間是現實的 7 倍：現實 1 天＝遊戲 1 週，現實 1 小時＝遊戲 7 小時。關掉網頁時時間照常前進，下次打開會補算（最多兩週）。'),
+      h(
+        'details.dev',
+        {},
+        h('summary', {}, '開發用：加快時間'),
+        h(
+          'div.tabs',
+          {},
+          ...SPEED_OPTIONS.map((opt) =>
+            h(
+              `button.tab${game.clock.timeScale === opt.scale ? '.active' : ''}`,
+              {
+                onclick: () => {
+                  game.clock.timeScale = opt.scale;
+                  save();
+                  sheet.refresh();
+                },
+              },
+              opt.label,
+            ),
+          ),
+        ),
+      ),
+      h('h3', {}, '存檔'),
+      h('div.row', {}, h('button.btn', { onclick: exportSave }, '匯出存檔'), h('button.btn', { onclick: importSave }, '從檔案匯入')),
+      h('p.hint', {}, '遊戲每 10 秒自動存檔，每 30 分鐘自動備份一次；存檔壞掉時會自動用備份還原。換手機時可以匯出成檔案帶過去。'),
+      h('h3', {}, '開發者'),
       h('button.btn', { onclick: () => sheet.open('開發者數值', () => debugPanel(ctx), { live: true }) }, '開發者數值'),
-      h('p.hint', {}, '遊戲每 10 秒自動存檔；關掉網頁期間的時間，下次打開會以 ×7 補算（最多兩週）。'),
+    );
+  const menu = () =>
+    h(
+      'div.stack',
+      {},
+      h('button.btn', { onclick: () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen)) }, '圖鑑：魚蝦、水草、設備、疾病'),
+      h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) }, '水質趨勢與事件紀錄'),
+      h('button.btn', { onclick: () => (sheet.close(), guide.restart()) }, '重新看阿德老闆的教學'),
+      h('button.btn', { onclick: () => sheet.open('設定', settings) }, '設定：聲音、顯示、時間、存檔'),
       h(
         'button.btn',
         {
@@ -368,6 +430,9 @@ async function start(): Promise<void> {
     save();
   });
 
+  if (loaded.status === 'restored') toasts.show('存檔讀不出來，已經用自動備份還原', 'warn');
+  else if (loaded.status === 'newer') toasts.show('這個存檔來自比較新的版本，先幫你另外保留起來，這裡開了一個新缸', 'warn');
+  else if (loaded.status === 'corrupt') toasts.show('存檔壞掉了，也沒有備份，只好開一個新缸', 'bad');
   if (offline && offline.hours >= 1) {
     const days = offline.hours / 24;
     toasts.show(`你不在的期間過了 ${days >= 1 ? `${days.toFixed(1)} 天` : `${Math.round(offline.hours)} 小時`}${offline.capped ? '（只補算到兩週）' : ''}`);
@@ -411,6 +476,15 @@ async function start(): Promise<void> {
   };
   for (const type of ['pointerdown', 'pointermove', 'wheel', 'keydown']) window.addEventListener(type, wake, { passive: true });
   app.ticker.add((ticker) => {
+    try {
+      tick(ticker.deltaMS);
+    } catch (error) {
+      app.ticker.stop();
+      crash(error);
+    }
+  });
+  function tick(deltaMS: number) {
+    const ticker = { deltaMS };
     game.advance(ticker.deltaMS);
     view.update(game.state, ticker.deltaMS / 1000);
 
@@ -439,7 +513,7 @@ async function start(): Promise<void> {
         calm: game.clock.timeScale === 0 ? 1 : isLightOn(st) ? 0 : 0.8,
       });
     }
-  });
+  }
 }
 
 start();
