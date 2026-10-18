@@ -8,6 +8,8 @@ import {
   LIGHTS,
   step,
   TANKS,
+  linkTanks,
+  syncRoom,
   type SimEvent,
   type TankState,
 } from '../sim';
@@ -51,21 +53,39 @@ export function newGameState(seed = Date.now() % 2147483647): TankState {
 
 /**
  * 遊戲迴圈：把現實時間換算成模擬 tick，並把模擬產生的新事件交給畫面。
+ * 玩家可以有好幾缸，全部跟著同一個時鐘走；畫面和面板只看「目前這缸」（state）。
  * 不碰 DOM，方便測試。
  */
 export class Game {
   readonly clock: GameClock;
-  /** 最後一個已通知過的事件（事件陣列有長度上限，用物件本身而不是索引來追蹤）。 */
-  private lastSeen: SimEvent | undefined;
-  private eventListeners: Array<(e: SimEvent) => void> = [];
+  /** 所有的缸；第一缸是起始的主缸，錢包存在它身上。 */
+  tanks: TankState[];
+  /** 目前在看哪一缸。 */
+  active = 0;
+  /** 每缸最後一個已通知過的事件（事件陣列有長度上限，用物件本身而不是索引來追蹤）。 */
+  private lastSeen = new Map<TankState, SimEvent | undefined>();
+  private eventListeners: Array<(e: SimEvent, tank: number) => void> = [];
   private changeListeners: Array<() => void> = [];
 
-  constructor(public state: TankState, timeScale = 7) {
+  constructor(state: TankState, timeScale = 7, others: TankState[] = [], active = 0) {
     this.clock = new GameClock(timeScale);
-    this.lastSeen = state.events.at(-1);
+    this.tanks = [state, ...others];
+    this.active = Math.min(Math.max(0, active), this.tanks.length - 1);
+    linkTanks(this.tanks);
+    this.markSeen();
   }
 
-  onEvent(listener: (e: SimEvent) => void): void {
+  /** 目前這缸。 */
+  get state(): TankState {
+    return this.tanks[this.active];
+  }
+
+  /** 其他的缸（不含目前這缸）。 */
+  get others(): TankState[] {
+    return this.tanks.filter((_, i) => i !== this.active);
+  }
+
+  onEvent(listener: (e: SimEvent, tank: number) => void): void {
     this.eventListeners.push(listener);
   }
 
@@ -77,30 +97,78 @@ export class Game {
   /** 推進現實時間 realMs，回傳實際執行的 tick 數。 */
   advance(realMs: number): number {
     const ticks = Math.min(this.clock.advance(realMs), MAX_TICKS_PER_FRAME);
-    for (let i = 0; i < ticks; i++) step(this.state);
+    for (let i = 0; i < ticks; i++) for (const t of this.tanks) step(t);
     if (ticks > 0) this.flushEvents();
     return ticks;
   }
 
-  /** 執行一個玩家操作，並通知畫面。 */
+  /** 對目前這缸執行一個玩家操作，並通知畫面。房間的設定（冷氣、停電）跟著同步到每一缸。 */
   act<T>(action: (state: TankState) => T): T {
     const result = action(this.state);
-    this.flushEvents();
-    this.changeListeners.forEach((l) => l());
+    for (const t of this.others) syncRoom(this.state, t);
+    this.changed();
     return result;
   }
 
-  private flushEvents(): void {
-    const events = this.state.events;
-    const fresh = events.slice(this.lastSeen ? events.lastIndexOf(this.lastSeen) + 1 : 0);
-    this.lastSeen = events.at(-1);
-    fresh.forEach((e) => this.eventListeners.forEach((l) => l(e)));
+  /** 牽涉好幾缸的操作（買缸、魚換缸、收缸）。 */
+  actAll<T>(action: (tanks: TankState[]) => T): T {
+    const current = this.state;
+    const result = action(this.tanks);
+    linkTanks(this.tanks);
+    const i = this.tanks.indexOf(current);
+    this.active = i >= 0 ? i : Math.min(this.active, this.tanks.length - 1);
+    this.changed();
+    return result;
   }
 
-  /** 換成另一個存檔的狀態（讀檔、新遊戲）。 */
-  load(state: TankState): void {
-    this.state = state;
-    this.lastSeen = state.events.at(-1);
+  /** 切換到第 index 缸。 */
+  switchTo(index: number): void {
+    if (index < 0 || index >= this.tanks.length || index === this.active) return;
+    this.active = index;
+    this.changeListeners.forEach((l) => l());
+  }
+
+  private changed(): void {
+    this.flushEvents();
+    this.changeListeners.forEach((l) => l());
+  }
+
+  private markSeen(): void {
+    this.lastSeen = new Map(this.tanks.map((t) => [t, t.events.at(-1)]));
+  }
+
+  private flushEvents(): void {
+    this.tanks.forEach((t, index) => {
+      const events = t.events;
+      const last = this.lastSeen.get(t);
+      const fresh = events.slice(last ? events.lastIndexOf(last) + 1 : 0);
+      this.lastSeen.set(t, events.at(-1));
+      fresh.forEach((e) => this.eventListeners.forEach((l) => l(e, index)));
+    });
+  }
+
+  /** 換成另一個存檔的狀態（讀檔、新遊戲）：所有缸一起換掉。 */
+  load(state: TankState, others: TankState[] = [], active = 0): void {
+    this.tanks = [state, ...others];
+    this.active = Math.min(Math.max(0, active), this.tanks.length - 1);
+    linkTanks(this.tanks);
+    this.markSeen();
+    this.changeListeners.forEach((l) => l());
+  }
+
+  /** 復原：只把目前這缸換回操作前的樣子（其他缸不動）。 */
+  restoreActive(state: TankState): void {
+    // 復原前的錢包是複製出來的；把它的內容寫回共用的錢包（id 區段只會往前）
+    const wallet = this.tanks[0].economy;
+    const saved = state.economy;
+    if (wallet && saved && saved !== wallet) {
+      const block = Math.max(wallet.nextTankBlock ?? 0, saved.nextTankBlock ?? 0);
+      Object.assign(wallet, saved, { nextTankBlock: block || undefined });
+      state.economy = wallet;
+    }
+    this.tanks[this.active] = state;
+    linkTanks(this.tanks);
+    this.markSeen();
     this.changeListeners.forEach((l) => l());
   }
 }

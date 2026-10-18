@@ -13,6 +13,8 @@ import { FISH_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species
  */
 export interface TankState {
   version: 1;
+  /** 玩家幫這缸取的名字（多缸時顯示；沒取就叫「第 N 缸」）。 */
+  label?: string;
   /** 已模擬的遊戲小時數。 */
   hours: number;
   rng: RngState;

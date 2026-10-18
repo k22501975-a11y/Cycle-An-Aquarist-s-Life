@@ -1,4 +1,4 @@
-import { canClaimStarterPack, crowdingRatio, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, quarantineDays, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
+import { canClaimStarterPack, tankLabel, crowdingRatio, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, quarantineDays, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -83,7 +83,7 @@ export interface Todo {
 }
 
 /** 待辦卡：今天該做的事，嚴重的排前面。只用玩家看得到的資訊（症狀、死魚、設備狀態、自己做過的事）。 */
-export function todos(state: TankState): Todo[] {
+export function todos(state: TankState, others: TankState[] = []): Todo[] {
   const out: Todo[] = [];
   const living = state.fish.filter((f) => f.alive);
   const dead = state.fish.length - living.length;
@@ -109,7 +109,7 @@ export function todos(state: TankState): Todo[] {
   const crowd = crowdingRatio(state);
   if (crowd > 1) out.push({ text: `缸裡太擠了（${living.length} 條），賣掉一些或換大缸`, tone: 'bad' });
   else if (crowd > 0.8) out.push({ text: `魚快養滿了（${living.length} 條），可以開始賣一些`, tone: 'warn' });
-  if (canClaimStarterPack(state)) out.push({ text: '整缸都沒了？到商店領老闆送的起步包', tone: 'warn' });
+  if (canClaimStarterPack(state, others)) out.push({ text: '整缸都沒了？到商店領老闆送的起步包', tone: 'warn' });
   const coins = state.economy?.coins ?? 0;
   if (coins < 0) out.push({ text: `錢包透支 ${-coins} 元，賣些魚或插枝吧`, tone: 'warn' });
   const sub = eq.substrate;
@@ -155,4 +155,28 @@ export function todos(state: TankState): Todo[] {
   if (out.length === 0) out.push({ text: living.length === 0 ? '去商店買魚和水草吧' : '一切正常', tone: 'ok' });
   const rank = { bad: 0, warn: 1, ok: 2 };
   return out.sort((a, b) => rank[a.tone] - rank[b.tone]);
+}
+
+/** 這些待辦是整個房間共用的，不用在每一缸重複提醒。 */
+const SHARED_TODO = /^(停電中|錢包透支|整缸都沒了)/;
+
+/**
+ * 多缸的待辦：目前這缸的全部列出，其他缸有要處理的事也提醒一行（缸越多越難顧）。
+ */
+export function householdTodos(tanks: TankState[], active: number): Todo[] {
+  const current = tanks[active];
+  const others = tanks.filter((_, i) => i !== active);
+  const out = todos(current, others);
+  const extra: Todo[] = [];
+  tanks.forEach((t, i) => {
+    if (i === active) return;
+    const urgent = todos(t, tanks.filter((x) => x !== t)).filter((x) => x.tone !== 'ok' && !SHARED_TODO.test(x.text));
+    if (urgent.length === 0) return;
+    const more = urgent.length > 1 ? `（還有 ${urgent.length - 1} 件）` : '';
+    extra.push({ text: `${tankLabel(tanks, i)}：${urgent[0].text}${more}`, tone: urgent[0].tone });
+  });
+  if (extra.length === 0) return out;
+  const merged = [...out.filter((x) => x.text !== '一切正常'), ...extra];
+  const rank = { bad: 0, warn: 1, ok: 2 };
+  return merged.sort((a, b) => rank[a.tone] - rank[b.tone]);
 }

@@ -73,23 +73,26 @@ export interface Economy {
   meals?: number;
   /** 上次領保底起步包的時間（遊戲小時）。 */
   starterPackHours?: number;
+  /** 下一個新缸用的 id 區段（每缸的魚和水草 id 從不同區段開始，魚換缸也不會撞號）。 */
+  nextTankBlock?: number;
 }
 
 /** 保底起步包：整缸死光又沒錢時，水族店老闆送 3 條孔雀魚（GAME_DESIGN 第 14 節）。 */
 export const STARTER_PACK_COOLDOWN_DAYS = 7;
 export const STARTER_PACK_MAX_COINS = 200;
 
-export function canClaimStarterPack(state: TankState): boolean {
+/** others：同一個玩家的其他缸（多缸時任何一缸還有活魚就不送）。 */
+export function canClaimStarterPack(state: TankState, others: TankState[] = []): boolean {
   const e = economy(state);
-  const anyAlive = state.fish.some((f) => f.alive) || (state.quarantine?.fish ?? []).some((f) => f.alive);
+  const anyAlive = [state, ...others].some((t) => t.fish.some((f) => f.alive) || (t.quarantine?.fish ?? []).some((f) => f.alive));
   const hadFish = state.events.some((ev) => ev.type === 'fish_died') || state.fish.length > 0;
   const cooled = e.starterPackHours === undefined || state.hours - e.starterPackHours >= STARTER_PACK_COOLDOWN_DAYS * 24;
   return !anyAlive && hadFish && e.coins < STARTER_PACK_MAX_COINS && cooled;
 }
 
 /** 領起步包：1 公 2 母、確認健康的孔雀魚。送的魚不能賣回店裡（牠們生的可以）。 */
-export function claimStarterPack(state: TankState, addGuppy: (state: TankState, sex: 'male' | 'female') => Fish): boolean {
-  if (!canClaimStarterPack(state)) return false;
+export function claimStarterPack(state: TankState, addGuppy: (state: TankState, sex: 'male' | 'female') => Fish, others: TankState[] = []): boolean {
+  if (!canClaimStarterPack(state, others)) return false;
   for (const sex of ['male', 'female', 'female'] as const) addGuppy(state, sex).gift = true;
   economy(state).starterPackHours = state.hours;
   return true;

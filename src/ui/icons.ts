@@ -17,5 +17,6 @@ export const ICONS = {
   gear: svg(`<circle cx="0" cy="0" r="5" stroke="${GOLD}"/><path d="M0,-13 L0,-9 M0,9 L0,13 M-13,0 L-9,0 M9,0 L13,0 M-9.2,-9.2 L-6.4,-6.4 M6.4,6.4 L9.2,9.2 M-9.2,9.2 L-6.4,6.4 M6.4,-6.4 L9.2,-9.2"/><circle cx="0" cy="0" r="9"/>`),
   net: svg(`<path d="M-13,13 L-3,3"/><ellipse cx="4" cy="-4" rx="9" ry="7" transform="rotate(-45 4 -4)"/><path d="M-1,-9 L9,1 M2,-12 L12,-2 M-3,-4 L4,3" stroke-width="1" stroke="${GOLD}"/>`),
   todo: svg(`<rect x="-11" y="-10" width="22" height="22" rx="4"/><path d="M-11,-3 L11,-3"/><path d="M-5,-14 L-5,-7 M5,-14 L5,-7"/><path d="M-5,4 L-1,8 L6,1" stroke="${GOLD}"/>`),
+  tank: svg(`<rect x="-13" y="-9" width="26" height="19" rx="2.5"/><path d="M-13,-4 Q-6.5,-6 0,-4 T13,-4" stroke="${GOLD}"/><path d="M-9,13 L9,13"/><path d="M-3,4 q3,-3 6,0 q-3,3 -6,0 M3,4 l2.5,-2 l0,4 z" stroke-width="1.3"/>`),
   menu: svg(`<path d="M-9,-6 L9,-6 M-9,0 L9,0 M-9,6 L9,6"/>`),
 };
