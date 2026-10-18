@@ -13,7 +13,11 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, 'PingFang TC', 'Noto Sans TC', sans-serif; overflow: hidden; -webkit-tap-highlight-color: transparent; }
-#app { display: flex; flex-direction: column; height: 100dvh; max-width: 560px; margin: 0 auto; }
+/* 直向：狀態列／水缸／操作列 由上而下。橫向：操作列移到右側，水缸佔滿剩下的寬度。 */
+#app { display: grid; height: 100dvh; grid-template: 'hud' auto 'stage' 1fr 'tools' auto / 1fr; }
+#hud { grid-area: hud; }
+#stage { grid-area: stage; }
+#toolbar { grid-area: tools; }
 
 #hud { display: flex; align-items: center; gap: 8px; padding: calc(env(safe-area-inset-top) + 8px) 12px 8px; font-size: 14px; }
 #hud .clock { font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -22,7 +26,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 #hud select { background: var(--panel); color: var(--text); border: 1px solid var(--panel-2); border-radius: 8px; padding: 4px 6px; font-size: 13px; }
 #hud .icon-btn { background: none; border: none; color: var(--muted); font-size: 18px; padding: 4px; }
 
-#stage { flex: 1; position: relative; min-height: 0; margin: 0 8px; border-radius: 10px; overflow: hidden; border: 2px solid rgba(143, 201, 217, 0.4); }
+#stage { position: relative; min-height: 0; min-width: 0; overflow: hidden; }
 #stage canvas { display: block; touch-action: manipulation; }
 
 #toolbar { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; padding: 8px 8px calc(env(safe-area-inset-bottom) + 8px); }
@@ -35,6 +39,16 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .sheet-backdrop.open { opacity: 1; pointer-events: auto; }
 .sheet { position: fixed; left: 50%; bottom: 0; width: 100%; max-width: 560px; max-height: 75dvh; overflow-y: auto; transform: translate(-50%, 100%); transition: transform 0.22s ease-out; background: var(--panel); border-radius: 16px 16px 0 0; padding: 4px 16px calc(env(safe-area-inset-bottom) + 16px); }
 .sheet.open { transform: translate(-50%, 0); }
+
+@media (orientation: landscape) {
+  #app { grid-template: 'hud hud' auto 'stage tools' 1fr / 1fr auto; }
+  #hud { padding-left: calc(env(safe-area-inset-left) + 12px); padding-right: calc(env(safe-area-inset-right) + 12px); }
+  #toolbar { grid-template-columns: 1fr; grid-auto-rows: minmax(0, 72px); align-content: center; gap: 6px; width: 76px; padding: 4px calc(env(safe-area-inset-right) + 8px) calc(env(safe-area-inset-bottom) + 8px) 4px; }
+  #toolbar button { min-height: 40px; max-height: 64px; }
+  /* 面板改成從右邊滑出，不擋住水缸 */
+  .sheet { left: auto; right: 0; top: 0; bottom: 0; width: min(420px, 50vw); max-width: none; max-height: none; transform: translateX(100%); border-radius: 16px 0 0 16px; padding-right: calc(env(safe-area-inset-right) + 16px); }
+  .sheet.open { transform: translateX(0); }
+}
 .sheet-head { display: flex; align-items: center; position: sticky; top: 0; background: var(--panel); padding: 10px 0 6px; }
 .sheet-title { flex: 1; margin: 0; font-size: 17px; }
 .sheet-close { background: none; border: none; color: var(--muted); font-size: 18px; padding: 6px; }
