@@ -2,12 +2,13 @@ import { Application, BlurFilter, Container, FederatedPointerEvent, Graphics, Sp
 import { FISH_SPECIES, PLANT_SPECIES, isCo2Injecting, isJuvenile, isLightOn, lookVariant, observeSymptoms, phenotype, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture } from './painted';
-import { DEATH_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
+import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { BITE_SECONDS, biteKick, pickEaten, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type Mouth, type Pellet } from './feeding';
 import { canvasTexture, flakeTextures, makeCanvas, mix, softDotTexture } from './paint';
 import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame, TEST_SECONDS, WATER_CHANGE_SECONDS, type KitParam } from './ops-fx';
 import { PlantMesh } from './plant-sway';
+import { clawPose, clawRate, pleopods, type Pt } from './shrimp-limbs';
 import { phenotypeRecipe, recipeKey } from './phenotype-art';
 import { clampPan, fitCamera, maxSpan, zoomAt, type Camera } from './camera';
 import { type QualitySpec, qualitySpec } from './quality';
@@ -86,6 +87,8 @@ interface FishView {
   mouth: Mouth | null;
   /** 轉身中的面向（壓扁再彈回）。 */
   turn: TurnState;
+  /** 蝦的小螯與腹足（程式畫的細線）。 */
+  limbs: Graphics | null;
 }
 
 interface Mote {
@@ -812,6 +815,12 @@ export class TankView {
       const p = this.food.splice(pick.food, 1)[0];
       if (pick.eater !== null) {
         views[pick.eater].biteT = 0;
+        // 魚咬到飼料冒一兩顆小氣泡
+        if (views[pick.eater].swimmer.species !== 'cherry_shrimp') {
+          for (let i = 0, n = 1 + Math.floor(this.rand() * 2); i < n; i++) {
+            this.bubbles.push({ x: p.x + (this.rand() - 0.5) * 4, y: p.y - 2, r: (1.5 + this.rand() * 1.5) * this.hs, speed: 22 + this.rand() * 10 });
+          }
+        }
         for (let i = 0; i < 3; i++) {
           this.crumbs.push({ x: p.x, y: p.y, vx: (this.rand() - 0.5) * 30 * scale, vy: (this.rand() - 0.8) * 20 * scale, t: 0 });
         }
@@ -883,6 +892,7 @@ export class TankView {
       deathT: fish.alive ? -1 : DEATH_SECONDS,
       biteT: BITE_SECONDS,
       turn: { f: swimmer.vx < 0 ? 1 : -1, v: 0 },
+      limbs: null,
       mouth: null,
       z,
       zTarget: z,
@@ -908,9 +918,64 @@ export class TankView {
     view.rig = tex && painted ? new PaintedRig(painted, tex, look) : new FishRig(fish.species, look);
     view.rig.addChildAt(view.eggs, 0);
     view.rig.addChild(view.spots);
+    view.limbs?.destroy();
+    view.limbs = null;
+    if (fish.species === 'cherry_shrimp' && view.rig instanceof PaintedRig) {
+      view.limbs = new Graphics();
+      view.rig.addChild(view.limbs);
+    }
     view.holder.addChild(view.rig);
     view.ichDrawn = false;
     view.eggsDrawn = false;
+  }
+
+  /** 蝦：兩支小螯輪流夾底沙、抱蛋母蝦搧腹足、走路時步足擺、受驚時身體一縮。 */
+  private drawShrimpLimbs(view: FishView, fish: Fish, dt: number): void {
+    const rig = view.rig;
+    const g = view.limbs;
+    if (!(rig instanceof PaintedRig) || !g) return;
+    g.clear();
+    const s = view.swimmer;
+    const scale = this.motionScale;
+    const speedRatio = Math.min(1, Math.abs(s.vx) / (10 * scale));
+    rig.walk = fish.alive && !(s.startle! > 0) ? speedRatio : 0;
+    if (!fish.alive) return;
+    if (s.startle! > 0) {
+      // 尾巴一收：身體縮短、往後彈
+      const k = s.startle! / STARTLE_SECONDS;
+      rig.scale.x *= 1 - 0.18 * Math.sin(Math.PI * k);
+      return;
+    }
+    const w = rig.lengthPx, h = rig.heightPx;
+    const at = (p: Pt) => ({ x: -(p.x - 0.5) * w, y: (p.y - 0.5) * h });
+    const t = this.time + fish.id * 0.37;
+    const width = w * 0.012;
+    const color = fish.sex === 'female' && !isJuvenile(fish) ? 0xc8402c : 0xe06a50;
+    // 抱蛋母蝦的腹足（畫在螯後面）
+    if (fish.sex === 'female' && fish.pregnancy > 0) {
+      for (const leg of pleopods(t, true)) {
+        const a = at(leg.from), b = at(leg.to);
+        g.moveTo(a.x, a.y).lineTo(b.x, b.y);
+      }
+      g.stroke({ color, alpha: 0.75, width: width * 0.8, cap: 'round' });
+    }
+    const { rate, reach } = clawRate(!!s.eating, speedRatio);
+    for (const i of [0, 1]) {
+      const c = clawPose(t, rate, i, reach);
+      const a = at(c.base), e = at(c.elbow), tip = at(c.tip);
+      g.moveTo(a.x, a.y).lineTo(e.x, e.y).lineTo(tip.x, tip.y).stroke({ color, alpha: 0.85, width, cap: 'round', join: 'round' });
+      // 小鉗子：兩根短指，張開或夾緊
+      const dx = tip.x - e.x, dy = tip.y - e.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const f = w * 0.028, spread = 0.15 + 0.5 * c.open;
+      for (const sgn of [-1, 1]) {
+        const ang = Math.atan2(uy, ux) + sgn * spread;
+        g.moveTo(tip.x, tip.y).lineTo(tip.x + Math.cos(ang) * f, tip.y + Math.sin(ang) * f);
+      }
+      g.stroke({ color: 0xf08a6a, alpha: 0.9, width: width * 0.7, cap: 'round' });
+    }
+    void dt;
   }
 
   private syncFish(state: TankState, dt: number): void {
@@ -955,7 +1020,8 @@ export class TankView {
 
       view.holder.position.set(swimmer.x, swimmer.y);
       // 圖層是頭朝左畫的：往右游時水平翻轉。轉身時身體先壓窄再彈回，不是瞬間翻面。
-      if (fish.alive) stepTurn(view.turn, swimmer.vx, dt);
+      // 蝦受驚往後彈開時頭的方向不變
+      if (fish.alive && !(swimmer.startle! > 0)) stepTurn(view.turn, swimmer.vx, dt);
       const facingLeft = view.turn.f > 0;
       const turn = turnScale(view.turn.f);
       const k = (this.lengthPx(fish) / rig.lengthPx) * depth;
@@ -986,11 +1052,15 @@ export class TankView {
       const dir = facingLeft ? -1 : 1;
       view.biteT += dt;
       const kick = biteKick(view.biteT);
-      if (kick > 0) {
+      if (kick > 0 && fish.species !== 'cherry_shrimp') {
         view.holder.x += dir * kick * len * 0.12;
         rig.rotation += dir * kick * 0.18;
+        // 張口咬的瞬間身體壓扁一成再彈回
+        rig.scale.x *= 1 - 0.1 * kick;
         rig.scale.y *= 1 + 0.05 * kick;
       }
+      if (rig instanceof PaintedRig) rig.setMouthOpen(kick > 0.15 && fish.species !== 'cherry_shrimp');
+      if (fish.species === 'cherry_shrimp') this.drawShrimpLimbs(view, fish, dt);
       view.mouth = fish.alive ? { x: swimmer.x + dir * len * 0.25, y: swimmer.y, reach: Math.max(10, len * 0.55) } : null;
       const spotted = fish.alive && symptoms.includes('white_spots');
       if (spotted !== view.ichDrawn) {
