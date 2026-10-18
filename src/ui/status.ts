@@ -1,4 +1,4 @@
-import { FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, quarantineDays, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
+import { canClaimStarterPack, crowdingRatio, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, quarantineDays, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -96,6 +96,20 @@ export function todos(state: TankState): Todo[] {
   if (symptoms.some((x) => x.s.includes('white_spots'))) out.push({ text: '有魚身上出現白點', tone: 'bad' });
   if (symptoms.some((x) => x.s.includes('gasping'))) out.push({ text: '魚在水面喘氣', tone: 'bad' });
   if (symptoms.some((x) => x.s.includes('white_patches'))) out.push({ text: '有魚身上長出白色棉絮狀的斑', tone: 'bad' });
+  // 只用玩家看得到的資訊：最近一次測水的讀數、缸裡有幾條魚
+  const reading = state.lastTest && state.hours - state.lastTest.hours <= TEST_FORGET_HOURS ? state.lastTest.reading : null;
+  if (reading && living.length > 0) {
+    if (reading.kh <= 1) out.push({ text: `KH 只剩 ${reading.kh}，pH 隨時會崩，多換點水`, tone: 'bad' });
+    else if (reading.kh <= 2) out.push({ text: `KH 偏低（${reading.kh}），換水把它補回來`, tone: 'warn' });
+    const phMin = Math.max(...living.map((f) => FISH_SPECIES[f.species].ph.min));
+    const phMax = Math.min(...living.map((f) => FISH_SPECIES[f.species].ph.max));
+    if (reading.ph < phMin - 0.1) out.push({ text: `pH 太低（${reading.ph}），魚會緊迫`, tone: 'warn' });
+    else if (reading.ph > phMax + 0.1) out.push({ text: `pH 太高（${reading.ph}），魚會緊迫`, tone: 'warn' });
+  }
+  const crowd = crowdingRatio(state);
+  if (crowd > 1) out.push({ text: `缸裡太擠了（${living.length} 條），賣掉一些或換大缸`, tone: 'bad' });
+  else if (crowd > 0.8) out.push({ text: `魚快養滿了（${living.length} 條），可以開始賣一些`, tone: 'warn' });
+  if (canClaimStarterPack(state)) out.push({ text: '整缸都沒了？到商店領老闆送的起步包', tone: 'warn' });
   const coins = state.economy?.coins ?? 0;
   if (coins < 0) out.push({ text: `錢包透支 ${-coins} 元，賣些魚或插枝吧`, tone: 'warn' });
   const sub = eq.substrate;

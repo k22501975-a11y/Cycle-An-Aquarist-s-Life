@@ -6,6 +6,9 @@ import {
   addHardscape,
   addPlant,
   buybackRefusal,
+  canClaimStarterPack,
+  claimStarterPack,
+  chargeMeal,
   economy,
   FISH_PRICES,
   fishBuybackPrice,
@@ -104,8 +107,8 @@ export function feedPanel({ game, sheet, toasts, sound }: PanelContext): Node {
   if (meal <= 0) return h('p', {}, '缸裡還沒有魚。');
   const give = (mg: number, label: string) => () => {
     game.act((st) => {
-      // 飼料錢很少，錢不夠也讓玩家餵（不讓魚因為沒錢餓死）
-      economy(st).coins -= price('use:feed');
+      // 飼料錢每週跟電費一起結算，沒錢也能餵，魚不會因為沒錢餓死
+      chargeMeal(st);
       feed(st, mg);
     });
     sound?.('feed');
@@ -347,6 +350,19 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     content = h(
       'div.stack',
       {},
+      canClaimStarterPack(game.state)
+        ? h(
+            'div.item.gift',
+            {},
+            h('div', {}, h('b', {}, '老闆送你重新開始'), h('div.hint', {}, '整缸都沒了也別灰心。水族店老闆送你 1 公 2 母的孔雀魚（送的不能賣回店裡，生的小魚可以）。先想想上次出了什麼事。')),
+            button('收下', () => {
+              game.act((st) => claimStarterPack(st, (s2, sex) => addFish(s2, 'guppy', { carriesIch: false, carries: [], sex, pregnant: false })));
+              ctx.sound?.('quest');
+              toasts.show('收下 3 條孔雀魚，這次慢慢來');
+              sheet.open('商店', () => shopPanel(ctx, 'fish'));
+            }, 'primary'),
+          )
+        : null,
       game.state.quarantine
         ? h('p.hint', {}, `新買的魚會先放進檢疫盒，觀察 ${QUARANTINE_DAYS} 天沒問題再移到主缸。`)
         : h('p.hint', {}, '店裡的魚可能帶著白點蟲或其他病，直接放進主缸可能傳染整缸。商店的「設備」可以買檢疫盒。'),

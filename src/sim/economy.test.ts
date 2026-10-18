@@ -69,8 +69,8 @@ describe('賣給水族店', () => {
     const before = economy(s).coins;
     expect(sellFish(s, fry.id)).toBe(0);
     expect(sellFish(s, sick.id)).toBe(0);
-    expect(sellFish(s, adult.id)).toBe(12);
-    expect(economy(s).coins).toBe(before + 12);
+    expect(sellFish(s, adult.id)).toBe(18);
+    expect(economy(s).coins).toBe(before + 18);
     expect(s.fish).not.toContain(adult);
   });
 

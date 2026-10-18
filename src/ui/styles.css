@@ -303,3 +303,4 @@ details.dev summary { cursor: pointer; color: var(--muted); font-size: 13px; mar
 .coins.debt b { color: var(--bad, #e07a6a); }
 .wallet { color: var(--gold); font-size: 14px; letter-spacing: 0.04em; }
 @media (max-width: 520px) { .coins { font-size: 13px; padding: 4px 9px 4px 6px; min-height: 30px; } .coins .coin { width: 13px; height: 13px; } }
+.item.gift { border-color: var(--gold); background: rgba(227, 189, 109, 0.08); }

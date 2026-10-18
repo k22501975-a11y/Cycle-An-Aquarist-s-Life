@@ -1,5 +1,5 @@
 import { isJuvenile, isLightOn, recordEvent, type Fish, type TankState } from './state';
-import type { FishSpeciesId, PlantSpeciesId } from './species';
+import { FISH_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 
 /**
  * 經濟（GAME_DESIGN 第 7 節、market-and-breeding.md §3.1）：
@@ -15,8 +15,17 @@ export const BILL_DAYS = 7;
 export const BUYBACK_SHARE = 0.3;
 /** 每個遊戲日最多賣給水族店幾次。 */
 export const DAILY_SELL_LIMIT = 10;
+/** 一餐飼料的錢（一罐 100 元約可以餵 200 餐）。 */
+export const FOOD_PER_MEAL = 0.5;
 
-export const FISH_PRICES: Record<FishSpeciesId, number> = { guppy: 40, zebrafish: 20, cherry_shrimp: 25 };
+/** 記一餐飼料，週末跟電費一起算。 */
+export function chargeMeal(state: TankState): void {
+  const e = economy(state);
+  e.meals = (e.meals ?? 0) + 1;
+}
+
+/** 店價：品系孔雀魚在台灣約 50～100 元一隻、斑馬魚 20 元、櫻花蝦 25 元。 */
+export const FISH_PRICES: Record<FishSpeciesId, number> = { guppy: 60, zebrafish: 20, cherry_shrimp: 25 };
 export const PLANT_PRICES: Record<PlantSpeciesId, number> = { anubias: 150, rotala: 60 };
 
 /** 設備、底材、造景、藥品、耗材的價格，鍵是「類別:id」。 */
@@ -45,10 +54,8 @@ export const PRICES: Record<string, number> = {
   'med:ich': 150,
   'med:antibiotic': 250,
   'med:dewormer': 200,
-  /** 一次完整的測水（一盒試劑約 300 元可以測 60 次）。 */
-  'use:test': 5,
-  /** 一餐的飼料。 */
-  'use:feed': 1,
+  /** 一次測水（一盒試紙約 200 元可以測 100 次）。 */
+  'use:test': 2,
 };
 
 export interface Economy {
@@ -61,6 +68,30 @@ export interface Economy {
   sold: { day: number; count: number };
   /** 剪下來還沒處理的插枝。 */
   cuttings: Partial<Record<PlantSpeciesId, number>>;
+  /** 這一期餵了幾餐（飼料錢跟電費一起每週結算）。 */
+  meals?: number;
+  /** 上次領保底起步包的時間（遊戲小時）。 */
+  starterPackHours?: number;
+}
+
+/** 保底起步包：整缸死光又沒錢時，水族店老闆送 3 條孔雀魚（GAME_DESIGN 第 14 節）。 */
+export const STARTER_PACK_COOLDOWN_DAYS = 7;
+export const STARTER_PACK_MAX_COINS = 200;
+
+export function canClaimStarterPack(state: TankState): boolean {
+  const e = economy(state);
+  const anyAlive = state.fish.some((f) => f.alive) || (state.quarantine?.fish ?? []).some((f) => f.alive);
+  const hadFish = state.events.some((ev) => ev.type === 'fish_died') || state.fish.length > 0;
+  const cooled = e.starterPackHours === undefined || state.hours - e.starterPackHours >= STARTER_PACK_COOLDOWN_DAYS * 24;
+  return !anyAlive && hadFish && e.coins < STARTER_PACK_MAX_COINS && cooled;
+}
+
+/** 領起步包：1 公 2 母、確認健康的孔雀魚。送的魚不能賣回店裡（牠們生的可以）。 */
+export function claimStarterPack(state: TankState, addGuppy: (state: TankState, sex: 'male' | 'female') => Fish): boolean {
+  if (!canClaimStarterPack(state)) return false;
+  for (const sex of ['male', 'female', 'female'] as const) addGuppy(state, sex).gift = true;
+  economy(state).starterPackHours = state.hours;
+  return true;
 }
 
 export function economy(state: TankState): Economy {
@@ -103,10 +134,12 @@ export function updateEconomy(state: TankState, dt: number): void {
   const e = economy(state);
   e.kwh += (powerWatts(state) / 1000) * dt;
   if (state.hours - e.lastBillHours >= BILL_DAYS * 24) {
-    const amount = Math.round(e.kwh * KWH_PRICE);
-    e.coins -= amount;
-    recordEvent(state, { type: 'power_bill', count: amount });
+    const power = Math.round(e.kwh * KWH_PRICE);
+    const food = Math.round((e.meals ?? 0) * FOOD_PER_MEAL);
+    e.coins -= power + food;
+    recordEvent(state, { type: 'power_bill', count: power, cause: String(food) });
     e.kwh = 0;
+    e.meals = 0;
     e.lastBillHours = state.hours;
   }
 }
@@ -121,13 +154,15 @@ export function sellsLeftToday(state: TankState): number {
 /** 水族店收這條魚嗎？只收活的成魚，看起來有病的不收。 */
 export function buybackRefusal(fish: Fish): string | null {
   if (!fish.alive) return '死魚不收';
-  if (isJuvenile(fish)) return '還太小，店家不收';
+  if (fish.gift) return '老闆送的魚不能賣回去';
+  if (fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * 0.5) return '還太小，店家不收';
   if (fish.ich.stage === 'visible' || (fish.infections ?? []).some((i) => i.stage === 'visible') || fish.health < 0.6) return '看起來生病了，店家不收';
   return null;
 }
 
+/** 成魚店價三成；還沒長大的中魚只算一半。 */
 export function fishBuybackPrice(fish: Fish): number {
-  return Math.max(1, Math.round(FISH_PRICES[fish.species] * BUYBACK_SHARE));
+  return Math.max(1, Math.round(FISH_PRICES[fish.species] * BUYBACK_SHARE * (isJuvenile(fish) ? 0.5 : 1)));
 }
 
 export function plantBuybackPrice(species: PlantSpeciesId): number {
