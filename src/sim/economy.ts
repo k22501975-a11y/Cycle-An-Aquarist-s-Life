@@ -1,0 +1,179 @@
+import { isJuvenile, isLightOn, recordEvent, type Fish, type TankState } from './state';
+import type { FishSpeciesId, PlantSpeciesId } from './species';
+
+/**
+ * 經濟（GAME_DESIGN 第 7 節、market-and-breeding.md §3.1）：
+ * 魚幣以台幣計價、價格貼近台灣水族館；電費每週結算；水族店（NPC）用店價三成收購普通的成魚和插枝，每天有上限。
+ */
+
+export const STARTING_COINS = 2000;
+/** 台灣住宅電費約每度 3 元。 */
+export const KWH_PRICE = 3;
+/** 電費多久結算一次（遊戲天數）。 */
+export const BILL_DAYS = 7;
+/** NPC 收購價是店價的幾成。 */
+export const BUYBACK_SHARE = 0.3;
+/** 每個遊戲日最多賣給水族店幾次。 */
+export const DAILY_SELL_LIMIT = 10;
+
+export const FISH_PRICES: Record<FishSpeciesId, number> = { guppy: 40, zebrafish: 20, cherry_shrimp: 25 };
+export const PLANT_PRICES: Record<PlantSpeciesId, number> = { anubias: 150, rotala: 60 };
+
+/** 設備、底材、造景、藥品、耗材的價格，鍵是「類別:id」。 */
+export const PRICES: Record<string, number> = {
+  'filter:sponge': 150,
+  'filter:hangOn': 450,
+  'filter:canister': 2800,
+  'heater:h25': 280,
+  'heater:h50': 350,
+  'heater:h100': 450,
+  'light:basic': 400,
+  'light:planted': 1600,
+  'air:small': 250,
+  'co2:diy': 2600,
+  'fan:clip': 350,
+  'chiller:small': 8500,
+  'controller:basic': 650,
+  'quarantine:box': 700,
+  'substrate:sand': 200,
+  'substrate:soil': 450,
+  'substrate:coral': 300,
+  'hardscape:seiryu': 300,
+  'hardscape:lava': 150,
+  'hardscape:slate': 200,
+  'hardscape:driftwood': 350,
+  'med:ich': 150,
+  'med:antibiotic': 250,
+  'med:dewormer': 200,
+  /** 一次完整的測水（一盒試劑約 300 元可以測 60 次）。 */
+  'use:test': 5,
+  /** 一餐的飼料。 */
+  'use:feed': 1,
+};
+
+export interface Economy {
+  coins: number;
+  /** 這一期累積的用電（度）。 */
+  kwh: number;
+  /** 上次結算電費的時間（遊戲小時）。 */
+  lastBillHours: number;
+  /** 今天賣了幾次（以遊戲日計）。 */
+  sold: { day: number; count: number };
+  /** 剪下來還沒處理的插枝。 */
+  cuttings: Partial<Record<PlantSpeciesId, number>>;
+}
+
+export function economy(state: TankState): Economy {
+  return (state.economy ??= { coins: STARTING_COINS, kwh: 0, lastBillHours: state.hours, sold: { day: -1, count: 0 }, cuttings: {} });
+}
+
+export function price(key: string): number {
+  return PRICES[key] ?? 0;
+}
+
+export function canAfford(state: TankState, cost: number): boolean {
+  return economy(state).coins >= cost;
+}
+
+/** 付錢；錢不夠就不付、回傳 false。 */
+export function spend(state: TankState, cost: number): boolean {
+  const e = economy(state);
+  if (e.coins < cost) return false;
+  e.coins -= cost;
+  return true;
+}
+
+/** 目前所有設備的耗電（W）。 */
+export function powerWatts(state: TankState): number {
+  if (state.environment.powerOut) return 0;
+  const eq = state.equipment;
+  let w = 0;
+  if (eq.filter?.on) w += { sponge: 3, hangOn: 6, canister: 15 }[eq.filter.spec.id] ?? 8;
+  if (eq.heater?.heating) w += eq.heater.spec.watts;
+  if (eq.light && isLightOn(state)) w += eq.light.spec.par >= 80 ? 30 : 10;
+  if (eq.airPump?.on) w += 3;
+  if (eq.fan?.on) w += 5;
+  if (eq.chiller?.cooling) w += 120;
+  // 檢疫盒：小加熱棒平均開一半，加上海綿過濾的打氣
+  if (state.quarantine) w += 12;
+  return w;
+}
+
+export function updateEconomy(state: TankState, dt: number): void {
+  const e = economy(state);
+  e.kwh += (powerWatts(state) / 1000) * dt;
+  if (state.hours - e.lastBillHours >= BILL_DAYS * 24) {
+    const amount = Math.round(e.kwh * KWH_PRICE);
+    e.coins -= amount;
+    recordEvent(state, { type: 'power_bill', count: amount });
+    e.kwh = 0;
+    e.lastBillHours = state.hours;
+  }
+}
+
+const today = (state: TankState) => Math.floor(state.hours / 24);
+
+export function sellsLeftToday(state: TankState): number {
+  const e = economy(state);
+  return e.sold.day === today(state) ? Math.max(0, DAILY_SELL_LIMIT - e.sold.count) : DAILY_SELL_LIMIT;
+}
+
+/** 水族店收這條魚嗎？只收活的成魚，看起來有病的不收。 */
+export function buybackRefusal(fish: Fish): string | null {
+  if (!fish.alive) return '死魚不收';
+  if (isJuvenile(fish)) return '還太小，店家不收';
+  if (fish.ich.stage === 'visible' || (fish.infections ?? []).some((i) => i.stage === 'visible') || fish.health < 0.6) return '看起來生病了，店家不收';
+  return null;
+}
+
+export function fishBuybackPrice(fish: Fish): number {
+  return Math.max(1, Math.round(FISH_PRICES[fish.species] * BUYBACK_SHARE));
+}
+
+export function plantBuybackPrice(species: PlantSpeciesId): number {
+  // 插枝大約是一盆的三分之一
+  return Math.max(1, Math.round((PLANT_PRICES[species] / 3) * BUYBACK_SHARE));
+}
+
+function countSale(state: TankState): boolean {
+  const e = economy(state);
+  if (sellsLeftToday(state) <= 0) return false;
+  if (e.sold.day !== today(state)) e.sold = { day: today(state), count: 0 };
+  e.sold.count++;
+  return true;
+}
+
+/** 把一條魚賣給水族店，回傳拿到多少錢（不收就回傳 0）。 */
+export function sellFish(state: TankState, fishId: number): number {
+  const fish = state.fish.find((f) => f.id === fishId);
+  if (!fish || buybackRefusal(fish) || !countSale(state)) return 0;
+  const coins = fishBuybackPrice(fish);
+  state.fish = state.fish.filter((f) => f !== fish);
+  economy(state).coins += coins;
+  return coins;
+}
+
+/** 把手上的插枝全部賣掉（算一次），回傳拿到多少錢。 */
+export function sellCuttings(state: TankState, species: PlantSpeciesId): number {
+  const e = economy(state);
+  const n = e.cuttings[species] ?? 0;
+  if (n <= 0 || !countSale(state)) return 0;
+  const coins = n * plantBuybackPrice(species);
+  e.cuttings[species] = 0;
+  e.coins += coins;
+  return coins;
+}
+
+export function addCuttings(state: TankState, species: PlantSpeciesId, count: number): void {
+  const e = economy(state);
+  e.cuttings[species] = (e.cuttings[species] ?? 0) + count;
+}
+
+/** 種一株手上的插枝回缸裡（不用錢）。 */
+export function takeCutting(state: TankState, species: PlantSpeciesId): boolean {
+  const e = economy(state);
+  if ((e.cuttings[species] ?? 0) <= 0) return false;
+  e.cuttings[species]! -= 1;
+  return true;
+}
+

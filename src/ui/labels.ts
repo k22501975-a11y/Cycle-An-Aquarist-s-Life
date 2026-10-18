@@ -51,6 +51,8 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
   switch (e.type) {
     case 'fish_died':
       return { text: `${fish ? fishName(fish) : '一條魚'} 死了。可能原因：${DEATH_CAUSE_LABELS[e.cause ?? 'unknown'] ?? e.cause}`, tone: 'bad' };
+    case 'power_bill':
+      return { text: `繳了這週的電費 ${e.count ?? 0} 元`, tone: 'info' };
     case 'disease_visible':
       return { text: `${fish ? fishName(fish) : '有魚'} ${e.cause === 'columnaris' ? '嘴巴和身上長出白色棉絮狀的斑' : '鰓蓋張開、呼吸很急'}`, tone: e.cause === 'columnaris' ? 'bad' : 'warn' };
     case 'ich_visible':
