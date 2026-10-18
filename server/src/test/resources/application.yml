@@ -11,3 +11,4 @@ cycle:
   allowed-origins: http://localhost:5173
   session-days: 30
   max-save-bytes: 2000
+  market-min-account-days: 3

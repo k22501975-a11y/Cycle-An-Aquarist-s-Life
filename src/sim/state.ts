@@ -183,6 +183,8 @@ export interface Fish {
   inbreeding?: number;
   /** 保底起步包送的魚：不能賣回店裡。 */
   gift?: boolean;
+  /** 在玩家市場上架中的編號：魚還在缸裡照常養，成交後才出貨。 */
+  listing?: number;
   /** 白點以外的病（柱狀病、鰓吸蟲）。 */
   infections?: Infection[];
   /** 個體體質差異（約 0.85–1.15），乘在魚種體質上，讓同一缸的魚不會同時倒下。 */

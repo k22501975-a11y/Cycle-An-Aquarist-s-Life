@@ -10,6 +10,7 @@ import { isNativeApp, saveTextFile } from './ui/native';
 import { CloudClient } from './net/cloud';
 import { autoUpload, checkCloudOnStart, cloudPanel, type CloudPanelDeps } from './ui/cloud-panel';
 import { friendsPanel, giftPanel, type FriendsDeps } from './ui/friends-panel';
+import { marketPanel, syncMarket, type MarketDeps } from './ui/market-panel';
 import { canPromptInstall, isInstalled, isIos, promptInstall, setupPwa } from './ui/pwa';
 import { loadPaintedArt } from './render/painted';
 import { defaultQuality, isQuality, type Quality, QUALITY_LABELS, qualitySpec } from './render/quality';
@@ -252,6 +253,7 @@ async function start(): Promise<void> {
     requestAnimationFrame(() => measure());
   };
   const friendsDeps: FriendsDeps = { cloud, game, sheet, toasts, visit: (name) => void visit(name), openCloud: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) };
+  const marketDeps: MarketDeps = { cloud, game, sheet, toasts, sound: ctx.sound, openCloud: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) };
   const checkGifts = async () => {
     if (!cloud.session) return;
     const res = await cloud.gifts();
@@ -553,6 +555,7 @@ async function start(): Promise<void> {
       {},
       h('button.btn', { onclick: () => sheet.open('我的水缸', () => tanksPanel(ctx)) }, '我的水缸：切換、加一缸'),
       h('button.btn', { onclick: () => sheet.open('好友', () => friendsPanel(friendsDeps)) }, '好友：參觀、按讚、送禮'),
+      h('button.btn', { onclick: () => sheet.open('市場', () => marketPanel(marketDeps)) }, '市場：買賣魚蝦和水草'),
       h('button.btn', { onclick: () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen)) }, '圖鑑：魚蝦、水草、設備、疾病'),
       h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) }, '水質趨勢與事件紀錄'),
       h('button.btn', { onclick: () => (sheet.close(), guide.restart()) }, '重新看阿德老闆的教學'),
@@ -720,7 +723,9 @@ async function start(): Promise<void> {
   if (window.matchMedia('(orientation: portrait)').matches) toasts.show('把手機轉成橫向，水缸會更大');
   setInterval(save, 10_000);
   // 雲端：開遊戲時看看別的裝置有沒有玩過；之後每 10 分鐘和切到背景時自動上傳
-  void checkCloudOnStart(cloudDeps).then(checkGifts);
+  void checkCloudOnStart(cloudDeps).then(checkGifts).then(() => syncMarket(marketDeps));
+  // 市場：賣出的魚自動出貨、貨款入帳、到貨提醒
+  setInterval(() => void syncMarket(marketDeps), 60_000);
   setInterval(() => void autoUpload(cloudDeps), 10 * 60_000);
   analytics.track('session_start', sessionProps());
   guide.questDone = (step) => analytics.track('quest_done', { step });

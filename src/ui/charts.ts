@@ -26,6 +26,8 @@ export interface LineChartOptions {
   dots: boolean;
   formatX: (x: number) => string;
   formatY: (y: number) => string;
+  /** X 軸每天刻度的文字（預設是遊戲第幾天）。 */
+  formatTick?: (day: number) => string;
   empty: string;
 }
 
@@ -87,7 +89,7 @@ export function lineChart(o: LineChartOptions): HTMLElement {
   const every = Math.ceil(days / 7);
   for (let d = Math.ceil(x0 / 24); d * 24 <= x1; d += every) {
     const label = el('text', { x: sx(d * 24), y: H - 4, class: 'chart-tick', 'text-anchor': 'middle' });
-    label.textContent = `${d + 1}`;
+    label.textContent = o.formatTick ? o.formatTick(d) : `${d + 1}`;
     svg.append(label);
   }
 

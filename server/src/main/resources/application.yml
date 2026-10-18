@@ -19,6 +19,8 @@ cycle:
   session-days: 30
   # 一份雲端存檔最大幾 bytes
   max-save-bytes: 4000000
+  # 新帳號滿幾天才能在市場上架（防開小號洗錢，market-and-breeding.md §4）
+  market-min-account-days: ${MARKET_MIN_ACCOUNT_DAYS:3}
 management:
   endpoints:
     web:
