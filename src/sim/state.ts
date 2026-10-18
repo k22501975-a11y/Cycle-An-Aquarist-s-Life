@@ -1,6 +1,7 @@
 import { co2Equilibrium, oxygenSaturation, phFromCo2 } from './chemistry';
 import type { AirPumpSpec, Co2Spec, FilterSpec, HeaterSpec, LightSpec, TankSpec } from './equipment';
 import type { RngState } from './random';
+import type { TestKitReading } from './readings';
 import { FISH_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 
 /**
@@ -22,6 +23,10 @@ export interface TankState {
   /** 缸壁與造景上的藻類覆蓋率 0–1。 */
   algae: number;
   events: SimEvent[];
+  /** 最近一次用測試劑測水（玩家只知道測過的數值）。 */
+  lastTest?: { hours: number; reading: TestKitReading };
+  /** 最近一次換水的時間（遊戲小時）。 */
+  lastWaterChangeHours?: number;
 }
 
 export interface Environment {

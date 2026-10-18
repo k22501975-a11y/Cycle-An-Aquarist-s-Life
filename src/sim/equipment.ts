@@ -8,6 +8,8 @@ export interface TankSpec {
   volumeL: number;
   /** 水面面積（cm²），影響氣體交換速度。 */
   surfaceCm2: number;
+  /** 外尺寸（cm）：寬 × 高 × 深。畫面依此決定鏡頭遠近（大缸魚看起來比較小）。舊存檔可能沒有。 */
+  sizeCm?: { w: number; h: number; d: number };
 }
 
 export interface FilterSpec {
@@ -48,9 +50,9 @@ export interface Co2Spec {
 }
 
 export const TANKS = {
-  nano20: { id: 'nano20', name: '20L 小缸', volumeL: 20, surfaceCm2: 900 },
-  std40: { id: 'std40', name: '40L 標準缸', volumeL: 40, surfaceCm2: 1350 },
-  std90: { id: 'std90', name: '90L 中型缸', volumeL: 90, surfaceCm2: 2700 },
+  nano20: { id: 'nano20', name: '20L 小缸', volumeL: 20, surfaceCm2: 900, sizeCm: { w: 36, h: 22, d: 26 } },
+  std40: { id: 'std40', name: '40L 標準缸', volumeL: 40, surfaceCm2: 1350, sizeCm: { w: 45, h: 30, d: 30 } },
+  std90: { id: 'std90', name: '90L 中型缸', volumeL: 90, surfaceCm2: 2700, sizeCm: { w: 60, h: 38, d: 40 } },
 } satisfies Record<string, TankSpec>;
 
 export const FILTERS = {
@@ -77,3 +79,12 @@ export const LIGHTS = {
 export const CO2_KITS = {
   diy: { id: 'diy', name: 'CO₂ 鋼瓶組', mgPerHour: 100 },
 } satisfies Record<string, Co2Spec>;
+
+/** 缸的外尺寸；舊存檔沒有記錄時依水量推估（標準缸比例約 1.5 : 1 : 1）。 */
+export function tankSize(tank: TankSpec): { w: number; h: number; d: number } {
+  if (tank.sizeCm) return tank.sizeCm;
+  const known = Object.values(TANKS).find((t) => t.id === tank.id);
+  if (known) return known.sizeCm;
+  const unit = Math.cbrt((tank.volumeL * 1000) / 1.5);
+  return { w: Math.round(unit * 1.5), h: Math.round(unit), d: Math.round(unit) };
+}

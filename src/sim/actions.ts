@@ -5,6 +5,7 @@ import { roomTemperature } from './processes/thermal';
 import { nextRandom } from './random';
 import { FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 import type { FilterSpec } from './equipment';
+import { testWater, type TestKitReading } from './readings';
 import { recordEvent, type Fish, type Plant, type TankState } from './state';
 
 /** 投餵飼料（mg）。吃不完的會沉底腐敗。 */
@@ -41,6 +42,14 @@ export function waterChange(state: TankState, fraction: number, options: WaterCh
   // 換水時順便虹吸底砂，帶走部分殘餌與髒污。
   water.foodMg *= 1 - f * 0.8;
   water.organicMg *= 1 - f * 0.5;
+  state.lastWaterChangeHours = state.hours;
+}
+
+/** 用測試劑測水：讀數記下來，狀態列顯示最近一次測到的值（沒測過就顯示「?」）。 */
+export function useTestKit(state: TankState): TestKitReading {
+  const reading = testWater(state);
+  state.lastTest = { hours: state.hours, reading };
+  return reading;
 }
 
 /**
