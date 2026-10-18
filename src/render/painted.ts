@@ -135,6 +135,8 @@ export class PaintedRig extends Container {
   private rim: Mesh | null = null;
   private rimFill: ColorMatrixFilter | null = null;
   private rimColor = -1;
+  private rimBlur: BlurFilter | null = null;
+  private rimSoft: boolean | null = null;
 
   constructor(key: string, texture: Texture, readonly look: { alpha: number }) {
     super();
@@ -187,7 +189,7 @@ export class PaintedRig extends Container {
    * 選取時的輪廓光（Glow ＋邊緣光）：同一份網格再畫一次，放大一點、填成單色、模糊，墊在魚的後面。
    * 共用網格，所以尾巴擺動時光也跟著擺。
    */
-  setRim(color: number | null, alpha = 1): void {
+  setRim(color: number | null, alpha = 1, soft = true): void {
     if (color === null) {
       if (this.rim) this.rim.visible = false;
       return;
@@ -200,8 +202,13 @@ export class PaintedRig extends Container {
       this.rim.scale.set(-k, k);
       this.rim.position.set((w / 2) * k, (-h / 2) * k);
       this.rimFill = new ColorMatrixFilter();
-      this.rim.filters = [this.rimFill, new BlurFilter({ strength: 5, quality: 2 })];
       this.addChildAt(this.rim, 0);
+    }
+    if (soft !== this.rimSoft) {
+      // 低畫質不模糊，只剩一圈細細的邊緣光
+      this.rimBlur ??= new BlurFilter({ strength: 5, quality: 2 });
+      this.rim.filters = soft ? [this.rimFill!, this.rimBlur] : [this.rimFill!];
+      this.rimSoft = soft;
     }
     if (color !== this.rimColor) {
       const r = ((color >> 16) & 255) / 255;

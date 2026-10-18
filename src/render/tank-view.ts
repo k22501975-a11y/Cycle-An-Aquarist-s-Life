@@ -5,6 +5,7 @@ import { PaintedRig, paintedKey, paintedTexture } from './painted';
 import { spawnSwimmer, updateSwimmer, type Swimmer } from './fish-motion';
 import { pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { canvasTexture, makeCanvas, softDotTexture } from './paint';
+import { type QualitySpec, qualitySpec } from './quality';
 import { causticsTexture, MOCKUP_PX_PER_CM, paintBackdrop, paintDriftwood, paintFront, paintPlant, paintVignette, rayTexture } from './scenery';
 
 interface FoodParticle {
@@ -108,6 +109,8 @@ export class TankView {
   /** 相對示意圖的鏡頭倍率：造景、設備的大小。 */
   private hs = 1;
   private sceneKey = '';
+  private readonly depthBlur = new BlurFilter({ strength: 2.5, quality: 2 });
+  private quality: QualitySpec = qualitySpec('high', 2);
   private fish = new Map<number, FishView>();
   private plants = new Map<number, PlantView>();
   private food: FoodParticle[] = [];
@@ -126,7 +129,7 @@ export class TankView {
     for (const c of [this.causticsA, this.causticsB]) c.blendMode = 'add';
     this.causticsLayer.addChild(this.causticsA, this.causticsB, this.causticsMask);
     // 遠層的魚：模糊、偏藍、淡一點（後景模糊）
-    this.backFish.filters = [new BlurFilter({ strength: 2.5, quality: 2 })];
+    this.backFish.filters = [this.depthBlur];
     this.backFish.alpha = 0.75;
     this.backFish.tint = 0xa9d4e2;
     this.moteLayer.blendMode = 'add';
@@ -158,6 +161,14 @@ export class TankView {
   setInsets(insets: Insets): void {
     if (insets.top === this.insets.top && insets.bottom === this.insets.bottom) return;
     this.insets = insets;
+    this.sceneKey = '';
+  }
+
+  /** 換畫質：濾鏡馬上換，粒子數量在下一次重新排版時重算。 */
+  setQuality(spec: QualitySpec): void {
+    this.quality = spec;
+    this.backFish.filters = spec.depthBlur ? [this.depthBlur] : [];
+    this.causticsB.visible = spec.doubleCaustics;
     this.sceneKey = '';
   }
 
@@ -230,7 +241,7 @@ export class TankView {
     }
     this.moteLayer.removeChildren().forEach((c) => c.destroy());
     this.motes = [];
-    const motes = Math.round(Math.min(70, (b.width * b.height) / 14000));
+    const motes = Math.round(Math.min(70, (b.width * b.height) / 14000) * this.quality.motes);
     for (let i = 0; i < motes; i++) {
       const s = new Sprite(softDotTexture());
       s.anchor.set(0.5);
@@ -558,7 +569,7 @@ export class TankView {
       // 選取的魚：身後一圈柔和的金色光暈
       const selected = this.selectedFish === fish.id;
       view.glow.visible = selected;
-      rig.setRim(selected ? 0xffe9b0 : null, 0.75 + 0.25 * Math.sin(this.time * 3));
+      rig.setRim(selected ? 0xffe9b0 : null, 0.75 + 0.25 * Math.sin(this.time * 3), this.quality.softGlow);
       if (selected) {
         const r = this.lengthPx(fish) * depth * 1.5;
         view.glow.width = r;
