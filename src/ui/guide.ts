@@ -23,6 +23,8 @@ export class Guide {
   private progress: TutorialProgress;
   private pages: Page[] = [];
   private onDone: (() => void) | null = null;
+  /** 完成任務時通知（匿名數據分析用來看新手卡在哪一步）。 */
+  questDone: ((step: number) => void) | null = null;
 
   constructor(
     host: HTMLElement,
@@ -46,6 +48,7 @@ export class Guide {
     const done = advanceQuest(this.progress, state);
     if (done) {
       this.save();
+      this.questDone?.(this.progress.step);
       this.sound('quest');
       const next = currentQuest(this.progress);
       this.say([{ text: done.done, label: next ? '下一個任務' : '謝謝老闆' }, ...(next ? this.questPages() : [])]);

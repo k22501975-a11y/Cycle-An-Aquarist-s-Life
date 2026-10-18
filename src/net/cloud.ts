@@ -150,6 +150,18 @@ export class CloudClient {
     return this.call('POST', `/api/gifts/${id}/claim`);
   }
 
+  /** 伺服器上跟這個帳號有關的所有資料（個資法的查詢、複製權）。 */
+  exportData(): Promise<CloudResult<Record<string, unknown>>> {
+    return this.call('GET', '/api/me/export');
+  }
+
+  /** 刪除帳號和雲端上的所有資料；這台的水缸不受影響。 */
+  async deleteAccount(password: string): Promise<CloudResult<void>> {
+    const res = await this.call<void>('DELETE', '/api/account', JSON.stringify({ password }));
+    if (res.ok) this.setSession(null);
+    return res;
+  }
+
   /** 採用了雲端那份（或確認兩邊一樣）之後，記下雲端的版本號。 */
   markSynced(revision: number, now = Date.now()): void {
     if (!this.session) return;
