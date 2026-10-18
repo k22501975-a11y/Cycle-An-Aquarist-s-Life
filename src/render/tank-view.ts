@@ -2,9 +2,9 @@ import { Application, BlurFilter, Container, FederatedPointerEvent, Graphics, Sp
 import { FISH_SPECIES, isCo2Injecting, isJuvenile, isLightOn, observeSymptoms, sizeRatio, tankSize, type Fish, type TankState } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture } from './painted';
-import { spawnSwimmer, updateSwimmer, type Swimmer } from './fish-motion';
+import { DEATH_SECONDS, deathPose, spawnSwimmer, updateSwimmer, type Swimmer } from './fish-motion';
 import { pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
-import { canvasTexture, makeCanvas, softDotTexture } from './paint';
+import { canvasTexture, makeCanvas, mix, softDotTexture } from './paint';
 import { type QualitySpec, qualitySpec } from './quality';
 import { causticsTexture, MOCKUP_PX_PER_CM, paintBackdrop, paintDriftwood, paintFront, paintPlant, paintVignette, rayTexture } from './scenery';
 
@@ -45,6 +45,8 @@ interface FishView {
   z: number;
   zTarget: number;
   back: boolean;
+  /** 死了幾秒（-1 還活著）。讀檔時已經死的魚直接用演完的姿勢。 */
+  deathT: number;
 }
 
 interface Mote {
@@ -464,6 +466,7 @@ export class TankView {
       eggs,
       ichDrawn: false,
       eggsDrawn: false,
+      deathT: fish.alive ? -1 : DEATH_SECONDS,
       z,
       zTarget: z,
       back: z < BACK_ENTER,
@@ -538,11 +541,16 @@ export class TankView {
       const k = (this.lengthPx(fish) / rig.lengthPx) * depth;
       rig.scale.x = facingLeft ? k : -k;
       if (!fish.alive) {
-        rig.rotation = 0;
-        rig.scale.y = -k;
-        rig.alpha = 0.75;
-        rig.setDim(0x8a8a8a);
+        // 死亡演出：最後抽動幾下，慢慢翻成白肚朝上、褪成灰色，一邊沉到底
+        view.deathT = view.deathT < 0 ? 0 : view.deathT + dt;
+        const pose = deathPose(view.deathT, fish.species === 'cherry_shrimp');
+        rig.scale.y = k * pose.flip;
+        rig.rotation = facingLeft ? -pose.tilt : pose.tilt;
+        rig.alpha = rig.look.alpha * (1 - 0.25 * pose.fade);
+        rig.setDim(pose.fade < 0.02 ? null : mix(0xffffff, 0x8a8a8a, pose.fade));
+        if (view.deathT < DEATH_SECONDS) rig.animate(view.deathT * 9, pose.swing, 0.6, fish.finDamage);
       } else {
+        view.deathT = -1;
         rig.scale.y = k;
         rig.alpha = rig.look.alpha;
         rig.setDim(symptoms.includes('lethargic') ? 0xb8b8b8 : null);
