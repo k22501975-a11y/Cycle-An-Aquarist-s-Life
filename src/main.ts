@@ -1,6 +1,7 @@
 import { Application } from 'pixi.js';
 import { Game, newGameState, SPEED_OPTIONS } from './game/game';
 import { browserStore, catchUp, clearSave, readSave, writeSave } from './game/save';
+import { loadPaintedArt } from './render/painted';
 import { TankView } from './render/tank-view';
 import * as sim from './sim';
 import { FISH_SPECIES, removeDeadFish, tankSize, useTestKit } from './sim';
@@ -51,6 +52,7 @@ async function start(): Promise<void> {
   const app = new Application();
   await app.init({ resizeTo: stage, backgroundAlpha: 0, antialias: true, resolution: Math.min(2, window.devicePixelRatio), autoDensity: true });
   stage.appendChild(app.canvas);
+  await loadPaintedArt();
 
   // 讀取存檔並補算離開期間的時間
   const store = browserStore();
@@ -58,7 +60,6 @@ async function start(): Promise<void> {
   const offline = saved ? catchUp(saved) : null;
   const game = new Game(saved?.state ?? newGameState(), saved?.timeScale ?? 7);
   const save = () => writeSave(store, game.state, game.clock.timeScale);
-  // 給瀏覽器端的自動化測試與除錯使用。
   // 開發用：在瀏覽器主控台用 cycle.game、cycle.sim 直接操作（截圖、調平衡）。
   const debugHandle = { game, sim } as Record<string, unknown>;
   (window as unknown as { cycle: unknown }).cycle = debugHandle;
