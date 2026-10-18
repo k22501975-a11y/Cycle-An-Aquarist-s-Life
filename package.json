@@ -9,14 +9,20 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.sim.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "android": "npm run build && cap sync android"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.6.9",
     "typescript": "^5.9.3",
     "vite": "^6.4.4",
     "vitest": "^3.2.7"
   },
   "dependencies": {
+    "@capacitor/android": "^7.6.9",
+    "@capacitor/core": "^7.6.9",
+    "@capacitor/filesystem": "^7.1.9",
+    "@capacitor/share": "^7.0.4",
     "pixi.js": "^8.22.0"
   }
 }
