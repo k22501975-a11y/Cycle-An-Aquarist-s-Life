@@ -1,5 +1,5 @@
 import type { FishSpeciesId, Symptom } from '../sim';
-import type { TankBounds } from './layout';
+import { floorAt, type TankBounds } from './layout';
 
 /** 每個魚種的游動個性。 */
 interface MotionProfile {
@@ -53,7 +53,7 @@ export interface FishCondition {
 
 export function spawnSwimmer(id: number, species: FishSpeciesId, bounds: TankBounds, rand: () => number): Swimmer {
   const p = PROFILES[species];
-  const y = p.crawler ? bounds.bottom - 4 : bounds.surface + 30 + rand() * (bounds.bottom - bounds.surface - 60);
+  const y = p.crawler ? floorAt(bounds, bounds.width / 2) - 4 : bounds.surface + 30 + rand() * (bounds.bottom - bounds.surface - 60);
   return { id, species, x: 20 + rand() * (bounds.width - 40), y, vx: rand() - 0.5, vy: 0, wander: rand() * Math.PI * 2, phase: rand() * 10 };
 }
 
@@ -70,7 +70,7 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
     s.vx *= 0.95;
     s.vy = Math.min(s.vy + 4 * dt, 12 * scale);
     s.x += s.vx * dt;
-    s.y = Math.min(s.y + s.vy * dt, bounds.bottom - 3 * scale);
+    s.y = Math.min(s.y + s.vy * dt, floorAt(bounds, s.x) - 3 * scale);
     return;
   }
 
@@ -83,7 +83,7 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
     s.startle = Math.max(0, s.startle! - dt);
     s.vx *= Math.pow(0.02, dt);
     s.x = Math.min(bounds.width - 16 * scale, Math.max(16 * scale, s.x + s.vx * dt));
-    s.y = bounds.bottom - 3 * scale;
+    s.y = floorAt(bounds, s.x) - 3 * scale;
     return;
   }
   if (p.crawler) {
@@ -135,7 +135,7 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   // 餓了就追最近的飼料
   // 魚只搶水裡的，沉到底沙的留給蝦；蝦只走向沉到下層的
   const water = bounds.bottom - bounds.surface;
-  const reachable = ctx.food.filter((f) => (p.crawler ? f.y > bounds.bottom - water * 0.4 : f.y < bounds.bottom - 6 * scale));
+  const reachable = ctx.food.filter((f) => (p.crawler ? f.y > bounds.bottom - water * 0.4 : f.y < floorAt(bounds, f.x) - 6 * scale));
   if (cond.hungry && !sym.has('not_eating') && reachable.length > 0) {
     let best = reachable[0], bd = Infinity;
     for (const f of reachable) {
@@ -143,7 +143,7 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
       if (d < bd) { bd = d; best = f; }
     }
     const d = Math.sqrt(bd) + 1;
-    if (p.crawler && Math.abs(best.x - s.x) < 8 * scale && best.y > bounds.bottom - 8 * scale) {
+    if (p.crawler && Math.abs(best.x - s.x) < 8 * scale && best.y > floorAt(bounds, best.x) - 8 * scale) {
       // 走到飼料旁邊：停下來抱著夾
       s.eating = true;
       ax = 0;
@@ -173,11 +173,10 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   }
   if (p.crawler) {
     s.vy = 0;
-    s.y = bounds.bottom - 3 * scale;
   }
   const edge = 16 * scale;
   s.x = Math.min(bounds.width - edge, Math.max(edge, s.x + s.vx * dt));
-  s.y = Math.min(bounds.bottom - 3 * scale, Math.max(bounds.surface + 4, s.y + s.vy * dt));
+  s.y = p.crawler ? floorAt(bounds, s.x) - 3 * scale : Math.min(bounds.bottom - 3 * scale, Math.max(bounds.surface + 4, s.y + s.vy * dt));
   // 病懨懨的魚尾巴也擺得慢
   s.phase += dt * (4 + v / (8 * scale)) * (sym.has('lethargic') || sym.has('loss_of_balance') ? 0.5 : 1);
 }

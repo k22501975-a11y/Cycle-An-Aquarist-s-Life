@@ -75,7 +75,6 @@ export function paintedKey(species: FishSpeciesId, form: FishForm, variant: numb
 /** 背景與造景（青龍石、沉木）：不做網格，由 scenery.ts 畫進場景的 Canvas。 */
 export const SCENERY: Record<string, string> = {
   'bg-back': 'bg/bg-tank-back.webp',
-  'bg-substrate': 'bg/bg-tank-substrate.webp',
   'rock-1': 'scape/rock-seiryu-1.webp',
   'rock-2': 'scape/rock-seiryu-2.webp',
   'rock-3': 'scape/rock-seiryu-3.webp',
@@ -86,6 +85,13 @@ export const SCENERY: Record<string, string> = {
   'wood-3': 'scape/wood-spider-3.webp',
   'plant-rotala': 'scape/plant-rotala.webp',
   'plant-anubias': 'scape/plant-anubias.webp',
+  // 底材：俯視紋理（鋪沙面）與前玻璃看進去的斷面條
+  'sub-sand-tile': 'substrate/substrate-sand-tile.webp',
+  'sub-soil-tile': 'substrate/substrate-soil-tile.webp',
+  'sub-coral-tile': 'substrate/substrate-coral-tile.webp',
+  'sub-sand-side': 'substrate/substrate-sand-side.webp',
+  'sub-soil-side': 'substrate/substrate-soil-side.webp',
+  'sub-coral-side': 'substrate/substrate-coral-side.webp',
 };
 
 const textures = new Map<string, Texture>();

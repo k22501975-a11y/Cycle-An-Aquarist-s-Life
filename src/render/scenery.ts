@@ -3,6 +3,7 @@ import type { TankBounds } from './layout';
 import { canvasTexture, makeCanvas, mix, rgba, seeded, type Ctx } from './paint';
 import type { Texture } from 'pixi.js';
 import { sceneryImage } from './painted';
+import { frontLip, sandSurface, SUBSTRATE_PALETTES, type SubstrateLook } from './substrate';
 
 /**
  * 精緻插畫風的場景（design/art-style.md §0.4）：用 Canvas 繪製漸層、柔光、半透明，烘成貼圖。
@@ -296,78 +297,219 @@ export function paintDriftwood(b: TankBounds, hs: number): Texture {
   return canvasTexture(canvas, false);
 }
 
-/** 前景：三顆青龍石與底沙（底沙蓋住石頭底部）。 */
-export function paintFront(b: TankBounds, hs: number): Texture {
+/** 前景：三顆青龍石與底沙（底沙蓋住石頭底部）。底沙依底材換外觀，裸缸就是玻璃缸底。 */
+export function paintFront(b: TankBounds, hs: number, look: SubstrateLook = 'sand'): Texture {
   const { canvas, ctx } = makeCanvas(b.width, b.height);
-  const { width: w, height: h, bottom } = b;
-  const y = bottom + 22 * hs;
+  const { width: w, bottom } = b;
+  // 裸缸：石頭直接放在玻璃上
+  const y = look === 'bare' ? bottom + 8 * hs : bottom + 22 * hs;
+  if (look === 'bare') paintGlassFloor(ctx, b, hs);
   const rocks = (['rock-1', 'rock-4', 'rock-3'] as const).map((k) => sceneryImage(k));
+  if (look === 'bare') {
+    // 石頭底下的接觸陰影
+    for (const [x, r] of [[0.28, 90], [0.67, 70], [0.79, 42]] as const) {
+      const sg = ctx.createRadialGradient(w * x, y, 0, w * x, y, r * hs);
+      sg.addColorStop(0, 'rgba(0,10,15,0.55)');
+      sg.addColorStop(1, 'rgba(0,10,15,0)');
+      ctx.fillStyle = sg;
+      ctx.beginPath();
+      ctx.ellipse(w * x, y, r * hs, r * hs * 0.18, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
   if (rocks.every(Boolean)) {
     drawSceneryArt(ctx, rocks[0]!, w * 0.28, y, 165 * hs, 0.06);
     drawSceneryArt(ctx, rocks[1]!, w * 0.67, y + 4 * hs, 125 * hs, 0.06, true);
     drawSceneryArt(ctx, rocks[2]!, w * 0.79, y + 6 * hs, 72 * hs, 0.06);
   } else {
     paintSeiryu(ctx, w * 0.29, y, hs, [-85, 0, -51, -110, 8.5, -126.5, 59.5, -77, 85, 0], [[8.5, -126.5, 0, -10], [-51, -110, -34, -33]], 11);
-  paintSeiryu(ctx, w * 0.67, y + 4 * hs, hs, [-70, 0, -42, -80, 7, -92, 49, -56, 70, 0], [[7, -92, 0, -8], [-42, -80, -28, -24]], 23);
+    paintSeiryu(ctx, w * 0.67, y + 4 * hs, hs, [-70, 0, -42, -80, 7, -92, 49, -56, 70, 0], [[7, -92, 0, -8], [-42, -80, -28, -24]], 23);
     paintSeiryu(ctx, w * 0.775, y + 4 * hs, hs, [-45, 0, -27, -55, 4.5, -63.25, 31.5, -38.5, 45, 0], [[4.5, -63.25, 0, -6]], 37);
   }
-
-  // 底沙：起伏的沙面，越前面越亮（光從上面照下來）
-  const sand = new Path2D();
-  sand.moveTo(0, bottom + 4 * hs);
-  sand.quadraticCurveTo(w * 0.27, bottom - 14 * hs, w * 0.545, bottom + 2 * hs);
-  sand.quadraticCurveTo(w * 0.82, bottom + 18 * hs, w, bottom - 2 * hs);
-  sand.lineTo(w, h);
-  sand.lineTo(0, h);
-  sand.closePath();
-  const g = ctx.createLinearGradient(0, bottom - 10 * hs, 0, h);
-  g.addColorStop(0, '#b8a27a');
-  g.addColorStop(0.25, '#e2d1a6');
-  g.addColorStop(1, '#f3e7c8');
-  ctx.fillStyle = g;
-  ctx.fill(sand);
-  ctx.save();
-  ctx.clip(sand);
-  const substrate = sceneryImage('bg-substrate');
-  if (substrate) {
-    // 精繪底沙：取圖下半部的沙紋鋪滿沙面，上面再疊一層受光漸層統一色調
-    const { w: iw, h: ih } = imageSize(substrate);
-    ctx.drawImage(substrate, 0, ih * 0.52, iw, ih * 0.48, 0, bottom - 18 * hs, w, h - bottom + 18 * hs);
-    ctx.globalAlpha = 0.35;
-    ctx.fillStyle = g;
-    ctx.fillRect(0, bottom - 20 * hs, w, h);
-    ctx.globalAlpha = 1;
-  }
-  const rand = seeded(4242);
-  // 沙粒（精繪底沙本身就有質感，只灑少一點）
-  for (let i = 0; i < (w * (h - bottom)) / (substrate ? 240 : 60); i++) {
-    const x = rand() * w;
-    const yy = bottom - 14 * hs + rand() * (h - bottom + 14 * hs);
-    ctx.fillStyle = rand() < 0.5 ? 'rgba(120,90,50,0.22)' : 'rgba(255,255,240,0.35)';
-    ctx.fillRect(x, yy, 1 + rand() * 1.5, 1 + rand() * 1.5);
-  }
-  // 小卵石
-  for (let i = 0; i < w / 45; i++) {
-    const x = rand() * w;
-    const yy = bottom + 6 * hs + rand() * (h - bottom - 6 * hs);
-    const r = (2 + rand() * 4) * Math.max(0.6, hs);
-    const pg = ctx.createRadialGradient(x - r * 0.3, yy - r * 0.4, 0, x, yy, r);
-    const tone = [0xd9cbb0, 0xa89a86, 0x8c8478, 0xe8e0d0][i % 4];
-    pg.addColorStop(0, rgba(mix(tone, 0xffffff, 0.4), 1));
-    pg.addColorStop(1, rgba(mix(tone, 0x000000, 0.35), 1));
-    ctx.fillStyle = pg;
-    ctx.beginPath();
-    ctx.ellipse(x, yy, r * 1.3, r, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // 沙面邊緣的陰影（水草、石頭根部）
-  const edge = ctx.createLinearGradient(0, bottom - 16 * hs, 0, bottom + 16 * hs);
-  edge.addColorStop(0, 'rgba(40,50,40,0.45)');
-  edge.addColorStop(1, 'rgba(40,50,40,0)');
-  ctx.fillStyle = edge;
-  ctx.fillRect(0, bottom - 20 * hs, w, 40 * hs);
-  ctx.restore();
+  if (look !== 'bare') paintSubstrate(ctx, b, hs, look);
   return canvasTexture(canvas, false);
+}
+
+/** 裸缸的缸底：一片玻璃，底下是缸架的暗色。 */
+function paintGlassFloor(ctx: Ctx, b: TankBounds, hs: number): void {
+  const { width: w, height: h, bottom } = b;
+  const g0 = bottom + 6 * hs;
+  const stand = ctx.createLinearGradient(0, g0, 0, h);
+  stand.addColorStop(0, '#16303a');
+  stand.addColorStop(1, '#0b171c');
+  ctx.fillStyle = stand;
+  ctx.fillRect(0, g0, w, h - g0);
+  // 玻璃厚度：一條亮邊加上反光
+  const glass = ctx.createLinearGradient(0, g0 - 2 * hs, 0, g0 + 10 * hs);
+  glass.addColorStop(0, 'rgba(200,240,240,0.55)');
+  glass.addColorStop(0.3, 'rgba(120,190,190,0.35)');
+  glass.addColorStop(1, 'rgba(60,120,120,0)');
+  ctx.fillStyle = glass;
+  ctx.fillRect(0, g0 - 2 * hs, w, 12 * hs);
+  ctx.fillStyle = 'rgba(230,255,255,0.7)';
+  ctx.fillRect(0, g0 - 1 * hs, w, Math.max(1, 1.2 * hs));
+}
+
+/** 底沙：後面高的沙面受光，前面隔著玻璃看到分層的斷面。 */
+function paintSubstrate(ctx: Ctx, b: TankBounds, hs: number, look: Exclude<SubstrateLook, 'bare'>): void {
+  const { width: w, height: h, bottom } = b;
+  const pal = SUBSTRATE_PALETTES[look];
+  const step = Math.max(4, w / 160);
+  const top = new Path2D();
+  top.moveTo(0, sandSurface(look, 0, w, bottom, hs));
+  for (let x = step; x <= w + step; x += step) top.lineTo(x, sandSurface(look, x, w, bottom, hs));
+  top.lineTo(w, h);
+  top.lineTo(0, h);
+  top.closePath();
+  const lip = new Path2D();
+  lip.moveTo(0, frontLip(look, 0, w, bottom, hs));
+  for (let x = step; x <= w + step; x += step) lip.lineTo(x, frontLip(look, x, w, bottom, hs));
+  lip.lineTo(w, h);
+  lip.lineTo(0, h);
+  lip.closePath();
+
+  // 沙面：越前面越亮（光從上面照下來）
+  const g = ctx.createLinearGradient(0, bottom - 14 * hs, 0, bottom + 32 * hs);
+  g.addColorStop(0, pal.top[0]);
+  g.addColorStop(0.4, pal.top[1]);
+  g.addColorStop(1, pal.top[2]);
+  ctx.fillStyle = g;
+  ctx.fill(top);
+  ctx.save();
+  ctx.clip(top);
+  const tile = sceneryImage(`sub-${look}-tile`);
+  if (tile) {
+    // 精繪底材紋理：斜斜看下去，垂直方向壓扁，越後面越暗
+    const { w: iw } = imageSize(tile);
+    const pattern = ctx.createPattern(tile, 'repeat');
+    if (pattern) {
+      const k = (180 * hs) / iw;
+      pattern.setTransform(new DOMMatrix().translate(0, bottom - 16 * hs).scale(k, k * 0.38));
+      ctx.fillStyle = pattern;
+      ctx.fillRect(0, bottom - 20 * hs, w, 56 * hs);
+    }
+    const shade = ctx.createLinearGradient(0, bottom - 16 * hs, 0, bottom + 32 * hs);
+    shade.addColorStop(0, 'rgba(10,20,20,0.4)');
+    shade.addColorStop(0.45, 'rgba(10,20,20,0.05)');
+    shade.addColorStop(1, 'rgba(255,250,235,0.08)');
+    ctx.fillStyle = shade;
+    ctx.fillRect(0, bottom - 20 * hs, w, 56 * hs);
+  }
+  const art = tile;
+  const rand = seeded(4242);
+  paintGrains(ctx, rand, pal, hs, 0, bottom - 16 * hs, w, 50 * hs, art ? 3 : 1);
+  if (look === 'sand' || look === 'coral') {
+    // 小卵石、貝殼碎片
+    for (let i = 0; i < w / 45; i++) {
+      const x = rand() * w;
+      const yy = sandSurface(look, x, w, bottom, hs) + 4 * hs + rand() * 20 * hs;
+      const r = (2 + rand() * 4) * Math.max(0.6, hs);
+      const pg = ctx.createRadialGradient(x - r * 0.3, yy - r * 0.4, 0, x, yy, r);
+      const tone = look === 'coral' ? [0xf4ece0, 0xe6c8b8, 0xfaf6ee, 0xd8cfc0][i % 4] : [0xd9cbb0, 0xa89a86, 0x8c8478, 0xe8e0d0][i % 4];
+      pg.addColorStop(0, rgba(mix(tone, 0xffffff, 0.4), 1));
+      pg.addColorStop(1, rgba(mix(tone, 0x000000, 0.3), 1));
+      ctx.fillStyle = pg;
+      ctx.beginPath();
+      if (look === 'coral') {
+        // 珊瑚碎片是有稜角的
+        ctx.moveTo(x - r * 1.4, yy);
+        ctx.lineTo(x - r * 0.2, yy - r);
+        ctx.lineTo(x + r * 1.3, yy - r * 0.3);
+        ctx.lineTo(x + r * 0.5, yy + r * 0.7);
+      } else ctx.ellipse(x, yy, r * 1.3, r, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  // 沙面最後面的陰影（水草、石頭根部）
+  const edge = ctx.createLinearGradient(0, bottom - 16 * hs, 0, bottom + 14 * hs);
+  edge.addColorStop(0, 'rgba(20,30,25,0.5)');
+  edge.addColorStop(1, 'rgba(20,30,25,0)');
+  ctx.fillStyle = edge;
+  ctx.fillRect(0, bottom - 20 * hs, w, 36 * hs);
+  ctx.restore();
+
+  // 斷面：隔著前玻璃看進去，上層顆粒清楚、往下越暗，中間有幾條沉積紋
+  ctx.save();
+  ctx.clip(lip);
+  const lipY = bottom + 27 * hs;
+  const side = sceneryImage(`sub-${look}-side`);
+  if (side) {
+    // 精繪斷面條：上緣波浪接著沙面，左右接起來鋪滿
+    const { w: iw, h: ih } = imageSize(side);
+    const sh = Math.max(h - lipY + 6 * hs, 60 * hs);
+    const sw = iw * (sh / ih);
+    const face = ctx.createLinearGradient(0, lipY, 0, h);
+    face.addColorStop(0, pal.face[0]);
+    face.addColorStop(1, pal.face[1]);
+    ctx.fillStyle = face;
+    ctx.fillRect(0, lipY, w, h - lipY);
+    for (let x = 0; x < w; x += sw - 1) ctx.drawImage(side, x, lipY - 6 * hs, sw, sh);
+  } else {
+    const lipY = bottom + 27 * hs;
+    const face = ctx.createLinearGradient(0, lipY, 0, h);
+    face.addColorStop(0, pal.face[0]);
+    face.addColorStop(1, pal.face[1]);
+    ctx.fillStyle = face;
+    ctx.fillRect(0, lipY, w, h - lipY);
+    if (look === 'soil') {
+      // 水草泥底下墊一層基肥（偏紅褐）
+      const base = lipY + (h - lipY) * 0.55;
+      ctx.fillStyle = 'rgba(120,60,30,0.45)';
+      ctx.beginPath();
+      ctx.moveTo(0, base);
+      for (let x = 0; x <= w; x += step) ctx.lineTo(x, base + Math.sin(x * 0.02) * 3 * hs);
+      ctx.lineTo(w, h);
+      ctx.lineTo(0, h);
+      ctx.fill();
+    }
+    for (let k = 1; k <= 3; k++) {
+      const yy = lipY + (h - lipY) * (k / 4.2);
+      ctx.strokeStyle = look === 'soil' ? 'rgba(0,0,0,0.25)' : 'rgba(120,95,60,0.22)';
+      ctx.lineWidth = Math.max(1, 1.5 * hs);
+      ctx.beginPath();
+      for (let x = 0; x <= w; x += step) {
+        const yy2 = yy + Math.sin(x * 0.013 + k * 2) * 2.5 * hs;
+        if (x === 0) ctx.moveTo(x, yy2);
+        else ctx.lineTo(x, yy2);
+      }
+      ctx.stroke();
+    }
+    paintGrains(ctx, rand, pal, hs, 0, lipY, w, h - lipY, 0.7);
+  }
+  // 越往下越暗（光透不進去）
+  const dark = ctx.createLinearGradient(0, lipY, 0, h);
+  dark.addColorStop(0, 'rgba(0,0,0,0)');
+  dark.addColorStop(1, 'rgba(0,10,15,0.45)');
+  ctx.fillStyle = dark;
+  ctx.fillRect(0, lipY, w, h - lipY);
+  ctx.restore();
+  // 前玻璃的邊：一條細細的反光
+  ctx.strokeStyle = 'rgba(235,255,255,0.45)';
+  ctx.lineWidth = Math.max(1, 1.4 * hs);
+  ctx.beginPath();
+  for (let x = 0; x <= w + step; x += step) {
+    const yy = frontLip(look, x, w, bottom, hs);
+    if (x === 0) ctx.moveTo(x, yy);
+    else ctx.lineTo(x, yy);
+  }
+  ctx.stroke();
+}
+
+/** 撒顆粒：水草泥是圓的黑褐顆粒，沙子是細點。 */
+function paintGrains(ctx: Ctx, rand: () => number, pal: (typeof SUBSTRATE_PALETTES)['sand'], hs: number, x0: number, y0: number, w: number, hh: number, sparse: number): void {
+  const n = (w * hh) / (pal.grainEvery * sparse);
+  const size = pal.grainSize * Math.max(0.6, hs);
+  for (let i = 0; i < n; i++) {
+    const x = x0 + rand() * w;
+    const yy = y0 + rand() * hh;
+    ctx.fillStyle = pal.grains[Math.floor(rand() * pal.grains.length)];
+    const r = size * (0.5 + rand() * 0.7);
+    if (size > 2) {
+      ctx.beginPath();
+      ctx.ellipse(x, yy, r, r * 0.85, rand() * 3, 0, Math.PI * 2);
+      ctx.fill();
+    } else ctx.fillRect(x, yy, r, r);
+  }
 }
 
 /** 可以無縫拼接的焦散光紋（水面的波浪把光聚成網狀亮線）。 */

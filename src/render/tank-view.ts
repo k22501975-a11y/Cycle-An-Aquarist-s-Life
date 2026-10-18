@@ -3,7 +3,8 @@ import { FISH_SPECIES, PLANT_SPECIES, isCo2Injecting, isJuvenile, isLightOn, loo
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture } from './painted';
 import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
-import { pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
+import { floorAt, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
+import { dirtSpots, floorY, frontLip, sandSurface, substrateLook, SUBSTRATE_PALETTES, type SubstrateLook } from './substrate';
 import { applyFoodLook, BITE_SECONDS, biteKick, pickEaten, pickFoodKind, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type FoodLook, type Mouth, type Pellet } from './feeding';
 import { canvasTexture, flakeTextures, makeCanvas, mix, pelletTextures, softDotTexture, tabletTexture, wormTextures } from './paint';
 import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame, TEST_SECONDS, WATER_CHANGE_SECONDS, type KitParam } from './ops-fx';
@@ -195,6 +196,10 @@ export class TankView {
   private tabletSprite: Sprite | null = null;
   /** 飼料剛因重新排版清空：補回去時不演撒飼料。 */
   private foodReset = true;
+  private look: SubstrateLook = 'sand';
+  /** 沙面髒點：重畫的依據（數量、版面）。 */
+  private dirtKey = '';
+  private readonly dirt = new Graphics();
   private lastFoodMg = 0;
   private bubbles: Bubble[] = [];
   private motes: Mote[] = [];
@@ -223,6 +228,7 @@ export class TankView {
       this.driftwood,
       this.plantLayer,
       this.front,
+      this.dirt,
       this.causticsLayer,
       this.gear,
       this.gearGlow,
@@ -294,7 +300,8 @@ export class TankView {
     }
     this.cam.pan = clampPan(this.cam.pan, this.cam.span, screen.width);
     this.root.x = -this.cam.pan;
-    const key = `${screen.width}x${screen.height}:${this.insets.top},${this.insets.bottom}:${size.w}x${size.h}:${this.cam.span}`;
+    const look = substrateLook(state.equipment.substrate?.spec.id);
+    const key = `${screen.width}x${screen.height}:${this.insets.top},${this.insets.bottom}:${size.w}x${size.h}:${this.cam.span}:${look}`;
     if (key === this.sceneKey) return;
     this.sceneKey = key;
     const oldWidth = this.bounds.width;
@@ -303,6 +310,10 @@ export class TankView {
     if (oldWidth > 0 && oldWidth !== b.width) for (const v of this.fish.values()) v.swimmer.x *= b.width / oldWidth;
     this.ppc = pxPerCm(b, size);
     this.hs = this.ppc / MOCKUP_PX_PER_CM;
+    const hs = this.hs;
+    this.look = look;
+    b.floor = (x: number) => floorY(look, x, b.width, b.bottom, hs);
+    this.dirtKey = '';
     this.root.hitArea = { contains: (x: number, y: number) => x >= 0 && y >= 0 && x <= b.width && y <= b.height };
 
     const swap = (sprite: Sprite, tex: Texture) => {
@@ -314,7 +325,7 @@ export class TankView {
     };
     swap(this.backdrop, paintBackdrop(b, this.hs));
     swap(this.driftwood, paintDriftwood(b, this.hs));
-    swap(this.front, paintFront(b, this.hs));
+    swap(this.front, paintFront(b, this.hs, look));
     swap(this.vignette, paintVignette(b.width, b.height));
 
     // 焦散：主要照在底沙上，往上漸漸消失
@@ -394,6 +405,7 @@ export class TankView {
     this.layout(state);
     this.detectOps(state, dt);
     this.syncFood(state, dt);
+    this.drawDirt(state);
     this.syncFish(state, dt);
     this.syncPlants(state);
     this.drawOps(dt);
@@ -862,7 +874,7 @@ export class TankView {
       p.s.destroy();
     }
     for (const p of this.food) {
-      stepPellet(p, dt, surface, bottom, scale);
+      stepPellet(p, dt, surface, floorAt(this.bounds, p.x) + 2, scale);
       p.s.position.set(p.x, p.y);
       p.s.rotation = p.rot;
       // 漂在水面時壓扁一點，像薄片平躺（顆粒、紅蟲不壓）
@@ -883,6 +895,32 @@ export class TankView {
       c.y += c.vy * dt;
       c.vy += 20 * scale * dt;
       fx.circle(c.x, c.y, Math.max(1, 1.6 * this.hs)).fill({ color: 0xe8a050, alpha: 1 - c.t / 0.6 });
+    }
+  }
+
+  /** 沙面的髒點：殘餌、魚便積在沙上，越髒越多；換水虹吸時一起吸掉。 */
+  private drawDirt(state: TankState): void {
+    const n = dirtSpots(state.water.organicMg / state.equipment.tank.volumeL);
+    const key = `${n}:${this.sceneKey}`;
+    if (key === this.dirtKey) return;
+    this.dirtKey = key;
+    const g = this.dirt.clear();
+    const { width, bottom } = this.bounds;
+    const hs = this.hs;
+    const look = this.look;
+    const color = look === 'bare' ? 0x5a4a30 : SUBSTRATE_PALETTES[look].dirt;
+    // 位置固定（同一缸每次都在同樣的地方），越髒就多畫幾團
+    let seed = 9173;
+    const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < n; i++) {
+      const x = r() * width;
+      const top = sandSurface(look, x, width, bottom, hs) + 3 * hs;
+      const lip = frontLip(look, x, width, bottom, hs) - 3 * hs;
+      const y = look === 'bare' ? top - 2 * hs : top + r() * Math.max(1, lip - top);
+      const size = (3 + r() * 5) * hs;
+      for (let k = 0; k < 5; k++) {
+        g.ellipse(x + (r() - 0.5) * size * 1.6, y + (r() - 0.5) * size * 0.4, size * (0.4 + r() * 0.5), size * (0.18 + r() * 0.15)).fill({ color, alpha: 0.22 + r() * 0.18 });
+      }
     }
   }
 
