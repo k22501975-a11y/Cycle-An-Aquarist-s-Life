@@ -42,6 +42,7 @@ export function eventSound(type: SimEventType): SoundId {
     case 'trap_rotted':
     case 'betta_fight':
     case 'betta_ate_shrimp':
+    case 'betta_chase_female':
       return 'warn';
     case 'snail_eggs':
     case 'snail_hatched':

@@ -60,6 +60,8 @@ export interface FishCondition {
   follow?: number;
   /** 正在帶小孩的母魚：慢慢巡、趕走靠近的魚。 */
   guarding?: boolean;
+  /** 顧泡巢的公鬥魚：泡巢的水平位置，公魚守在下面、不時游上去補泡泡。 */
+  nestX?: number;
 }
 
 /** 靠近母魚的外人（不是自己的小孩、不是蝦）。 */
@@ -151,6 +153,14 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
     ax = ax * 0.3 + ((tx - s.x) / (14 * scale)) * (threat ? 3 : 1.5);
     ay = ((ty - s.y) / (14 * scale)) * (threat ? 3 : 1.5);
     speed *= threat ? 2.2 : 1.2;
+  } else if (cond.nestX !== undefined) {
+    // 在泡巢下慢慢晃，偶爾貼到水面補泡泡、把掉下來的卵含回去
+    const up = Math.sin(s.phase * 0.05 + s.id) > 0.6;
+    const ty = bounds.surface + (up ? 12 : 30) * scale;
+    ax = ax * 0.25 + ((cond.nestX - s.x) / (30 * scale)) * 1.2;
+    ay = ((ty - s.y) / (16 * scale)) * 1.5;
+    // 離泡巢遠就游回去，到了就慢慢晃
+    speed *= Math.hypot(cond.nestX - s.x, ty - s.y) > 40 * scale ? 0.9 : 0.35;
   } else if (cond.guarding) {
     const foe = intruderNear(s, all, 70 * scale);
     if (foe) {
@@ -181,7 +191,7 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
       cx += o.x; cy += o.y; avx += o.vx; avy += o.vy; n++;
     }
   }
-  if (n > 0 && p.cohesion > 0 && !sym.has('hiding')) {
+  if (n > 0 && p.cohesion > 0 && !sym.has('hiding') && cond.nestX === undefined) {
     ax += ((cx / n - s.x) / (60 * scale)) * p.cohesion;
     ay += ((cy / n - s.y) / (60 * scale)) * p.cohesion * 0.6;
     ax += (avx / n / speed) * 0.5 * p.cohesion;
@@ -215,7 +225,7 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   const margin = 30 * scale;
   if (s.x < margin) ax += (margin - s.x) / margin * 3;
   if (s.x > bounds.width - margin) ax -= (s.x - (bounds.width - margin)) / margin * 3;
-  if (s.y < bounds.surface + margin * 0.5) ay += 2;
+  if (s.y < bounds.surface + margin * 0.5 && cond.nestX === undefined) ay += 2;
   if (s.y > bounds.bottom - margin * 0.5 && !p.crawler) ay -= 2;
 
   s.vx += ax * speed * dt * 2;

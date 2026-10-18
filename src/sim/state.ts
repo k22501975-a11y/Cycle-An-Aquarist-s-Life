@@ -274,6 +274,7 @@ export type SimEventType =
   | 'heater_exposed'
   | 'betta_fight'
   | 'betta_ate_shrimp'
+  | 'betta_chase_female'
   | 'snail_died'
   | 'snail_eggs'
   | 'snail_hatched'

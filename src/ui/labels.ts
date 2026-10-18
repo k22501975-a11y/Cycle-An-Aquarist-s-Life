@@ -45,7 +45,8 @@ export const DEATH_CAUSE_LABELS: Record<string, string> = {
 export const BROOD_ISSUE_LABELS: Record<string, string> = {
   noisy: '缸裡太吵了，魚太多',
   water: '水質變動太大',
-  stress: '母魚太緊張了',
+  stress: '親魚太緊張了',
+  current: '水流太強，泡巢一直被沖散（換成海綿過濾或關小）',
 };
 
 export function fishName(fish: Fish): string {
@@ -103,11 +104,16 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
     case 'snail_hatched':
       return { text: `蘋果螺的卵孵出 ${e.count ?? 0} 隻小螺`, tone: 'info' };
     case 'brood_laid':
+      if (e.cause === 'bubble') return { text: `${fish ? fishName(fish) : '公鬥魚'} 在水面吐了泡巢，跟母魚產下約 ${e.count ?? 0} 顆卵，正一顆顆含進泡巢。現在把母魚撈到別缸，不然公魚會追咬牠；也別開強水流`, tone: 'info' };
       return { text: `${fish ? fishName(fish) : '短鯛母魚'} 在洞穴裡產了約 ${e.count ?? 0} 顆卵，轉成護幼色守著。這幾天別大換水、別動造景`, tone: 'info' };
     case 'brood_eaten':
+      if (fish?.species === 'betta') return { text: `${fishName(fish)} 把泡巢裡的卵吃掉了：${BROOD_ISSUE_LABELS[e.cause ?? 'stress'] ?? '太緊張了'}。第一次常這樣，養好再配一次`, tone: 'warn' };
       return { text: `${fish ? fishName(fish) : '短鯛母魚'} 把整窩卵吃掉了：${BROOD_ISSUE_LABELS[e.cause ?? 'stress'] ?? '太緊張了'}。新手第一窩常這樣，下次會好一點`, tone: 'warn' };
     case 'brood_left':
+      if (fish?.species === 'betta') return { text: `${fish ? fishName(fish) : '公鬥魚'} 顧的 ${e.count ?? 0} 尾小鬥魚會自己游了。把公魚撈走，不然牠會開始吃小魚；小魚要餵很細的飼料`, tone: 'warn' };
       return { text: `${fish ? fishName(fish) : '短鯛母魚'} 帶大的 ${e.count ?? 0} 尾小魚離巢了，可以分缸了`, tone: 'info' };
+    case 'betta_chase_female':
+      return { text: `公鬥魚在顧泡巢，一直追咬 ${fish ? fishName(fish) : '母魚'}。快把母魚撈到別缸`, tone: 'bad' };
     case 'betta_fight':
       return { text: `缸裡有 ${e.count ?? 2} 尾公鬥魚在打架！打輸的撐不了幾天，快把牠們分到不同缸`, tone: 'bad' };
     case 'betta_ate_shrimp':

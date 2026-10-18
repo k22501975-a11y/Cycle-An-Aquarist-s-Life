@@ -175,8 +175,8 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     finNipPerDay: 0,
     // 公魚的長鰭也是斑馬魚咬鰭的目標
     longFinnedMales: true,
-    // 泡巢繁殖之後再做（要隔離缸、公魚護巢）；兩尾公魚同缸會打架（betta.ts）
-    breeding: null,
+    // 泡巢繁殖、公魚護巢（parental.ts）：現實一窩一兩百顆卵起跳，遊戲裡縮小；兩尾公魚同缸會打架（betta.ts）
+    breeding: { gestationDays: 0, broodMean: 80, broodMin: 30, broodMax: 150 },
   },
   crystal_shrimp: {
     id: 'crystal_shrimp',
