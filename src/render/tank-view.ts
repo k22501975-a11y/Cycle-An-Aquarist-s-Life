@@ -558,6 +558,7 @@ export class TankView {
       // 選取的魚：身後一圈柔和的金色光暈
       const selected = this.selectedFish === fish.id;
       view.glow.visible = selected;
+      rig.setRim(selected ? 0xffe9b0 : null, 0.75 + 0.25 * Math.sin(this.time * 3));
       if (selected) {
         const r = this.lengthPx(fish) * depth * 1.5;
         view.glow.width = r;

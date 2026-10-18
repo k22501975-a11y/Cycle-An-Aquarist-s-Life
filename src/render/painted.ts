@@ -1,4 +1,4 @@
-import { Assets, Container, MeshPlane, Texture } from 'pixi.js';
+import { Assets, BlurFilter, ColorMatrixFilter, Container, Mesh, MeshPlane, Texture } from 'pixi.js';
 import type { FishSpeciesId } from '../sim';
 import type { FishForm } from './fish-art';
 import { guppyLook } from './strains';
@@ -81,6 +81,7 @@ export const SCENERY: Record<string, string> = {
   'wood-2': 'scape/wood-spider-2.webp',
   'wood-3': 'scape/wood-spider-3.webp',
   'plant-rotala': 'scape/plant-rotala.webp',
+  'plant-anubias': 'scape/plant-anubias.webp',
 };
 
 const textures = new Map<string, Texture>();
@@ -131,6 +132,9 @@ export class PaintedRig extends Container {
   private readonly mesh: MeshPlane;
   private readonly rest: Float32Array;
   private readonly spec: PaintedSpec;
+  private rim: Mesh | null = null;
+  private rimFill: ColorMatrixFilter | null = null;
+  private rimColor = -1;
 
   constructor(key: string, texture: Texture, readonly look: { alpha: number }) {
     super();
@@ -177,6 +181,38 @@ export class PaintedRig extends Container {
       data[i + 1] = cy + (y - cy) * (fold + (1 - fold) * (1 - d) * 0.3) + wave;
     }
     buf.update();
+  }
+
+  /**
+   * 選取時的輪廓光（Glow ＋邊緣光）：同一份網格再畫一次，放大一點、填成單色、模糊，墊在魚的後面。
+   * 共用網格，所以尾巴擺動時光也跟著擺。
+   */
+  setRim(color: number | null, alpha = 1): void {
+    if (color === null) {
+      if (this.rim) this.rim.visible = false;
+      return;
+    }
+    if (!this.rim) {
+      const w = this.lengthPx;
+      const h = this.mesh.texture.height;
+      const k = 1.06;
+      this.rim = new Mesh({ geometry: this.mesh.geometry, texture: this.mesh.texture });
+      this.rim.scale.set(-k, k);
+      this.rim.position.set((w / 2) * k, (-h / 2) * k);
+      this.rimFill = new ColorMatrixFilter();
+      this.rim.filters = [this.rimFill, new BlurFilter({ strength: 5, quality: 2 })];
+      this.addChildAt(this.rim, 0);
+    }
+    if (color !== this.rimColor) {
+      const r = ((color >> 16) & 255) / 255;
+      const g = ((color >> 8) & 255) / 255;
+      const b = (color & 255) / 255;
+      // 不管原本的顏色，只保留形狀（alpha），填成單色
+      this.rimFill!.matrix = [0, 0, 0, 0, r, 0, 0, 0, 0, g, 0, 0, 0, 0, b, 0, 0, 0, 1, 0];
+      this.rimColor = color;
+    }
+    this.rim.visible = true;
+    this.rim.alpha = alpha;
   }
 
   /** 死掉或生病時整條魚變灰。 */

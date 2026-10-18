@@ -332,7 +332,7 @@ export function paintFront(b: TankBounds, hs: number): Texture {
   if (substrate) {
     // 精繪底沙：取圖下半部的沙紋鋪滿沙面，上面再疊一層受光漸層統一色調
     const { w: iw, h: ih } = imageSize(substrate);
-    ctx.drawImage(substrate, 0, ih * 0.42, iw, ih * 0.58, 0, bottom - 18 * hs, w, h - bottom + 18 * hs);
+    ctx.drawImage(substrate, 0, ih * 0.52, iw, ih * 0.48, 0, bottom - 18 * hs, w, h - bottom + 18 * hs);
     ctx.globalAlpha = 0.35;
     ctx.fillStyle = g;
     ctx.fillRect(0, bottom - 20 * hs, w, h);

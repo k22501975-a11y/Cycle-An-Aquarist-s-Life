@@ -10,7 +10,7 @@ from pathlib import Path
 from PIL import Image
 
 # 類別 → 最長邊像素
-MAX_SIDE = {'fish': 512, 'shrimp': 384, 'scape': 768, 'ui': 128, 'bg': 1920}
+MAX_SIDE = {'fish': 512, 'shrimp': 384, 'scape': 768, 'ui': 256, 'bg': 1920}
 
 src = Path(sys.argv[1] if len(sys.argv) > 1 else '/mnt/project-files/art')
 dst = Path(__file__).resolve().parent.parent / 'public' / 'art'
