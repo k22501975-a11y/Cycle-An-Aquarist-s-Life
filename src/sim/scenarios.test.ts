@@ -3,6 +3,7 @@ import {
   addFish,
   addPlant,
   breakHeater,
+  lightHeatC,
   computeStressors,
   createTank,
   doseIchMedication,
@@ -226,6 +227,26 @@ describe('設備與環境', () => {
     }
     expect(stuck / runs).toBeGreaterThan(0.2);
     expect(stuck / runs).toBeLessThan(0.3);
+  });
+
+  it('燈具會發熱：開燈時水溫比室溫高，水草燈比基本燈熱、小缸比大缸熱', () => {
+    const noHeater = { ...STARTER, heater: null, roomTempC: 26, seed: 22 };
+    const dark = createTank({ ...noHeater, light: null });
+    const basic = createTank({ ...noHeater, light: { spec: LIGHTS.basic, startHour: 0, photoperiodHours: 16 } });
+    const planted = createTank({ ...noHeater, light: { spec: LIGHTS.planted, startHour: 0, photoperiodHours: 16 } });
+    // 跑到第三天的開燈後段（14 點），讓水溫接近平衡。
+    for (const s of [dark, basic, planted]) simulate(s, 48 + 14);
+    expect(basic.water.tempC - dark.water.tempC).toBeGreaterThan(0.3);
+    expect(planted.water.tempC - basic.water.tempC).toBeGreaterThan(0.4);
+    expect(planted.water.tempC - dark.water.tempC).toBeLessThan(1.5);
+
+    const nano = createTank({ ...noHeater, tank: TANKS.nano20, light: { spec: LIGHTS.planted, startHour: 0, photoperiodHours: 16 } });
+    simulate(nano, 48 + 14);
+    expect(lightHeatC(nano)).toBeGreaterThan(lightHeatC(planted));
+
+    // 關燈後燈熱歸零。
+    simulate(planted, 4);
+    expect(lightHeatC(planted)).toBe(0);
   });
 
   it('加熱棒功率不足時，大缸在冷房間達不到設定溫度', () => {
