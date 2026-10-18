@@ -25,7 +25,7 @@ async function start(): Promise<void> {
   const toolbar = document.getElementById('toolbar')!;
 
   const app = new Application();
-  await app.init({ resizeTo: stage, background: 0x0b1a24, antialias: true, resolution: Math.min(2, window.devicePixelRatio), autoDensity: true });
+  await app.init({ resizeTo: stage, background: 0x1d3046, antialias: true, resolution: Math.min(2, window.devicePixelRatio), autoDensity: true });
   stage.appendChild(app.canvas);
 
   // 讀取存檔並補算離開期間的時間
