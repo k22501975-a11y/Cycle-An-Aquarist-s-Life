@@ -4,7 +4,7 @@ import { quantizeTone, toneImage, toneRGB } from './tone';
 describe('色調烘進貼圖（I1）', () => {
   it('不調色時顏色不變；飽和度 -1 變灰；提高飽和度讓主色更突出', () => {
     expect(toneRGB(0.8, 0.3, 0.1, 0, 1)).toEqual([0.8, 0.3, 0.1]);
-    const [r, g, b] = toneRGB(0.8, 0.3, 0.1, -1.5, 1);
+    const [r, g, b] = toneRGB(0.8, 0.3, 0.1, -1, 1);
     expect(Math.abs(r - g)).toBeLessThan(0.01);
     expect(Math.abs(g - b)).toBeLessThan(0.01);
     const vivid = toneRGB(0.8, 0.3, 0.1, 0.4, 1);
