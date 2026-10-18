@@ -5,6 +5,7 @@ import { eventSound } from './audio/sounds';
 import { applySeason, Game, newGameState, SPEED_OPTIONS } from './game/game';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
 import { installCrashGuard } from './ui/crash';
+import { canPromptInstall, isInstalled, isIos, promptInstall, setupPwa } from './ui/pwa';
 import { loadPaintedArt } from './render/painted';
 import { defaultQuality, isQuality, type Quality, QUALITY_LABELS, qualitySpec } from './render/quality';
 import { TankView } from './render/tank-view';
@@ -167,6 +168,23 @@ async function start(): Promise<void> {
     input.click();
   };
   const crash = installCrashGuard({ save, exportSave });
+  // 可安裝的 App：有新版時提示重新整理（先存檔）
+  setupPwa((apply) => toasts.show('有新版本了', 'info', { label: '更新', run: () => (save(), apply()) }));
+  const installSection = () => {
+    if (isInstalled()) return [h('p.hint', {}, '已經用安裝好的 App 開啟。')];
+    if (canPromptInstall())
+      return [
+        h('button.btn', {
+          onclick: async () => {
+            if (await promptInstall()) toasts.show('裝好了，之後從主畫面的圖示開啟');
+            sheet.refresh();
+          },
+        }, '安裝到主畫面'),
+        h('p.hint', {}, '裝好後會全螢幕開啟，沒網路也能玩。'),
+      ];
+    if (isIos()) return [h('p.hint', {}, '在 Safari 按下方的「分享」，選「加入主畫面」，就能全螢幕開啟、沒網路也能玩。')];
+    return [h('p.hint', {}, '用瀏覽器選單的「安裝應用程式」或「加到主畫面」，就能全螢幕開啟、沒網路也能玩。')];
+  };
   debugHandle.audio = audio;
 
   // ---- 選取卡：點一條魚，顯示名字、品系、健康與壓力 ----
@@ -208,6 +226,7 @@ async function start(): Promise<void> {
     renderSelCard();
     if (id !== null) requestAnimationFrame(() => placeSelCard());
   };
+  debugHandle.select = select;
 
   const view = new TankView(app, {
     onSelectFish: (id) => select(id),
@@ -377,6 +396,8 @@ async function start(): Promise<void> {
       h('h3', {}, '存檔'),
       h('div.row', {}, h('button.btn', { onclick: exportSave }, '匯出存檔'), h('button.btn', { onclick: importSave }, '從檔案匯入')),
       h('p.hint', {}, '遊戲每 10 秒自動存檔，每 30 分鐘自動備份一次；存檔壞掉時會自動用備份還原。換手機時可以匯出成檔案帶過去。'),
+      h('h3', {}, '安裝'),
+      ...installSection(),
       h('h3', {}, '開發者'),
       h('button.btn', { onclick: () => sheet.open('開發者數值', () => debugPanel(ctx), { live: true }) }, '開發者數值'),
     );
