@@ -1,4 +1,5 @@
 import { freeAmmoniaFraction, temperatureFactor } from '../chemistry';
+import { DEFAULT_BREEDING_CONDITION, DEFAULT_NUTRITION, foodLots, foodQuality, nutritionFactor, pruneFood } from '../food';
 import { chance } from '../random';
 import { FISH_SPECIES, type FishSpecies } from '../species';
 import { recordEvent, type Fish, type TankState } from '../state';
@@ -115,7 +116,7 @@ function computeDamage(state: TankState, fish: Fish, sp: FishSpecies): Damage[] 
 }
 
 export function immunity(fish: Fish, sp: FishSpecies): number {
-  return hardiness(fish, sp) * (1 - 0.7 * fish.stress) * (fish.hunger > 0.8 ? 0.8 : 1);
+  return Math.min(1, hardiness(fish, sp) * nutritionFactor(fish.nutrition)) * (1 - 0.7 * fish.stress) * (fish.hunger > 0.8 ? 0.8 : 1);
 }
 
 export function updateFauna(state: TankState, dt: number): void {
@@ -208,11 +209,18 @@ export function mainCause(fish: Fish): string {
   return best;
 }
 
-/** 魚會搶食缸內的飼料；壓力大時食慾下降。吃下的部分變成氨與糞便。 */
+/**
+ * 魚會搶食缸內的飼料；壓力大時食慾下降。吃下的部分變成氨與糞便。
+ * 每種飼料在不同的層（design/food.md）：上層魚搶漂浮的、蝦吃底沙的，餵錯層就有魚吃不到。
+ * 吃到的等級慢慢改變魚的長期營養、發色和繁殖意願。
+ */
 function feed(state: TankState, living: Fish[], dt: number): void {
   const { water } = state;
   const volume = state.equipment.tank.volumeL;
+  for (const fish of living) settleCondition(fish, dt);
   if (water.foodMg <= 0) return;
+  const lots = foodLots(water);
+  const total = water.foodMg;
 
   const appetites = living.map((f) => {
     const sp = FISH_SPECIES[f.species];
@@ -223,18 +231,58 @@ function feed(state: TankState, living: Fish[], dt: number): void {
     const room = f.hunger * daily * DAYS_TO_STARVING;
     return Math.min(room, daily * 4 * appetite * dt);
   });
-  const demand = appetites.reduce((a, b) => a + b, 0);
-  if (demand <= 0) return;
 
-  const eatenTotal = Math.min(water.foodMg, demand);
-  water.foodMg -= eatenTotal;
+  // 每批飼料：各條魚依「吃得到幾成」搶，不夠就照比例分
+  const eatenBy = living.map(() => ({ mg: 0, satiety: 0, nutrition: 0, color: 0, breeding: 0 }));
+  let eatenTotal = 0;
+  let dirtTotal = 0;
+  for (const lot of lots) {
+    const share = lot.mg / total;
+    const demands = living.map((f, i) => appetites[i] * FISH_SPECIES[f.species].diet[lot.kind] * share);
+    const demand = demands.reduce((a, b) => a + b, 0);
+    if (demand <= 0) continue;
+    const eaten = Math.min(lot.mg, demand);
+    lot.mg -= eaten;
+    eatenTotal += eaten;
+    const q = foodQuality(lot);
+    dirtTotal += eaten * q.dirt;
+    demands.forEach((d, i) => {
+      const mg = eaten * (d / demand);
+      const e = eatenBy[i];
+      e.mg += mg;
+      e.satiety += mg * q.satiety;
+      e.nutrition += mg * q.nutrition;
+      e.color += mg * q.color;
+      e.breeding += mg * q.breeding;
+    });
+  }
+  pruneFood(water);
   living.forEach((fish, i) => {
-    const eaten = eatenTotal * (appetites[i] / demand);
+    const e = eatenBy[i];
+    if (e.mg <= 0) return;
     const daily = FISH_SPECIES[fish.species].dailyFoodMg * sizeRatio(fish) ** 2;
-    fish.hunger = Math.max(0, fish.hunger - eaten / daily / DAYS_TO_STARVING);
+    fish.hunger = Math.max(0, fish.hunger - e.satiety / daily / DAYS_TO_STARVING);
+    // 吃了一天的份量，長期狀態往這批飼料的品質走一步
+    const meals = Math.min(1, e.mg / daily);
+    const toward = (v: number | undefined, base: number, target: number, days: number) => {
+      const cur = v ?? base;
+      return cur + (target - cur) * Math.min(1, meals / days);
+    };
+    fish.nutrition = toward(fish.nutrition, DEFAULT_NUTRITION, e.nutrition / e.mg, 14);
+    fish.breedingCondition = toward(fish.breedingCondition, DEFAULT_BREEDING_CONDITION, e.breeding / e.mg, 5);
+    const color = e.color / e.mg;
+    if (color > (fish.colorBoost ?? 0)) fish.colorBoost = toward(fish.colorBoost, 0, color, 6);
   });
   water.tan += (eatenTotal * TAN_PER_MG_FOOD) / volume;
-  water.organicMg += eatenTotal * FECES_PER_MG_FOOD;
+  water.organicMg += dirtTotal * FECES_PER_MG_FOOD;
+}
+
+/** 發色停餵好飼料會慢慢退（約兩週退一半）；繁殖意願沒有吃肉也會慢慢回到平常。 */
+function settleCondition(fish: Fish, dt: number): void {
+  if (fish.colorBoost) fish.colorBoost *= Math.exp(-dt / (24 * 20));
+  if (fish.breedingCondition !== undefined && fish.breedingCondition > DEFAULT_BREEDING_CONDITION) {
+    fish.breedingCondition += (DEFAULT_BREEDING_CONDITION - fish.breedingCondition) * (1 - Math.exp(-dt / (24 * 10)));
+  }
 }
 
 /**

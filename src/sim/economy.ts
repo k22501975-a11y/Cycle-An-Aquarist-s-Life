@@ -19,10 +19,10 @@ export const DAILY_SELL_LIMIT = 10;
 /** 一餐飼料的錢（一罐 100 元約可以餵 200 餐）。 */
 export const FOOD_PER_MEAL = 0.5;
 
-/** 記一餐飼料，週末跟電費一起算。 */
-export function chargeMeal(state: TankState): void {
+/** 記一餐飼料，週末跟電費一起算。units 是標準飼料一餐的幾倍（好飼料貴、份量大也貴）。 */
+export function chargeMeal(state: TankState, units = 1): void {
   const e = economy(state);
-  e.meals = (e.meals ?? 0) + 1;
+  e.meals = (e.meals ?? 0) + units;
 }
 
 /** 店價：品系孔雀魚在台灣約 50～100 元一隻、斑馬魚 20 元、櫻花蝦 25 元。 */
@@ -168,7 +168,9 @@ export function buybackRefusal(fish: Fish): string | null {
 export function fishBuybackPrice(fish: Fish): number {
   // 孔雀魚看品系和尾鰭：尾鰭 50 分是一般價，80 分多三成
   const base = fish.genome ? phenotypeValue(phenotype(fish.genome)) * (0.5 + fish.genome.tail / 100) : FISH_PRICES[fish.species];
-  return Math.max(1, Math.round(base * BUYBACK_SHARE * (isJuvenile(fish) ? 0.5 : 1)));
+  // 發色好的魚（長期餵好飼料）賣得貴一點
+  const color = 1 + 0.25 * (fish.colorBoost ?? 0);
+  return Math.max(1, Math.round(base * color * BUYBACK_SHARE * (isJuvenile(fish) ? 0.5 : 1)));
 }
 
 export function plantBuybackPrice(species: PlantSpeciesId): number {

@@ -1,4 +1,5 @@
 import { temperatureFactor } from '../chemistry';
+import { FOOD_KINDS, foodLots, foodQuality, pruneFood } from '../food';
 import type { TankState } from '../state';
 
 /** 有機物中的氮含量：分解時以氨氮（TAN）形式釋出。 */
@@ -7,8 +8,6 @@ const NITROGEN_FRACTION = 0.04;
 const O2_PER_MG_ORGANIC = 0.3;
 /** 有機物在 25°C 下每小時分解的比例。 */
 const DECOMPOSITION_PER_HOUR = 0.03;
-/** 沒被吃掉的飼料沉底後，每小時轉成腐敗有機物的比例。 */
-const FOOD_SPOIL_PER_HOUR = 0.5;
 /** 屍體每小時腐爛的比例。 */
 const CORPSE_DECAY_PER_HOUR = 0.02;
 
@@ -17,9 +16,13 @@ export function updateWaste(state: TankState, dt: number): void {
   const volume = state.equipment.tank.volumeL;
   const tf = temperatureFactor(water.tempC);
 
-  const spoiled = water.foodMg * (1 - Math.exp(-FOOD_SPOIL_PER_HOUR * dt));
-  water.foodMg -= spoiled;
-  water.organicMg += spoiled;
+  // 各種飼料爛的速度不同（黏缸壁的放很久），平價的填充物多、肉食蛋白質高，爛了更髒
+  for (const lot of foodLots(water)) {
+    const spoiled = lot.mg * (1 - Math.exp(-FOOD_KINDS[lot.kind].spoilPerHour * dt));
+    lot.mg -= spoiled;
+    water.organicMg += spoiled * foodQuality(lot).dirt;
+  }
+  pruneFood(water);
 
   // 死魚沒撈出來，會持續腐爛成大量有機廢物 → 氨。
   for (const fish of state.fish) {

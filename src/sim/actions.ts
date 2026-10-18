@@ -4,15 +4,16 @@ import { infect, STORE_DISEASE_CHANCE } from './processes/disease';
 import { lookIndex, phenotype, storeGenome } from './genetics';
 import { createFish } from './processes/population';
 import { roomTemperature } from './processes/thermal';
+import { addFood, DEFAULT_FOOD, type FoodGrade, type FoodKind } from './food';
 import { nextRandom } from './random';
 import { FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 import type { FilterSpec, HardscapeSpec, SubstrateSpec } from './equipment';
 import { testWater, type TestKitReading } from './readings';
 import { recordEvent, TEST_LOG_MAX, type DiseaseKind, type Fish, type Plant, type TankState } from './state';
 
-/** 投餵飼料（mg）。吃不完的會沉底腐敗。 */
-export function feed(state: TankState, mg: number): void {
-  state.water.foodMg += Math.max(0, mg);
+/** 投餵飼料（mg）。沒指定就是標準的漂浮薄片；吃不完的會腐敗。 */
+export function feed(state: TankState, mg: number, kind: FoodKind = DEFAULT_FOOD.kind, grade: FoodGrade = DEFAULT_FOOD.grade): void {
+  addFood(state.water, kind, grade, Math.max(0, mg));
 }
 
 export interface WaterChangeOptions {

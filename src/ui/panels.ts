@@ -53,8 +53,12 @@ import {
   CHILLERS,
   CO2_KITS,
   doseIchMedication,
+  DEFAULT_FOOD,
   feed,
   FANS,
+  FOOD_GRADES,
+  FOOD_KINDS,
+  mealPrice,
   FILTERS,
   FISH_SPECIES,
   freeAmmonia,
@@ -76,6 +80,8 @@ import {
   waterChange,
   type Fish,
   type FishSpeciesId,
+  type FoodGrade,
+  type FoodKind,
   type Symptom,
   type PlantSpeciesId,
   type Region,
@@ -118,24 +124,49 @@ function button(label: string, onclick: () => void, kind = ''): HTMLButtonElemen
   return h(`button.btn${kind ? '.' + kind : ''}`, { onclick }, label);
 }
 
-export function feedPanel({ game, sheet, toasts, sound }: PanelContext): Node {
+/** 上次選的飼料（同一次遊戲記住）。 */
+let feedChoice: { kind: FoodKind; grade: FoodGrade } = { ...DEFAULT_FOOD };
+
+/** 缸裡有誰吃不太到這種飼料（例如只餵漂浮的，蝦吃不到）。 */
+export function feedWarning(s: TankState, kind: FoodKind): string | null {
+  const species = [...new Set(alive(s).map((f) => f.species))];
+  const missing = species.filter((sp) => FISH_SPECIES[sp].diet[kind] < 0.5);
+  if (!missing.length) return null;
+  const better = kind === 'sinking' ? '漂浮' : '沉底';
+  return `${missing.map((sp) => FISH_SPECIES[sp].name).join('、')}吃不太到${FOOD_KINDS[kind].name}飼料，記得也餵${better}的。`;
+}
+
+export function feedPanel(ctx: PanelContext): Node {
+  const { game, sheet, toasts, sound } = ctx;
   const s = game.state;
   const meal = mealSize(s);
   if (meal <= 0) return h('p', {}, '缸裡還沒有魚。');
   const give = (mg: number, label: string) => () => {
+    const { kind, grade } = feedChoice;
     game.act((st) => {
       // 飼料錢每週跟電費一起結算，沒錢也能餵，魚不會因為沒錢餓死
-      chargeMeal(st);
-      feed(st, mg);
+      chargeMeal(st, mealPrice(kind, grade) * (mg / meal));
+      feed(st, mg, kind, grade);
     });
     sound?.('feed');
-    toasts.show(`餵了${label}（${mg.toFixed(0)} mg）`);
+    toasts.show(`餵了${label}${FOOD_GRADES[grade].name}${FOOD_KINDS[kind].name}飼料（${mg.toFixed(0)} mg）`);
     sheet.close();
   };
+  const pick = (choice: Partial<typeof feedChoice>) => () => {
+    feedChoice = { ...feedChoice, ...choice };
+    sheet.refresh();
+  };
+  const { kind, grade } = feedChoice;
+  const g = FOOD_GRADES[grade];
+  const warning = feedWarning(s, kind);
   return h(
     'div.stack',
     {},
-    h('p.hint', {}, '一天兩餐、幾分鐘內吃完最好。吃不完的飼料會沉底腐敗，變成氨。'),
+    h('div.tabs', {}, ...(Object.keys(FOOD_KINDS) as FoodKind[]).map((k) => h(`button.tab${k === kind ? '.active' : ''}`, { onclick: pick({ kind: k }) }, FOOD_KINDS[k].name))),
+    h('p.hint', {}, FOOD_KINDS[kind].hint + '。'),
+    h('div.tabs', {}, ...([1, 2, 3, 4] as FoodGrade[]).map((n) => h(`button.tab${n === grade ? '.active' : ''}`, { onclick: pick({ grade: n }) }, FOOD_GRADES[n].name))),
+    h('p.hint', {}, `${g.name}：${GRADE_NOTES[grade]}價錢是標準的 ${mealPrice(kind, grade).toFixed(1)} 倍。`),
+    warning ? h('p.hint.warn', {}, warning) : null,
     h(
       'div.row',
       {},
@@ -143,8 +174,16 @@ export function feedPanel({ game, sheet, toasts, sound }: PanelContext): Node {
       button('一餐', give(meal, '一餐'), 'primary'),
       button('一大把', give(meal * 3, '一大把')),
     ),
+    h('p.hint', {}, '一天兩餐、幾分鐘內吃完最好。吃不完的飼料會腐敗，變成氨。'),
   );
 }
+
+const GRADE_NOTES: Record<FoodGrade, string> = {
+  1: '填充物多，魚長得慢、比較容易生病，吃不完的也比較髒。',
+  2: '營養足夠，日常用。',
+  3: '含蝦紅素、螺旋藻，發色變好，比賽前用。',
+  4: '營養、發色、繁殖意願都最好，殘餌也少。',
+};
 
 export function waterChangePanel({ game, sheet, toasts, sound, undoable }: PanelContext): Node {
   let fraction = 0.3;
@@ -284,9 +323,22 @@ export function fishPanel({ game, sheet, toasts }: PanelContext, fishId: number)
     symptoms.length
       ? h('ul.symptoms', {}, ...symptoms.map((s) => h('li', {}, SYMPTOM_LABELS[s])))
       : h('p', {}, '游動正常，看起來很健康。'),
+    h('p', {}, conditionLine(fish)),
     h('p.hint', {}, '症狀只是線索：先用測試劑檢查水質，再判斷是環境問題還是生病。'),
     game.tanks.length > 1 ? moveFishRow(game, sheet, toasts, fish) : null,
   );
+}
+
+/** 吃得怎麼樣：長期營養、發色、繁殖意願（看最近餵的飼料）。 */
+export function conditionLine(fish: Fish): string {
+  const n = fish.nutrition ?? 0.5;
+  const parts = [`營養${n < 0.4 ? '偏差' : n < 0.65 ? '普通' : '很好'}`];
+  const c = fish.colorBoost ?? 0;
+  if (c >= 0.1) parts.push(`發色加成 ${Math.round(c * 100)}%`);
+  const b = fish.breedingCondition ?? 0.5;
+  if (b >= 0.65) parts.push('很想繁殖');
+  else if (b < 0.4) parts.push('沒什麼繁殖意願');
+  return parts.join(' · ');
 }
 
 /** 把魚撈到別缸：繁殖時把母魚隔開、把挑出來的種魚放專缸。 */

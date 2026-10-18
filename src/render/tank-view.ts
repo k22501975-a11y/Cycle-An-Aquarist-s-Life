@@ -1,11 +1,11 @@
-import { Application, BlurFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
+import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
 import { FISH_SPECIES, PLANT_SPECIES, isCo2Injecting, isJuvenile, isLightOn, lookVariant, observeSymptoms, phenotype, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture } from './painted';
 import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
-import { BITE_SECONDS, biteKick, pickEaten, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type Mouth, type Pellet } from './feeding';
-import { canvasTexture, flakeTextures, makeCanvas, mix, softDotTexture } from './paint';
+import { applyFoodLook, BITE_SECONDS, biteKick, pickEaten, pickFoodKind, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type FoodLook, type Mouth, type Pellet } from './feeding';
+import { canvasTexture, flakeTextures, makeCanvas, mix, pelletTextures, softDotTexture, tabletTexture, wormTextures } from './paint';
 import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame, TEST_SECONDS, WATER_CHANGE_SECONDS, type KitParam } from './ops-fx';
 import { PlantMesh } from './plant-sway';
 import { clawPose, clawRate, pleopods, type Pt } from './shrimp-limbs';
@@ -89,6 +89,8 @@ interface FishView {
   turn: TurnState;
   /** 蝦的小螯與腹足（程式畫的細線）。 */
   limbs: Graphics | null;
+  /** 目前套用的發色加成（分四段，變了才換濾鏡）。 */
+  boost: number;
 }
 
 interface Mote {
@@ -188,8 +190,12 @@ export class TankView {
   private dragged = false;
   private ripples: Array<{ x: number; t: number }> = [];
   private crumbs: Crumb[] = [];
+  /** 黏缸壁錠貼在玻璃上的位置；t 記一開始有幾顆碎屑，越吃越小。 */
+  private tablet: { x: number; y: number; t: number } | null = null;
+  private tabletSprite: Sprite | null = null;
   /** 飼料剛因重新排版清空：補回去時不演撒飼料。 */
   private foodReset = true;
+  private lastFoodMg = 0;
   private bubbles: Bubble[] = [];
   private motes: Mote[] = [];
   private rays: Ray[] = [];
@@ -781,32 +787,60 @@ export class TankView {
     const scale = this.motionScale;
     const target = Math.min(80, Math.ceil(state.water.foodMg / 2));
     const r = Math.max(4, 9 * this.hs);
+    // 缸裡已經滿是飼料時又撒一把：最舊的幾片先拿掉讓位，新撒的才看得到
+    const fresh = state.water.foodMg - this.lastFoodMg;
+    this.lastFoodMg = state.water.foodMg;
+    if (!this.foodReset && fresh > 4 && this.food.length >= target) {
+      const room = Math.min(this.food.length, Math.ceil(fresh / 2), 40);
+      for (const p of this.food.splice(0, room)) p.s.destroy();
+    }
     const add = target - this.food.length;
     if (add > 0) {
       let pellets: Pellet[];
+      const lots = state.water.food ?? [];
+      // 最新的那一批是剛撒下去的
+      const kind = (lots[lots.length - 1]?.kind ?? 'floating') as FoodLook;
       if (this.foodReset || add < 2) {
         // 讀檔、換鏡頭：直接散在水裡，不演撒下去
         pellets = scatterPellets(add, width / 2, surface, width * 0.3, () => this.rand());
         for (const p of pellets) {
+          const k = pickFoodKind(lots.length ? lots : [{ kind: 'floating', mg: 1 }], this.rand());
+          applyFoodLook(p, k);
+          (p as Pellet & { kind?: FoodLook }).kind = k;
           p.floatT = 0;
-          p.y = surface + this.rand() * (bottom - surface);
+          p.y = k === 'sticky' ? surface + (bottom - surface) * 0.62 : surface + this.rand() * (bottom - surface);
         }
+      } else if (kind === 'sticky') {
+        // 黏缸壁錠：壓在前玻璃上一塊，碎屑圍在旁邊
+        const x0 = width * (0.3 + this.rand() * 0.4);
+        const y0 = surface + (bottom - surface) * 0.62;
+        pellets = scatterPellets(add, x0, y0, r * 1.6, () => this.rand());
+        for (const p of pellets) {
+          p.y = y0 + (this.rand() - 0.5) * r * 2.4;
+          applyFoodLook(p, kind);
+        }
+        this.tablet = { x: x0, y: y0, t: 0 };
       } else {
         // 撒一把：集中落在一處，水面泛起漣漪
         const dropX = width * (0.3 + this.rand() * 0.4);
         pellets = scatterPellets(add, dropX, surface, width * 0.06, () => this.rand());
+        for (const p of pellets) applyFoodLook(p, kind);
         this.ripples.push({ x: dropX, t: 0 }, { x: dropX - width * 0.02, t: -0.18 }, { x: dropX + width * 0.025, t: -0.35 });
       }
-      const tex = flakeTextures();
       for (const p of pellets) {
+        const k = (p as Pellet & { kind?: FoodLook }).kind ?? kind;
+        const tex = k === 'sinking' ? pelletTextures() : k === 'meat' ? wormTextures() : k === 'sticky' ? pelletTextures() : flakeTextures();
         const s = new Sprite(tex[Math.floor(this.rand() * tex.length)]);
         s.anchor.set(0.5);
-        s.width = s.height = r * (0.75 + this.rand() * 0.5);
+        const size = r * (k === 'sinking' || k === 'sticky' ? 0.55 : k === 'meat' ? 1.6 : 1) * (0.75 + this.rand() * 0.5);
+        s.width = s.height = size;
+        if (k === 'meat') s.height = size * 0.5;
         this.foodLayer.addChild(s);
         this.food.push({ ...p, s });
       }
     }
     this.foodReset = false;
+    this.drawTablet();
     // 模擬吃掉的份量：嘴邊那片被咬走，咬的魚往前一衝、噴出碎屑；沒魚碰到的就是沉底爛掉
     const views = [...this.fish.values()].filter((v) => v.mouth);
     const mouths = views.map((v) => v.mouth!);
@@ -831,8 +865,8 @@ export class TankView {
       stepPellet(p, dt, surface, bottom, scale);
       p.s.position.set(p.x, p.y);
       p.s.rotation = p.rot;
-      // 漂在水面時壓扁一點，像薄片平躺
-      p.s.scale.y = Math.abs(p.s.scale.x) * (p.floatT > 0 ? 0.55 : 0.75 + 0.25 * Math.sin(p.phase * 3));
+      // 漂在水面時壓扁一點，像薄片平躺（顆粒、紅蟲不壓）
+      if (!p.sink && !p.stuck) p.s.scale.y = Math.abs(p.s.scale.x) * (p.floatT > 0 ? 0.55 : 0.75 + 0.25 * Math.sin(p.phase * 3));
     }
 
     const fx = this.feedFx;
@@ -850,6 +884,27 @@ export class TankView {
       c.vy += 20 * scale * dt;
       fx.circle(c.x, c.y, Math.max(1, 1.6 * this.hs)).fill({ color: 0xe8a050, alpha: 1 - c.t / 0.6 });
     }
+  }
+
+  /** 黏缸壁錠：還有碎屑黏著就畫一塊圓餅，越吃越小，吃完就消失。 */
+  private drawTablet(): void {
+    const stuck = this.food.filter((p) => p.stuck).length;
+    const tab = this.tablet;
+    if (tab && tab.t === 0) tab.t = stuck;
+    if (!tab || stuck === 0) {
+      this.tablet = null;
+      if (this.tabletSprite) this.tabletSprite.visible = false;
+      return;
+    }
+    if (!this.tabletSprite) {
+      this.tabletSprite = new Sprite(tabletTexture());
+      this.tabletSprite.anchor.set(0.5);
+      this.foodLayer.addChildAt(this.tabletSprite, 0);
+    }
+    const sp = this.tabletSprite;
+    sp.visible = true;
+    sp.position.set(tab.x, tab.y);
+    sp.width = sp.height = Math.max(4, 9 * this.hs) * 4.5 * Math.sqrt(stuck / Math.max(1, tab.t));
   }
 
   /** 游動、距離用的縮放（舊版以 300 px 高的缸為 1）。 */
@@ -893,6 +948,7 @@ export class TankView {
       biteT: BITE_SECONDS,
       turn: { f: swimmer.vx < 0 ? 1 : -1, v: 0 },
       limbs: null,
+      boost: 0,
       mouth: null,
       z,
       zTarget: z,
@@ -916,6 +972,7 @@ export class TankView {
     const look = appearance(fish.species, form, lookVariant(fish), gravid);
     const tex = paintedTexture(painted);
     view.rig = tex && painted ? new PaintedRig(painted, tex, look) : new FishRig(fish.species, look);
+    view.boost = 0;
     view.rig.addChildAt(view.eggs, 0);
     view.rig.addChild(view.spots);
     view.limbs?.destroy();
@@ -1061,6 +1118,17 @@ export class TankView {
       }
       if (rig instanceof PaintedRig) rig.setMouthOpen(kick > 0.15 && fish.species !== 'cherry_shrimp');
       if (fish.species === 'cherry_shrimp') this.drawShrimpLimbs(view, fish, dt);
+      // 長期餵好飼料：顏色更飽和、更亮（只是表現，停餵會退）
+      const boost = fish.alive ? Math.round((fish.colorBoost ?? 0) * 4) / 4 : 0;
+      if (boost !== view.boost) {
+        view.boost = boost;
+        if (boost > 0) {
+          const f = new ColorMatrixFilter();
+          f.saturate(boost * 0.45, false);
+          f.brightness(1 + boost * 0.08, true);
+          view.rig.filters = [f];
+        } else view.rig.filters = [];
+      }
       view.mouth = fish.alive ? { x: swimmer.x + dir * len * 0.25, y: swimmer.y, reach: Math.max(10, len * 0.55) } : null;
       const spotted = fish.alive && symptoms.includes('white_spots');
       if (spotted !== view.ichDrawn) {

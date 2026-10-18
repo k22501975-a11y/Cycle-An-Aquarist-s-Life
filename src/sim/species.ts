@@ -1,3 +1,5 @@
+import type { FoodKind } from './food';
+
 /**
  * 魚種與水草資料。數值是 Phase 0 的初版，之後會依真實資料再調整。
  */
@@ -18,6 +20,8 @@ export interface FishSpecies {
   bodyMassMg: number;
   /** 每日食量（mg 飼料）。 */
   dailyFoodMg: number;
+  /** 各種飼料吃得到幾成（覓食層，design/food.md §3）：上層魚搶漂浮的，蝦吃底沙的。 */
+  diet: Record<FoodKind, number>;
   /** 每小時耗氧（mg）。 */
   o2UseMgPerHour: number;
   /** 體質 0–1：基礎免疫力，也決定對毒素的耐受度。 */
@@ -58,6 +62,7 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     adultLengthCm: 4,
     bodyMassMg: 500,
     dailyFoodMg: 15,
+    diet: { floating: 1, sinking: 0.35, sticky: 0.9, meat: 1.1 },
     o2UseMgPerHour: 0.15,
     hardiness: 0.7,
     minGroup: 0,
@@ -82,6 +87,8 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     adultLengthCm: 4,
     bodyMassMg: 600,
     dailyFoodMg: 18,
+    // 搶食最快
+    diet: { floating: 1.25, sinking: 0.35, sticky: 0.9, meat: 1.25 },
     o2UseMgPerHour: 0.18,
     hardiness: 0.8,
     minGroup: 6,
@@ -107,6 +114,8 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     adultLengthCm: 2,
     bodyMassMg: 150,
     dailyFoodMg: 2,
+    // 只吃得到落到底沙的；漂浮的要等沉下來
+    diet: { floating: 0.35, sinking: 1, sticky: 0.6, meat: 0.8 },
     o2UseMgPerHour: 0.03,
     hardiness: 0.5,
     minGroup: 0,

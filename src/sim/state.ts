@@ -1,3 +1,4 @@
+import type { FoodLot } from './food';
 import { co2Equilibrium, oxygenSaturation, phFromCo2 } from './chemistry';
 import type { AirPumpSpec, ChillerSpec, Co2Spec, FanSpec, FilterSpec, HardscapeSpec, HeaterSpec, LightSpec, SubstrateSpec, TankSpec } from './equipment';
 import type { Region } from './season';
@@ -126,6 +127,8 @@ export interface Water {
   co2: number;
   /** 未被吃掉、正在腐敗的飼料（mg，整缸總量）。 */
   foodMg: number;
+  /** 缸裡的飼料分成哪幾批（種類、等級）；總量是 foodMg。舊存檔沒有。 */
+  food?: FoodLot[];
   /** 正在分解的有機廢物：糞便、腐爛的飼料、死魚、枯葉（mg，整缸總量）。 */
   organicMg: number;
   /** 白點蟲游走期的濃度指數（會感染魚，藥物殺得到）。 */
@@ -197,6 +200,12 @@ export interface Fish {
   ageDays: number;
   /** 懷孕／抱卵進度 0–1，0 表示沒有。 */
   pregnancy: number;
+  /** 長期營養 0–1（標準飼料約 0.5）：影響成長與免疫力。舊存檔沒有，當 0.5。 */
+  nutrition?: number;
+  /** 發色加成 0–1：只影響表現，停餵好飼料會慢慢退回去。 */
+  colorBoost?: number;
+  /** 繁殖意願 0–1（標準約 0.5）：肉食和好飼料讓魚準備繁殖。 */
+  breedingCondition?: number;
 }
 
 export interface Plant {
