@@ -41,7 +41,7 @@ function fishEntries(): CodexEntry[] {
     facts: [
       ['適溫', `${sp.temp.min}～${sp.temp.max} °C`],
       ['致死溫度', `低於 ${sp.tempLethal.min} °C 或高於 ${sp.tempLethal.max} °C`],
-      ['pH', `${sp.ph.min}～${sp.ph.max}`],
+      ['pH', `一般 ${sp.ph.min}～${sp.ph.max}，能適應 ${sp.phSurvive.min}～${sp.phSurvive.max}（重點是穩定，慢慢對水）`],
       ['成體體長', `約 ${sp.adultLengthCm} cm`],
       ['長大需要', `約 ${sp.daysToAdult} 天`],
       ['壽命', sp.lifespanDays >= 365 ? `約 ${Math.round((sp.lifespanDays / 365) * 2) / 2} 年` : `約 ${Math.round(sp.lifespanDays / 30)} 個月`],

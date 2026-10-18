@@ -224,6 +224,8 @@ export interface Fish {
   moltTimerH?: number;
   /** 蝦：脫殼卡住死掉（畫面上身體有一圈白線）。 */
   stuckMolt?: boolean;
+  /** 這尾魚習慣的水（舒適中心，design/acclimation.md）：會慢慢往牠住的水移動。舊存檔沒有，當成習慣目前的缸。 */
+  acclimated?: { ph: number; gh: number; tempC: number };
 }
 
 export interface Plant {

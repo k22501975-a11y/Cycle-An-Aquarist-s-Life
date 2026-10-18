@@ -48,6 +48,13 @@ import {
   hasVisible,
   isJuvenile,
   crowdingRatio,
+  COMFORT_BAND,
+  dripMinutes,
+  farmHabit,
+  habitGap,
+  habitOf,
+  phBeyondSurvival,
+  waterGh,
   SPLIT_PLAN_LABELS,
   splitAdvice,
   splitGroup,
@@ -276,6 +283,9 @@ export function trimListPanel(ctx: PanelContext): Node {
   );
 }
 
+/** 商店放魚的方式：預設慢慢滴水對水。 */
+let shopDrip = true;
+
 const TAIL_SHAPE_LABELS = { round: '圓尾', delta: '三角尾', halfmoon: '半月尾' } as const;
 
 /** 孔雀魚的品系、尾鰭分數、代數與近親程度（玩家看得到的外觀與紀錄，看不到隱性基因）。 */
@@ -341,6 +351,7 @@ export function fishPanel({ game, sheet, toasts }: PanelContext, fishId: number)
     {},
     h('p', {}, `${fishName(fish)} · 體長約 ${fish.lengthCm.toFixed(1)} cm · ${ageLabel(fish.ageDays)}`),
     h('p', {}, growthLine(game.state, fish)),
+    h('p', {}, habitLine(game.state, fish)),
     fish.genome ? geneticsInfo(fish) : null,
     symptoms.length
       ? h('ul.symptoms', {}, ...symptoms.map((s) => h('li', {}, SYMPTOM_LABELS[s])))
@@ -363,6 +374,16 @@ export function growthLine(state: TankState, fish: Fish): string {
   if ((fish.stunted ?? 0) >= 0.15) parts.push('小時候太擠或吃不好，長大會比別人小（永久）');
   if (fish.species === 'cherry_shrimp' && fish.lengthCm < maxLengthCm(fish) * 0.97) parts.push('靠脫殼長大');
   return parts.join(' · ');
+}
+
+/** 習慣的水質（design/acclimation.md §4）：跟目前的水差多少，差太多會緊迫，慢慢就會適應。 */
+export function habitLine(state: TankState, fish: Fish): string {
+  const h = habitOf(state, fish);
+  const g = habitGap(state, fish);
+  const off = Math.abs(g.ph) > COMFORT_BAND.ph || Math.abs(g.gh) > COMFORT_BAND.gh;
+  const base = `習慣的水質：pH ${h.ph.toFixed(1)}、GH ${Math.round(h.gh)}、${h.tempC.toFixed(0)}°C`;
+  if (phBeyondSurvival(state, fish) > 0) return `${base} · 現在的 pH 超出牠能撐的範圍，要盡快調回來`;
+  return off ? `${base} · 跟現在的水差比較多，會緊迫一陣子，一兩週會慢慢適應` : `${base} · 跟現在的水差不多`;
 }
 
 /** 吃得怎麼樣：長期營養、發色、繁殖意願（看最近餵的飼料）。 */
@@ -536,23 +557,41 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     const quarantined = !!game.state.quarantine;
     const name = finStrain ? `${finStrain.name}孔雀魚` : strain !== undefined ? `${GUPPY_STRAINS[strain]}孔雀魚` : FISH_SPECIES[species].name;
     const each = finStrain ? finStrain.price : strain !== undefined ? GUPPY_STRAIN_PRICES[strain] : FISH_PRICES[species];
-    const options = finStrain ? { strain: finStrain.strain, fin: finStrain.fin } : { strain };
+    const options = { ...(finStrain ? { strain: finStrain.strain, fin: finStrain.fin } : { strain }), drip: shopDrip };
     purchase(
       ctx,
       each * count,
       (st) => {
         for (let i = 0; i < count; i++) (quarantined ? addFishToQuarantine : addFish)(st, species, options);
       },
-      quarantined ? `買了 ${count} 隻${name}，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天` : `買了 ${count} 隻${name}，剛運到會有點緊迫`,
+      quarantined
+        ? `買了 ${count} 隻${name}，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天`
+        : shopDrip
+          ? `買了 ${count} 隻${name}，慢慢滴水對水後放進缸裡`
+          : `買了 ${count} 隻${name}，直接倒進缸裡${Math.abs(farmHabit(species).ph - game.state.water.ph) > 0.6 ? '，水質差很多，牠們嚇壞了' : ''}`,
+      !shopDrip && Math.abs(farmHabit(species).ph - game.state.water.ph) > 0.6 ? 'warn' : 'info',
     );
   };
   const buyPlant = (species: PlantSpeciesId) => () => purchase(ctx, PLANT_PRICES[species], (st) => addPlant(st, species), `種下一株${PLANT_SPECIES[species].name}`);
 
   let content: Node;
   if (tab === 'fish') {
+    const farm = farmHabit('guppy');
+    const dripRow = h(
+      'div.stack',
+      {},
+      h('p.hint', {}, `店裡的魚習慣魚場的水（孔雀魚 pH ${farm.ph}、GH ${farm.gh}），你的缸現在 pH ${game.state.water.ph.toFixed(1)}、GH ${Math.round(waterGh(game.state))}。魚怕的是水質突然改變，不是 pH 數字本身。`),
+      h(
+        'div.row.wrap',
+        {},
+        h(`button.btn.small${shopDrip ? '.primary' : ''}`, { onclick: () => ((shopDrip = true), sheet.refresh?.()) }, `慢慢滴水對水（約 ${dripMinutes(game.state, farm)} 分鐘）`),
+        h(`button.btn.small${shopDrip ? '' : '.primary'}`, { onclick: () => ((shopDrip = false), sheet.refresh?.()) }, '直接倒進缸裡'),
+      ),
+    );
     content = h(
       'div.stack',
       {},
+      dripRow,
       canClaimStarterPack(game.state, game.others)
         ? h(
             'div.item.gift',
@@ -571,7 +610,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         : h('p.hint', {}, '店裡的魚可能帶著白點蟲或其他病，直接放進主缸可能傳染整缸。商店的「設備」可以買檢疫盒。'),
       h('p.hint', {}, '新缸還沒養好水就放太多魚，會氨中毒。'),
       h('p.hint', {}, '孔雀魚和櫻花蝦會自己繁殖，但成魚會吃仔魚和仔蝦，水草種密一點才躲得掉。斑馬魚會輕微咬孔雀魚公魚的長尾巴。'),
-      h('p.hint', {}, `孔雀魚（${FISH_SPECIES.guppy.temp.min}–${FISH_SPECIES.guppy.temp.max}°C、pH ${FISH_SPECIES.guppy.ph.min}–${FISH_SPECIES.guppy.ph.max}）照品系賣。同品系配對生出來的大多一樣；不同品系混養會生出各種組合，也可能冒出藏在基因裡的白子。`),
+      h('p.hint', {}, `孔雀魚（${FISH_SPECIES.guppy.temp.min}–${FISH_SPECIES.guppy.temp.max}°C；pH ${FISH_SPECIES.guppy.phSurvive.min}–${FISH_SPECIES.guppy.phSurvive.max} 都能慢慢適應）照品系賣。同品系配對生出來的大多一樣；不同品系混養會生出各種組合，也可能冒出藏在基因裡的白子。`),
       ...GUPPY_STRAINS.map((strain, i) =>
         h(
           'div.item',
@@ -591,7 +630,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       ),
       ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).filter((id) => id !== 'guppy').map((id) => {
         const sp = FISH_SPECIES[id];
-        const note = [`每隻 ${FISH_PRICES[id]} 元`, `${sp.temp.min}–${sp.temp.max}°C`, `pH ${sp.ph.min}–${sp.ph.max}`, sp.minGroup ? `群游，至少 ${sp.minGroup} 隻` : ''].filter(Boolean).join(' · ');
+        const note = [`每隻 ${FISH_PRICES[id]} 元`, `${sp.temp.min}–${sp.temp.max}°C`, `pH ${sp.phSurvive.min}–${sp.phSurvive.max} 能適應`, sp.minGroup ? `群游，至少 ${sp.minGroup} 隻` : ''].filter(Boolean).join(' · ');
         return h('div.item', {}, h('div', {}, h('b', {}, sp.name), h('div.hint', {}, note)), h('div.row', {}, button('+1', buyFish(id, 1)), button('+6', buyFish(id, 6))));
       }),
     );
