@@ -11,6 +11,7 @@ import { updateQuarantine } from './quarantine';
 import { updateSnails } from './snails';
 import { updateParental } from './parental';
 import { updateEconomy } from './economy';
+import { settleTurbidity } from './aquascape';
 import { TEMP_LOG_HOURS, type TankState } from './state';
 
 export const TICK_HOURS = TICK_GAME_SECONDS / 3600;
@@ -20,6 +21,7 @@ export function step(state: TankState, dtHours: number = TICK_HOURS): void {
   updateTemperature(state, dtHours);
   updateWaste(state, dtHours);
   updateHardscape(state, dtHours);
+  settleTurbidity(state, dtHours);
   updateNitrogen(state, dtHours);
   updatePlants(state, dtHours);
   updateGases(state, dtHours);

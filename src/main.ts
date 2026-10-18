@@ -18,6 +18,7 @@ import { canPromptInstall, isInstalled, isIos, promptInstall, setupPwa } from '.
 import { loadPaintedArt } from './render/painted';
 import { defaultQuality, isQuality, type Quality, QUALITY_LABELS, qualitySpec } from './render/quality';
 import { TankView } from './render/tank-view';
+import { ScapeBar } from './ui/scape-bar';
 import * as sim from './sim';
 import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, useTestKit } from './sim';
 import { h } from './ui/dom';
@@ -357,8 +358,38 @@ async function start(): Promise<void> {
   const view = new TankView(app, {
     onSelectFish: (id) => select(id),
     onSelectPlant: (id) => sheet.open('水草', () => plantPanel(ctx, id), { live: true }),
+    onScapeSelect: (target) => scapeBar.select(target),
+    onScapeDrop: (target, x) => scapeBar.drop(target, x),
   });
   debugHandle.view = view;
+  // 造景模式（aquascape-editor.md）：底部工具列換成造景操作列，在缸裡拖曳石頭、沉木、水草
+  let scaping = false;
+  const scapeBar = new ScapeBar({
+    game,
+    toasts,
+    onChange: (edit) => view.setScapeEdit(edit),
+    onDone: () => leaveScape(),
+  });
+  const enterScape = () => {
+    if (visiting) return;
+    sheet.close();
+    select(null);
+    scaping = true;
+    scapeBar.reset();
+    view.setScapeEdit(scapeBar.state);
+    document.body.classList.add('scaping');
+    stage.append(scapeBar.el);
+    requestAnimationFrame(() => measure());
+  };
+  const leaveScape = () => {
+    scaping = false;
+    view.setScapeEdit(null);
+    document.body.classList.remove('scaping');
+    scapeBar.el.remove();
+    requestAnimationFrame(() => measure());
+  };
+  ctx.openScape = enterScape;
+  debugHandle.scape = { enter: enterScape, leave: leaveScape, bar: scapeBar };
   // 畫質：低畫質關掉景深模糊、柔光，降低解析度與粒子數量
   const setQuality = (q: Quality) => {
     uiPrefs.quality = q;
@@ -739,7 +770,7 @@ async function start(): Promise<void> {
     const stageRect = stage.getBoundingClientRect();
     const top = hud.getBoundingClientRect().bottom - stageRect.top;
     // 參觀時底部工具列藏起來，改留參觀列的空間
-    const bottom = visiting ? visitBar.offsetHeight + 24 : stageRect.bottom - tools.getBoundingClientRect().top;
+    const bottom = visiting ? visitBar.offsetHeight + 24 : scaping ? scapeBar.el.offsetHeight + 24 : stageRect.bottom - tools.getBoundingClientRect().top;
     view.setInsets({ top: Math.round(top), bottom: Math.round(bottom) });
     // 任務小卡在左上角；浮動選取卡排在它下面，下緣留給左下角的缸名標籤。
     guide.pill.style.top = `${Math.round(top + 10)}px`;

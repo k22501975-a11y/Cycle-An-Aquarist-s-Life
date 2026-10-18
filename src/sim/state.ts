@@ -2,6 +2,7 @@ import type { SnailState } from './snails';
 import type { Brood } from './parental';
 import type { FoodLot } from './food';
 import { co2Equilibrium, oxygenSaturation, phFromCo2 } from './chemistry';
+import type { Placement } from './aquascape';
 import type { AirPumpSpec, ChillerSpec, Co2Spec, FanSpec, FilterSpec, HardscapeSpec, HeaterSpec, LightSpec, SubstrateSpec, TankSpec } from './equipment';
 import type { Region } from './season';
 import type { Economy } from './economy';
@@ -121,6 +122,8 @@ export interface Equipment {
   substrate?: { spec: SubstrateSpec; sinceHours: number; buffer: number } | null;
   /** 造景石與沉木，一項是一組。 */
   hardscape?: HardscapeSpec[];
+  /** 每組造景材料擺在哪裡（跟 hardscape 一一對應；沒有就用預設位置，aquascape.ts）。 */
+  hardscapePlace?: Placement[];
 }
 
 export interface Water {
@@ -158,6 +161,8 @@ export interface Water {
   phAvg: number;
   /** 目前水量（L）。蒸發會讓水位下降、溶解物濃縮；沒有這個欄位表示滿水位。 */
   levelL?: number;
+  /** 混濁度 0–1：動造景攪起的底沙，開著過濾幾小時就沉澱。 */
+  turbidity?: number;
 }
 
 /** 硝化菌族群，以「每小時可處理的 mg 數」表示其規模。 */
@@ -250,6 +255,8 @@ export interface Plant {
   leafAlgae: number;
   /** 近一天的平均淨生長率（每小時）。負值代表正在溶葉。 */
   growthRate: number;
+  /** 種在哪裡（造景編輯）；沒有就用預設位置。 */
+  place?: Placement;
 }
 
 export type SimEventType =
