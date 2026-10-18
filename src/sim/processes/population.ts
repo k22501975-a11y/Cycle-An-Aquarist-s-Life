@@ -167,7 +167,9 @@ function breed(state: TankState, tf: number, dt: number): void {
       continue;
     }
 
-    const relaxed = mother.health > 0.7 && mother.stress < 0.4 && mother.hunger < 0.7;
+    // 水溫低於適溫下限時停止繁殖（temperature.md §3）
+    const warmEnough = state.water.tempC >= sp.temp.min;
+    const relaxed = warmEnough && mother.health > 0.7 && mother.stress < 0.4 && mother.hunger < 0.7;
     const mate = relaxed && living.some((f) => f.species === mother.species && f.sex === 'male' && !isJuvenile(f));
     if (mate && chance(state.rng, 0.5 / 24, dt)) mother.pregnancy = 0.001;
   }

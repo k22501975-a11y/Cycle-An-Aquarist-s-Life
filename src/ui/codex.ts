@@ -1,5 +1,5 @@
 import type { KeyValueStore } from '../game/save';
-import { AIR_PUMPS, CO2_KITS, FILTERS, FISH_SPECIES, HEATERS, LIGHTS, observeSymptoms, PLANT_SPECIES, TANKS, type Symptom, type TankState } from '../sim';
+import { AIR_PUMPS, CHILLERS, CO2_KITS, FANS, FILTERS, FISH_SPECIES, HEATERS, LIGHTS, observeSymptoms, PLANT_SPECIES, TANKS, type Symptom, type TankState } from '../sim';
 
 /**
  * 圖鑑：魚種、水草、設備隨時可以查；疾病要親眼遇過一次才會解鎖（GAME_DESIGN：第一次遇到才開放）。
@@ -40,6 +40,7 @@ function fishEntries(): CodexEntry[] {
     name: sp.name,
     facts: [
       ['適溫', `${sp.temp.min}～${sp.temp.max} °C`],
+      ['致死溫度', `低於 ${sp.tempLethal.min} °C 或高於 ${sp.tempLethal.max} °C`],
       ['pH', `${sp.ph.min}～${sp.ph.max}`],
       ['成體體長', `約 ${sp.adultLengthCm} cm`],
       ['長大需要', `約 ${sp.daysToAdult} 天`],
@@ -85,6 +86,11 @@ function gearEntries(): CodexEntry[] {
     out.push({ id: `gear:${a.id}`, category: 'gear', name: a.name, facts: [['用途', '增加水中溶氧']], text: '氣泡攪動水面，讓氧氣溶進水裡。夏天水溫高、魚多的時候特別重要；但會把 CO₂ 趕跑。' });
   for (const c of Object.values(CO2_KITS))
     out.push({ id: `gear:${c.id}`, category: 'gear', name: c.name, facts: [['輸出', `${c.mgPerHour} mg/小時`]], text: '開燈時打 CO₂，陽性草長得快、顏色漂亮。打太多魚會窒息，晚上要關。' });
+  for (const f of Object.values(FANS))
+    out.push({ id: `gear:fan_${f.id}`, category: 'gear', name: f.name, facts: [['降溫', `水溫比室溫低約 ${f.coolingC} °C`], ['蒸發', `平常的 ${f.evaporationFactor} 倍`]], text: '台灣夏天最便宜的降溫方法：吹水面讓水蒸發帶走熱。代價是水少得很快，要天天補水，不然水質會越來越濃。' });
+  for (const c of Object.values(CHILLERS))
+    out.push({ id: `gear:chiller_${c.id}`, category: 'gear', name: c.name, facts: [['製冷', `${c.coolingWatts} W`], ['用法', '設定溫度，高於設定就製冷']], text: '像小冰箱一樣把水降到設定溫度，不受室溫影響，養怕熱的魚蝦最安心。很貴、很耗電，停電時也沒用。' });
+  out.push({ id: 'gear:controller', category: 'gear', name: '控溫器', facts: [['作用', '水溫超過上限就切斷加熱棒電源']], text: '加熱棒的恆溫器卡住時會一直加熱把魚煮熟。控溫器是第二道保險，用另一支溫度探頭監看，超過就斷電。' });
   return out;
 }
 
@@ -136,6 +142,14 @@ const DISEASES: CodexEntry[] = [
     facts: [['原因', '斑馬魚等愛咬的魚數量不足、空間太擠'], ['症狀', '長尾巴破破爛爛']],
     text: '讓群游魚湊到足夠的數量，牠們就會比較少去騷擾別的魚；或把長尾巴的魚分開養。',
     unlock: (s) => anySymptom(s, 'torn_fins') || diedOf(s, 'fin_nip'),
+  },
+  {
+    id: 'disease:temperature',
+    category: 'disease',
+    name: '水溫過高或過低',
+    facts: [['原因', '夏天沒降溫、加熱棒壞掉或卡住、冬天沒加熱'], ['症狀', '太熱會浮頭喘氣，太冷會縮在底部不動、不吃']],
+    text: '每種魚有自己的適溫範圍，超出致死溫度很快就會死。夏天用風扇、冷水機或冷氣房降溫；冬天用加熱棒，再加控溫器防止加熱棒卡住。水溫要慢慢調，一天不要變超過 2°C。',
+    unlock: (s) => diedOf(s, 'temperature') || s.events.some((e) => e.type === 'controller_cut' || e.type === 'heater_stuck'),
   },
 ];
 

@@ -96,6 +96,17 @@ export function todos(state: TankState): Todo[] {
   if (symptoms.some((x) => x.s.includes('white_spots'))) out.push({ text: '有魚身上出現白點', tone: 'bad' });
   if (symptoms.some((x) => x.s.includes('gasping'))) out.push({ text: '魚在水面喘氣', tone: 'bad' });
 
+  // 水溫超出缸裡魚種的適溫範圍（以最怕熱、最怕冷的那種為準）
+  if (living.length > 0) {
+    const t = state.water.tempC;
+    const hottest = Math.min(...living.map((f) => FISH_SPECIES[f.species].temp.max));
+    const coldest = Math.max(...living.map((f) => FISH_SPECIES[f.species].temp.min));
+    if (t > hottest + 0.5) out.push({ text: `水溫偏高（${t.toFixed(1)}°C），開風扇或冷水機`, tone: t > hottest + 2 ? 'bad' : 'warn' });
+    else if (t < coldest - 0.5) out.push({ text: `水溫偏低（${t.toFixed(1)}°C），檢查加熱棒`, tone: t < coldest - 2 ? 'bad' : 'warn' });
+  }
+  const level = (state.water.levelL ?? eq.tank.volumeL) / eq.tank.volumeL;
+  if (level < 0.9) out.push({ text: `水位降到 ${Math.round(level * 100)}%，該補水了`, tone: level < 0.8 && eq.heater ? 'bad' : 'warn' });
+
   if (living.length > 0) {
     const testAge = state.lastTest ? state.hours - state.lastTest.hours : Infinity;
     if (testAge === Infinity) out.push({ text: '還沒測過水質', tone: 'warn' });

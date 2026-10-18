@@ -23,6 +23,8 @@ export interface WaterChangeOptions {
  * 會稀釋氨、亞硝酸鹽、硝酸鹽與藥物，補回 KH；新水溫度與缸水差太多會讓魚緊迫。
  */
 export function waterChange(state: TankState, fraction: number, options: WaterChangeOptions = {}): void {
+  // 換水時順便補滿水位
+  topUp(state, options.tempC);
   const f = Math.min(1, Math.max(0, fraction));
   const { water, environment } = state;
   const tap = environment.tap;
@@ -43,6 +45,34 @@ export function waterChange(state: TankState, fraction: number, options: WaterCh
   water.foodMg *= 1 - f * 0.8;
   water.organicMg *= 1 - f * 0.5;
   state.lastWaterChangeHours = state.hours;
+}
+
+/**
+ * 補水：用自來水（已除氯）把蒸發掉的水補回滿水位。
+ * 蒸發只帶走水，所以補水會稀釋濃縮了的氨、亞硝酸鹽、藥，KH 和硝酸鹽則往自來水靠。
+ * 回傳補了幾公升。
+ */
+export function topUp(state: TankState, tempC?: number): number {
+  const { water, environment, equipment } = state;
+  const volume = equipment.tank.volumeL;
+  const level = water.levelL ?? volume;
+  const add = volume - level;
+  if (add <= 0.001) {
+    water.levelL = undefined;
+    return 0;
+  }
+  const keep = level / volume;
+  const fresh = 1 - keep;
+  const tap = environment.tap;
+  const newTemp = tempC ?? roomTemperature(state);
+  water.kh = water.kh * keep + tap.kh * fresh;
+  water.no3 = water.no3 * keep + tap.no3 * fresh;
+  water.tan *= keep;
+  water.no2 *= keep;
+  water.medication *= keep;
+  water.tempC = water.tempC * keep + newTemp * fresh;
+  water.levelL = undefined;
+  return add;
 }
 
 /** 用測試劑測水：讀數記下來，狀態列顯示最近一次測到的值（沒測過就顯示「?」）。 */

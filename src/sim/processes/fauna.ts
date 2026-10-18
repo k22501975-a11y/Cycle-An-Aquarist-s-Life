@@ -87,7 +87,7 @@ function computeDamage(state: TankState, fish: Fish, sp: FishSpecies): Damage[] 
   add((water.no2 - 1) * 0.004 * sensitivity, 'nitrite');
   add((2 - water.o2) * 0.05, 'oxygen');
   add((water.co2 - 45) * 0.004, 'co2');
-  const tempOut = Math.max(0, sp.temp.min - 4 - water.tempC, water.tempC - sp.temp.max - 3);
+  const tempOut = Math.max(0, sp.tempLethal.min - water.tempC, water.tempC - sp.tempLethal.max);
   add(tempOut * 0.01, 'temperature');
   if (fish.hunger >= 1) add(0.004, 'starvation');
   if (sp.medicationSensitive) add(water.medication * 0.02, 'medication');

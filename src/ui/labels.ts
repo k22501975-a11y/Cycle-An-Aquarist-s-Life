@@ -57,6 +57,10 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
       return { text: '停電了，所有設備停止運作', tone: 'bad' };
     case 'power_restored':
       return { text: '電力恢復', tone: 'info' };
+    case 'controller_cut':
+      return { text: '控溫器切斷了加熱棒的電源：水溫超過上限，加熱棒可能卡住了', tone: 'warn' };
+    case 'heater_exposed':
+      return { text: '水位太低，加熱棒露出水面空燒壞掉了！記得補水', tone: 'bad' };
     case 'fry_born': {
       const shrimp = fish?.species === 'cherry_shrimp';
       return { text: `${fish ? fishName(fish) : '有隻母魚'} ${shrimp ? '孵出' : '生了'} ${e.count ?? 0} ${shrimp ? '隻仔蝦' : '尾仔魚'}。成魚會吃小魚小蝦，水草越密越好躲`, tone: 'info' };
