@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addFish, createTank, FILTERS, HEATERS, lifeFraction, LIGHTS, normalizeState, observeSymptoms, simulate, TANKS, type CreateTankOptions } from './index';
+import { FISH_SPECIES } from './species';
 
 const STARTER: CreateTankOptions = {
   tank: TANKS.std40,
@@ -14,8 +15,9 @@ describe('壽命與老死', () => {
   it('店裡買的魚是剛長大到幾個月大', () => {
     const s = createTank({ ...STARTER, seed: 2 });
     const f = addFish(s, 'guppy', { carriesIch: false });
-    expect(f.ageDays).toBeGreaterThanOrEqual(60);
-    expect(f.ageDays).toBeLessThan(100);
+    // 店裡的孔雀魚約四到六個月大（剛長成，design/growth.md：成魚從第 100 天起）
+    expect(f.ageDays).toBeGreaterThanOrEqual(100);
+    expect(f.ageDays).toBeLessThan(200);
   });
 
   it('25°C 下年齡一天加一天', () => {
@@ -75,7 +77,7 @@ describe('壽命與老死', () => {
     delete (adult as { ageDays?: number }).ageDays;
     delete (fry as { ageDays?: number }).ageDays;
     normalizeState(s);
-    expect(adult.ageDays).toBe(60);
-    expect(fry.ageDays).toBeLessThan(30);
+    expect(adult.ageDays).toBe(FISH_SPECIES.guppy.daysToAdult);
+    expect(fry.ageDays).toBeLessThan(35);
   });
 });

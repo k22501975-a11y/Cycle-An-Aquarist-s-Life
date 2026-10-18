@@ -1,5 +1,5 @@
 import { guppyLook } from '../render/strains';
-import { FISH_SPECIES, isJuvenile, phenotype, PLANT_SPECIES, strainName, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
+import { FISH_SPECIES, growthStage, phenotype, PLANT_SPECIES, sexVisible, strainName, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
 
 export const SYMPTOM_LABELS: Record<Symptom, string> = {
   hiding: '躲在角落',
@@ -30,6 +30,7 @@ export const DEATH_CAUSE_LABELS: Record<string, string> = {
   chronic_stress: '長期緊迫',
   fin_nip: '被咬鰭',
   old_age: '老死（壽終正寢）',
+  molt: '脫殼失敗（卡殼）：GH 太低或水質一下變太多',
   columnaris: '柱狀病（爛嘴爛身）',
   flukes: '鰓吸蟲',
   unknown: '原因不明',
@@ -37,13 +38,17 @@ export const DEATH_CAUSE_LABELS: Record<string, string> = {
 
 export function fishName(fish: Fish): string {
   const shrimp = fish.species === 'cherry_shrimp';
-  const young = isJuvenile(fish) ? (shrimp ? '仔蝦' : '仔魚') : fish.sex === 'male' ? (shrimp ? '公蝦' : '公魚') : shrimp ? '母蝦' : '母魚';
+  // 轉色前看不出公母：叫仔魚、幼魚（design/growth.md §6）
+  const stage = growthStage(fish);
+  const young = !sexVisible(fish)
+    ? shrimp ? (stage === 'fry' ? '仔蝦' : '幼蝦') : stage === 'fry' ? '仔魚' : '幼魚'
+    : fish.sex === 'male' ? (shrimp ? '公蝦' : '公魚') : shrimp ? '母蝦' : '母魚';
   return `${FISH_SPECIES[fish.species].name}${young} #${fish.id}`;
 }
 
 /** 品系名（目前只有成年的公孔雀魚看得出品系）。 */
 export function fishStrain(fish: Fish): string | null {
-  if (fish.species !== 'guppy' || fish.sex !== 'male' || isJuvenile(fish)) return null;
+  if (fish.species !== 'guppy' || fish.sex !== 'male' || !sexVisible(fish)) return null;
   return fish.genome ? strainName(phenotype(fish.genome)) : guppyLook(fish.id).strain;
 }
 

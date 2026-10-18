@@ -92,7 +92,8 @@ describe('繁殖（Phase 0 簡化版）', () => {
     runDays(s, 10);
     expect(fry.lengthCm).toBeGreaterThan(FISH_SPECIES.guppy.birthLengthCm + 0.5);
     expect(isJuvenile(fry)).toBe(true);
-    runDays(s, 50);
+    // 約兩個月進入亞成魚，可以開始配對（design/growth.md §1）
+    runDays(s, 60);
     expect(isJuvenile(fry)).toBe(false);
   });
 });

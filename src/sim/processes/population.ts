@@ -1,9 +1,10 @@
-import { breedingFactor, nutritionFactor } from '../food';
+import { breedingFactor } from '../food';
 import { temperatureFactor } from '../chemistry';
 import { chance, nextRandom } from '../random';
 import { FISH_SPECIES, type FishSpeciesId } from '../species';
 import { isJuvenile, recordEvent, type Fish, type TankState } from '../state';
-import { lifeFraction } from './fauna';
+import { crowdingRatio, lifeFraction } from './fauna';
+import { growFish } from '../growth';
 import { childInbreeding, cross, matingSuccess, type GuppyGenome } from '../genetics';
 
 /**
@@ -67,8 +68,10 @@ export function updatePopulation(state: TankState, dt: number): void {
   if (living.length === 0) return;
   const tf = temperatureFactor(state.water.tempC);
 
+  const crowding = crowdingRatio(state);
   for (const fish of living) {
-    grow(fish, tf, dt);
+    growFish(state, fish, tf, crowding, dt);
+    if (!fish.alive) continue;
     // 鰭在壓力不大時慢慢長回來（約一兩週）。
     if (fish.finDamage > 0) fish.finDamage = Math.max(0, fish.finDamage - (0.06 / 24) * (1 - fish.stress) * dt);
   }
@@ -79,15 +82,6 @@ export function updatePopulation(state: TankState, dt: number): void {
   if (eaten.size > 0) state.fish = state.fish.filter((f) => !eaten.has(f));
   finNipping(state, living.filter((f) => !eaten.has(f)), hiding, dt);
   breed(state, tf, dt);
-}
-
-/** 體長以 von Bertalanffy 曲線趨近成體；水溫高長得快，餓著幾乎不長。 */
-function grow(fish: Fish, tf: number, dt: number): void {
-  const sp = FISH_SPECIES[fish.species];
-  if (fish.lengthCm >= sp.adultLengthCm) return;
-  const k = Math.log(10) / (sp.daysToAdult * 24);
-  const food = (fish.hunger < 0.8 ? 1 : 0.2) * nutritionFactor(fish.nutrition);
-  fish.lengthCm += k * tf * food * (sp.adultLengthCm - fish.lengthCm) * dt;
 }
 
 /**
@@ -209,6 +203,8 @@ function giveBirth(state: TankState, mother: Fish, population: number): void {
   const inbreeding = sire && mother.genome ? childInbreeding(mother.inbreeding ?? 0, sire.inbreeding, sire.lineage === line) : 0;
   for (let i = 0; i < n; i++) {
     const fry = createFish(state, mother.species, { lengthCm: sp.birthLengthCm, stress: 0.1, hunger: 0.2 });
+    // 同一胎有快有慢（約 ±20%），所以長大後要挑
+    fry.growthRate = Math.min(1.4, Math.max(0.6, 1 + (nextRandom(state.rng) + nextRandom(state.rng) + nextRandom(state.rng) - 1.5) * 0.4));
     if (mother.genome && sire) {
       fry.genome = cross(state.rng, mother.genome, sire.genome, fry.sex, inbreeding);
       fry.lineage = line;

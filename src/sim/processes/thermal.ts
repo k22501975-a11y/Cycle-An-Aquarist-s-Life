@@ -39,6 +39,7 @@ function evaporate(state: TankState, dt: number): void {
   if (next >= level) return;
   const k = level / next;
   water.kh *= k;
+  if (water.gh !== undefined) water.gh *= k;
   water.no3 *= k;
   water.tan *= k;
   water.no2 *= k;

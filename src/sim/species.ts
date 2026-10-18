@@ -69,7 +69,7 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     susceptibleToIch: true,
     medicationSensitive: false,
     birthLengthCm: 0.7,
-    daysToAdult: 60,
+    daysToAdult: 116,
     lifespanDays: 730,
     mouthRatio: 0.4,
     juvenilePredationPerDay: 0.25,
