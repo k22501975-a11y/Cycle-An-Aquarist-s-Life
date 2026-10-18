@@ -20,6 +20,7 @@ import {
   maintenancePanel,
   plantPanel,
   shopPanel,
+  tanksPanel,
   testKitPanel,
   trimListPanel,
   waterChangePanel,
@@ -30,7 +31,7 @@ import { recordsPanel } from './ui/records';
 import { loadCodexSeen, saveCodexSeen, unlockCodex } from './ui/codex';
 import { codexPanel } from './ui/codex-panel';
 import { Sheet, Toasts } from './ui/sheet';
-import { clockLabel, todos, waterCapsules } from './ui/status';
+import { clockLabel, householdTodos, waterCapsules } from './ui/status';
 import { cornerRect, pickCorner, type Corner, type Rect } from './ui/dodge';
 import './ui/styles.css';
 
@@ -70,11 +71,12 @@ async function start(): Promise<void> {
   const store = browserStore();
   const loaded = loadSave(store);
   const saved = loaded.file;
-  if (saved) applySeason(saved.state);
+  if (saved) for (const t of [saved.state, ...(saved.tanks ?? [])]) applySeason(t);
   const offline = saved ? catchUp(saved) : null;
-  const game = new Game(saved?.state ?? newGameState(), saved?.timeScale ?? 7);
-  applySeason(game.state);
-  const save = () => writeSave(store, game.state, game.clock.timeScale);
+  const game = new Game(saved?.state ?? newGameState(), saved?.timeScale ?? 7, saved?.tanks ?? [], saved?.active ?? 0);
+  for (const t of game.tanks) applySeason(t);
+  const extraTanks = () => ({ tanks: game.tanks.slice(1), active: game.active });
+  const save = () => writeSave(store, game.tanks[0], game.clock.timeScale, Date.now(), extraTanks());
   // 開發用：在瀏覽器主控台用 cycle.game、cycle.sim 直接操作（截圖、調平衡）。
   const debugHandle = { game, sim } as Record<string, unknown>;
   (window as unknown as { cycle: unknown }).cycle = debugHandle;
@@ -127,7 +129,7 @@ async function start(): Promise<void> {
     toasts.show(text, tone, {
       label: '復原',
       run: () => {
-        game.load(before);
+        game.restoreActive(before);
         toasts.show('已經復原');
       },
     });
@@ -135,7 +137,7 @@ async function start(): Promise<void> {
   const ctx: PanelContext = { game, sheet, toasts, sound: (id) => audio.play(id), undoable };
   // 存檔匯出成檔案（換手機、怕瀏覽器清掉資料時用）
   const exportSave = () => {
-    const blob = new Blob([serializeSave(game.state, game.clock.timeScale)], { type: 'application/json' });
+    const blob = new Blob([serializeSave(game.tanks[0], game.clock.timeScale, Date.now(), undefined, extraTanks())], { type: 'application/json' });
     const a = h('a', { href: URL.createObjectURL(blob), download: `cycle-save-day${Math.floor(game.state.hours / 24) + 1}.json` });
     document.body.append(a);
     a.click();
@@ -153,13 +155,14 @@ async function start(): Promise<void> {
         return;
       }
       if (!confirm('要用這個檔案取代目前的水缸嗎？目前的進度會被覆蓋。')) return;
-      const before = structuredClone(game.state);
+      const before = structuredClone(game.tanks);
+      const beforeActive = game.active;
       game.clock.timeScale = res.file.timeScale;
-      game.load(res.file.state);
+      game.load(res.file.state, res.file.tanks ?? [], res.file.active ?? 0);
       save();
       sheet.close();
       select(null);
-      toasts.show('匯入了存檔', 'info', { label: '復原', run: () => (game.load(before), save()) });
+      toasts.show('匯入了存檔', 'info', { label: '復原', run: () => (game.load(before[0], before.slice(1), beforeActive), save()) });
     });
     input.click();
   };
@@ -234,12 +237,27 @@ async function start(): Promise<void> {
     if (coinsValue.textContent !== text) coinsValue.textContent = text;
     coinsBtn.classList.toggle('debt', coins < 0);
   };
+  // 多缸：目前在看哪一缸，點一下切換或加缸
+  const tankName = h('b');
+  const tankCount = h('span.count');
+  const tankBtn = h('button.tank-chip', { 'aria-label': '我的水缸', title: '我的水缸：切換、加一缸', onclick: () => sheet.open('我的水缸', () => tanksPanel(ctx)) }, icon(ICONS.tank), tankName, tankCount);
+  const renderTankChip = () => {
+    const multi = game.tanks.length > 1;
+    const text = multi ? sim.tankLabel(game.tanks, game.active) : '水缸';
+    const count = multi ? `${game.active + 1}/${game.tanks.length}` : '';
+    if (tankName.textContent !== text) tankName.textContent = text;
+    if (tankCount.textContent !== count) tankCount.textContent = count;
+    tankBtn.title = `我的水缸：${text}（切換、加一缸）`;
+    // 其他缸有嚴重的事：小紅點
+    const alarm = game.tanks.some((t, i) => i !== game.active && householdTodos([t], 0).some((x) => x.tone === 'bad'));
+    tankBtn.classList.toggle('alert', alarm);
+  };
   const caps = h('button.caps', { 'aria-label': '水質趨勢', title: '點一下看水質趨勢', onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) });
   const todoBadge = h('span.badge');
   const todoCard = h('div.card.glass.todo');
   const todosChanged = memo();
   const renderTodos = () => {
-    const list = todos(game.state);
+    const list = householdTodos(game.tanks, game.active);
     if (!todosChanged(JSON.stringify(list))) return;
     todoCard.replaceChildren(
       h('button.card-link', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx, 'events')) }, '紀錄 ›'),
@@ -254,7 +272,7 @@ async function start(): Promise<void> {
     h(
       'div.stack',
       {},
-      ...todos(game.state).map((t) => h(`div.todo-item.${t.tone}`, {}, t.text)),
+      ...householdTodos(game.tanks, game.active).map((t) => h(`div.todo-item.${t.tone}`, {}, t.text)),
       h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx, 'events')) }, '看事件紀錄'),
     );
   const todoBtn = h('button.hud-btn.todo-btn', { 'aria-label': '待辦', onclick: () => sheet.open('待辦', todoSheet, { live: true }) }, icon(ICONS.todo), todoBadge);
@@ -366,6 +384,7 @@ async function start(): Promise<void> {
     h(
       'div.stack',
       {},
+      h('button.btn', { onclick: () => sheet.open('我的水缸', () => tanksPanel(ctx)) }, '我的水缸：切換、加一缸'),
       h('button.btn', { onclick: () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen)) }, '圖鑑：魚蝦、水草、設備、疾病'),
       h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) }, '水質趨勢與事件紀錄'),
       h('button.btn', { onclick: () => (sheet.close(), guide.restart()) }, '重新看阿德老闆的教學'),
@@ -388,7 +407,7 @@ async function start(): Promise<void> {
     );
   const menuBtn = h('button.hud-btn', { onclick: () => sheet.open('選單', menu), 'aria-label': '選單' }, icon(ICONS.menu));
   hud.classList.add('glass');
-  hud.append(clock, coinsBtn, h('span.hud-sep'), caps, todoBtn, menuBtn);
+  hud.append(clock, coinsBtn, tankBtn, h('span.hud-sep'), caps, todoBtn, menuBtn);
 
   // ---- 下方櫃台：待辦卡｜圓形工具列｜選取卡 ----
   const tools = h('div.tools.glass');
@@ -486,17 +505,20 @@ async function start(): Promise<void> {
     stage.style.setProperty('--dock-top', `${Math.round(stageRect.bottom - dockTop - stageRect.top)}px`);
     tankLabel.style.bottom = `${Math.round(stageRect.bottom - dock.getBoundingClientRect().top + 8)}px`;
     const size = tankSize(game.state.equipment.tank);
-    tankLabel.textContent = `${game.state.equipment.tank.name}・${size.w}×${size.h}×${size.d} cm`;
+    const named = game.tanks.length > 1 ? `${sim.tankLabel(game.tanks, game.active)}・` : '';
+    tankLabel.textContent = `${named}${game.state.equipment.tank.name}・${size.w}×${size.h}×${size.d} cm`;
   };
   new ResizeObserver(measure).observe(hud);
   new ResizeObserver(measure).observe(dock);
   window.addEventListener('resize', measure);
   measure();
 
-  game.onEvent((e) => {
+  // 其他缸的事件也要通知，前面加上缸名
+  const tankPrefix = (tank: number) => (game.tanks.length > 1 && tank !== game.active ? `${sim.tankLabel(game.tanks, tank)}：` : '');
+  game.onEvent((e, tank) => {
     audio.play(eventSound(e.type));
-    const msg = describeEvent(game.state, e);
-    if (msg) toasts.show(msg.text, msg.tone);
+    const msg = describeEvent(game.tanks[tank] ?? game.state, e);
+    if (msg) toasts.show(tankPrefix(tank) + msg.text, msg.tone);
   });
   game.onChange(() => {
     sheet.refresh();
@@ -504,6 +526,7 @@ async function start(): Promise<void> {
     renderSelCard();
     renderTodos();
     renderCaps();
+    renderTankChip();
     save();
   });
 
@@ -513,10 +536,12 @@ async function start(): Promise<void> {
   if (offline && offline.hours >= 1) {
     const days = offline.hours / 24;
     toasts.show(`你不在的期間過了 ${days >= 1 ? `${days.toFixed(1)} 天` : `${Math.round(offline.hours)} 小時`}${offline.capped ? '（只補算到兩週）' : ''}`);
-    for (const e of offline.events) {
-      const msg = describeEvent(game.state, e);
-      if (msg) toasts.show(msg.text, msg.tone);
-    }
+    offline.byTank.forEach((events, tank) => {
+      for (const e of events) {
+        const msg = describeEvent(game.tanks[tank] ?? game.state, e);
+        if (msg) toasts.show(tankPrefix(tank) + msg.text, msg.tone);
+      }
+    });
   }
   if (window.matchMedia('(orientation: portrait)').matches) toasts.show('把手機轉成橫向，水缸會更大');
   setInterval(save, 10_000);
@@ -530,12 +555,14 @@ async function start(): Promise<void> {
       save();
     } else if (hiddenAt !== null) {
       app.ticker.start();
-      const away = catchUp({ version: 1, savedAt: hiddenAt, timeScale: game.clock.timeScale, state: game.state });
+      const away = catchUp({ version: 1, savedAt: hiddenAt, timeScale: game.clock.timeScale, state: game.tanks[0], tanks: game.tanks.slice(1) });
       hiddenAt = null;
-      away.events.forEach((e) => {
-        const msg = describeEvent(game.state, e);
-        if (msg) toasts.show(msg.text, msg.tone);
-      });
+      away.byTank.forEach((events, tank) =>
+        events.forEach((e) => {
+          const msg = describeEvent(game.tanks[tank] ?? game.state, e);
+          if (msg) toasts.show(tankPrefix(tank) + msg.text, msg.tone);
+        }),
+      );
     }
   });
   window.addEventListener('pagehide', save);
@@ -573,13 +600,14 @@ async function start(): Promise<void> {
     refreshTimer += ticker.deltaMS;
     if (refreshTimer > 500) {
       refreshTimer = 0;
-      applySeason(game.state);
+      for (const t of game.tanks) applySeason(t);
       if (sheet.isLive) sheet.refresh();
       renderSelCard();
       placeSelCard();
       renderTodos();
       renderCaps();
       renderCoins();
+      renderTankChip();
       guide.update(game.state);
       for (const entry of unlockCodex(codexSeen, game.state)) {
         saveCodexSeen(store, codexSeen);
