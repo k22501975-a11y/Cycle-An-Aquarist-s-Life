@@ -204,3 +204,28 @@ export function deathPose(t: number, crawler = false): DeathPose {
   const r = roll * roll * (3 - 2 * roll);
   return { flip: Math.cos(Math.PI * r), tilt: 0.35 * Math.sin(Math.PI * r), fade: ease, swing };
 }
+
+/** 轉身的狀態：f 是面向（1 朝左、-1 朝右），轉身時經過 0（身體變窄，像轉向鏡頭）。 */
+export interface TurnState {
+  f: number;
+  v: number;
+}
+
+/** 速度小於這個就不換面向，避免停著的魚左右抖。 */
+const TURN_DEADZONE = 0.6;
+
+/** 用彈簧把面向帶到游的方向：稍微衝過頭再彈回，所以轉完會有一下回彈。 */
+export function stepTurn(s: TurnState, vx: number, dt: number): void {
+  const target = vx < -TURN_DEADZONE ? 1 : vx > TURN_DEADZONE ? -1 : Math.sign(s.f) || 1;
+  const k = 90, damping = 2 * Math.sqrt(k) * 0.7;
+  s.v += (k * (target - s.f) - damping * s.v) * dt;
+  s.f = Math.max(-1.2, Math.min(1.2, s.f + s.v * dt));
+}
+
+/** 面向換算成縮放：轉到一半身體壓窄、稍微變高；衝過頭時拉長、變扁。 */
+export function turnScale(f: number): { sx: number; sy: number } {
+  const a = Math.abs(f);
+  const sx = (f < 0 ? -1 : 1) * Math.max(0.15, a);
+  const sy = 1 + 0.1 * (1 - Math.min(1, a)) - 0.35 * Math.max(0, a - 1);
+  return { sx, sy };
+}
