@@ -21,6 +21,12 @@ cycle:
   max-save-bytes: 4000000
   # 新帳號滿幾天才能在市場上架（防開小號洗錢，market-and-breeding.md §4）
   market-min-account-days: ${MARKET_MIN_ACCOUNT_DAYS:3}
+  push:
+    # 推播服務用來聯絡營運者的信箱或網址（mailto: 或 https:）
+    subject: ${PUSH_SUBJECT:mailto:admin@localhost}
+    # VAPID 金鑰（base64url）；留空會自動產生並存在資料庫
+    public-key: ${VAPID_PUBLIC_KEY:}
+    private-key: ${VAPID_PRIVATE_KEY:}
 management:
   endpoints:
     web:

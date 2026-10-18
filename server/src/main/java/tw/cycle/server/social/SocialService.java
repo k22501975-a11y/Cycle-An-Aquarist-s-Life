@@ -16,6 +16,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tw.cycle.server.config.ApiException;
+import tw.cycle.server.push.PushService;
 
 /**
  * 好友、參觀、按讚、互贈（friends.md §1、§2.1、§2.2）。
@@ -29,12 +30,14 @@ public class SocialService {
     private final JdbcTemplate db;
     private final ObjectMapper json;
     private final Clock clock;
+    private final PushService push;
     private final SecureRandom random = new SecureRandom();
 
-    public SocialService(JdbcTemplate db, ObjectMapper json, Clock clock) {
+    public SocialService(JdbcTemplate db, ObjectMapper json, Clock clock, PushService push) {
         this.db = db;
         this.json = json;
         this.clock = clock;
+        this.push = push;
     }
 
     public record Friend(String username, int affinity, int level, boolean visitedToday, boolean likedToday) {}
@@ -101,8 +104,10 @@ public class SocialService {
             befriend(me, other);
             return Map.of("username", name, "status", "friends");
         }
-        if (!exists("select count(*) from friend_request where from_id = ? and to_id = ?", me, other))
+        if (!exists("select count(*) from friend_request where from_id = ? and to_id = ?", me, other)) {
             db.update("insert into friend_request(from_id, to_id, created_at) values (?, ?, ?)", me, other, now());
+            push.notifyAccount(other, "friends", username(me) + " 想加你好友", "friend-request", null);
+        }
         return Map.of("username", name, "status", "requested");
     }
 
@@ -185,6 +190,7 @@ public class SocialService {
         db.update("insert into gift(from_id, to_id, kind, payload, points, gift_day, created_at) values (?, ?, ?, ?, ?, ?, ?)",
                 me, other, kind, json.writeValueAsString(payload), points, day, now());
         addAffinity(me, other, 1);
+        push.notifyAccount(other, "friends", username(me) + " 送你" + ("cuttings".equals(kind) ? payload.path("count").asInt() + " 株水草插枝" : "一份成熟濾材") + "，打開遊戲收下吧", "gift", null);
         return Map.of("sendLeft", SocialRules.DAILY_SEND_POINTS - sentPoints(me, day));
     }
 

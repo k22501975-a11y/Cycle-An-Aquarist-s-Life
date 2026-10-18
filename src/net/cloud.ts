@@ -255,6 +255,24 @@ export class CloudClient {
     return this.call('GET', `/api/market/prices?species=${encodeURIComponent(species)}`);
   }
 
+  // ---- 推播（不用登入；有登入時順便讓伺服器知道這台是誰的） ----
+
+  pushKey(): Promise<CloudResult<{ publicKey: string }>> {
+    return this.call('GET', '/api/push/key', undefined, false);
+  }
+
+  pushRegister(deviceId: string, device: { secret: string; endpoint: string; p256dh: string; auth: string; categories: string[] }): Promise<CloudResult<void>> {
+    return this.call('PUT', `/api/push/devices/${deviceId}`, JSON.stringify(device));
+  }
+
+  pushSchedule(deviceId: string, secret: string, items: { at: number; category: string; title: string; body: string; tag: string }[]): Promise<CloudResult<{ scheduled: number }>> {
+    return this.call('PUT', `/api/push/devices/${deviceId}/schedule`, JSON.stringify({ secret, items }), false, true);
+  }
+
+  pushUnregister(deviceId: string, secret: string): Promise<CloudResult<void>> {
+    return this.call('DELETE', `/api/push/devices/${deviceId}`, JSON.stringify({ secret }), false);
+  }
+
   /** 伺服器上跟這個帳號有關的所有資料（個資法的查詢、複製權）。 */
   exportData(): Promise<CloudResult<Record<string, unknown>>> {
     return this.call('GET', '/api/me/export');
@@ -281,14 +299,15 @@ export class CloudClient {
     return { ok: true, value: session };
   }
 
-  private async call<T>(method: string, path: string, body?: string, withToken = true): Promise<CloudResult<T>> {
+  /** keepalive：關掉頁面時也要送到（推播排程）。 */
+  private async call<T>(method: string, path: string, body?: string, withToken = true, keepalive = false): Promise<CloudResult<T>> {
     if (!this.baseUrl) return { ok: false, code: 'unavailable', message: '雲端存檔還沒開放' };
     const headers: Record<string, string> = {};
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (withToken && this.session) headers.Authorization = `Bearer ${this.session.token}`;
     let res: Response;
     try {
-      res = await this.fetcher(this.baseUrl.replace(/\/$/, '') + path, { method, headers, body });
+      res = await this.fetcher(this.baseUrl.replace(/\/$/, '') + path, keepalive ? { method, headers, body, keepalive } : { method, headers, body });
     } catch {
       return { ok: false, code: 'offline', message: '連不上雲端，檢查一下網路' };
     }

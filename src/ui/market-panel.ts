@@ -60,6 +60,12 @@ function speciesName(id: string): string {
 }
 
 let syncing = false;
+/** 上次對帳時知道的、還在路上的貨（App 版用來排到貨通知）。 */
+let inTransit: { at: number; title: string; id: number }[] = [];
+
+export function knownArrivals(): { at: number; title: string; id: number }[] {
+  return inTransit.filter((a) => a.at > Date.now());
+}
 
 /**
  * 和市場對帳（登入時每分鐘、打開市場時）：
@@ -73,6 +79,7 @@ export async function syncMarket(deps: MarketDeps): Promise<{ arrived: number } 
     const res = await cloud.marketMine();
     if (!res.ok) return null;
     const mine = res.value;
+    inTransit = mine.purchases.filter((o) => o.status === 'shipped' && !o.arrived && o.arriveAt).map((o) => ({ at: o.arriveAt!, title: o.title, id: o.id }));
     await handleSales(deps, mine.sales);
     await refreshListings(deps, mine);
     let arrived = 0;
