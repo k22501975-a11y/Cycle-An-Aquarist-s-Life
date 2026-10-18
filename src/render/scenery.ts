@@ -2,13 +2,53 @@ import { PLANT_SPECIES, type Plant } from '../sim';
 import type { TankBounds } from './layout';
 import { canvasTexture, makeCanvas, mix, rgba, seeded, type Ctx } from './paint';
 import type { Texture } from 'pixi.js';
+import { sceneryImage } from './painted';
 
 /**
  * 精緻插畫風的場景（design/art-style.md §0.4）：用 Canvas 繪製漸層、柔光、半透明，烘成貼圖。
  * 後景（遠山、遠處水草）用低解析度繪製再放大，自然就是模糊的；中景沉木、前景石頭與底沙清楚。
  * 造景照真實（青龍石、沉木、水草），只借參考圖的光影與質感。
  * 大小以 hs（相對示意圖的鏡頭倍率）縮放：缸越大 hs 越小，石頭和水草看起來越小（§7）。
+ * 有精繪素材（背景、青龍石、沉木）時畫素材，再疊上同樣的水色、光影讓它融入水中；沒有就用程式繪製。
  */
+
+function imageSize(img: CanvasImageSource): { w: number; h: number } {
+  const i = img as { width: number; height: number };
+  return { w: i.width, h: i.height };
+}
+
+/**
+ * 把一張去背素材畫成水裡的物件：底部中心對齊 (cx, baseY)，高度 height。
+ * 先在小畫布上疊上方受光、下方陰影與水的藍色（越遠 haze 越重），再畫到場景上，底下加接觸陰影。
+ */
+function drawSceneryArt(ctx: Ctx, img: CanvasImageSource, cx: number, baseY: number, height: number, haze: number, flip = false): void {
+  const { w: iw, h: ih } = imageSize(img);
+  const h = height;
+  const w = (iw / ih) * h;
+  const { canvas: tmp, ctx: t } = makeCanvas(w, h);
+  if (flip) {
+    t.translate(w, 0);
+    t.scale(-1, 1);
+  }
+  t.drawImage(img, 0, 0, w, h);
+  t.setTransform(1, 0, 0, 1, 0, 0);
+  t.globalCompositeOperation = 'source-atop';
+  const light = t.createLinearGradient(0, 0, 0, h);
+  light.addColorStop(0, 'rgba(200,245,255,0.14)');
+  light.addColorStop(0.5, 'rgba(40,120,150,0)');
+  light.addColorStop(1, 'rgba(5,25,35,0.42)');
+  t.fillStyle = light;
+  t.fillRect(0, 0, w, h);
+  t.fillStyle = `rgba(30,110,140,${haze})`;
+  t.fillRect(0, 0, w, h);
+  const shadow = ctx.createRadialGradient(cx, baseY, 0, cx, baseY, w * 0.6);
+  shadow.addColorStop(0, 'rgba(5,25,35,0.5)');
+  shadow.addColorStop(1, 'rgba(5,25,35,0)');
+  ctx.fillStyle = shadow;
+  ctx.fillRect(cx - w * 0.65, baseY - h * 0.12, w * 1.3, h * 0.24);
+  // 圖的底部留有幾像素透明邊，往下沉一點讓石頭「坐」在沙上
+  ctx.drawImage(tmp, cx - w / 2, baseY - h * 0.97);
+}
 
 /** 示意圖的鏡頭：1100 px 寬的缸代表 60 cm。 */
 export const MOCKUP_PX_PER_CM = 1100 / 60;
@@ -33,6 +73,37 @@ export function paintBackdrop(b: TankBounds, hs: number): Texture {
   glow.addColorStop(1, 'rgba(190,240,255,0)');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, w, h);
+
+  const art = sceneryImage('bg-back');
+  if (art) {
+    // 精繪背景：等比放大蓋滿，底部的水草對齊底沙；稍微模糊、蓋上水色，當作遠景
+    const { w: iw, h: ih } = imageSize(art);
+    // 直向手機不要放大到蓋滿整個高度（水草會變得巨大）；上方空出來的部分是原本的水色，接縫用漸層融掉
+    const s = Math.max(w / iw, (h * 0.7) / ih);
+    const dw = iw * s;
+    const dh = ih * s;
+    const dy = Math.min(0, bottom + 40 * hs - dh * 0.96);
+    ctx.save();
+    ctx.filter = 'blur(1.5px)';
+    ctx.drawImage(art, (w - dw) / 2, dy, dw, dh);
+    ctx.restore();
+    if (dy > -dh * 0.02) {
+      const seam = mix(WATER.top, WATER.mid, Math.min(1, dy / h / 0.55));
+      const blend = ctx.createLinearGradient(0, dy, 0, dy + dh * 0.35);
+      blend.addColorStop(0, rgba(seam, 1));
+      blend.addColorStop(1, rgba(seam, 0));
+      ctx.fillStyle = blend;
+      ctx.fillRect(0, dy, w, dh * 0.35);
+    }
+    ctx.fillStyle = rgba(WATER.mid, 0.18);
+    ctx.fillRect(0, 0, w, h);
+    const fade = ctx.createLinearGradient(0, h * 0.35, 0, h);
+    fade.addColorStop(0, 'rgba(20,90,110,0)');
+    fade.addColorStop(1, 'rgba(10,50,65,0.4)');
+    ctx.fillStyle = fade;
+    ctx.fillRect(0, 0, w, h);
+    return canvasTexture(canvas, false);
+  }
 
   const rand = seeded(9173);
   // 遠處的岩壁：兩層，越遠越淡越藍
@@ -153,6 +224,12 @@ export function paintDriftwood(b: TankBounds, hs: number): Texture {
   const ox = b.width * 0.38;
   const oy = b.bottom + 12 * hs;
   const P = (x: number, y: number): [number, number] => [ox + (x - 510) * hs, oy + (y - 510) * hs];
+  const wood = sceneryImage('wood-1');
+  if (wood) {
+    // 精繪的杜鵑根：中景，比前景石頭多一點水的藍色
+    drawSceneryArt(ctx, wood, b.width * 0.42, oy - 4 * hs, 340 * hs, 0.14);
+    return canvasTexture(canvas, false);
+  }
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   const trunk = new Path2D();
@@ -224,9 +301,16 @@ export function paintFront(b: TankBounds, hs: number): Texture {
   const { canvas, ctx } = makeCanvas(b.width, b.height);
   const { width: w, height: h, bottom } = b;
   const y = bottom + 22 * hs;
-  paintSeiryu(ctx, w * 0.29, y, hs, [-85, 0, -51, -110, 8.5, -126.5, 59.5, -77, 85, 0], [[8.5, -126.5, 0, -10], [-51, -110, -34, -33]], 11);
+  const rocks = (['rock-1', 'rock-4', 'rock-3'] as const).map((k) => sceneryImage(k));
+  if (rocks.every(Boolean)) {
+    drawSceneryArt(ctx, rocks[0]!, w * 0.28, y, 165 * hs, 0.06);
+    drawSceneryArt(ctx, rocks[1]!, w * 0.67, y + 4 * hs, 125 * hs, 0.06, true);
+    drawSceneryArt(ctx, rocks[2]!, w * 0.79, y + 6 * hs, 72 * hs, 0.06);
+  } else {
+    paintSeiryu(ctx, w * 0.29, y, hs, [-85, 0, -51, -110, 8.5, -126.5, 59.5, -77, 85, 0], [[8.5, -126.5, 0, -10], [-51, -110, -34, -33]], 11);
   paintSeiryu(ctx, w * 0.67, y + 4 * hs, hs, [-70, 0, -42, -80, 7, -92, 49, -56, 70, 0], [[7, -92, 0, -8], [-42, -80, -28, -24]], 23);
-  paintSeiryu(ctx, w * 0.775, y + 4 * hs, hs, [-45, 0, -27, -55, 4.5, -63.25, 31.5, -38.5, 45, 0], [[4.5, -63.25, 0, -6]], 37);
+    paintSeiryu(ctx, w * 0.775, y + 4 * hs, hs, [-45, 0, -27, -55, 4.5, -63.25, 31.5, -38.5, 45, 0], [[4.5, -63.25, 0, -6]], 37);
+  }
 
   // 底沙：起伏的沙面，越前面越亮（光從上面照下來）
   const sand = new Path2D();
@@ -244,9 +328,19 @@ export function paintFront(b: TankBounds, hs: number): Texture {
   ctx.fill(sand);
   ctx.save();
   ctx.clip(sand);
+  const substrate = sceneryImage('bg-substrate');
+  if (substrate) {
+    // 精繪底沙：取圖下半部的沙紋鋪滿沙面，上面再疊一層受光漸層統一色調
+    const { w: iw, h: ih } = imageSize(substrate);
+    ctx.drawImage(substrate, 0, ih * 0.42, iw, ih * 0.58, 0, bottom - 18 * hs, w, h - bottom + 18 * hs);
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = g;
+    ctx.fillRect(0, bottom - 20 * hs, w, h);
+    ctx.globalAlpha = 1;
+  }
   const rand = seeded(4242);
-  // 沙粒
-  for (let i = 0; i < (w * (h - bottom)) / 60; i++) {
+  // 沙粒（精繪底沙本身就有質感，只灑少一點）
+  for (let i = 0; i < (w * (h - bottom)) / (substrate ? 240 : 60); i++) {
     const x = rand() * w;
     const yy = bottom - 14 * hs + rand() * (h - bottom + 14 * hs);
     ctx.fillStyle = rand() < 0.5 ? 'rgba(120,90,50,0.22)' : 'rgba(255,255,240,0.35)';

@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { PAINTED, paintedKey, paintedTexture } from './painted';
+import { PAINTED, paintedKey, paintedTexture, SCENERY, sceneryImage } from './painted';
 import { GUPPY_LOOKS } from './strains';
 
 describe('精繪素材對應', () => {
   it('每個素材檔都在 public/art 裡', () => {
     const files = Object.keys(import.meta.glob('/public/art/**/*.webp'));
     for (const spec of Object.values(PAINTED)) expect(files, spec.file).toContain(`/public/art/${spec.file}`);
+    for (const file of Object.values(SCENERY)) expect(files, file).toContain(`/public/art/${file}`);
+  });
+
+  it('造景素材沒載入時回傳 null，場景改用程式繪製', () => {
+    expect(sceneryImage('rock-1')).toBeNull();
   });
 
   it('公孔雀魚依品系挑圖，沒畫的品系退回程式繪製', () => {
