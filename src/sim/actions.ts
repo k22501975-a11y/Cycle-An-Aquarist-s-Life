@@ -124,7 +124,7 @@ export interface AddFishOptions {
 const STORE_PREGNANT_CHANCE: Partial<Record<FishSpeciesId, number>> = { guppy: 0.6, cherry_shrimp: 0.2 };
 
 /** 店家魚帶白點蟲的機率。 */
-const STORE_ICH_CHANCE = 0.25;
+const STORE_ICH_CHANCE = 0.15;
 
 /** 放入新魚。剛運輸過來的魚處於緊迫狀態。 */
 export function addFish(state: TankState, species: FishSpeciesId, options: AddFishOptions = {}): Fish {

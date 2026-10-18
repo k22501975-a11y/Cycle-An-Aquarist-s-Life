@@ -39,9 +39,12 @@ export function freeAmmonia(state: TankState): number {
   return state.water.tan * freeAmmoniaFraction(state.water.ph, state.water.tempC);
 }
 
-/** 擁擠度：魚的總體長（cm）÷ 水量（L），超過 1 就太擠（經典的「每公升 1 cm」原則）。 */
+/**
+ * 擁擠度：魚的總體長（cm）÷ 水量（L），超過 1 就太擠（經典的「每公升 1 cm」原則，指的是成魚）。
+ * 幼魚的排泄和耗氧小得多，體長再乘上體型比例，一群剛出生的仔魚不會讓缸子馬上爆滿。
+ */
 export function crowdingRatio(state: TankState): number {
-  const totalCm = state.fish.filter((f) => f.alive).reduce((sum, f) => sum + f.lengthCm, 0);
+  const totalCm = state.fish.filter((f) => f.alive).reduce((sum, f) => sum + f.lengthCm * sizeRatio(f), 0);
   return totalCm / state.equipment.tank.volumeL;
 }
 
@@ -71,7 +74,7 @@ export function computeStressors(state: TankState, fish: Fish): Stressors {
     temperature: outside(water.tempC, sp.temp) / 6,
     ph: outside(water.ph, sp.ph) / 0.8,
     // 測試劑讀到 0 的微量不構成壓力。
-    ammonia: (Math.max(0, freeAmmonia(state) - 0.003) / 0.02) * sensitivity,
+    ammonia: (Math.max(0, freeAmmonia(state) - 0.01) / 0.05) * sensitivity,
     nitrite: Math.max(0, water.no2 - 0.2) * sensitivity,
     nitrate: Math.max(0, water.no3 - 50) / 100,
     oxygen: Math.max(0, 4 - water.o2) / 2,
@@ -94,7 +97,7 @@ function computeDamage(state: TankState, fish: Fish, sp: FishSpecies): Damage[] 
   const add = (amount: number, cause: string) => {
     if (amount > 0) damage.push({ amount, cause });
   };
-  add((freeAmmonia(state) - 0.02) * 0.6 * sensitivity, 'ammonia');
+  add((freeAmmonia(state) - 0.04) * 0.3 * sensitivity, 'ammonia');
   add((water.no2 - 1) * 0.004 * sensitivity, 'nitrite');
   add((2 - water.o2) * 0.05, 'oxygen');
   add((water.co2 - 45) * 0.004, 'co2');
