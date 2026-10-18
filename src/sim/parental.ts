@@ -1,7 +1,7 @@
 import { nextRandom, chance } from './random';
 import { createFish } from './processes/population';
 import { tankHabit } from './acclimation';
-import { FISH_SPECIES, type FishSpeciesId } from './species';
+import { isShrimpSpecies, FISH_SPECIES, type FishSpeciesId } from './species';
 import { isJuvenile, recordEvent, type Fish, type TankState } from './state';
 
 /**
@@ -57,7 +57,7 @@ export function guardianOf(state: TankState, fish: Fish): Fish | null {
 
 /** 護幼期間會被趕的魚：不是自己的小孩、也不是同種的公魚以外（公魚守外圍）。 */
 function intruders(state: TankState, mother: Fish): Fish[] {
-  return state.fish.filter((f) => f.alive && f !== mother && f.guardian !== mother.id && !isJuvenile(f) && f.species !== 'cherry_shrimp');
+  return state.fish.filter((f) => f.alive && f !== mother && f.guardian !== mother.id && !isJuvenile(f) && !isShrimpSpecies(f.species));
 }
 
 /** 照顧得好不好的原因（給面板和事件用）。 */
@@ -202,7 +202,7 @@ export function guardedPredationFactor(state: TankState, fry: Fish): number {
 
 /** 護幼中的母魚趕別的魚：被趕的魚壓力上升（給緊迫計算用）。 */
 export function territoryStress(state: TankState, fish: Fish): number {
-  if (isJuvenile(fish) || fish.species === 'cherry_shrimp') return 0;
+  if (isJuvenile(fish) || isShrimpSpecies(fish.species)) return 0;
   const guards = state.fish.filter((m) => isGuarding(m) && m !== fish && fish.guardian !== m.id);
   if (guards.length === 0) return 0;
   // 缸越小越躲不掉

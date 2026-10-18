@@ -7,6 +7,7 @@ import { crowdingRatio, lifeFraction } from './fauna';
 import { growFish } from '../growth';
 import { tankHabit } from '../acclimation';
 import { guardedPredationFactor, isCaveSpawner } from '../parental';
+import { bettaAggression } from '../betta';
 import { childInbreeding, cross, matingSuccess, type GuppyGenome } from '../genetics';
 
 /**
@@ -82,7 +83,10 @@ export function updatePopulation(state: TankState, dt: number): void {
   const eaten = predation(state, living, hiding, dt);
   // 被吃掉的幼體直接從缸裡消失。
   if (eaten.size > 0) state.fish = state.fish.filter((f) => !eaten.has(f));
-  finNipping(state, living.filter((f) => !eaten.has(f)), hiding, dt);
+  const survivors = living.filter((f) => !eaten.has(f));
+  finNipping(state, survivors, hiding, dt);
+  const hunted = bettaAggression(state, survivors, hiding, dt);
+  if (hunted.size > 0) state.fish = state.fish.filter((f) => !hunted.has(f));
   breed(state, tf, dt);
 }
 

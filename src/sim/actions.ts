@@ -134,7 +134,7 @@ export interface AddFishOptions {
 }
 
 /** 店家的孔雀魚母魚幾乎都已經懷孕（和公魚混養）；櫻花蝦母蝦偶爾抱卵。 */
-const STORE_PREGNANT_CHANCE: Partial<Record<FishSpeciesId, number>> = { guppy: 0.6, cherry_shrimp: 0.2 };
+const STORE_PREGNANT_CHANCE: Partial<Record<FishSpeciesId, number>> = { guppy: 0.6, cherry_shrimp: 0.2, crystal_shrimp: 0.15 };
 
 /** 店家魚帶白點蟲的機率。 */
 const STORE_ICH_CHANCE = 0.15;

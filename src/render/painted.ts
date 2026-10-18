@@ -1,3 +1,4 @@
+import { isShrimpSpecies } from '../sim';
 import { Assets, BlurFilter, ColorMatrixFilter, Container, Mesh, MeshPlane, Texture } from 'pixi.js';
 import type { FishSpeciesId, GrowthStage } from '../sim';
 import type { FishForm } from './fish-art';
@@ -92,7 +93,7 @@ const GUPPY_MALE_ART: Record<string, string> = {
 
 /** 這條魚該用哪張精繪圖；沒有就回傳 null（還沒畫的品系）。 */
 export function paintedKey(species: FishSpeciesId, form: FishForm, variant: number, gravid: boolean, stage?: GrowthStage, stuckMolt = false): string | null {
-  if (species === 'cherry_shrimp') {
+  if (isShrimpSpecies(species)) {
     // 卡殼死掉的蝦：身上一圈白線
     if (stuckMolt) return 'shrimp-molt-stuck';
     if (stage === 'subadult' && form === 'juvenile') return 'shrimp-cherry-subadult';
@@ -100,6 +101,8 @@ export function paintedKey(species: FishSpeciesId, form: FishForm, variant: numb
     if (form === 'female') return gravid ? 'shrimp-cherry-berried' : 'shrimp-cherry-female';
     return 'shrimp-cherry-male';
   }
+  // 鬥魚的精繪圖還沒到：成魚先用程式繪製版（fish-art.ts），仔魚和孔雀魚共用
+  if (species === 'betta') return form === 'juvenile' ? 'guppy-fry' : null;
   if (species === 'apisto') return form === 'juvenile' ? 'apisto-fry' : form === 'female' ? 'apisto-female' : 'apisto-male';
   // 孔雀魚和斑馬魚的仔魚都是半透明的小魚，共用一張；長到幼魚身體有底色、尾巴變大
   if (form === 'juvenile') return stage && stage !== 'fry' ? 'guppy-juvenile' : 'guppy-fry';

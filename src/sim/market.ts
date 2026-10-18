@@ -2,7 +2,7 @@ import { addCuttings, BUYBACK_SHARE, economy, fishBuybackPrice, plantBuybackPric
 import { phenotype, strainName } from './genetics';
 import { hasVisible } from './processes/disease';
 import { createFish } from './processes/population';
-import { FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
+import { isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 import { isJuvenile, type Fish, type TankState } from './state';
 
 /**
@@ -36,7 +36,7 @@ export function marketPayout(price: number): number {
 /** 買家看到的名字，例如「藍草孔雀魚 公」「櫻花蝦 母（抱卵）」。 */
 export function listingTitle(fish: Fish): string {
   const sp = FISH_SPECIES[fish.species];
-  const shrimp = fish.species === 'cherry_shrimp';
+  const shrimp = isShrimpSpecies(fish.species);
   const strain = fish.genome ? strainName(phenotype(fish.genome)) : '';
   const sex = isJuvenile(fish) ? (shrimp ? '仔蝦' : '幼魚') : fish.sex === 'male' ? '公' : '母';
   const carrying = fish.pregnancy > 0.05 ? (shrimp ? '（抱卵）' : '（懷孕）') : '';

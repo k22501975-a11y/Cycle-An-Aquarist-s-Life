@@ -25,8 +25,10 @@ export function chargeMeal(state: TankState, units = 1): void {
   e.meals = (e.meals ?? 0) + units;
 }
 
-/** 店價：品系孔雀魚在台灣約 50～100 元一隻、斑馬魚 20 元、櫻花蝦 25 元。 */
-export const FISH_PRICES: Record<FishSpeciesId, number> = { guppy: 60, zebrafish: 20, cherry_shrimp: 25, apisto: 180 };
+/** 店價：品系孔雀魚在台灣約 50～100 元一隻、斑馬魚 20 元、櫻花蝦 25 元、半月鬥魚公魚約 250 元、水晶紅蝦（入門等級）約 120 元。 */
+export const FISH_PRICES: Record<FishSpeciesId, number> = { guppy: 60, zebrafish: 20, cherry_shrimp: 25, apisto: 180, betta: 250, crystal_shrimp: 120 };
+/** 鬥魚母魚短鰭、不起眼，比公魚便宜很多。 */
+export const BETTA_FEMALE_PRICE = 100;
 export const PLANT_PRICES: Record<PlantSpeciesId, number> = { anubias: 150, rotala: 60 };
 
 /** 設備、底材、造景、藥品、耗材的價格，鍵是「類別:id」。 */
@@ -180,7 +182,11 @@ export function buybackRefusal(fish: Fish): string | null {
 /** 成魚店價三成；還沒長大的中魚只算一半。 */
 export function fishBuybackPrice(fish: Fish): number {
   // 孔雀魚看品系和尾鰭：尾鰭 50 分是一般價，80 分多三成
-  const base = fish.genome ? phenotypeValue(phenotype(fish.genome)) * (0.5 + fish.genome.tail / 100) : FISH_PRICES[fish.species];
+  const base = fish.genome
+    ? phenotypeValue(phenotype(fish.genome)) * (0.5 + fish.genome.tail / 100)
+    : fish.species === 'betta' && fish.sex === 'female'
+      ? BETTA_FEMALE_PRICE
+      : FISH_PRICES[fish.species];
   // 發色好的魚（長期餵好飼料）賣得貴一點
   const color = 1 + 0.25 * (fish.colorBoost ?? 0);
   return Math.max(1, Math.round(base * color * BUYBACK_SHARE * (isJuvenile(fish) ? 0.5 : 1)));

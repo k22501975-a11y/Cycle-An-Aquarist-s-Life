@@ -1,3 +1,4 @@
+import { isShrimpSpecies } from '../sim';
 import { Container, MeshPlane, Sprite, type Texture } from 'pixi.js';
 import type { FishSpeciesId } from '../sim';
 import { canvasTexture, makeCanvas, mix, seeded, type Ctx } from './paint';
@@ -475,7 +476,7 @@ const ART_CACHE = new Map<FishSpeciesId, SpeciesArt>();
 export function speciesArt(species: FishSpeciesId): SpeciesArt {
   let art = ART_CACHE.get(species);
   if (!art) {
-    art = species === 'guppy' ? guppyArt() : species === 'cherry_shrimp' ? shrimpArt() : zebraArt();
+    art = species === 'guppy' || species === 'betta' ? guppyArt() : isShrimpSpecies(species) ? shrimpArt() : zebraArt();
     ART_CACHE.set(species, art);
   }
   return art;
@@ -541,6 +542,42 @@ export function appearance(species: FishSpeciesId, form: FishForm, variant: numb
       rim: null,
       tailScale: 0.6,
       gravid: form === 'female' && pregnant,
+      alpha: juvenile ? 0.82 : 1,
+    };
+  }
+  if (species === 'betta') {
+    // 精繪圖到之前的暫代：公魚深紅大尾、母魚暗紅短尾（variant 單數是藍色系）
+    const blue = variant % 2 === 1;
+    const juvenile = form === 'juvenile';
+    if (form === 'male')
+      return {
+        body: blue ? 0x1d3f9c : 0x9e1018,
+        fin: blue ? 0x2a59d6 : 0xc4161f,
+        tail: blue ? 0x2f66e8 : 0xd21b25,
+        tailOuter: blue ? 0x8fb4ff : 0xff6a4a,
+        pattern: 0,
+        bodyPattern: 'none',
+        tailPattern: 'none',
+        iris: 0xd9c58a,
+        pupil: 0x111111,
+        rim: null,
+        tailScale: 1.35,
+        gravid: false,
+        alpha: 1,
+      };
+    return {
+      body: juvenile ? 0xd8d2c8 : blue ? 0x55607e : 0x8a4a46,
+      fin: juvenile ? 0xe6e2da : blue ? 0x6c7aa0 : 0xa4605a,
+      tail: juvenile ? 0xe6e2da : blue ? 0x6c7aa0 : 0xa4605a,
+      tailOuter: 0xe8e4dc,
+      pattern: 0,
+      bodyPattern: 'none',
+      tailPattern: 'none',
+      iris: 0xd9c58a,
+      pupil: 0x111111,
+      rim: null,
+      tailScale: juvenile ? 0.6 : 0.7,
+      gravid: false,
       alpha: juvenile ? 0.82 : 1,
     };
   }

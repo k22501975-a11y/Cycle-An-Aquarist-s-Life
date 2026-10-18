@@ -1,5 +1,5 @@
 import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
-import { FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, phenotype, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
+import { isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, phenotype, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
@@ -118,7 +118,7 @@ export interface TankViewEvents {
 }
 
 /** 魚畫得比真實比例大一些（遊戲裡要看得清楚品系花紋）。 */
-const EXAGGERATION: Record<string, number> = { guppy: 1.8, zebrafish: 1.6, cherry_shrimp: 1.8, apisto: 1.5 };
+const EXAGGERATION: Record<string, number> = { guppy: 1.8, zebrafish: 1.6, cherry_shrimp: 1.8, apisto: 1.5, betta: 1.5, crystal_shrimp: 1.8 };
 /** 景深切換的門檻（有緩衝，避免在兩層之間跳來跳去）。 */
 const BACK_ENTER = 0.3;
 const BACK_LEAVE = 0.4;
@@ -873,7 +873,7 @@ export class TankView {
       if (pick.eater !== null) {
         views[pick.eater].biteT = 0;
         // 魚咬到飼料冒一兩顆小氣泡
-        if (views[pick.eater].swimmer.species !== 'cherry_shrimp') {
+        if (!isShrimpSpecies(views[pick.eater].swimmer.species)) {
           for (let i = 0, n = 1 + Math.floor(this.rand() * 2); i < n; i++) {
             this.bubbles.push({ x: p.x + (this.rand() - 0.5) * 4, y: p.y - 2, r: (1.5 + this.rand() * 1.5) * this.hs, speed: 22 + this.rand() * 10 });
           }
@@ -997,7 +997,7 @@ export class TankView {
   private formOf(fish: Fish): FishForm {
     const stage = growthStage(fish);
     if (stage === 'fry' || stage === 'juvenile') return 'juvenile';
-    if (fish.species === 'cherry_shrimp') return stage === 'subadult' && !sexVisible(fish) ? 'juvenile' : fish.sex;
+    if (isShrimpSpecies(fish.species)) return stage === 'subadult' && !sexVisible(fish) ? 'juvenile' : fish.sex;
     return sexVisible(fish) ? fish.sex : 'juvenile';
   }
 
@@ -1016,7 +1016,7 @@ export class TankView {
     const spots = new Graphics();
     const eggs = new Graphics();
     holder.addChild(glow);
-    const crawler = fish.species === 'cherry_shrimp';
+    const crawler = isShrimpSpecies(fish.species);
     const z = crawler ? 0.7 + this.rand() * 0.3 : this.rand();
     const swimmer = spawnSwimmer(fish.id, fish.species, this.bounds, () => this.rand());
     const view: FishView = {
@@ -1047,7 +1047,7 @@ export class TankView {
   private applyRig(view: FishView, fish: Fish): void {
     const form = this.formOf(fish);
     // 魚懷孕後期肚子才看得出來；蝦一抱卵就看得到。
-    const gravid = form === 'female' && fish.pregnancy > (fish.species === 'cherry_shrimp' ? 0 : 0.5);
+    const gravid = form === 'female' && fish.pregnancy > (isShrimpSpecies(fish.species) ? 0 : 0.5);
     // 公孔雀魚照基因上色：雜交出來的組合也有自己的花色
     const painted = resolvePaintedKey(fish.species === 'guppy' && form === 'male' && fish.genome ? recipeKey(phenotypeRecipe(phenotype(fish.genome))) : paintedKey(fish.species, form, lookVariant(fish), gravid, growthStage(fish), !!fish.stuckMolt));
     // 鰭型到亞成魚才慢慢長出來（design/growth.md §1）
@@ -1067,7 +1067,7 @@ export class TankView {
     if (fins) drawFinOverlay(view.rig, fins);
     view.limbs?.destroy();
     view.limbs = null;
-    if (fish.species === 'cherry_shrimp' && view.rig instanceof PaintedRig) {
+    if (isShrimpSpecies(fish.species) && view.rig instanceof PaintedRig) {
       view.limbs = new Graphics();
       view.rig.addChild(view.limbs);
     }
@@ -1155,7 +1155,7 @@ export class TankView {
       updateSwimmer(swimmer, living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined, symptoms, follow, guarding: isGuarding(fish) }, ctx, dt, () => this.rand());
 
       // 景深：魚慢慢在前後之間游動；遠的小一點、模糊偏藍，畫在造景後面。
-      if (fish.species !== 'cherry_shrimp' && fish.alive) {
+      if (!isShrimpSpecies(fish.species) && fish.alive) {
         if (this.rand() < dt * 0.04) view.zTarget = this.rand();
         view.z += (view.zTarget - view.z) * Math.min(1, dt * 0.25);
       }
@@ -1177,7 +1177,7 @@ export class TankView {
       if (!fish.alive) {
         // 死亡演出：最後抽動幾下，慢慢翻成白肚朝上、褪成灰色，一邊沉到底
         view.deathT = view.deathT < 0 ? 0 : view.deathT + dt;
-        const pose = deathPose(view.deathT, fish.species === 'cherry_shrimp');
+        const pose = deathPose(view.deathT, isShrimpSpecies(fish.species));
         rig.scale.y = k * pose.flip;
         rig.rotation = facingLeft ? -pose.tilt : pose.tilt;
         rig.alpha = rig.look.alpha * (1 - 0.25 * pose.fade);
@@ -1200,15 +1200,15 @@ export class TankView {
       const dir = facingLeft ? -1 : 1;
       view.biteT += dt;
       const kick = biteKick(view.biteT);
-      if (kick > 0 && fish.species !== 'cherry_shrimp') {
+      if (kick > 0 && !isShrimpSpecies(fish.species)) {
         view.holder.x += dir * kick * len * 0.12;
         rig.rotation += dir * kick * 0.18;
         // 張口咬的瞬間身體壓扁一成再彈回
         rig.scale.x *= 1 - 0.1 * kick;
         rig.scale.y *= 1 + 0.05 * kick;
       }
-      if (rig instanceof PaintedRig) rig.setMouthOpen(kick > 0.15 && fish.species !== 'cherry_shrimp');
-      if (fish.species === 'cherry_shrimp') this.drawShrimpLimbs(view, fish, dt);
+      if (rig instanceof PaintedRig) rig.setMouthOpen(kick > 0.15 && !isShrimpSpecies(fish.species));
+      if (isShrimpSpecies(fish.species)) this.drawShrimpLimbs(view, fish, dt);
       // 長期餵好飼料：顏色更飽和、更亮（只是表現，停餵會退）
       // 轉色期顏色從淡慢慢變濃，老魚顏色變淡（design/growth.md §1、§5）
       const boost = fish.alive ? Math.round((fish.colorBoost ?? 0) * 4) / 4 : 0;
@@ -1234,7 +1234,7 @@ export class TankView {
         view.ichDrawn = spotted;
       }
       // 抱卵的母蝦：肚子下面一團黃綠色的卵
-      const berried = fish.alive && fish.species === 'cherry_shrimp' && fish.pregnancy > 0 && !rig.drawsEggs;
+      const berried = fish.alive && isShrimpSpecies(fish.species) && fish.pregnancy > 0 && !rig.drawsEggs;
       if (berried !== view.eggsDrawn) {
         view.eggs.clear();
         if (berried) {

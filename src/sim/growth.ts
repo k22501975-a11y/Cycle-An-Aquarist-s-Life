@@ -1,6 +1,6 @@
 import { nutritionFactor } from './food';
 import { nextRandom } from './random';
-import { FISH_SPECIES } from './species';
+import { isShrimpSpecies, FISH_SPECIES } from './species';
 import { recordEvent, type Fish, type TankState } from './state';
 
 /**
@@ -40,7 +40,7 @@ const SHRIMP_STAGES: Array<[GrowthStage, number]> = [
 /** 壽命走到這個比例以後算老魚。 */
 export const OLD_FRACTION = 0.85;
 
-const isShrimp = (fish: Fish) => fish.species === 'cherry_shrimp';
+const isShrimp = (fish: Fish) => isShrimpSpecies(fish.species);
 
 /** 這尾魚長到頂的體長：仔魚期吃不好、太擠的魚永久偏小（最多小兩成）。 */
 export function maxLengthCm(fish: Fish): number {
