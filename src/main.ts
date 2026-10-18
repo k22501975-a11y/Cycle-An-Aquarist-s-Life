@@ -240,7 +240,8 @@ async function start(): Promise<void> {
       ...list.map((c) => h(`span.cap.${c.tone}${c.stale ? '.stale' : ''}`, { title: c.title }, h('i.dot'), h('span.lbl', {}, c.label), h('b', {}, c.value))),
     );
   };
-  const menu = () =>
+  // 設定頁：聲音、顯示、時間、存檔、開發者
+  const settings = () =>
     h(
       'div.stack',
       {},
@@ -274,40 +275,53 @@ async function start(): Promise<void> {
         h('span', {}, '靜音'),
       ),
       h('p.hint', {}, '背景音樂是即時彈奏的指彈吉他，每次都不一樣；晚上關燈後會彈得比較輕。'),
-      h('h3', {}, '時間倍率（開發用）'),
-      h(
-        'div.tabs',
-        {},
-        ...SPEED_OPTIONS.map((opt) =>
-          h(
-            `button.tab${game.clock.timeScale === opt.scale ? '.active' : ''}`,
-            {
-              onclick: () => {
-                game.clock.timeScale = opt.scale;
-                save();
-                sheet.refresh();
-              },
-            },
-            opt.label,
-          ),
-        ),
-      ),
-      h('h3', {}, '紀錄與顯示'),
-      h('button.btn', { onclick: () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen)) }, '圖鑑：魚蝦、水草、設備、疾病'),
-      h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) }, '水質趨勢與事件紀錄'),
+      h('h3', {}, '顯示'),
       h(
         'label.check-row',
         {},
         h('input', { type: 'checkbox', checked: uiPrefs.bigText, onchange: (e: Event) => setBigText((e.target as HTMLInputElement).checked) }),
         h('span', {}, '放大文字'),
       ),
+      h('div.item', {}, h('b', {}, '語言'), h('span.owned', {}, '繁體中文')),
+      h('p.hint', {}, '燈號除了顏色也用形狀區分：圓形正常、三角形注意、菱形危險。'),
+      h('h3', {}, '時間'),
+      h('p.hint', {}, '遊戲時間是現實的 7 倍：現實 1 天＝遊戲 1 週，現實 1 小時＝遊戲 7 小時。關掉網頁時時間照常前進，下次打開會補算（最多兩週）。'),
+      h(
+        'details.dev',
+        {},
+        h('summary', {}, '開發用：加快時間'),
+        h(
+          'div.tabs',
+          {},
+          ...SPEED_OPTIONS.map((opt) =>
+            h(
+              `button.tab${game.clock.timeScale === opt.scale ? '.active' : ''}`,
+              {
+                onclick: () => {
+                  game.clock.timeScale = opt.scale;
+                  save();
+                  sheet.refresh();
+                },
+              },
+              opt.label,
+            ),
+          ),
+        ),
+      ),
       h('h3', {}, '存檔'),
       h('div.row', {}, h('button.btn', { onclick: exportSave }, '匯出存檔'), h('button.btn', { onclick: importSave }, '從檔案匯入')),
-      h('p.hint', {}, '遊戲每 30 分鐘會自動備份一次，存檔壞掉時會自動用備份還原。'),
-      h('h3', {}, '新手引導'),
-      h('button.btn', { onclick: () => (sheet.close(), guide.restart()) }, '重新看阿德老闆的教學'),
+      h('p.hint', {}, '遊戲每 10 秒自動存檔，每 30 分鐘自動備份一次；存檔壞掉時會自動用備份還原。換手機時可以匯出成檔案帶過去。'),
+      h('h3', {}, '開發者'),
       h('button.btn', { onclick: () => sheet.open('開發者數值', () => debugPanel(ctx), { live: true }) }, '開發者數值'),
-      h('p.hint', {}, '遊戲每 10 秒自動存檔；關掉網頁期間的時間，下次打開會以 ×7 補算（最多兩週）。'),
+    );
+  const menu = () =>
+    h(
+      'div.stack',
+      {},
+      h('button.btn', { onclick: () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen)) }, '圖鑑：魚蝦、水草、設備、疾病'),
+      h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) }, '水質趨勢與事件紀錄'),
+      h('button.btn', { onclick: () => (sheet.close(), guide.restart()) }, '重新看阿德老闆的教學'),
+      h('button.btn', { onclick: () => sheet.open('設定', settings) }, '設定：聲音、顯示、時間、存檔'),
       h(
         'button.btn',
         {
