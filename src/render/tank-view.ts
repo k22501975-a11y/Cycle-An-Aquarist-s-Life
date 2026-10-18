@@ -1,8 +1,8 @@
 import { Application, Container, FederatedPointerEvent, FillGradient, Graphics } from 'pixi.js';
 import { isCo2Injecting, isJuvenile, isLightOn, observeSymptoms, sizeRatio, type TankState } from '../sim';
 import { spawnSwimmer, updateSwimmer, type Swimmer } from './fish-motion';
-import { tankBounds, unitScale, type TankBounds } from './layout';
-import { createFishSprite, drawIchSpots, drawPlant, type FishSprite } from './sprites';
+import { tankBounds, tankRect, unitScale, type TankBounds, type TankRect } from './layout';
+import { createFishSprite, drawIchSpots, drawPlant, INK, type FishSprite } from './sprites';
 
 interface FoodParticle {
   g: Graphics;
@@ -36,6 +36,13 @@ export interface TankViewEvents {
  */
 export class TankView {
   readonly root = new Container();
+  /** 房間背景與缸座（水缸外面）。 */
+  private readonly room = new Graphics();
+  /** 水缸內的一切，原點在水缸左上角，用遮罩裁成圓角。 */
+  private readonly scene = new Container();
+  private readonly sceneMask = new Graphics();
+  /** 卡通風格的粗黑缸框，蓋在最上面。 */
+  private readonly frame = new Graphics();
   private readonly background = new Graphics();
   private readonly plantLayer = new Container();
   private readonly foodLayer = new Container();
@@ -44,9 +51,10 @@ export class TankView {
   private readonly overlay = new Graphics();
   private readonly gear = new Graphics();
 
+  private rect: TankRect;
   private bounds: TankBounds;
   private scale: number;
-  private swimmers = new Map<number, { swimmer: Swimmer; sprite: FishSprite; ichDrawn: boolean; juvenile: boolean }>();
+  private swimmers = new Map<number, { swimmer: Swimmer; sprite: FishSprite; ichDrawn: boolean; juvenile: boolean; spriteScale: number }>();
   private plants = new Map<number, PlantView>();
   private food: FoodParticle[] = [];
   private bubbles: Bubble[] = [];
@@ -54,9 +62,12 @@ export class TankView {
   private seed = 12345;
 
   constructor(private readonly app: Application, private readonly events: TankViewEvents = {}) {
-    this.bounds = tankBounds(app.screen.width, app.screen.height);
+    this.rect = tankRect(app.screen.width, app.screen.height);
+    this.bounds = tankBounds(this.rect.width, this.rect.height);
     this.scale = unitScale(this.bounds);
-    this.root.addChild(this.background, this.gear, this.plantLayer, this.foodLayer, this.fishLayer, this.bubbleLayer, this.overlay);
+    this.scene.addChild(this.background, this.gear, this.plantLayer, this.foodLayer, this.fishLayer, this.bubbleLayer, this.overlay);
+    this.scene.mask = this.sceneMask;
+    this.root.addChild(this.room, this.scene, this.sceneMask, this.frame);
     this.root.eventMode = 'static';
     this.root.on('pointertap', (e: FederatedPointerEvent) => this.handleTap(e.global.x, e.global.y));
     this.layout();
@@ -73,35 +84,70 @@ export class TankView {
   }
 
   private layout(): void {
-    this.bounds = tankBounds(this.app.screen.width, this.app.screen.height);
+    const screen = this.app.screen;
+    this.rect = tankRect(screen.width, screen.height);
+    this.bounds = tankBounds(this.rect.width, this.rect.height);
     this.scale = unitScale(this.bounds);
     const { width, height, surface, bottom } = this.bounds;
-    this.root.hitArea = { contains: (x: number, y: number) => x >= 0 && y >= 0 && x <= width && y <= height };
+    const { x: rx, y: ry } = this.rect;
+    const radius = Math.min(18, height * 0.05);
+    this.root.hitArea = { contains: (x: number, y: number) => x >= rx && y >= ry && x <= rx + width && y <= ry + height };
+    this.scene.position.set(rx, ry);
+    this.sceneMask.clear().roundRect(rx, ry, width, height, radius).fill(0xffffff);
 
+    // 房間：淡色牆面＋木頭缸座
+    const room = this.room.clear();
+    room.rect(0, 0, screen.width, screen.height).fill(0x24384a);
+    const standY = ry + height;
+    const standH = Math.max(14, Math.min(40, screen.height - standY - 4));
+    room.roundRect(rx - 10, standY - 4, width + 20, standH, 6).fill(0x9a6a3c).stroke({ color: INK, width: 3 });
+    room.rect(rx - 6, standY + standH * 0.45, width + 12, 2).fill({ color: 0x6b4526, alpha: 0.8 });
+
+    // 缸框：粗黑外框＋上緣
+    const frame = this.frame.clear();
+    frame.roundRect(rx, ry, width, height, radius).stroke({ color: INK, width: 4 });
+    frame.rect(rx + radius, ry - 1, width - radius * 2, 5).fill({ color: 0xffffff, alpha: 0.25 });
+
+    // 卡通風格：明亮的藍色水、米色底砂、粗黑輪廓。
     const water = new FillGradient({
       type: 'linear',
       start: { x: 0, y: 0 },
       end: { x: 0, y: 1 },
       colorStops: [
-        { offset: 0, color: 0x3d8fb0 },
-        { offset: 1, color: 0x123e54 },
+        { offset: 0, color: 0x6fd0f0 },
+        { offset: 1, color: 0x2a8cc4 },
       ],
     });
-    this.background.clear();
-    this.background.rect(0, 0, width, surface).fill(0x0e2230);
-    this.background.rect(0, surface, width, bottom - surface).fill(water);
-    this.background.rect(0, surface, width, 2).fill({ color: 0xffffff, alpha: 0.35 });
-    this.background.rect(0, bottom, width, height - bottom).fill(0x6b5a45);
-    for (let i = 0; i < width / 3; i++) {
+    const bg = this.background.clear();
+    bg.rect(0, 0, width, surface).fill(0xd6f1fa);
+    bg.rect(0, surface, width, height - surface).fill(water);
+    bg.moveTo(0, surface).lineTo(width, surface).stroke({ color: 0xffffff, width: 2, alpha: 0.7 });
+    // 微微起伏的沙面
+    const sand: number[] = [0, height];
+    const steps = Math.max(8, Math.round(width / 40));
+    for (let i = 0; i <= steps; i++) {
+      const x = (i / steps) * width;
+      sand.push(x, bottom + Math.sin(i * 1.3) * 3 * this.scale + Math.sin(i * 0.37) * 4 * this.scale);
+    }
+    sand.push(width, height);
+    bg.poly(sand).fill(0xe9cc8e).stroke({ color: INK, width: 2.5 });
+    for (let i = 0; i < width / 6; i++) {
       const x = (i * 97) % width;
-      const y = bottom + ((i * 53) % Math.max(1, height - bottom));
-      this.background.circle(x, y, 1 + (i % 3) * 0.6).fill({ color: i % 2 ? 0x8a7558 : 0x4f4232, alpha: 0.8 });
+      const y = bottom + 8 + ((i * 53) % Math.max(1, height - bottom - 10));
+      bg.circle(x, y, 0.8 + (i % 3) * 0.5).fill({ color: i % 2 ? 0xc9a86a : 0xf5dfae, alpha: 0.9 });
+    }
+    // 幾顆卡通石頭
+    for (const [fx, r] of [[0.12, 14], [0.68, 10], [0.9, 17]] as const) {
+      bg.ellipse(width * fx, bottom + 4 * this.scale, r * this.scale * 1.4, r * this.scale * 0.75).fill(0xa4a9ad).stroke({ color: INK, width: 2 });
+      bg.ellipse(width * fx - r * 0.4 * this.scale, bottom, r * 0.45 * this.scale, r * 0.2 * this.scale).fill({ color: 0xffffff, alpha: 0.35 });
     }
     // 重新排列水草（位置依畫面寬度）
     for (const view of this.plants.values()) view.drawnBiomass = -1;
   }
 
-  private handleTap(x: number, y: number): void {
+  private handleTap(globalX: number, globalY: number): void {
+    const x = globalX - this.rect.x;
+    const y = globalY - this.rect.y;
     let best: number | null = null;
     let bestD = (28 * this.scale) ** 2;
     for (const { swimmer } of this.swimmers.values()) {
@@ -117,7 +163,7 @@ export class TankView {
     }
     for (const [id, view] of this.plants) {
       const b = view.g.getBounds();
-      if (x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY) {
+      if (globalX >= b.minX && globalX <= b.maxX && globalY >= b.minY && globalY <= b.maxY) {
         this.events.onSelectPlant?.(id);
         return;
       }
@@ -139,7 +185,7 @@ export class TankView {
     const { width, surface, bottom } = this.bounds;
     const target = Math.min(80, Math.ceil(state.water.foodMg / 2));
     while (this.food.length < target) {
-      const g = new Graphics().circle(0, 0, 1.6 * this.scale).fill(0xc8873a);
+      const g = new Graphics().circle(0, 0, 1.8 * this.scale).fill(0xe0913a).stroke({ color: INK, width: 0.6 * this.scale });
       const p = { g, x: width * (0.2 + this.rand() * 0.6), y: surface + this.rand() * 6 };
       this.foodLayer.addChild(g);
       this.food.push(p);
@@ -161,13 +207,13 @@ export class TankView {
       present.add(fish.id);
       let entry = this.swimmers.get(fish.id);
       const juvenile = isJuvenile(fish);
-      if (!entry || entry.juvenile !== juvenile) {
-        // 幼體一律是樸素的灰色，長大後才換成公母各自的樣子。
+      if (!entry || entry.juvenile !== juvenile || entry.spriteScale !== this.scale) {
+        // 幼體一律是樸素的灰色，長大後才換成公母各自的樣子；畫面縮放改變（例如手機轉向）時也重畫。
         const swimmer = entry?.swimmer ?? spawnSwimmer(fish.id, fish.species, this.bounds, () => this.rand());
         entry?.sprite.root.destroy({ children: true });
         const sprite = createFishSprite(fish.species, this.scale * 1.5, fish.id, juvenile || fish.sex === 'female');
         this.fishLayer.addChild(sprite.root);
-        entry = { swimmer, sprite, ichDrawn: false, juvenile };
+        entry = { swimmer, sprite, ichDrawn: false, juvenile, spriteScale: this.scale };
         this.swimmers.set(fish.id, entry);
       }
     }
@@ -258,18 +304,19 @@ export class TankView {
     const eq = state.equipment;
     if (eq.filter) {
       // 外掛過濾器掛在後方右上
-      g.roundRect(width - 46 * s, surface - 14 * s, 36 * s, 34 * s, 4 * s).fill({ color: 0x2b3238, alpha: 0.9 });
+      g.roundRect(width - 46 * s, surface - 14 * s, 36 * s, 34 * s, 5 * s).fill(0x3a4650).stroke({ color: INK, width: 2 });
+      g.rect(width - 40 * s, surface - 8 * s, 24 * s, 3 * s).fill({ color: 0xffffff, alpha: 0.25 });
     }
     if (eq.heater) {
       const on = eq.heater.heating && !eq.heater.broken && !state.environment.powerOut;
-      g.roundRect(10 * s, surface + 20 * s, 7 * s, 70 * s, 3 * s).fill({ color: 0xcfd8dc, alpha: 0.6 });
+      g.roundRect(10 * s, surface + 20 * s, 7 * s, 70 * s, 3 * s).fill({ color: 0xe6eef1, alpha: 0.85 }).stroke({ color: INK, width: 1.5 });
       g.circle(13.5 * s, surface + 26 * s, 2 * s).fill(eq.heater.broken ? 0x555555 : on ? 0xff7043 : 0x5d4037);
     }
     if (eq.co2) {
-      g.circle(width * 0.5, bottom - 10 * s, 5 * s).fill({ color: 0xb0bec5, alpha: 0.7 });
+      g.circle(width * 0.5, bottom - 10 * s, 5 * s).fill({ color: 0xd5e3ea, alpha: 0.9 }).stroke({ color: INK, width: 1.5 });
     }
     if (eq.airPump) {
-      g.roundRect(width * 0.82, bottom - 8 * s, 10 * s, 6 * s, 2 * s).fill({ color: 0x78909c, alpha: 0.8 });
+      g.roundRect(width * 0.82, bottom - 8 * s, 10 * s, 6 * s, 2 * s).fill(0x8aa0ab).stroke({ color: INK, width: 1.5 });
     }
   }
 
@@ -291,7 +338,7 @@ export class TankView {
     for (const b of this.bubbles) {
       b.y -= b.speed * dt;
       b.x += Math.sin(b.y * 0.08) * 0.3;
-      g.circle(b.x, b.y, b.r).stroke({ color: 0xffffff, width: 0.8, alpha: 0.6 });
+      g.circle(b.x, b.y, b.r).stroke({ color: 0xffffff, width: 1.2, alpha: 0.85 });
     }
   }
 

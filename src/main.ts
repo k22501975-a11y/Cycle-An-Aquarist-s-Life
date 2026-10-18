@@ -120,6 +120,7 @@ async function start(): Promise<void> {
       if (msg) toasts.show(msg.text, msg.tone);
     }
   }
+  if (window.matchMedia('(orientation: portrait)').matches) toasts.show('把手機轉成橫向，水缸會更大');
   setInterval(save, 10_000);
   // 切到背景時畫面停止更新；回來時以 ×7 補算這段時間，和關掉網頁一樣。
   let hiddenAt: number | null = null;
