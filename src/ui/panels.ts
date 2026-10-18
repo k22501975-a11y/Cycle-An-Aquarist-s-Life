@@ -9,6 +9,7 @@ import {
   FISH_SPECIES,
   freeAmmonia,
   HEATERS,
+  hidingFactor,
   LIGHTS,
   observeSymptoms,
   PLANT_SPECIES,
@@ -138,6 +139,7 @@ export function fishPanel({ game, sheet }: PanelContext, fishId: number): Node {
   return h(
     'div.stack',
     {},
+    h('p', {}, `${fishName(fish)} · 體長約 ${fish.lengthCm.toFixed(1)} cm`),
     symptoms.length
       ? h('ul.symptoms', {}, ...symptoms.map((s) => h('li', {}, SYMPTOM_LABELS[s])))
       : h('p', {}, '游動正常，看起來很健康。'),
@@ -213,6 +215,7 @@ export function shopPanel(ctx: PanelContext, tab: 'fish' | 'plants' | 'gear' = '
       'div.stack',
       {},
       h('p.hint', {}, '店裡的魚可能帶著白點蟲。新缸還沒養好水就放太多魚，會氨中毒。'),
+      h('p.hint', {}, '孔雀魚和櫻花蝦會自己繁殖，但成魚會吃仔魚和仔蝦，水草種密一點才躲得掉。斑馬魚會輕微咬孔雀魚公魚的長尾巴。'),
       ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).map((id) => {
         const sp = FISH_SPECIES[id];
         const note = [`${sp.temp.min}–${sp.temp.max}°C`, `pH ${sp.ph.min}–${sp.ph.max}`, sp.minGroup ? `群游，至少 ${sp.minGroup} 隻` : ''].filter(Boolean).join(' · ');
@@ -331,6 +334,7 @@ export function debugPanel({ game }: PanelContext): Node {
     ['白點蟲 游走 / 包囊', `${w.ichPathogen.toFixed(2)} / ${w.ichCysts.toFixed(2)}`],
     ['藥物', w.medication.toFixed(2)],
     ['藻類', s.algae.toFixed(2)],
+    ['躲藏係數', hidingFactor(s).toFixed(2)],
   ];
   return h(
     'div.stack',
@@ -340,7 +344,7 @@ export function debugPanel({ game }: PanelContext): Node {
       'table.readings',
       {},
       ...s.fish.map((f) =>
-        h('tr', {}, h('td', {}, fishName(f)), h('td.value', {}, f.alive ? `健康 ${f.health.toFixed(2)} 壓力 ${f.stress.toFixed(2)} 飢餓 ${f.hunger.toFixed(2)} ${f.ich.stage}` : '死亡')),
+        h('tr', {}, h('td', {}, fishName(f)), h('td.value', {}, f.alive ? `健康 ${f.health.toFixed(2)} 壓力 ${f.stress.toFixed(2)} 飢餓 ${f.hunger.toFixed(2)} ${f.ich.stage} ${f.lengthCm.toFixed(1)}cm${f.finDamage > 0 ? ` 鰭 ${f.finDamage.toFixed(2)}` : ''}${f.pregnancy > 0 ? ` 孕 ${f.pregnancy.toFixed(2)}` : ''}` : '死亡')),
       ),
       ...s.plants.map((p) => h('tr', {}, h('td', {}, PLANT_SPECIES[p.species].name), h('td.value', {}, `${p.biomassG.toFixed(2)} g 生長 ${(p.growthRate * 24).toFixed(3)}/天 葉藻 ${p.leafAlgae.toFixed(2)}`))),
     ),

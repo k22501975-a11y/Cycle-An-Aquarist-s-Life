@@ -34,8 +34,9 @@ const STARTER: CreateTankOptions = {
   light: { spec: LIGHTS.basic },
 };
 
+/** 放魚。預設全放公的，避免繁殖干擾水質類的情境（繁殖與混養另有測試）。 */
 function stock(state: TankState, species: FishSpeciesId, count: number): void {
-  for (let i = 0; i < count; i++) addFish(state, species, { carriesIch: false });
+  for (let i = 0; i < count; i++) addFish(state, species, { carriesIch: false, sex: 'male' });
 }
 
 const alive = (s: TankState) => s.fish.filter((f) => f.alive);
@@ -300,7 +301,7 @@ describe('疾病', () => {
   it('帶白點蟲的新魚沒檢疫就下缸，會傳染給同缸的魚', () => {
     const s = createTank({ ...STARTER, seed: 20, matureMedia: true });
     stock(s, 'guppy', 8);
-    addFish(s, 'guppy', { carriesIch: true });
+    addFish(s, 'guppy', { carriesIch: true, sex: 'male' });
     runDays(s, 14);
     const infected = s.fish.filter((f) => f.ich.stage !== 'none' || !f.alive).length;
     expect(infected).toBeGreaterThan(3);
@@ -310,7 +311,7 @@ describe('疾病', () => {
   it('下藥加上提高水溫能控制白點病；不治療的缸持續惡化', () => {
     const untreated = createTank({ ...STARTER, seed: 21, matureMedia: true });
     stock(untreated, 'guppy', 8);
-    addFish(untreated, 'guppy', { carriesIch: true });
+    addFish(untreated, 'guppy', { carriesIch: true, sex: 'male' });
     runDays(untreated, 7);
     const treated = structuredClone(untreated);
 
@@ -335,7 +336,7 @@ describe('疾病', () => {
 
   it('白點病有可觀察的症狀', () => {
     const s = createTank({ ...STARTER, seed: 23, matureMedia: true });
-    const fish = addFish(s, 'guppy', { carriesIch: true });
+    const fish = addFish(s, 'guppy', { carriesIch: true, sex: 'male' });
     let sawFlashing = false;
     let sawSpots = false;
     runDays(s, 6, {

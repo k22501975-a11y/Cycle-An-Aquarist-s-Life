@@ -26,6 +26,20 @@ export interface FishSpecies {
   susceptibleToIch: boolean;
   /** 對藥物（如白點藥）是否敏感（無脊椎動物通常很敏感）。 */
   medicationSensitive: boolean;
+  /** 剛出生的體長（cm）。 */
+  birthLengthCm: number;
+  /** 從出生長到成體（約九成體長）的天數。 */
+  daysToAdult: number;
+  /** 嘴巴大小 ÷ 體長：體長 × 此值以下的小生物吃得下。0 表示不吃活物。 */
+  mouthRatio: number;
+  /** 幼體在掠食者身邊、沒有躲藏處時，每天被吃掉的機率（剛出生時）。 */
+  juvenilePredationPerDay: number;
+  /** 咬鰭傾向（每尾長鰭魚每天被咬的基礎機率）。0 表示不咬鰭。 */
+  finNipPerDay: number;
+  /** 公魚是否有長鰭（咬鰭魚的目標）。 */
+  longFinnedMales: boolean;
+  /** Phase 0 的簡化繁殖（只為了讓仔魚、仔蝦出現；遺傳在 Phase 1）。 */
+  breeding: { gestationDays: number; broodMean: number; broodMin: number; broodMax: number } | null;
 }
 
 export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
@@ -42,6 +56,14 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     minGroup: 0,
     susceptibleToIch: true,
     medicationSensitive: false,
+    birthLengthCm: 0.7,
+    daysToAdult: 60,
+    mouthRatio: 0.4,
+    juvenilePredationPerDay: 0.25,
+    finNipPerDay: 0,
+    longFinnedMales: true,
+    // 卵胎生：母魚約 4 週生一胎，每胎約 20 尾。
+    breeding: { gestationDays: 28, broodMean: 20, broodMin: 4, broodMax: 40 },
   },
   zebrafish: {
     id: 'zebrafish',
@@ -56,6 +78,15 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     minGroup: 6,
     susceptibleToIch: true,
     medicationSensitive: false,
+    birthLengthCm: 0.4,
+    daysToAdult: 75,
+    mouthRatio: 0.4,
+    juvenilePredationPerDay: 0.25,
+    // 輕微咬鰭：只針對長鰭魚，群游數量不足時加倍。
+    finNipPerDay: 0.08,
+    longFinnedMales: false,
+    // 斑馬魚撒卵且吃卵很兇，Phase 0 先不做（需要產卵盒）。
+    breeding: null,
   },
   cherry_shrimp: {
     id: 'cherry_shrimp',
@@ -70,6 +101,14 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     minGroup: 0,
     susceptibleToIch: false,
     medicationSensitive: true,
+    birthLengthCm: 0.15,
+    daysToAdult: 50,
+    mouthRatio: 0,
+    juvenilePredationPerDay: 0.15,
+    finNipPerDay: 0,
+    longFinnedMales: false,
+    // 抱卵約 30 天，孵出 10–30 隻仔蝦。
+    breeding: { gestationDays: 30, broodMean: 20, broodMin: 5, broodMax: 30 },
   },
 };
 

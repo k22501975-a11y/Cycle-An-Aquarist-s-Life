@@ -1,5 +1,5 @@
 import { Application, Container, FederatedPointerEvent, FillGradient, Graphics } from 'pixi.js';
-import { isCo2Injecting, isLightOn, observeSymptoms, type TankState } from '../sim';
+import { isCo2Injecting, isJuvenile, isLightOn, observeSymptoms, sizeRatio, type TankState } from '../sim';
 import { spawnSwimmer, updateSwimmer, type Swimmer } from './fish-motion';
 import { tankBounds, unitScale, type TankBounds } from './layout';
 import { createFishSprite, drawIchSpots, drawPlant, type FishSprite } from './sprites';
@@ -46,7 +46,7 @@ export class TankView {
 
   private bounds: TankBounds;
   private scale: number;
-  private swimmers = new Map<number, { swimmer: Swimmer; sprite: FishSprite; ichDrawn: boolean }>();
+  private swimmers = new Map<number, { swimmer: Swimmer; sprite: FishSprite; ichDrawn: boolean; juvenile: boolean }>();
   private plants = new Map<number, PlantView>();
   private food: FoodParticle[] = [];
   private bubbles: Bubble[] = [];
@@ -160,11 +160,14 @@ export class TankView {
     for (const fish of state.fish) {
       present.add(fish.id);
       let entry = this.swimmers.get(fish.id);
-      if (!entry) {
-        const swimmer = spawnSwimmer(fish.id, fish.species, this.bounds, () => this.rand());
-        const sprite = createFishSprite(fish.species, this.scale * 1.5, fish.id);
+      const juvenile = isJuvenile(fish);
+      if (!entry || entry.juvenile !== juvenile) {
+        // 幼體一律是樸素的灰色，長大後才換成公母各自的樣子。
+        const swimmer = entry?.swimmer ?? spawnSwimmer(fish.id, fish.species, this.bounds, () => this.rand());
+        entry?.sprite.root.destroy({ children: true });
+        const sprite = createFishSprite(fish.species, this.scale * 1.5, fish.id, juvenile || fish.sex === 'female');
         this.fishLayer.addChild(sprite.root);
-        entry = { swimmer, sprite, ichDrawn: false };
+        entry = { swimmer, sprite, ichDrawn: false, juvenile };
         this.swimmers.set(fish.id, entry);
       }
     }
@@ -186,18 +189,22 @@ export class TankView {
 
       sprite.root.position.set(swimmer.x, swimmer.y);
       const facingLeft = swimmer.vx < 0;
-      sprite.root.scale.x = facingLeft ? -1 : 1;
+      // 幼體依體長縮小。
+      const size = Math.max(0.2, sizeRatio(fish));
+      sprite.root.scale.x = facingLeft ? -size : size;
       if (!fish.alive) {
         sprite.root.rotation = 0;
-        sprite.root.scale.y = -1;
+        sprite.root.scale.y = -size;
         sprite.root.alpha = 0.75;
         sprite.body.tint = 0x9a9a9a;
       } else {
-        sprite.root.scale.y = 1;
+        sprite.root.scale.y = size;
         const tilt = symptoms.includes('loss_of_balance') ? 1.2 : Math.max(-0.35, Math.min(0.35, Math.atan2(swimmer.vy, Math.abs(swimmer.vx) + 1) * 0.6));
         sprite.root.rotation = facingLeft ? -tilt : tilt;
         sprite.tail.rotation = Math.sin(swimmer.phase) * (symptoms.includes('clamped_fins') ? 0.1 : 0.35);
         sprite.tail.scale.y = symptoms.includes('clamped_fins') ? 0.55 : 1;
+        // 鰭被咬破會變短。
+        sprite.tail.scale.x = 1 - 0.5 * fish.finDamage;
       }
       const spotted = fish.alive && symptoms.includes('white_spots');
       if (spotted !== entry.ichDrawn) {

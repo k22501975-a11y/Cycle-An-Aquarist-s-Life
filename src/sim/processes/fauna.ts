@@ -2,6 +2,7 @@ import { freeAmmoniaFraction, temperatureFactor } from '../chemistry';
 import { chance } from '../random';
 import { FISH_SPECIES, type FishSpecies } from '../species';
 import { recordEvent, type Fish, type TankState } from '../state';
+import { sizeRatio } from './population';
 
 /** 吃下的飼料中，以氨氮形式排出的比例；其餘一部分變成糞便。 */
 const TAN_PER_MG_FOOD = 0.03;
@@ -24,6 +25,7 @@ export interface Stressors {
   suddenChange: number;
   medication: number;
   disease: number;
+  injury: number;
 }
 
 /** 每項傷害來源的每小時健康損失。 */
@@ -36,11 +38,9 @@ export function freeAmmonia(state: TankState): number {
   return state.water.tan * freeAmmoniaFraction(state.water.ph, state.water.tempC);
 }
 
-/** 擁擠度：成魚總體長（cm）÷ 水量（L），超過 1 就太擠（經典的「每公升 1 cm」原則）。 */
+/** 擁擠度：魚的總體長（cm）÷ 水量（L），超過 1 就太擠（經典的「每公升 1 cm」原則）。 */
 export function crowdingRatio(state: TankState): number {
-  const totalCm = state.fish
-    .filter((f) => f.alive)
-    .reduce((sum, f) => sum + FISH_SPECIES[f.species].adultLengthCm, 0);
+  const totalCm = state.fish.filter((f) => f.alive).reduce((sum, f) => sum + f.lengthCm, 0);
   return totalCm / state.equipment.tank.volumeL;
 }
 
@@ -72,6 +72,7 @@ export function computeStressors(state: TankState, fish: Fish): Stressors {
       Math.max(0, Math.abs(water.tempC - water.tempAvgC) - 1) / 2 + Math.max(0, Math.abs(water.ph - water.phAvg) - 0.3) / 0.5,
     medication: sp.medicationSensitive ? water.medication * 2 : 0,
     disease: fish.ich.stage === 'visible' ? 0.3 : 0,
+    injury: fish.finDamage * 0.3,
   };
 }
 
@@ -110,12 +111,14 @@ export function updateFauna(state: TankState, dt: number): void {
 
   for (const fish of living) {
     const sp = FISH_SPECIES[fish.species];
+    // 代謝量大約和體表面積成正比，幼體用得少。
+    const metabolic = sizeRatio(fish) ** 2;
 
     // 代謝：飢餓、耗氧、排出 CO₂。
     fish.hunger = Math.min(1, fish.hunger + (dt / 24 / DAYS_TO_STARVING) * Math.sqrt(tf));
     fish.starvingHours = fish.hunger >= 1 ? fish.starvingHours + dt : 0;
-    water.o2 = Math.max(0, water.o2 - (sp.o2UseMgPerHour * tf * dt) / volume);
-    water.co2 += (sp.o2UseMgPerHour * 1.375 * tf * dt) / volume;
+    water.o2 = Math.max(0, water.o2 - (sp.o2UseMgPerHour * metabolic * tf * dt) / volume);
+    water.co2 += (sp.o2UseMgPerHour * metabolic * 1.375 * tf * dt) / volume;
 
     // 壓力往目標值靠近：上升快、下降慢。
     const s = computeStressors(state, fish);
@@ -138,7 +141,7 @@ export function updateFauna(state: TankState, dt: number): void {
     if (fish.health <= 0) {
       fish.health = 0;
       fish.alive = false;
-      fish.corpseMg = sp.bodyMassMg;
+      fish.corpseMg = sp.bodyMassMg * sizeRatio(fish) ** 3;
       recordEvent(state, { type: 'fish_died', subjectId: fish.id, cause: mainCause(fish) });
     }
   }
@@ -148,8 +151,9 @@ export function updateFauna(state: TankState, dt: number): void {
   water.ichCysts -= released;
   water.ichPathogen += released;
 
-  // 白點蟲游走期找不到宿主會死亡；高溫加速、藥物大幅加速。
-  const kill = 0.02 * tf * (water.tempC >= 30 ? 3 : 1) * (1 + 10 * water.medication);
+  // 白點蟲游走期找不到宿主會死亡；高溫加速（28°C 以上漸增，30°C 約 3 倍）、藥物大幅加速。
+  const heat = 1 + 2 * Math.min(1, Math.max(0, (water.tempC - 28) / 2));
+  const kill = 0.02 * tf * heat * (1 + 30 * water.medication);
   water.ichPathogen *= Math.exp(-kill * dt);
   water.medication *= Math.exp(-0.01 * dt);
 }
@@ -182,11 +186,12 @@ function feed(state: TankState, living: Fish[], dt: number): void {
 
   const appetites = living.map((f) => {
     const sp = FISH_SPECIES[f.species];
+    const daily = sp.dailyFoodMg * sizeRatio(f) ** 2;
     // 壓力超過 0.5 後食慾逐漸下降，最低剩三成。
     const appetite = 1 - 0.7 * Math.min(1, Math.max(0, (f.stress - 0.5) / 0.5));
     // 約半小時內吃完一餐；吃到飽（飢餓值歸零）就不再吃。
-    const room = f.hunger * sp.dailyFoodMg * DAYS_TO_STARVING;
-    return Math.min(room, sp.dailyFoodMg * 4 * appetite * dt);
+    const room = f.hunger * daily * DAYS_TO_STARVING;
+    return Math.min(room, daily * 4 * appetite * dt);
   });
   const demand = appetites.reduce((a, b) => a + b, 0);
   if (demand <= 0) return;
@@ -195,7 +200,8 @@ function feed(state: TankState, living: Fish[], dt: number): void {
   water.foodMg -= eatenTotal;
   living.forEach((fish, i) => {
     const eaten = eatenTotal * (appetites[i] / demand);
-    fish.hunger = Math.max(0, fish.hunger - eaten / FISH_SPECIES[fish.species].dailyFoodMg / DAYS_TO_STARVING);
+    const daily = FISH_SPECIES[fish.species].dailyFoodMg * sizeRatio(fish) ** 2;
+    fish.hunger = Math.max(0, fish.hunger - eaten / daily / DAYS_TO_STARVING);
   });
   water.tan += (eatenTotal * TAN_PER_MG_FOOD) / volume;
   water.organicMg += eatenTotal * FECES_PER_MG_FOOD;
