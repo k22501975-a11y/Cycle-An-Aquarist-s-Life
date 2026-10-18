@@ -225,3 +225,44 @@ ul.symptoms { margin: 0; padding: 10px 12px 10px 30px; line-height: 1.9; backgro
   .owner-avatar { flex-basis: 40px; height: 40px; }
 }
 .owner-actions .btn { flex: 0 0 auto; width: auto; min-width: 112px; padding: 0 18px; }
+
+/* 水質膠囊可以點：看趨勢圖 */
+button.caps { background: none; border: 0; padding: 0; margin: 0; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.card-link { position: absolute; top: 10px; right: 12px; background: none; border: 0; padding: 2px 4px; color: var(--gold); font-size: 12px; letter-spacing: 0.06em; cursor: pointer; }
+.card { position: relative; }
+
+/* 色盲友善：燈號除了顏色還有形狀（圓＝正常、三角＝注意、菱形＝危險） */
+.cap.warn .dot, .todo-item.warn::before { width: 10px; height: 9px; border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); box-shadow: none; }
+.cap.bad .dot, .todo-item.bad::before { border-radius: 1px; transform: rotate(45deg) scale(0.85); }
+.event.warn::before { clip-path: polygon(50% 0, 100% 100%, 0 100%); border-radius: 0; }
+.event.bad::before { border-radius: 1px; transform: rotate(45deg) scale(0.85); }
+
+/* 放大文字 */
+.big-text #hud, .big-text #dock, .big-text .sheet, .big-text .toasts, .big-text .owner, .big-text .quest-pill, .big-text #stage .selcard { zoom: 1.15; }
+
+/* 紀錄：趨勢圖與事件 */
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.chart { margin: 0; padding: 10px 12px 6px; border: 1px solid rgba(243, 234, 216, 0.12); border-radius: 14px; background: rgba(255, 255, 255, 0.03); }
+.chart-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.chart .hint { margin: 6px 0 8px; font-size: 12.5px; }
+.chart-plot { position: relative; }
+.chart-svg { display: block; width: 100%; height: auto; touch-action: pan-y; overflow: visible; }
+.chart-grid { stroke: rgba(243, 234, 216, 0.1); stroke-width: 1; }
+.chart-band { fill: rgba(126, 211, 135, 0.1); }
+.chart-tick { fill: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.chart-end { fill: var(--text); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.chart-line { fill: none; stroke: var(--gold); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart-dot { fill: var(--gold); stroke: #10262f; stroke-width: 2; }
+.chart-cross { stroke: rgba(243, 234, 216, 0.35); stroke-width: 1; }
+.chart-focus { fill: var(--gold); stroke: var(--text); stroke-width: 2; }
+.chart-tip { position: absolute; top: -6px; transform: translate(-50%, -100%); white-space: nowrap; padding: 4px 8px; border-radius: 8px; background: var(--glass-strong); border: 1px solid var(--line); font-size: 12px; color: var(--text); pointer-events: none; opacity: 0; transition: opacity 0.15s; }
+.chart-tip.show { opacity: 1; }
+.readings.log { font-size: 12.5px; }
+.readings.log th { text-align: left; color: var(--muted); font-weight: 400; padding: 4px 6px; }
+.readings.log td { padding: 4px 6px; }
+.event-log { display: flex; flex-direction: column; gap: 6px; }
+.event { display: flex; gap: 10px; align-items: baseline; font-size: 13.5px; line-height: 1.5; padding: 6px 0; border-bottom: 1px solid rgba(243, 234, 216, 0.08); }
+.event::before { content: ''; flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); transform: translateY(-1px); }
+.event.warn::before { background: var(--warn); }
+.event.bad::before { background: var(--bad); }
+.event-time { flex: 0 0 auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }

@@ -24,6 +24,7 @@ import {
   type PanelContext,
 } from './ui/panels';
 import { Guide } from './ui/guide';
+import { recordsPanel } from './ui/records';
 import { Sheet, Toasts } from './ui/sheet';
 import { clockLabel, todos, waterCapsules } from './ui/status';
 import { cornerRect, pickCorner, type Corner, type Rect } from './ui/dodge';
@@ -87,6 +88,25 @@ async function start(): Promise<void> {
     audio.applySettings(audioSettings);
     saveAudioSettings(store, audioSettings);
   };
+  // 顯示偏好（放大文字）：和存檔分開
+  const UI_KEY = 'cycle.ui.v1';
+  const uiPrefs = (() => {
+    try {
+      return { bigText: JSON.parse(store.getItem(UI_KEY) ?? '{}').bigText === true };
+    } catch {
+      return { bigText: false };
+    }
+  })();
+  const setBigText = (on: boolean) => {
+    uiPrefs.bigText = on;
+    document.documentElement.classList.toggle('big-text', on);
+    try {
+      store.setItem(UI_KEY, JSON.stringify(uiPrefs));
+    } catch {
+      // 存不了就算了
+    }
+  };
+  setBigText(uiPrefs.bigText);
   const ctx: PanelContext = { game, sheet, toasts, sound: (id) => audio.play(id) };
   debugHandle.audio = audio;
 
@@ -140,19 +160,30 @@ async function start(): Promise<void> {
   // ---- 狀態列：時間、水質膠囊（沒測過顯示「?」）、待辦、選單 ----
   const clockValue = h('span.value');
   const clock = h('div.time', {}, h('span.label', {}, '水族人生'), clockValue);
-  const caps = h('div.caps');
+  const caps = h('button.caps', { 'aria-label': '水質趨勢', title: '點一下看水質趨勢', onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) });
   const todoBadge = h('span.badge');
   const todoCard = h('div.card.glass.todo');
   const todosChanged = memo();
   const renderTodos = () => {
     const list = todos(game.state);
     if (!todosChanged(JSON.stringify(list))) return;
-    todoCard.replaceChildren(h('div.card-title', {}, '今日待辦'), ...list.slice(0, 3).map((t) => h(`div.todo-item.${t.tone}`, {}, t.text)));
+    todoCard.replaceChildren(
+      h('button.card-link', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx, 'events')) }, '紀錄 ›'),
+      h('div.card-title', {}, '今日待辦'),
+      ...list.slice(0, 3).map((t) => h(`div.todo-item.${t.tone}`, {}, t.text)),
+    );
     const urgent = list.filter((t) => t.tone !== 'ok').length;
     todoBadge.textContent = urgent > 0 ? String(urgent) : '';
     todoBadge.classList.toggle('show', urgent > 0);
   };
-  const todoBtn = h('button.hud-btn.todo-btn', { 'aria-label': '待辦', onclick: () => sheet.open('待辦', () => h('div.stack', {}, ...todos(game.state).map((t) => h(`div.todo-item.${t.tone}`, {}, t.text))), { live: true }) }, icon(ICONS.todo), todoBadge);
+  const todoSheet = () =>
+    h(
+      'div.stack',
+      {},
+      ...todos(game.state).map((t) => h(`div.todo-item.${t.tone}`, {}, t.text)),
+      h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx, 'events')) }, '看事件紀錄'),
+    );
+  const todoBtn = h('button.hud-btn.todo-btn', { 'aria-label': '待辦', onclick: () => sheet.open('待辦', todoSheet, { live: true }) }, icon(ICONS.todo), todoBadge);
   const capsChanged = memo();
   const renderCaps = () => {
     const list = waterCapsules(game.state);
@@ -212,6 +243,14 @@ async function start(): Promise<void> {
             opt.label,
           ),
         ),
+      ),
+      h('h3', {}, '紀錄與顯示'),
+      h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) }, '水質趨勢與事件紀錄'),
+      h(
+        'label.check-row',
+        {},
+        h('input', { type: 'checkbox', checked: uiPrefs.bigText, onchange: (e: Event) => setBigText((e.target as HTMLInputElement).checked) }),
+        h('span', {}, '放大文字'),
       ),
       h('h3', {}, '新手引導'),
       h('button.btn', { onclick: () => (sheet.close(), guide.restart()) }, '重新看阿德老闆的教學'),

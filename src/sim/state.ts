@@ -25,6 +25,10 @@ export interface TankState {
   events: SimEvent[];
   /** 最近一次用測試劑測水（玩家只知道測過的數值）。 */
   lastTest?: { hours: number; reading: TestKitReading };
+  /** 測試劑紀錄（玩家的筆記本），最多保留 TEST_LOG_MAX 筆。 */
+  testLog?: { hours: number; reading: TestKitReading }[];
+  /** 溫度計每個整點的讀數，最多保留 TEMP_LOG_HOURS 筆。 */
+  tempLog?: { hours: number; tempC: number }[];
   /** 最近一次換水的時間（遊戲小時）。 */
   lastWaterChangeHours?: number;
 }
@@ -169,6 +173,11 @@ export interface CreateTankOptions {
 
 /** 剛細菌接種前的最小族群（空氣、水中本來就有少量硝化菌）。 */
 export const BACTERIA_SEED = 0.001;
+
+/** 溫度紀錄保留兩週。 */
+export const TEMP_LOG_HOURS = 14 * 24;
+/** 測試劑紀錄保留幾筆。 */
+export const TEST_LOG_MAX = 60;
 
 export function createTank(options: CreateTankOptions): TankState {
   const roomTempC = options.roomTempC ?? 23;

@@ -6,7 +6,7 @@ import { nextRandom } from './random';
 import { FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 import type { FilterSpec } from './equipment';
 import { testWater, type TestKitReading } from './readings';
-import { recordEvent, type Fish, type Plant, type TankState } from './state';
+import { recordEvent, TEST_LOG_MAX, type Fish, type Plant, type TankState } from './state';
 
 /** 投餵飼料（mg）。吃不完的會沉底腐敗。 */
 export function feed(state: TankState, mg: number): void {
@@ -49,6 +49,9 @@ export function waterChange(state: TankState, fraction: number, options: WaterCh
 export function useTestKit(state: TankState): TestKitReading {
   const reading = testWater(state);
   state.lastTest = { hours: state.hours, reading };
+  const log = (state.testLog ??= []);
+  log.push({ hours: state.hours, reading });
+  if (log.length > TEST_LOG_MAX) log.splice(0, log.length - TEST_LOG_MAX);
   return reading;
 }
 
