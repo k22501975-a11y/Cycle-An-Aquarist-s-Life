@@ -27,9 +27,9 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        // 除了註冊和登入，其他 API 都要帶 token
+        // 除了註冊、登入和匿名數據分析，其他 API 都要帶 token
         registry.addInterceptor(authInterceptor)
                 .addPathPatterns("/api/**")
-                .excludePathPatterns("/api/auth/register", "/api/auth/login");
+                .excludePathPatterns("/api/auth/register", "/api/auth/login", "/api/events");
     }
 }

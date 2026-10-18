@@ -12,6 +12,8 @@ export interface CloudPanelDeps {
   applyCloud: (save: unknown, revision: number) => boolean;
 }
 
+const legal = (label: string, page: 'privacy' | 'terms') => h('a', { href: `./legal/${page}.html`, target: '_blank', rel: 'noopener' }, label);
+
 const when = (ms: number) => new Date(ms).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 /** 衝突時的選擇：雲端有另一台裝置上傳的存檔。 */
@@ -51,6 +53,7 @@ export function cloudPanel(deps: CloudPanelDeps, conflict?: CloudConflict): Node
       h('div.row', {}, h('button.btn.primary', { onclick: () => go('login') }, '登入'), h('button.btn', { onclick: () => go('register') }, '建立新帳號')),
       status,
       h('p.hint', {}, '密碼只用來登入，伺服器只存加密過的版本。'),
+      h('p.hint', {}, '建立帳號代表你同意', legal('使用條款', 'terms'), '和', legal('隱私權政策', 'privacy'), '。'),
     );
   }
 
@@ -86,6 +89,52 @@ export function cloudPanel(deps: CloudPanelDeps, conflict?: CloudConflict): Node
     } else status.textContent = '雲端的存檔讀不出來，可能是比較新的版本，請先更新遊戲';
   };
 
+  const exportMine = async () => {
+    status.textContent = '下載中…';
+    const res = await cloud.exportData();
+    if (!res.ok) {
+      status.textContent = res.message;
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([JSON.stringify(res.value, null, 2)], { type: 'application/json' }));
+    const a = h('a', { href: url, download: `cycle-data-${session.username}.json` }) as HTMLAnchorElement;
+    // 要放進頁面裡，瀏覽器才會用 download 指定的檔名
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    status.textContent = '';
+  };
+  const deleteBox = h('details.danger', {}, h('summary', {}, '刪除帳號'));
+  const pass = h('input.text-input', { type: 'password', placeholder: '再輸入一次密碼', autocomplete: 'current-password', maxlength: '72' }) as HTMLInputElement;
+  const deleteStatus = h('p.hint');
+  deleteBox.append(
+    h('p.hint', {}, '雲端存檔、好友、禮物會全部刪除，無法復原。這台裝置上的水缸不受影響。'),
+    pass,
+    h(
+      'button.btn.danger',
+      {
+        onclick: async () => {
+          if (!pass.value) {
+            deleteStatus.textContent = '請輸入密碼';
+            return;
+          }
+          if (!confirm(`確定要刪除帳號「${session.username}」嗎？刪除後無法復原。`)) return;
+          deleteStatus.textContent = '刪除中…';
+          const res = await cloud.deleteAccount(pass.value);
+          if (!res.ok) {
+            deleteStatus.textContent = res.message;
+            return;
+          }
+          toasts.show('帳號刪除了，這台的水缸還在');
+          reopen();
+        },
+      },
+      '永久刪除帳號',
+    ),
+    deleteStatus,
+  );
+
   return h(
     'div.stack',
     {},
@@ -117,6 +166,10 @@ export function cloudPanel(deps: CloudPanelDeps, conflict?: CloudConflict): Node
       },
       '登出',
     ),
+    h('h3', {}, '我的資料'),
+    h('button.btn', { onclick: exportMine }, '下載我的資料'),
+    h('p.hint', {}, '伺服器上跟你帳號有關的所有資料：存檔、好友、禮物紀錄。'),
+    deleteBox,
   );
 }
 

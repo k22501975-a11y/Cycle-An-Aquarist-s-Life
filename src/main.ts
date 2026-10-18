@@ -5,6 +5,7 @@ import { eventSound } from './audio/sounds';
 import { applySeason, Game, newGameState, SPEED_OPTIONS } from './game/game';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
 import { installCrashGuard } from './ui/crash';
+import { Analytics } from './net/analytics';
 import { CloudClient } from './net/cloud';
 import { autoUpload, checkCloudOnStart, cloudPanel, type CloudPanelDeps } from './ui/cloud-panel';
 import { friendsPanel, giftPanel, type FriendsDeps } from './ui/friends-panel';
@@ -192,6 +193,8 @@ async function start(): Promise<void> {
     },
   };
   debugHandle.cloud = cloud;
+  // 匿名數據分析：玩家同意才會送（設定 › 隱私）
+  const analytics = new Analytics(import.meta.env.VITE_API_URL, store);
 
   // ---- 參觀好友的缸：畫面換成朋友的缸（照常游動、會動的模擬），自己的缸在背景繼續跑 ----
   let visiting: { name: string; state: sim.TankState; likes: number } | null = null;
@@ -246,6 +249,7 @@ async function start(): Promise<void> {
     sheet.close();
     select(null);
     document.body.classList.add('visiting');
+    analytics.track('friend_visit');
     renderVisitBar();
     stage.append(visitBar);
     requestAnimationFrame(() => measure());
@@ -392,6 +396,58 @@ async function start(): Promise<void> {
       ...list.map((c) => h(`span.cap.${c.tone}${c.stale ? '.stale' : ''}`, { title: c.title }, h('i.dot'), h('span.lbl', {}, c.label), h('b', {}, c.value))),
     );
   };
+  const privacySection = () => [
+    analytics.available
+      ? h(
+          'label.check-row',
+          {},
+          h('input', {
+            type: 'checkbox',
+            checked: analytics.consent === true,
+            onchange: (e: Event) => {
+              analytics.setConsent((e.target as HTMLInputElement).checked);
+              consentCard.remove();
+            },
+          }),
+          h('span', {}, '幫忙改進遊戲：回報匿名的遊戲紀錄'),
+        )
+      : null,
+    h(
+      'p.hint',
+      {},
+      analytics.available
+        ? '只回報像「魚因為氨中毒死掉」「完成教學第 3 步」這類事件，用隨機代號、不連到帳號，180 天後刪除。'
+        : '存檔只放在這台裝置上，不會傳到任何地方。',
+    ),
+    h(
+      'div.row',
+      {},
+      h('a.btn', { href: './legal/privacy.html', target: '_blank', rel: 'noopener' }, '隱私權政策'),
+      h('a.btn', { href: './legal/terms.html', target: '_blank', rel: 'noopener' }, '使用條款'),
+    ),
+  ];
+  // 第一次玩一陣子之後問一次要不要幫忙（不打斷新手引導的第一個畫面）
+  const consentCard = h(
+    'div.consent-card.glass',
+    {},
+    h('div', {}, h('b', {}, '幫忙改進遊戲？'), h('div.hint', {}, '回報匿名的遊戲紀錄（例如魚為什麼死掉），讓我們知道哪裡太難。不連到帳號，隨時能在設定裡關掉。')),
+    h(
+      'div.row',
+      {},
+      h('button.btn.primary', { onclick: () => answerConsent(true) }, '好'),
+      h('button.btn', { onclick: () => answerConsent(false) }, '不要'),
+      h('a.btn.ghost', { href: './legal/privacy.html', target: '_blank', rel: 'noopener' }, '詳細說明'),
+    ),
+  );
+  const answerConsent = (on: boolean) => {
+    analytics.setConsent(on);
+    consentCard.remove();
+    if (on) {
+      analytics.track('session_start', sessionProps());
+      toasts.show('謝謝！可以在設定 › 隱私隨時關掉');
+    }
+  };
+  const sessionProps = () => ({ tanks: game.tanks.length, fish: game.tanks.reduce((n, t) => n + t.fish.filter((f) => f.alive).length, 0), day: Math.floor(game.state.hours / 24) });
   // 設定頁：聲音、顯示、時間、存檔、開發者
   const settings = () =>
     h(
@@ -487,6 +543,8 @@ async function start(): Promise<void> {
       h('p.hint', {}, '遊戲每 10 秒自動存檔，每 30 分鐘自動備份一次；存檔壞掉時會自動用備份還原。換手機時可以匯出成檔案帶過去。'),
       h('h3', {}, '雲端存檔'),
       h('button.btn', { onclick: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) }, cloud.session ? `雲端存檔（${cloud.session.username}）` : '登入雲端存檔'),
+      h('h3', {}, '隱私'),
+      ...privacySection(),
       h('h3', {}, '安裝'),
       ...installSection(),
       h('h3', {}, '開發者'),
@@ -630,6 +688,11 @@ async function start(): Promise<void> {
   // 其他缸的事件也要通知，前面加上缸名
   const tankPrefix = (tank: number) => (game.tanks.length > 1 && tank !== game.active ? `${sim.tankLabel(game.tanks, tank)}：` : '');
   game.onEvent((e, tank) => {
+    if (e.type === 'fish_died') {
+      const t = game.tanks[tank] ?? game.state;
+      const fish = t.fish.find((f) => f.id === e.subjectId);
+      analytics.track('fish_died', { cause: e.cause ?? 'unknown', species: fish?.species ?? 'unknown', day: Math.floor(t.hours / 24) });
+    }
     audio.play(eventSound(e.type));
     const msg = describeEvent(game.tanks[tank] ?? game.state, e);
     if (msg) toasts.show(tankPrefix(tank) + msg.text, msg.tone);
@@ -662,6 +725,10 @@ async function start(): Promise<void> {
   // 雲端：開遊戲時看看別的裝置有沒有玩過；之後每 10 分鐘和切到背景時自動上傳
   void checkCloudOnStart(cloudDeps).then(checkGifts);
   setInterval(() => void autoUpload(cloudDeps), 10 * 60_000);
+  analytics.track('session_start', sessionProps());
+  guide.questDone = (step) => analytics.track('quest_done', { step });
+  setInterval(() => void analytics.flush(), 60_000);
+  if (analytics.available && analytics.consent === null) setTimeout(() => stage.append(consentCard), 3 * 60_000);
   // 切到背景時畫面停止更新；回來時以 ×7 補算這段時間，和關掉網頁一樣。
   let hiddenAt: number | null = null;
   document.addEventListener('visibilitychange', () => {
@@ -671,6 +738,7 @@ async function start(): Promise<void> {
       hiddenAt = Date.now();
       save();
       void autoUpload(cloudDeps);
+      void analytics.flush(true);
     } else if (hiddenAt !== null) {
       app.ticker.start();
       const away = catchUp({ version: 1, savedAt: hiddenAt, timeScale: game.clock.timeScale, state: game.tanks[0], tanks: game.tanks.slice(1) });
