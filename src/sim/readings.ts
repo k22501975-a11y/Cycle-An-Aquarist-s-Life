@@ -42,7 +42,9 @@ export type Symptom =
   | 'white_spots'
   | 'lethargic'
   | 'loss_of_balance'
-  | 'thin';
+  | 'thin'
+  | 'torn_fins'
+  | 'pregnant';
 
 /**
  * 玩家能「看到」的症狀。分成早期行為異常、中期外觀變化、晚期瀕死，
@@ -61,6 +63,8 @@ export function observeSymptoms(state: TankState, fish: Fish): Symptom[] {
   if (fish.health < 0.5) out.push('lethargic');
   if (fish.health < 0.15) out.push('loss_of_balance');
   if (fish.starvingHours > 48) out.push('thin');
+  if (fish.finDamage > 0.15) out.push('torn_fins');
+  if (fish.pregnancy > 0.5) out.push('pregnant');
   return out;
 }
 

@@ -1,4 +1,4 @@
-import { DEFAULT_TIME_SCALE, simulate, type SimEvent, type TankState } from '../sim';
+import { DEFAULT_TIME_SCALE, normalizeState, simulate, type SimEvent, type TankState } from '../sim';
 
 export const SAVE_KEY = 'cycle.save.v1';
 
@@ -42,6 +42,7 @@ export function readSave(store: KeyValueStore): SaveFile | null {
   try {
     const file = JSON.parse(raw) as SaveFile;
     if (file?.version !== 1 || file.state?.version !== 1 || typeof file.savedAt !== 'number') return null;
+    normalizeState(file.state);
     return file;
   } catch {
     return null;

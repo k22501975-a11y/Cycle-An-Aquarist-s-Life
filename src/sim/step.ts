@@ -3,13 +3,14 @@ import { updateFauna } from './processes/fauna';
 import { updateGases } from './processes/gases';
 import { updateNitrogen } from './processes/nitrogen';
 import { updatePlants } from './processes/plants';
+import { updatePopulation } from './processes/population';
 import { updateTemperature } from './processes/thermal';
 import { updateWaste } from './processes/waste';
 import type { TankState } from './state';
 
 export const TICK_HOURS = TICK_GAME_SECONDS / 3600;
 
-/** 推進一個 tick。順序：溫度 → 廢物分解 → 氮循環 → 水草 → 氣體與 pH → 生物。 */
+/** 推進一個 tick。順序：溫度 → 廢物分解 → 氮循環 → 水草 → 氣體與 pH → 生物 → 族群（成長、繁殖、混養）。 */
 export function step(state: TankState, dtHours: number = TICK_HOURS): void {
   updateTemperature(state, dtHours);
   updateWaste(state, dtHours);
@@ -17,6 +18,7 @@ export function step(state: TankState, dtHours: number = TICK_HOURS): void {
   updatePlants(state, dtHours);
   updateGases(state, dtHours);
   updateFauna(state, dtHours);
+  updatePopulation(state, dtHours);
   state.hours += dtHours;
 }
 

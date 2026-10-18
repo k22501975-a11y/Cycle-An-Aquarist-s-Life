@@ -1,7 +1,7 @@
 import { co2Equilibrium, oxygenSaturation, phFromCo2 } from './chemistry';
 import type { AirPumpSpec, Co2Spec, FilterSpec, HeaterSpec, LightSpec, TankSpec } from './equipment';
 import type { RngState } from './random';
-import type { FishSpeciesId, PlantSpeciesId } from './species';
+import { FISH_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 
 /**
  * 一個水缸的完整模擬狀態。只用純資料（可 JSON 序列化），方便存檔與搬到伺服器。
@@ -103,6 +103,13 @@ export interface Fish {
   recentDamage: Record<string, number>;
   /** 屍體剩餘重量（mg），死後在缸內持續腐爛。 */
   corpseMg: number;
+  sex: 'male' | 'female';
+  /** 目前體長（cm），幼體會慢慢長大；決定吃不吃得下別人、會不會被吃。 */
+  lengthCm: number;
+  /** 鰭破損 0–1（被咬鰭），會慢慢長回來。 */
+  finDamage: number;
+  /** 懷孕／抱卵進度 0–1，0 表示沒有。 */
+  pregnancy: number;
 }
 
 export interface Plant {
@@ -121,13 +128,16 @@ export type SimEventType =
   | 'plant_died'
   | 'heater_broke'
   | 'power_out'
-  | 'power_restored';
+  | 'power_restored'
+  | 'fry_born';
 
 export interface SimEvent {
   hours: number;
   type: SimEventType;
   subjectId?: number;
   cause?: string;
+  /** 數量（例如一胎生了幾尾）。 */
+  count?: number;
 }
 
 export interface CreateTankOptions {
@@ -227,4 +237,23 @@ export function isCo2Injecting(state: TankState): boolean {
 
 export function isFilterRunning(state: TankState): boolean {
   return !!state.equipment.filter?.on && !state.environment.powerOut;
+}
+
+/** 是否為幼體（還沒長到可以繁殖的大小）。 */
+export function isJuvenile(fish: Fish): boolean {
+  return fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * 0.75;
+}
+
+/**
+ * 補上舊存檔缺少的欄位（新增欄位時在這裡給預設值），讓存檔版本不用每次都升級。
+ */
+export function normalizeState(state: TankState): TankState {
+  for (const fish of state.fish) {
+    const sp = FISH_SPECIES[fish.species];
+    fish.sex ??= fish.id % 2 === 0 ? 'female' : 'male';
+    fish.lengthCm ??= sp.adultLengthCm;
+    fish.finDamage ??= 0;
+    fish.pregnancy ??= 0;
+  }
+  return state;
 }

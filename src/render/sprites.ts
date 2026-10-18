@@ -11,7 +11,7 @@ export interface FishSprite {
 }
 
 /** 依魚種畫一隻面向右邊的魚（原點在身體中心）。 */
-export function createFishSprite(species: FishSpeciesId, scale: number, variant: number): FishSprite {
+export function createFishSprite(species: FishSpeciesId, scale: number, variant: number, female = false): FishSprite {
   const root = new Container();
   const body = new Graphics();
   const tail = new Graphics();
@@ -19,7 +19,14 @@ export function createFishSprite(species: FishSpeciesId, scale: number, variant:
   const ring = new Graphics();
   const s = scale;
 
-  if (species === 'guppy') {
+  if (species === 'guppy' && female) {
+    // 母孔雀魚：體型較大、灰色，尾巴短、顏色淡
+    tail.poly([0, 0, -7 * s, -4 * s, -8 * s, 0, -7 * s, 4 * s]).fill({ color: 0xa9b2b6, alpha: 0.8 });
+    tail.position.set(-8 * s, 0);
+    body.ellipse(0, 0, 9 * s, 4.2 * s).fill(0xa8b4b8);
+    body.ellipse(-3 * s, 1.5 * s, 1.6 * s, 1.2 * s).fill({ color: 0x444a4c, alpha: 0.6 });
+    body.circle(6 * s, -0.8 * s, 1 * s).fill(0x111111);
+  } else if (species === 'guppy') {
     const tailColors = [0xff6b3d, 0x3d8bff, 0xff3d8b, 0xffc23d];
     const tc = tailColors[variant % tailColors.length];
     tail.poly([0, 0, -12 * s, -8 * s, -16 * s, 0, -12 * s, 8 * s]).fill({ color: tc, alpha: 0.9 });

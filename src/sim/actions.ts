@@ -1,5 +1,6 @@
 import { co2Equilibrium, oxygenSaturation } from './chemistry';
 import { filterBacteriaShare } from './processes/nitrogen';
+import { createFish } from './processes/population';
 import { roomTemperature } from './processes/thermal';
 import { nextRandom } from './random';
 import { FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
@@ -64,7 +65,14 @@ export function replaceFilter(state: TankState, spec: FilterSpec | null): void {
 export interface AddFishOptions {
   /** 新魚是否帶有白點蟲（未檢疫的店家魚有一定機率）。不指定時依機率決定。 */
   carriesIch?: boolean;
+  /** 不指定時隨機。 */
+  sex?: 'male' | 'female';
+  /** 店家母魚是否已經懷孕／抱卵。不指定時依機率決定。 */
+  pregnant?: boolean;
 }
+
+/** 店家的孔雀魚母魚幾乎都已經懷孕（和公魚混養）；櫻花蝦母蝦偶爾抱卵。 */
+const STORE_PREGNANT_CHANCE: Partial<Record<FishSpeciesId, number>> = { guppy: 0.6, cherry_shrimp: 0.2 };
 
 /** 店家魚帶白點蟲的機率。 */
 const STORE_ICH_CHANCE = 0.25;
@@ -73,19 +81,18 @@ const STORE_ICH_CHANCE = 0.25;
 export function addFish(state: TankState, species: FishSpeciesId, options: AddFishOptions = {}): Fish {
   const carries =
     FISH_SPECIES[species].susceptibleToIch && (options.carriesIch ?? nextRandom(state.rng) < STORE_ICH_CHANCE);
-  const fish: Fish = {
-    id: state.nextId++,
-    species,
-    alive: true,
-    health: 1,
+  const sp = FISH_SPECIES[species];
+  const fish: Fish = createFish(state, species, {
+    sex: options.sex,
     stress: 0.5,
     hunger: 0.3,
-    starvingHours: 0,
+    lengthCm: sp.adultLengthCm * (0.9 + 0.1 * nextRandom(state.rng)),
     ich: carries ? { stage: 'incubating', progress: 0 } : { stage: 'none', progress: 0 },
-    constitution: 0.85 + 0.3 * nextRandom(state.rng),
-    recentDamage: {},
-    corpseMg: 0,
-  };
+  });
+  if (fish.sex === 'female' && sp.breeding) {
+    const pregnant = options.pregnant ?? nextRandom(state.rng) < (STORE_PREGNANT_CHANCE[species] ?? 0);
+    if (pregnant) fish.pregnancy = 0.05 + 0.85 * nextRandom(state.rng);
+  }
   state.fish.push(fish);
   return fish;
 }
