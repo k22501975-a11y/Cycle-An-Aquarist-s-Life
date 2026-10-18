@@ -8,6 +8,7 @@ import { updatePopulation } from './processes/population';
 import { updateTemperature } from './processes/thermal';
 import { updateWaste } from './processes/waste';
 import { updateQuarantine } from './quarantine';
+import { updateSnails } from './snails';
 import { updateEconomy } from './economy';
 import { TEMP_LOG_HOURS, type TankState } from './state';
 
@@ -23,6 +24,7 @@ export function step(state: TankState, dtHours: number = TICK_HOURS): void {
   updateGases(state, dtHours);
   updateFauna(state, dtHours);
   updatePopulation(state, dtHours);
+  updateSnails(state, dtHours);
   updateQuarantine(state, dtHours);
   updateEconomy(state, dtHours);
   // 小時數由很多小 tick 累加，有浮點誤差，加一點點容差再取整

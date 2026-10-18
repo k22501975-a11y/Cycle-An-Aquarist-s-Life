@@ -55,6 +55,7 @@ export const PRICES: Record<string, number> = {
   'med:ich': 150,
   'med:antibiotic': 250,
   'med:dewormer': 200,
+  'med:snail': 120,
   /** 一次測水（一盒試紙約 200 元可以測 100 次）。 */
   'use:test': 2,
 };

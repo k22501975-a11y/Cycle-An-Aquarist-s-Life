@@ -87,7 +87,7 @@ export function computeStressors(state: TankState, fish: Fish): Stressors {
     group: sp.minGroup > 0 && sameSpecies < sp.minGroup ? 0.1 + (0.3 * (sp.minGroup - sameSpecies)) / sp.minGroup : 0,
     suddenChange:
       Math.max(0, Math.abs(water.tempC - water.tempAvgC) - 1) / 2 + Math.max(0, Math.abs(water.ph - water.phAvg) - 0.3) / 0.5,
-    medication: sp.medicationSensitive ? water.medication * 2 : 0,
+    medication: (sp.medicationSensitive ? water.medication * 2 : 0) + (sp.invertebrate ? (water.copper ?? 0) * 3 : (water.copper ?? 0) * 0.5),
     disease: Math.max(fish.ich.stage === 'visible' ? 0.3 : 0, diseaseStress(fish)),
     injury: fish.finDamage * 0.3,
   };
@@ -112,6 +112,8 @@ function computeDamage(state: TankState, fish: Fish, sp: FishSpecies): Damage[] 
   const life = lifeFraction(fish);
   if (life > 1) add(0.002 + (life - 1) * 0.02, 'old_age');
   if (sp.medicationSensitive) add(water.medication * 0.02, 'medication');
+  // 除螺藥的銅對蝦是毒（螺也是軟體動物，蝦是甲殼類但一樣怕銅）
+  if (sp.invertebrate) add((water.copper ?? 0) * 0.08, 'copper');
   if (fish.ich.stage === 'visible') add(0.004 * (1 - 0.5 * immunity(fish, sp)), 'ich');
   // 長期高壓力本身就會耗損身體。
   add((fish.stress - 0.7) * 0.01, 'chronic_stress');
