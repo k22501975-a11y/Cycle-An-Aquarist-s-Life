@@ -17,7 +17,7 @@ describe('精繪素材對應', () => {
     const variant = (strain: string) => GUPPY_LOOKS.findIndex((l) => l.strain === strain);
     expect(paintedKey('guppy', 'male', variant('藍草'), false)).toBe('guppy-male-bluegrass');
     expect(paintedKey('guppy', 'male', variant('黃金蛇王'), false)).toBe('guppy-male-cobra');
-    expect(paintedKey('guppy', 'male', variant('紅蛇王'), false)).toBeNull();
+    expect(paintedKey('guppy', 'male', variant('紅蛇王'), false)).toBe('guppy-male-redcobra');
   });
 
   it('母魚懷孕換成大肚子的圖，母蝦抱卵換成抱蛋的圖', () => {
@@ -27,9 +27,12 @@ describe('精繪素材對應', () => {
     expect(paintedKey('cherry_shrimp', 'male', 0, false)).toBe('shrimp-cherry-male');
   });
 
-  it('仔魚和還沒有素材的魚種用程式繪製', () => {
-    expect(paintedKey('guppy', 'juvenile', 0, false)).toBeNull();
-    expect(paintedKey('zebrafish', 'male', 0, false)).toBeNull();
+  it('仔魚、仔蝦、斑馬魚都有自己的圖', () => {
+    expect(paintedKey('guppy', 'juvenile', 0, false)).toBe('guppy-fry');
+    expect(paintedKey('zebrafish', 'juvenile', 0, false)).toBe('guppy-fry');
+    expect(paintedKey('cherry_shrimp', 'juvenile', 0, false)).toBe('shrimp-cherry-juvenile');
+    expect(paintedKey('zebrafish', 'male', 0, false)).toBe('zebrafish-male');
+    expect(paintedKey('zebrafish', 'female', 0, true)).toBe('zebrafish-female');
   });
 
   it('素材沒載入時拿不到貼圖（畫面會退回程式繪製版）', () => {
