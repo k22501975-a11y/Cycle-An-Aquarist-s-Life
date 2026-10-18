@@ -2,6 +2,8 @@
  * 可安裝的網頁 App（PWA）：註冊離線快取、記下「安裝到主畫面」的提示、有新版時通知。
  */
 
+import { isNativeApp } from './native';
+
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
@@ -11,6 +13,7 @@ let deferred: InstallPromptEvent | null = null;
 
 /** 已經用安裝好的 App 開啟（全螢幕／獨立視窗）。 */
 export function isInstalled(): boolean {
+  if (isNativeApp()) return true;
   return window.matchMedia?.('(display-mode: fullscreen), (display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true;
 }
 
@@ -42,7 +45,8 @@ export function setupPwa(onUpdate: (apply: () => void) => void, onInstallable?: 
     deferred = e as InstallPromptEvent;
     onInstallable?.();
   });
-  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+  // App 版的檔案本來就在手機裡，不需要離線快取（也避免更新 App 後還吃到舊快取）
+  if (!import.meta.env.PROD || !('serviceWorker' in navigator) || isNativeApp()) return;
   const register = async () => {
     try {
       const reg = await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);

@@ -6,6 +6,7 @@ import { applySeason, Game, newGameState, SPEED_OPTIONS } from './game/game';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
 import { installCrashGuard } from './ui/crash';
 import { Analytics } from './net/analytics';
+import { isNativeApp, saveTextFile } from './ui/native';
 import { CloudClient } from './net/cloud';
 import { autoUpload, checkCloudOnStart, cloudPanel, type CloudPanelDeps } from './ui/cloud-panel';
 import { friendsPanel, giftPanel, type FriendsDeps } from './ui/friends-panel';
@@ -141,14 +142,10 @@ async function start(): Promise<void> {
   };
   const ctx: PanelContext = { game, sheet, toasts, sound: (id) => audio.play(id), undoable };
   // 存檔匯出成檔案（換手機、怕瀏覽器清掉資料時用）
-  const exportSave = () => {
-    const blob = new Blob([serializeSave(game.tanks[0], game.clock.timeScale, Date.now(), undefined, extraTanks())], { type: 'application/json' });
-    const a = h('a', { href: URL.createObjectURL(blob), download: `cycle-save-day${Math.floor(game.state.hours / 24) + 1}.json` });
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  };
+  const exportSave = () =>
+    void saveTextFile(`cycle-save-day${Math.floor(game.state.hours / 24) + 1}.json`, serializeSave(game.tanks[0], game.clock.timeScale, Date.now(), undefined, extraTanks())).catch(() =>
+      toasts.show('存檔沒有匯出', 'warn'),
+    );
   const importSave = () => {
     const input = h('input', { type: 'file', accept: 'application/json,.json' }) as HTMLInputElement;
     input.addEventListener('change', async () => {
@@ -545,8 +542,8 @@ async function start(): Promise<void> {
       h('button.btn', { onclick: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) }, cloud.session ? `雲端存檔（${cloud.session.username}）` : '登入雲端存檔'),
       h('h3', {}, '隱私'),
       ...privacySection(),
-      h('h3', {}, '安裝'),
-      ...installSection(),
+      // App 版本來就是裝好的，不用顯示安裝說明
+      ...(isNativeApp() ? [] : [h('h3', {}, '安裝'), ...installSection()]),
       h('h3', {}, '開發者'),
       h('button.btn', { onclick: () => sheet.open('開發者數值', () => debugPanel(ctx), { live: true }) }, '開發者數值'),
     );

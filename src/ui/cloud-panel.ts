@@ -1,5 +1,6 @@
 import type { CloudClient } from '../net/cloud';
 import { h } from './dom';
+import { saveTextFile } from './native';
 import type { Sheet, Toasts } from './sheet';
 
 export interface CloudPanelDeps {
@@ -96,13 +97,7 @@ export function cloudPanel(deps: CloudPanelDeps, conflict?: CloudConflict): Node
       status.textContent = res.message;
       return;
     }
-    const url = URL.createObjectURL(new Blob([JSON.stringify(res.value, null, 2)], { type: 'application/json' }));
-    const a = h('a', { href: url, download: `cycle-data-${session.username}.json` }) as HTMLAnchorElement;
-    // 要放進頁面裡，瀏覽器才會用 download 指定的檔名
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    await saveTextFile(`cycle-data-${session.username}.json`, JSON.stringify(res.value, null, 2)).catch(() => undefined);
     status.textContent = '';
   };
   const deleteBox = h('details.danger', {}, h('summary', {}, '刪除帳號'));

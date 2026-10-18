@@ -26,7 +26,7 @@ VITE_API_URL=http://localhost:8080 npm run dev
 | `PORT` | 8080 | |
 | `DATABASE_URL` | `jdbc:postgresql://localhost:5432/cycle` | |
 | `DATABASE_USER`／`DATABASE_PASSWORD` | cycle／cycle | |
-| `ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:4173` | 遊戲網頁的網址，逗號分隔 |
+| `ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:4173,https://localhost` | 遊戲網頁的網址，逗號分隔；`https://localhost` 是 Android App 裡的來源，上線時記得保留 |
 
 ## API
 

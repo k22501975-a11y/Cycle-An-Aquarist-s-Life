@@ -14,7 +14,7 @@ spring:
       enabled: false
 cycle:
   # 允許哪些網頁來源呼叫 API（逗號分隔），例如 https://cycle.example.com
-  allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173}
+  allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173,https://localhost}
   # 登入多久後要重新登入
   session-days: 30
   # 一份雲端存檔最大幾 bytes
