@@ -129,6 +129,8 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
     stress: 0.5,
     hunger: 0.3,
     lengthCm: sp.adultLengthCm * (0.9 + 0.1 * nextRandom(state.rng)),
+    // 店裡賣的是剛長大到幾個月大的魚
+    ageDays: sp.daysToAdult * (1 + 0.6 * nextRandom(state.rng)),
     ich: carries ? { stage: 'incubating', progress: 0 } : { stage: 'none', progress: 0 },
   });
   if (fish.sex === 'female' && sp.breeding) {

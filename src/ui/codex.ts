@@ -44,6 +44,7 @@ function fishEntries(): CodexEntry[] {
       ['pH', `${sp.ph.min}～${sp.ph.max}`],
       ['成體體長', `約 ${sp.adultLengthCm} cm`],
       ['長大需要', `約 ${sp.daysToAdult} 天`],
+      ['壽命', sp.lifespanDays >= 365 ? `約 ${Math.round((sp.lifespanDays / 365) * 2) / 2} 年` : `約 ${Math.round(sp.lifespanDays / 30)} 個月`],
       ['群游', sp.minGroup > 0 ? `至少 ${sp.minGroup} 條` : '不需要'],
       ['繁殖', sp.breeding ? `懷孕約 ${sp.breeding.gestationDays} 天，一胎 ${sp.breeding.broodMin}～${sp.breeding.broodMax} 隻` : '目前不會在缸裡繁殖'],
     ],

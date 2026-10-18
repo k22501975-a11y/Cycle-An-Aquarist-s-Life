@@ -32,6 +32,8 @@ export interface FishSpecies {
   birthLengthCm: number;
   /** 從出生長到成體（約九成體長）的天數。 */
   daysToAdult: number;
+  /** 平均壽命（天）。個體差異跟著體質走，長期偏高溫會老得比較快。 */
+  lifespanDays: number;
   /** 嘴巴大小 ÷ 體長：體長 × 此值以下的小生物吃得下。0 表示不吃活物。 */
   mouthRatio: number;
   /** 幼體在掠食者身邊、沒有躲藏處時，每天被吃掉的機率（剛出生時）。 */
@@ -61,6 +63,7 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     medicationSensitive: false,
     birthLengthCm: 0.7,
     daysToAdult: 60,
+    lifespanDays: 730,
     mouthRatio: 0.4,
     juvenilePredationPerDay: 0.25,
     finNipPerDay: 0,
@@ -84,6 +87,7 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     medicationSensitive: false,
     birthLengthCm: 0.4,
     daysToAdult: 75,
+    lifespanDays: 1100,
     mouthRatio: 0.4,
     juvenilePredationPerDay: 0.25,
     // 輕微咬鰭：只針對長鰭魚，群游數量不足時加倍。
@@ -108,6 +112,7 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     medicationSensitive: true,
     birthLengthCm: 0.15,
     daysToAdult: 50,
+    lifespanDays: 400,
     mouthRatio: 0,
     juvenilePredationPerDay: 0.15,
     finNipPerDay: 0,

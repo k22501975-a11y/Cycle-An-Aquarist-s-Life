@@ -169,6 +169,14 @@ export function trimListPanel(ctx: PanelContext): Node {
   );
 }
 
+/** 年齡：未滿兩個月用天，之後用月、年。 */
+export function ageLabel(days: number): string {
+  if (days < 60) return `${Math.floor(days)} 天大`;
+  if (days < 365) return `約 ${Math.floor(days / 30)} 個月大`;
+  const years = days / 365;
+  return `約 ${years < 10 ? (Math.floor(years * 2) / 2).toString() : Math.floor(years)} 歲`;
+}
+
 export function fishPanel({ game, sheet }: PanelContext, fishId: number): Node {
   const fish = game.state.fish.find((f) => f.id === fishId);
   if (!fish) return h('p', {}, '這條魚已經不在缸裡了。');
@@ -189,7 +197,7 @@ export function fishPanel({ game, sheet }: PanelContext, fishId: number): Node {
   return h(
     'div.stack',
     {},
-    h('p', {}, `${fishName(fish)} · 體長約 ${fish.lengthCm.toFixed(1)} cm`),
+    h('p', {}, `${fishName(fish)} · 體長約 ${fish.lengthCm.toFixed(1)} cm · ${ageLabel(fish.ageDays)}`),
     symptoms.length
       ? h('ul.symptoms', {}, ...symptoms.map((s) => h('li', {}, SYMPTOM_LABELS[s])))
       : h('p', {}, '游動正常，看起來很健康。'),

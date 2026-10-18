@@ -139,6 +139,8 @@ export interface Fish {
   lengthCm: number;
   /** 鰭破損 0–1（被咬鰭），會慢慢長回來。 */
   finDamage: number;
+  /** 生理年齡（天）。高溫時老得快一點。舊存檔沒有，依體長推估。 */
+  ageDays: number;
   /** 懷孕／抱卵進度 0–1，0 表示沒有。 */
   pregnancy: number;
 }
@@ -293,6 +295,7 @@ export function normalizeState(state: TankState): TankState {
     fish.lengthCm ??= sp.adultLengthCm;
     fish.finDamage ??= 0;
     fish.pregnancy ??= 0;
+    fish.ageDays ??= Math.min(1, fish.lengthCm / sp.adultLengthCm) >= 0.9 ? sp.daysToAdult : sp.daysToAdult * (fish.lengthCm / sp.adultLengthCm);
   }
   return state;
 }

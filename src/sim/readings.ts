@@ -1,5 +1,5 @@
 import { FISH_SPECIES } from './species';
-import { freeAmmonia, immunity } from './processes/fauna';
+import { ELDERLY_FRACTION, freeAmmonia, immunity, lifeFraction } from './processes/fauna';
 import type { Fish, TankState } from './state';
 
 /**
@@ -44,7 +44,8 @@ export type Symptom =
   | 'loss_of_balance'
   | 'thin'
   | 'torn_fins'
-  | 'pregnant';
+  | 'pregnant'
+  | 'elderly';
 
 /**
  * 玩家能「看到」的症狀。分成早期行為異常、中期外觀變化、晚期瀕死，
@@ -65,6 +66,7 @@ export function observeSymptoms(state: TankState, fish: Fish): Symptom[] {
   if (fish.starvingHours > 48) out.push('thin');
   if (fish.finDamage > 0.15) out.push('torn_fins');
   if (fish.pregnancy > 0.5) out.push('pregnant');
+  if (lifeFraction(fish) > ELDERLY_FRACTION + 0.05) out.push('elderly');
   return out;
 }
 
