@@ -1,7 +1,16 @@
 import type { SoundId } from '../audio/sounds';
 import {
   addFish,
+  addFishToQuarantine,
   addPlant,
+  buyQuarantine,
+  doseAntibiotic,
+  doseDewormer,
+  doseQuarantine,
+  hasVisible,
+  QUARANTINE_DAYS,
+  quarantineDays,
+  releaseQuarantine,
   AIR_PUMPS,
   CHILLERS,
   CO2_KITS,
@@ -27,7 +36,9 @@ import {
   unplugHeater,
   trimPlant,
   waterChange,
+  type Fish,
   type FishSpeciesId,
+  type Symptom,
   type PlantSpeciesId,
   type Region,
   type TankState,
@@ -258,11 +269,12 @@ export function shopPanel(ctx: PanelContext, tab: 'fish' | 'plants' | 'gear' = '
   );
 
   const buyFish = (species: FishSpeciesId, count: number) => () => {
+    const quarantined = !!game.state.quarantine;
     game.act((st) => {
-      for (let i = 0; i < count; i++) addFish(st, species);
+      for (let i = 0; i < count; i++) (quarantined ? addFishToQuarantine : addFish)(st, species);
     });
     ctx.sound?.('buy');
-    toasts.show(`買了 ${count} 隻${FISH_SPECIES[species].name}，剛運到會有點緊迫`);
+    toasts.show(quarantined ? `買了 ${count} 隻${FISH_SPECIES[species].name}，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天` : `買了 ${count} 隻${FISH_SPECIES[species].name}，剛運到會有點緊迫`);
   };
   const buyPlant = (species: PlantSpeciesId) => () => {
     game.act((st) => addPlant(st, species));
@@ -275,7 +287,10 @@ export function shopPanel(ctx: PanelContext, tab: 'fish' | 'plants' | 'gear' = '
     content = h(
       'div.stack',
       {},
-      h('p.hint', {}, '店裡的魚可能帶著白點蟲。新缸還沒養好水就放太多魚，會氨中毒。'),
+      game.state.quarantine
+        ? h('p.hint', {}, `新買的魚會先放進檢疫盒，觀察 ${QUARANTINE_DAYS} 天沒問題再移到主缸。`)
+        : h('p.hint', {}, '店裡的魚可能帶著白點蟲或其他病，直接放進主缸可能傳染整缸。商店的「設備」可以買檢疫盒。'),
+      h('p.hint', {}, '新缸還沒養好水就放太多魚，會氨中毒。'),
       h('p.hint', {}, '孔雀魚和櫻花蝦會自己繁殖，但成魚會吃仔魚和仔蝦，水草種密一點才躲得掉。斑馬魚會輕微咬孔雀魚公魚的長尾巴。'),
       ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).map((id) => {
         const sp = FISH_SPECIES[id];
@@ -321,6 +336,7 @@ export function shopPanel(ctx: PanelContext, tab: 'fish' | 'plants' | 'gear' = '
       ),
       item(AIR_PUMPS.small.name, !!eq.airPump, () => game.act((st) => (st.equipment.airPump = { spec: AIR_PUMPS.small, on: true }))),
       item(CO2_KITS.diy.name, !!eq.co2, () => game.act((st) => (st.equipment.co2 = { spec: CO2_KITS.diy, on: true }))),
+      item('檢疫盒', !!game.state.quarantine, () => game.act(buyQuarantine), '獨立的小缸：新魚先在這裡觀察，發病也不會傳染主缸'),
       h('h3', {}, '控溫'),
       item(FANS.clip.name, !!eq.fan, () => game.act((st) => (st.equipment.fan = { spec: FANS.clip, on: true })), `水溫比室溫低約 ${FANS.clip.coolingC}°C，但水蒸發得快很多`),
       item(CHILLERS.small.name, !!eq.chiller, () => game.act((st) => (st.equipment.chiller = { spec: CHILLERS.small, targetC: 26, on: true, cooling: false })), '夏天把水溫壓在設定溫度，不怕停電以外的高溫'),
@@ -330,7 +346,62 @@ export function shopPanel(ctx: PanelContext, tab: 'fish' | 'plants' | 'gear' = '
   return h('div.stack', {}, tabs, content);
 }
 
-export function maintenancePanel({ game, toasts, undoable }: PanelContext): Node {
+/** 檢疫盒裡看得到的症狀（盒子的水質不追蹤，只看病）。 */
+export function quarantineSymptoms(fish: Fish): Symptom[] {
+  const out: Symptom[] = [];
+  if (fish.ich.stage === 'visible') out.push('white_spots');
+  if (hasVisible(fish, 'columnaris')) out.push('white_patches');
+  if (hasVisible(fish, 'flukes')) out.push('gill_flare');
+  if (fish.health < 0.5) out.push('lethargic');
+  return out;
+}
+
+export function quarantinePanel(ctx: PanelContext): Node {
+  const { game, toasts, sheet } = ctx;
+  const q = game.state.quarantine;
+  if (!q) return h('p', {}, '還沒有檢疫盒，可以到商店的「設備」購買。');
+  const living = q.fish.filter((f) => f.alive);
+  const dead = q.fish.length - living.length;
+  const release = (ids?: number[]) => {
+    let moved = 0;
+    game.act((st) => (moved = releaseQuarantine(st, ids)));
+    ctx.sound?.('net');
+    toasts.show(moved > 0 ? `把 ${moved} 條移到主缸了` : '撈掉了檢疫盒裡的死魚');
+    if (game.state.quarantine!.fish.length === 0) sheet.close();
+  };
+  const bath = (medicine: 'antibiotic' | 'dewormer' | 'ichMedication', label: string) =>
+    button(label, () => {
+      game.act((st) => doseQuarantine(st, medicine));
+      toasts.show(`在檢疫盒下了${label}，不會影響主缸`);
+    });
+  return h(
+    'div.stack',
+    {},
+    h('p.hint', {}, `新魚可能帶著還沒發作的病。觀察 ${QUARANTINE_DAYS} 天，大部分潛伏的病都會在這裡現形；在這裡下藥不會傷到主缸的硝化菌、水草和蝦。`),
+    living.length === 0 && dead === 0 ? h('p', {}, '檢疫盒是空的。在商店買魚會先放進來。') : null,
+    ...living.map((f) => {
+      const days = quarantineDays(game.state, f);
+      const symptoms = quarantineSymptoms(f);
+      return h(
+        'div.item',
+        {},
+        h(
+          'div',
+          {},
+          h('b', {}, `${fishName(f)}・第 ${Math.floor(days) + 1} 天`),
+          symptoms.length ? h('div.warn-text', {}, symptoms.map((x) => SYMPTOM_LABELS[x]).join('、')) : h('div.hint', {}, days >= QUARANTINE_DAYS ? '觀察期滿，看起來很健康' : '還在觀察'),
+        ),
+        button('移到主缸', () => release([f.id]), days >= QUARANTINE_DAYS && symptoms.length === 0 ? 'primary' : ''),
+      );
+    }),
+    dead > 0 ? h('div.warn-text', {}, `有 ${dead} 條死在檢疫盒裡了。還好沒有放進主缸。`) : null,
+    h('h3', {}, '藥浴（只下在檢疫盒）'),
+    h('div.row.wrap', {}, bath('ichMedication', '白點藥'), bath('antibiotic', '抗生素'), bath('dewormer', '驅蟲藥')),
+    living.length > 0 || dead > 0 ? button(dead > 0 && living.length === 0 ? '撈掉死魚' : '全部移到主缸', () => release()) : null,
+  );
+}
+
+export function maintenancePanel({ game, sheet, toasts, undoable }: PanelContext): Node {
   const s = game.state;
   const eq = s.equipment;
   const toggle = (label: string, on: boolean, flip: (st: TankState) => void) =>
@@ -458,7 +529,26 @@ export function maintenancePanel({ game, toasts, undoable }: PanelContext): Node
       button('下白點藥', () => {
         doUndoable({ toasts, undoable }, () => game.act((st) => doseIchMedication(st)), '下了一份白點藥（對蝦有毒）', 'warn');
       }),
+      button('下抗生素', () => {
+        doUndoable({ toasts, undoable }, () => game.act((st) => doseAntibiotic(st)), '下了一份抗生素（也會殺掉一些硝化菌）', 'warn');
+      }),
+      button('下驅蟲藥', () => {
+        doUndoable({ toasts, undoable }, () => game.act((st) => doseDewormer(st)), '下了一份驅蟲藥');
+      }),
     ),
+    s.quarantine
+      ? h(
+          'div.stack',
+          {},
+          h('h3', {}, '檢疫盒'),
+          h(
+            'div.item',
+            {},
+            h('div', {}, h('b', {}, `檢疫盒裡有 ${s.quarantine.fish.filter((f) => f.alive).length} 條`), h('div.hint', {}, '新魚先觀察，發病了就在盒子裡藥浴')),
+            button('查看', () => sheet.open('檢疫盒', () => quarantinePanel({ game, sheet, toasts, undoable }))),
+          ),
+        )
+      : null,
   );
 }
 

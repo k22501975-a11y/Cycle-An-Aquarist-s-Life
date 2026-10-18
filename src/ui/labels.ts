@@ -14,6 +14,8 @@ export const SYMPTOM_LABELS: Record<Symptom, string> = {
   torn_fins: '鰭破破爛爛的（被咬鰭）',
   pregnant: '肚子鼓起來（懷孕／抱卵）',
   elderly: '顏色變淡、背有點彎（年紀大了）',
+  white_patches: '嘴巴和身上有白色棉絮狀的斑，像在爛',
+  gill_flare: '鰓蓋張開、呼吸很快',
 };
 
 export const DEATH_CAUSE_LABELS: Record<string, string> = {
@@ -28,6 +30,8 @@ export const DEATH_CAUSE_LABELS: Record<string, string> = {
   chronic_stress: '長期緊迫',
   fin_nip: '被咬鰭',
   old_age: '老死（壽終正寢）',
+  columnaris: '柱狀病（爛嘴爛身）',
+  flukes: '鰓吸蟲',
   unknown: '原因不明',
 };
 
@@ -43,10 +47,12 @@ export function fishStrain(fish: Fish): string | null {
 }
 
 export function describeEvent(state: TankState, e: SimEvent): { text: string; tone: 'bad' | 'warn' | 'info' } | null {
-  const fish = state.fish.find((f) => f.id === e.subjectId);
+  const fish = state.fish.find((f) => f.id === e.subjectId) ?? state.quarantine?.fish.find((f) => f.id === e.subjectId);
   switch (e.type) {
     case 'fish_died':
       return { text: `${fish ? fishName(fish) : '一條魚'} 死了。可能原因：${DEATH_CAUSE_LABELS[e.cause ?? 'unknown'] ?? e.cause}`, tone: 'bad' };
+    case 'disease_visible':
+      return { text: `${fish ? fishName(fish) : '有魚'} ${e.cause === 'columnaris' ? '嘴巴和身上長出白色棉絮狀的斑' : '鰓蓋張開、呼吸很急'}`, tone: e.cause === 'columnaris' ? 'bad' : 'warn' };
     case 'ich_visible':
       return { text: `${fish ? fishName(fish) : '有魚'} 身上出現白點`, tone: 'warn' };
     case 'plant_died':

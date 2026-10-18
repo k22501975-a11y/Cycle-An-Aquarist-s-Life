@@ -7,6 +7,8 @@ export * from './step';
 export * from './actions';
 export * from './readings';
 export * from './season';
+export * from './quarantine';
+export { canCatch, DISEASE_SPECS, hasVisible, infect, STORE_DISEASE_CHANCE } from './processes/disease';
 export { computeStressors, crowdingRatio, ELDERLY_FRACTION, freeAmmonia, lifeFraction } from './processes/fauna';
 export { bacteriaCapacity } from './processes/nitrogen';
 export { currentPar } from './processes/plants';

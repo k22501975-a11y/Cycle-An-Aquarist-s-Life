@@ -1,12 +1,13 @@
 import { co2Equilibrium, oxygenSaturation } from './chemistry';
 import { filterBacteriaShare } from './processes/nitrogen';
+import { infect, STORE_DISEASE_CHANCE } from './processes/disease';
 import { createFish } from './processes/population';
 import { roomTemperature } from './processes/thermal';
 import { nextRandom } from './random';
 import { FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 import type { FilterSpec } from './equipment';
 import { testWater, type TestKitReading } from './readings';
-import { recordEvent, TEST_LOG_MAX, type Fish, type Plant, type TankState } from './state';
+import { recordEvent, TEST_LOG_MAX, type DiseaseKind, type Fish, type Plant, type TankState } from './state';
 
 /** 投餵飼料（mg）。吃不完的會沉底腐敗。 */
 export function feed(state: TankState, mg: number): void {
@@ -39,6 +40,8 @@ export function waterChange(state: TankState, fraction: number, options: WaterCh
   water.o2 = mix(water.o2, oxygenSaturation(newTemp));
   water.co2 = mix(water.co2, Math.max(tap.co2, co2Equilibrium(newTemp)));
   water.medication = mix(water.medication, 0);
+  water.antibiotic = mix(water.antibiotic ?? 0, 0);
+  water.dewormer = mix(water.dewormer ?? 0, 0);
   water.ichPathogen = mix(water.ichPathogen, 0);
   water.ichCysts *= 1 - f * 0.3;
   // 換水時順便虹吸底砂，帶走部分殘餌與髒污。
@@ -70,6 +73,8 @@ export function topUp(state: TankState, tempC?: number): number {
   water.tan *= keep;
   water.no2 *= keep;
   water.medication *= keep;
+  water.antibiotic = (water.antibiotic ?? 0) * keep;
+  water.dewormer = (water.dewormer ?? 0) * keep;
   water.tempC = water.tempC * keep + newTemp * fresh;
   water.levelL = undefined;
   return add;
@@ -111,6 +116,8 @@ export interface AddFishOptions {
   sex?: 'male' | 'female';
   /** 店家母魚是否已經懷孕／抱卵。不指定時依機率決定。 */
   pregnant?: boolean;
+  /** 帶著哪些潛伏的病（柱狀病、鰓吸蟲）。不指定時依店家機率決定。 */
+  carries?: DiseaseKind[];
 }
 
 /** 店家的孔雀魚母魚幾乎都已經懷孕（和公魚混養）；櫻花蝦母蝦偶爾抱卵。 */
@@ -137,6 +144,10 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
     const pregnant = options.pregnant ?? nextRandom(state.rng) < (STORE_PREGNANT_CHANCE[species] ?? 0);
     if (pregnant) fish.pregnancy = 0.05 + 0.85 * nextRandom(state.rng);
   }
+  // 指定不帶白點（carriesIch: false）視為確認過健康的魚，也不帶其他病
+  const carried =
+    options.carries ?? (options.carriesIch === false ? [] : (Object.keys(STORE_DISEASE_CHANCE) as DiseaseKind[]).filter((k) => nextRandom(state.rng) < STORE_DISEASE_CHANCE[k]));
+  for (const kind of carried) infect(fish, kind);
   state.fish.push(fish);
   return fish;
 }
@@ -171,6 +182,16 @@ export function trimPlant(state: TankState, plantId: number): number {
 /** 下白點藥（一份標準劑量）。只殺游走期的蟲；對蝦有毒。 */
 export function doseIchMedication(state: TankState, doses = 1): void {
   state.water.medication += doses;
+}
+
+/** 下抗生素：治柱狀病，但也會殺掉一部分硝化菌。 */
+export function doseAntibiotic(state: TankState, doses = 1): void {
+  state.water.antibiotic = (state.water.antibiotic ?? 0) + doses;
+}
+
+/** 下驅蟲藥：治鰓吸蟲，對蝦和硝化菌安全。 */
+export function doseDewormer(state: TankState, doses = 1): void {
+  state.water.dewormer = (state.water.dewormer ?? 0) + doses;
 }
 
 export function setHeaterTarget(state: TankState, targetC: number): void {

@@ -1,4 +1,4 @@
-import { FISH_SPECIES, GAME_SECONDS_PER_DAY, observeSymptoms, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
+import { FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, quarantineDays, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -95,6 +95,15 @@ export function todos(state: TankState): Todo[] {
   const symptoms = living.map((f) => ({ fish: f, s: observeSymptoms(state, f) }));
   if (symptoms.some((x) => x.s.includes('white_spots'))) out.push({ text: '有魚身上出現白點', tone: 'bad' });
   if (symptoms.some((x) => x.s.includes('gasping'))) out.push({ text: '魚在水面喘氣', tone: 'bad' });
+  if (symptoms.some((x) => x.s.includes('white_patches'))) out.push({ text: '有魚身上長出白色棉絮狀的斑', tone: 'bad' });
+  const q = state.quarantine;
+  if (q) {
+    const qLiving = q.fish.filter((f) => f.alive);
+    if (q.fish.length > qLiving.length) out.push({ text: '檢疫盒裡有魚死了', tone: 'warn' });
+    if (qLiving.some((f) => f.ich.stage === 'visible' || hasVisible(f))) out.push({ text: '檢疫盒裡有魚發病了，先藥浴', tone: 'warn' });
+    else if (qLiving.length > 0 && qLiving.every((f) => quarantineDays(state, f) >= QUARANTINE_DAYS))
+      out.push({ text: `檢疫盒的魚觀察滿 ${QUARANTINE_DAYS} 天，可以移到主缸`, tone: 'ok' });
+  }
 
   // 水溫超出缸裡魚種的適溫範圍（以最怕熱、最怕冷的那種為準）
   if (living.length > 0) {

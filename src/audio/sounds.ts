@@ -34,6 +34,7 @@ export function eventSound(type: SimEventType): SoundId {
     case 'controller_cut':
     case 'heater_broke':
     case 'ich_visible':
+    case 'disease_visible':
     case 'plant_died':
       return 'warn';
   }

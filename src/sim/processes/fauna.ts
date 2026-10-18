@@ -2,6 +2,7 @@ import { freeAmmoniaFraction, temperatureFactor } from '../chemistry';
 import { chance } from '../random';
 import { FISH_SPECIES, type FishSpecies } from '../species';
 import { recordEvent, type Fish, type TankState } from '../state';
+import { diseaseStress, progressInfections, spreadInfections } from './disease';
 import { sizeRatio } from './population';
 
 /** 吃下的飼料中，以氨氮形式排出的比例；其餘一部分變成糞便。 */
@@ -81,7 +82,7 @@ export function computeStressors(state: TankState, fish: Fish): Stressors {
     suddenChange:
       Math.max(0, Math.abs(water.tempC - water.tempAvgC) - 1) / 2 + Math.max(0, Math.abs(water.ph - water.phAvg) - 0.3) / 0.5,
     medication: sp.medicationSensitive ? water.medication * 2 : 0,
-    disease: fish.ich.stage === 'visible' ? 0.3 : 0,
+    disease: Math.max(fish.ich.stage === 'visible' ? 0.3 : 0, diseaseStress(fish)),
     injury: fish.finDamage * 0.3,
   };
 }
@@ -144,11 +145,12 @@ export function updateFauna(state: TankState, dt: number): void {
     updateIch(state, fish, sp, dt);
 
     const damage = computeDamage(state, fish, sp);
+    damage.push(...progressInfections(state, fish, water.tempC, { antibiotic: water.antibiotic ?? 0, dewormer: water.dewormer ?? 0 }, dt));
     const total = damage.reduce((sum, d) => sum + d.amount, 0);
     rememberDamage(fish, damage, dt);
     if (total > 0) {
       fish.health -= total * dt;
-    } else if (fish.ich.stage === 'none') {
+    } else if (fish.ich.stage === 'none' && !fish.infections?.some((i) => i.stage === 'visible')) {
       fish.health += 0.01 * (1 - fish.stress) * dt;
     }
     fish.health = Math.min(1, fish.health);
@@ -171,6 +173,16 @@ export function updateFauna(state: TankState, dt: number): void {
   const kill = 0.02 * tf * heat * (1 + 30 * water.medication);
   water.ichPathogen *= Math.exp(-kill * dt);
   water.medication *= Math.exp(-0.01 * dt);
+
+  // 柱狀病、鰓吸蟲在缸裡傳染；抗生素會順便傷到硝化菌（藥效約三天）
+  spreadInfections(state, living, dt, 40 / volume);
+  if (water.antibiotic) {
+    const hit = Math.exp(-0.004 * water.antibiotic * dt);
+    state.bacteria.aob *= hit;
+    state.bacteria.nob *= hit;
+    water.antibiotic *= Math.exp(-0.01 * dt);
+  }
+  if (water.dewormer) water.dewormer *= Math.exp(-0.01 * dt);
 }
 
 /** 近期傷害記錄以約 24 小時的時間常數衰減。 */
