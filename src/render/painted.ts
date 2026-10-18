@@ -60,24 +60,52 @@ export function paintedKey(species: FishSpeciesId, form: FishForm, variant: numb
   return null;
 }
 
+/** 背景與造景（青龍石、沉木）：不做網格，由 scenery.ts 畫進場景的 Canvas。 */
+export const SCENERY: Record<string, string> = {
+  'bg-back': 'bg/bg-tank-back.webp',
+  'bg-substrate': 'bg/bg-tank-substrate.webp',
+  'rock-1': 'scape/rock-seiryu-1.webp',
+  'rock-2': 'scape/rock-seiryu-2.webp',
+  'rock-3': 'scape/rock-seiryu-3.webp',
+  'rock-4': 'scape/rock-seiryu-4.webp',
+  'rock-5': 'scape/rock-seiryu-5.webp',
+  'wood-1': 'scape/wood-spider-1.webp',
+  'wood-2': 'scape/wood-spider-2.webp',
+  'wood-3': 'scape/wood-spider-3.webp',
+};
+
 const textures = new Map<string, Texture>();
+const scenery = new Map<string, Texture>();
 
 /** 開遊戲前載入素材。個別檔案失敗只會讓那張圖退回程式繪製，不會擋住遊戲。 */
 export async function loadPaintedArt(base = import.meta.env.BASE_URL): Promise<number> {
-  await Promise.all(
-    Object.entries(PAINTED).map(async ([key, spec]) => {
+  await Promise.all([
+    ...Object.entries(PAINTED).map(async ([key, spec]) => {
       try {
         textures.set(key, await Assets.load<Texture>(`${base}art/${spec.file}`));
       } catch {
         // 留給程式繪製版
       }
     }),
-  );
-  return textures.size;
+    ...Object.entries(SCENERY).map(async ([key, file]) => {
+      try {
+        scenery.set(key, await Assets.load<Texture>(`${base}art/${file}`));
+      } catch {
+        // 留給程式繪製版
+      }
+    }),
+  ]);
+  return textures.size + scenery.size;
 }
 
 export function paintedTexture(key: string | null): Texture | null {
   return key ? (textures.get(key) ?? null) : null;
+}
+
+/** 造景素材的原圖（給 Canvas 的 drawImage 用）；沒載入就回傳 null，改用程式繪製。 */
+export function sceneryImage(key: string): CanvasImageSource | null {
+  const tex = scenery.get(key);
+  return tex ? (tex.source.resource as CanvasImageSource) : null;
 }
 
 const MESH_X = 12;
