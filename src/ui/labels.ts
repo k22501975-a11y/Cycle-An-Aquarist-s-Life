@@ -1,3 +1,4 @@
+import { guppyLook } from '../render/strains';
 import { FISH_SPECIES, isJuvenile, PLANT_SPECIES, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
 
 export const SYMPTOM_LABELS: Record<Symptom, string> = {
@@ -32,6 +33,11 @@ export function fishName(fish: Fish): string {
   const shrimp = fish.species === 'cherry_shrimp';
   const young = isJuvenile(fish) ? (shrimp ? '仔蝦' : '仔魚') : fish.sex === 'male' ? (shrimp ? '公蝦' : '公魚') : shrimp ? '母蝦' : '母魚';
   return `${FISH_SPECIES[fish.species].name}${young} #${fish.id}`;
+}
+
+/** 品系名（目前只有成年的公孔雀魚看得出品系）。 */
+export function fishStrain(fish: Fish): string | null {
+  return fish.species === 'guppy' && fish.sex === 'male' && !isJuvenile(fish) ? guppyLook(fish.id).strain : null;
 }
 
 export function describeEvent(state: TankState, e: SimEvent): { text: string; tone: 'bad' | 'warn' | 'info' } | null {

@@ -18,17 +18,18 @@ import {
   rinseFilterMedia,
   setHeaterTarget,
   unplugHeater,
-  testWater,
   trimPlant,
   waterChange,
   type FishSpeciesId,
   type PlantSpeciesId,
   type TankState,
+  type TestKitReading,
 } from '../sim';
 import type { Game } from '../game/game';
 import { h } from './dom';
 import { DEATH_CAUSE_LABELS, fishName, plantName, SYMPTOM_LABELS } from './labels';
 import type { Sheet, Toasts } from './sheet';
+import { READING_TONES } from './status';
 
 export interface PanelContext {
   game: Game;
@@ -95,28 +96,54 @@ export function waterChangePanel({ game, sheet, toasts }: PanelContext): Node {
   );
 }
 
-const READING_ROWS: Array<{ key: 'ammonia' | 'nitrite' | 'nitrate' | 'ph' | 'kh'; label: string; unit: string; danger: (v: number) => 'ok' | 'warn' | 'bad' }> = [
-  { key: 'ammonia', label: '氨 NH₃/NH₄⁺', unit: 'ppm', danger: (v) => (v === 0 ? 'ok' : v <= 0.25 ? 'warn' : 'bad') },
-  { key: 'nitrite', label: '亞硝酸鹽 NO₂', unit: 'ppm', danger: (v) => (v === 0 ? 'ok' : v <= 0.25 ? 'warn' : 'bad') },
-  { key: 'nitrate', label: '硝酸鹽 NO₃', unit: 'ppm', danger: (v) => (v <= 20 ? 'ok' : v <= 40 ? 'warn' : 'bad') },
-  { key: 'ph', label: 'pH', unit: '', danger: (v) => (v >= 6.6 && v <= 8 ? 'ok' : 'warn') },
-  { key: 'kh', label: 'KH', unit: 'dKH', danger: (v) => (v >= 3 ? 'ok' : v >= 1 ? 'warn' : 'bad') },
+const READING_ROWS: Array<{ key: keyof TestKitReading; label: string; unit: string }> = [
+  { key: 'ammonia', label: '氨 NH₃/NH₄⁺', unit: 'ppm' },
+  { key: 'nitrite', label: '亞硝酸鹽 NO₂', unit: 'ppm' },
+  { key: 'nitrate', label: '硝酸鹽 NO₃', unit: 'ppm' },
+  { key: 'ph', label: 'pH', unit: '' },
+  { key: 'kh', label: 'KH', unit: 'dKH' },
 ];
 
+/** 顯示最近一次測水的結果（測試按鈕會先測一次）。 */
 export function testKitPanel({ game }: PanelContext): Node {
-  const r = testWater(game.state);
+  const test = game.state.lastTest;
+  if (!test) return h('p', {}, '還沒測過水。');
+  const r = test.reading;
   return h(
     'div.stack',
     {},
-    h('p.hint', {}, '試劑只能比對色卡，讀到的是大約的級距。'),
+    h('p.hint', {}, '試劑只能比對色卡，讀到的是大約的級距。結果會顯示在上方的狀態列，三天後就不準了。'),
     h(
       'table.readings',
       {},
-      ...READING_ROWS.map((row) =>
-        h('tr', {}, h('td', {}, row.label), h(`td.value.${row.danger(r[row.key])}`, {}, `${r[row.key]} ${row.unit}`)),
-      ),
+      ...READING_ROWS.map((row) => {
+        const tone = READING_TONES[row.key](r[row.key]);
+        return h('tr', {}, h('td', {}, row.label), h(`td.value.${tone}`, {}, `${r[row.key]} ${row.unit}`));
+      }),
       h('tr', {}, h('td', {}, '水溫（溫度計）'), h('td.value', {}, `${game.state.water.tempC.toFixed(1)} °C`)),
     ),
+  );
+}
+
+/** 修剪：列出所有水草，長滿一半以上的可以剪。 */
+export function trimListPanel(ctx: PanelContext): Node {
+  const { game, sheet } = ctx;
+  const plants = game.state.plants;
+  if (plants.length === 0) return h('p', {}, '缸裡還沒有水草，可以到商店買。');
+  return h(
+    'div.stack',
+    {},
+    h('p.hint', {}, '水草長超過一半就能修剪，剪下的插枝可以種回缸裡。也可以直接點缸裡的水草。'),
+    ...plants.map((p) => {
+      const sp = PLANT_SPECIES[p.species];
+      const fullness = Math.min(100, Math.round((p.biomassG / sp.maxBiomassG) * 100));
+      return h(
+        'div.item',
+        {},
+        h('div', {}, h('b', {}, `${sp.name} #${p.id}`), h('div.hint', {}, `茂密度 ${fullness}%`)),
+        button('查看', () => sheet.open('水草', () => plantPanel(ctx, p.id), { live: true })),
+      );
+    }),
   );
 }
 
