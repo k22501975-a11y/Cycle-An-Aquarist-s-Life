@@ -54,3 +54,37 @@ export function softDotTexture(): Texture {
   softDot = canvasTexture(canvas);
   return softDot;
 }
+
+/** 飼料片：幾種顏色的不規則薄片，帶一點亮面。 */
+let flakes: Texture[] | null = null;
+export function flakeTextures(): Texture[] {
+  if (flakes) return flakes;
+  const colors = [['#e0913c', '#f7c271'], ['#c8452e', '#f08a64'], ['#8fa53a', '#c9d878'], ['#d9a646', '#f4dc8e']];
+  flakes = colors.map(([base, hi], k) => {
+    const rand = seeded(91 + k * 17);
+    const { canvas, ctx } = makeCanvas(32, 32);
+    ctx.beginPath();
+    const n = 7;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const r = 9 + rand() * 6;
+      const x = 16 + Math.cos(a) * r, y = 16 + Math.sin(a) * r * 0.75;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    const g = ctx.createLinearGradient(6, 6, 26, 26);
+    g.addColorStop(0, hi);
+    g.addColorStop(1, base);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(90,40,10,0.35)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.beginPath();
+    ctx.ellipse(12, 12, 4, 2, -0.6, 0, Math.PI * 2);
+    ctx.fill();
+    return canvasTexture(canvas);
+  });
+  return flakes;
+}

@@ -4,15 +4,23 @@ import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture } from './painted';
 import { DEATH_SECONDS, deathPose, sickLook, spawnSwimmer, updateSwimmer, type Swimmer } from './fish-motion';
 import { pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
-import { canvasTexture, makeCanvas, mix, softDotTexture } from './paint';
+import { BITE_SECONDS, biteKick, pickEaten, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type Mouth, type Pellet } from './feeding';
+import { canvasTexture, flakeTextures, makeCanvas, mix, softDotTexture } from './paint';
 import { PlantMesh } from './plant-sway';
 import { type QualitySpec, qualitySpec } from './quality';
 import { causticsTexture, MOCKUP_PX_PER_CM, paintBackdrop, paintDriftwood, paintFront, paintPlant, paintVignette, rayTexture } from './scenery';
 
-interface FoodParticle {
+interface FoodParticle extends Pellet {
   s: Sprite;
+}
+
+/** 魚咬到飼料時噴出的碎屑。 */
+interface Crumb {
   x: number;
   y: number;
+  vx: number;
+  vy: number;
+  t: number;
 }
 
 interface Bubble {
@@ -50,6 +58,10 @@ interface FishView {
   back: boolean;
   /** 死了幾秒（-1 還活著）。讀檔時已經死的魚直接用演完的姿勢。 */
   deathT: number;
+  /** 咬一口後過了幾秒。 */
+  biteT: number;
+  /** 上一格的嘴巴位置，判斷飼料是誰吃掉的（死魚為 null）。 */
+  mouth: Mouth | null;
 }
 
 interface Mote {
@@ -100,6 +112,8 @@ export class TankView {
   private readonly gear = new Graphics();
   private readonly gearGlow = new Container();
   private readonly foodLayer = new Container();
+  /** 水面漣漪與碎屑，每格重畫。 */
+  private readonly feedFx = new Graphics();
   private readonly frontFish = new Container();
   private readonly bubbleLayer = new Graphics();
   private readonly moteLayer = new Container();
@@ -119,6 +133,10 @@ export class TankView {
   private fish = new Map<number, FishView>();
   private plants = new Map<number, PlantView>();
   private food: FoodParticle[] = [];
+  private ripples: Array<{ x: number; t: number }> = [];
+  private crumbs: Crumb[] = [];
+  /** 飼料剛因重新排版清空：補回去時不演撒飼料。 */
+  private foodReset = true;
   private bubbles: Bubble[] = [];
   private motes: Mote[] = [];
   private rays: Ray[] = [];
@@ -150,6 +168,7 @@ export class TankView {
       this.gear,
       this.gearGlow,
       this.foodLayer,
+      this.feedFx,
       this.frontFish,
       this.bubbleLayer,
       this.moteLayer,
@@ -260,6 +279,7 @@ export class TankView {
     for (const v of this.plants.values()) v.drawnBiomass = -1;
     for (const p of this.food) p.s.destroy();
     this.food = [];
+    this.foodReset = true;
   }
 
   private handleTap(x: number, y: number): void {
@@ -410,25 +430,71 @@ export class TankView {
 
   private syncFood(state: TankState, dt: number): void {
     const { width, surface, bottom } = this.bounds;
+    const scale = this.motionScale;
     const target = Math.min(80, Math.ceil(state.water.foodMg / 2));
-    const r = Math.max(3, 7 * this.hs);
-    while (this.food.length < target) {
-      const s = new Sprite(softDotTexture());
-      s.anchor.set(0.5);
-      s.width = s.height = r;
-      s.tint = 0xd98a3a;
-      const p = { s, x: width * (0.2 + this.rand() * 0.6), y: surface + this.rand() * 6 };
-      this.foodLayer.addChild(s);
-      this.food.push(p);
+    const r = Math.max(4, 9 * this.hs);
+    const add = target - this.food.length;
+    if (add > 0) {
+      let pellets: Pellet[];
+      if (this.foodReset || add < 2) {
+        // 讀檔、換鏡頭：直接散在水裡，不演撒下去
+        pellets = scatterPellets(add, width / 2, surface, width * 0.3, () => this.rand());
+        for (const p of pellets) {
+          p.floatT = 0;
+          p.y = surface + this.rand() * (bottom - surface);
+        }
+      } else {
+        // 撒一把：集中落在一處，水面泛起漣漪
+        const dropX = width * (0.3 + this.rand() * 0.4);
+        pellets = scatterPellets(add, dropX, surface, width * 0.06, () => this.rand());
+        this.ripples.push({ x: dropX, t: 0 }, { x: dropX - width * 0.02, t: -0.18 }, { x: dropX + width * 0.025, t: -0.35 });
+      }
+      const tex = flakeTextures();
+      for (const p of pellets) {
+        const s = new Sprite(tex[Math.floor(this.rand() * tex.length)]);
+        s.anchor.set(0.5);
+        s.width = s.height = r * (0.75 + this.rand() * 0.5);
+        this.foodLayer.addChild(s);
+        this.food.push({ ...p, s });
+      }
     }
+    this.foodReset = false;
+    // 模擬吃掉的份量：嘴邊那片被咬走，咬的魚往前一衝、噴出碎屑；沒魚碰到的就是沉底爛掉
+    const views = [...this.fish.values()].filter((v) => v.mouth);
+    const mouths = views.map((v) => v.mouth!);
     while (this.food.length > target) {
-      const p = this.food.splice(Math.floor(this.rand() * this.food.length), 1)[0];
+      const pick = pickEaten(this.food, mouths);
+      const p = this.food.splice(pick.food, 1)[0];
+      if (pick.eater !== null) {
+        views[pick.eater].biteT = 0;
+        for (let i = 0; i < 3; i++) {
+          this.crumbs.push({ x: p.x, y: p.y, vx: (this.rand() - 0.5) * 30 * scale, vy: (this.rand() - 0.8) * 20 * scale, t: 0 });
+        }
+      }
       p.s.destroy();
     }
     for (const p of this.food) {
-      p.y = Math.min(bottom - 2, p.y + 14 * this.motionScale * dt);
-      p.x += Math.sin(p.y * 0.05) * 0.2;
+      stepPellet(p, dt, surface, bottom, scale);
       p.s.position.set(p.x, p.y);
+      p.s.rotation = p.rot;
+      // 漂在水面時壓扁一點，像薄片平躺
+      p.s.scale.y = Math.abs(p.s.scale.x) * (p.floatT > 0 ? 0.55 : 0.75 + 0.25 * Math.sin(p.phase * 3));
+    }
+
+    const fx = this.feedFx;
+    fx.clear();
+    this.ripples = this.ripples.filter((w) => (w.t += dt) < RIPPLE_SECONDS);
+    for (const w of this.ripples) {
+      if (w.t < 0) continue;
+      const { r: rr, alpha } = ripple(w.t, 46 * this.hs);
+      fx.ellipse(w.x, surface + 3, rr, rr * 0.22).stroke({ color: 0xffffff, alpha, width: Math.max(1, 2 * this.hs) });
+    }
+    this.crumbs = this.crumbs.filter((c) => (c.t += dt) < 0.6);
+    for (const c of this.crumbs) {
+      c.x += c.vx * dt;
+      c.y += c.vy * dt;
+      c.vy += 20 * scale * dt;
+      fx.circle(c.x, c.y, Math.max(1, 1.6 * this.hs)).fill({ color: 0xe8a050, alpha: 1 - c.t / 0.6 });
     }
   }
 
@@ -470,6 +536,8 @@ export class TankView {
       ichDrawn: false,
       eggsDrawn: false,
       deathT: fish.alive ? -1 : DEATH_SECONDS,
+      biteT: BITE_SECONDS,
+      mouth: null,
       z,
       zTarget: z,
       back: z < BACK_ENTER,
@@ -564,6 +632,17 @@ export class TankView {
         const clamped = symptoms.includes('clamped_fins');
         rig.animate(swimmer.phase, clamped ? 0.25 : 1, clamped ? 0.55 : 1, fish.finDamage);
       }
+      // 咬一口：往前一衝、頭往下點一下
+      const len = this.lengthPx(fish) * depth;
+      const dir = facingLeft ? -1 : 1;
+      view.biteT += dt;
+      const kick = biteKick(view.biteT);
+      if (kick > 0) {
+        view.holder.x += dir * kick * len * 0.12;
+        rig.rotation += dir * kick * 0.18;
+        rig.scale.y *= 1 + 0.05 * kick;
+      }
+      view.mouth = fish.alive ? { x: swimmer.x + dir * len * 0.25, y: swimmer.y, reach: Math.max(10, len * 0.55) } : null;
       const spotted = fish.alive && symptoms.includes('white_spots');
       if (spotted !== view.ichDrawn) {
         drawIchSpots(view.spots, rig, spotted ? 12 : 0);
