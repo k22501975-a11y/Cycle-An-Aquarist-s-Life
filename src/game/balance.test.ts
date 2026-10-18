@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newGameState } from './game';
+import { applySeason, newGameState } from './game';
 import {
   addFish,
   addPlant,
@@ -16,6 +16,7 @@ import {
   sellFish,
   simulate,
   TANKS,
+  unplugHeater,
   useTestKit,
   waterChange,
   type TankState,
@@ -36,6 +37,8 @@ function day(s: TankState, careful: boolean): void {
   if (careful) {
     const r = useTestKit(s);
     if (r.ammonia >= 0.5 || r.nitrite >= 0.5 || r.kh <= 2) waterChange(s, 0.3);
+    // 溫度計一直在畫面上：加熱棒卡住、水溫衝上 29°C 就拔插頭
+    if (s.water.tempC > 29 && s.equipment.heater?.heating) unplugHeater(s);
   }
 }
 
@@ -43,6 +46,8 @@ describe('新手前幾週（K1）', () => {
   it('照教學只放 3 條魚、每天測水、超標就換水：新缸期間魚都活著', () => {
     for (const seed of [1, 2, 3]) {
       const s = newGameState(seed);
+      // 季節跟著現實日曆走：固定日期，測試結果才不會隨執行時間改變
+      applySeason(s, new Date(2026, 9, 15));
       s.environment.roomTempC = 25;
       addPlant(s, 'anubias');
       for (let i = 0; i < 3; i++) addFish(s, 'guppy', { carriesIch: false, carries: [] });
