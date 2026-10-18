@@ -42,7 +42,14 @@ export interface TapWater {
 export interface Equipment {
   tank: TankSpec;
   filter: { spec: FilterSpec; on: boolean } | null;
-  heater: { spec: HeaterSpec; targetC: number; broken: boolean; heating: boolean } | null;
+  heater: {
+    spec: HeaterSpec;
+    targetC: number;
+    broken: boolean;
+    heating: boolean;
+    /** 故障時卡在加熱狀態（恆溫器失靈），插著電就會一直加熱。舊存檔沒有這個欄位。 */
+    stuckOn?: boolean;
+  } | null;
   airPump: { spec: AirPumpSpec; on: boolean } | null;
   light: { spec: LightSpec; startHour: number; photoperiodHours: number } | null;
   /** CO₂ 跟著燈光的時程注入（夜間關閉）。 */
@@ -127,6 +134,7 @@ export type SimEventType =
   | 'ich_visible'
   | 'plant_died'
   | 'heater_broke'
+  | 'heater_stuck'
   | 'power_out'
   | 'power_restored'
   | 'fry_born';

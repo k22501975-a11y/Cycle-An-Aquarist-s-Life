@@ -308,9 +308,9 @@ export class TankView {
       g.rect(width - 40 * s, surface - 8 * s, 24 * s, 3 * s).fill({ color: 0xffffff, alpha: 0.25 });
     }
     if (eq.heater) {
-      const on = eq.heater.heating && !eq.heater.broken && !state.environment.powerOut;
+      const on = eq.heater.heating && !state.environment.powerOut;
       g.roundRect(10 * s, surface + 20 * s, 7 * s, 70 * s, 3 * s).fill({ color: 0xe6eef1, alpha: 0.85 }).stroke({ color: INK, width: 1.5 });
-      g.circle(13.5 * s, surface + 26 * s, 2 * s).fill(eq.heater.broken ? 0x555555 : on ? 0xff7043 : 0x5d4037);
+      g.circle(13.5 * s, surface + 26 * s, 2 * s).fill(on ? 0xff7043 : eq.heater.broken ? 0x555555 : 0x5d4037);
     }
     if (eq.co2) {
       g.circle(width * 0.5, bottom - 10 * s, 5 * s).fill({ color: 0xd5e3ea, alpha: 0.9 }).stroke({ color: INK, width: 1.5 });

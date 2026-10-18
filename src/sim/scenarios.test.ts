@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addFish,
   addPlant,
+  breakHeater,
   computeStressors,
   createTank,
   doseIchMedication,
@@ -16,6 +17,7 @@ import {
   removeDeadFish,
   rinseFilterMedia,
   setHeaterTarget,
+  unplugHeater,
   simulate,
   TANKS,
   testWater,
@@ -189,6 +191,41 @@ describe('設備與環境', () => {
     runDays(s, 2);
     expect(s.water.tempC).toBeLessThan(19);
     expect(computeStressors(s, s.fish[0]).temperature).toBeGreaterThan(0.5);
+  });
+
+  it('加熱棒卡住一直加熱：水溫衝過 33°C 把孔雀魚煮熟；拔掉插頭後慢慢降回室溫', () => {
+    const s = createTank({ ...STARTER, roomTempC: 24, seed: 21, matureMedia: true });
+    stock(s, 'guppy', 4);
+    runDays(s, 1);
+    expect(s.water.tempC).toBeLessThan(26);
+
+    s.equipment.heater!.broken = true;
+    s.equipment.heater!.stuckOn = true;
+    runDays(s, 1);
+    expect(s.equipment.heater!.heating).toBe(true);
+    expect(s.water.tempC).toBeGreaterThan(33);
+    expect(computeStressors(s, s.fish[0]).temperature).toBeGreaterThan(0.5);
+
+    unplugHeater(s);
+    expect(s.equipment.heater!.heating).toBe(false);
+    runDays(s, 2);
+    expect(s.water.tempC).toBeLessThan(26);
+    expect(s.equipment.heater!.broken).toBe(true);
+  });
+
+  it('加熱棒故障約四分之一是卡住一直加熱，並發出對應通知', () => {
+    let stuck = 0;
+    const runs = 1000;
+    for (let seed = 1; seed <= runs; seed++) {
+      const s = createTank({ ...STARTER, seed });
+      breakHeater(s);
+      const last = s.events[s.events.length - 1];
+      expect(s.equipment.heater!.broken).toBe(true);
+      expect(last.type).toBe(s.equipment.heater!.stuckOn ? 'heater_stuck' : 'heater_broke');
+      if (s.equipment.heater!.stuckOn) stuck++;
+    }
+    expect(stuck / runs).toBeGreaterThan(0.2);
+    expect(stuck / runs).toBeLessThan(0.3);
   });
 
   it('加熱棒功率不足時，大缸在冷房間達不到設定溫度', () => {
