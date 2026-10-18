@@ -44,9 +44,19 @@ export function crowdingRatio(state: TankState): number {
   return totalCm / state.equipment.tank.volumeL;
 }
 
-/** 這條魚的體質：魚種體質 × 個體差異。 */
+/** 已經活過壽命的幾成（體質好的魚活得久）。 */
+export function lifeFraction(fish: Fish): number {
+  const sp = FISH_SPECIES[fish.species];
+  return (fish.ageDays ?? 0) / (sp.lifespanDays * fish.constitution);
+}
+
+/** 開始顯老（體質下降、不再懷孕）的壽命比例。 */
+export const ELDERLY_FRACTION = 0.8;
+
+/** 這條魚的體質：魚種體質 × 個體差異，老了會變差。 */
 export function hardiness(fish: Fish, sp: FishSpecies): number {
-  return Math.min(1, sp.hardiness * fish.constitution);
+  const elder = 1 - 0.5 * Math.min(1, Math.max(0, (lifeFraction(fish) - ELDERLY_FRACTION) / 0.4));
+  return Math.min(1, sp.hardiness * fish.constitution) * elder;
 }
 
 export function computeStressors(state: TankState, fish: Fish): Stressors {
@@ -90,6 +100,9 @@ function computeDamage(state: TankState, fish: Fish, sp: FishSpecies): Damage[] 
   const tempOut = Math.max(0, sp.tempLethal.min - water.tempC, water.tempC - sp.tempLethal.max);
   add(tempOut * 0.01, 'temperature');
   if (fish.hunger >= 1) add(0.004, 'starvation');
+  // 超過壽命後身體一天天衰弱，大約兩三週內老死
+  const life = lifeFraction(fish);
+  if (life > 1) add(0.002 + (life - 1) * 0.02, 'old_age');
   if (sp.medicationSensitive) add(water.medication * 0.02, 'medication');
   if (fish.ich.stage === 'visible') add(0.004 * (1 - 0.5 * immunity(fish, sp)), 'ich');
   // 長期高壓力本身就會耗損身體。
@@ -113,6 +126,8 @@ export function updateFauna(state: TankState, dt: number): void {
     const sp = FISH_SPECIES[fish.species];
     // 代謝量大約和體表面積成正比，幼體用得少。
     const metabolic = sizeRatio(fish) ** 2;
+    // 變溫動物：水溫高代謝快、老得快（孔雀魚長期 28°C 壽命約少兩成）
+    fish.ageDays = (fish.ageDays ?? 0) + (dt / 24) * Math.min(1.5, Math.max(0.7, Math.sqrt(tf)));
 
     // 代謝：飢餓、耗氧、排出 CO₂。
     fish.hunger = Math.min(1, fish.hunger + (dt / 24 / DAYS_TO_STARVING) * Math.sqrt(tf));

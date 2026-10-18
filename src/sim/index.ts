@@ -7,7 +7,7 @@ export * from './step';
 export * from './actions';
 export * from './readings';
 export * from './season';
-export { computeStressors, crowdingRatio, freeAmmonia } from './processes/fauna';
+export { computeStressors, crowdingRatio, ELDERLY_FRACTION, freeAmmonia, lifeFraction } from './processes/fauna';
 export { bacteriaCapacity } from './processes/nitrogen';
 export { currentPar } from './processes/plants';
 export { hidingFactor, MAX_FAUNA, sizeRatio } from './processes/population';

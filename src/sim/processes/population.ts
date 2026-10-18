@@ -2,6 +2,7 @@ import { temperatureFactor } from '../chemistry';
 import { chance, nextRandom } from '../random';
 import { FISH_SPECIES, type FishSpeciesId } from '../species';
 import { isJuvenile, recordEvent, type Fish, type TankState } from '../state';
+import { lifeFraction } from './fauna';
 
 /**
  * 族群：成長、Phase 0 的簡化繁殖、混養互動（吃仔魚／仔蝦、咬鰭）。
@@ -17,6 +18,7 @@ export interface NewFishInit {
   stress?: number;
   hunger?: number;
   ich?: Fish['ich'];
+  ageDays?: number;
 }
 
 export function createFish(state: TankState, species: FishSpeciesId, init: NewFishInit = {}): Fish {
@@ -37,6 +39,7 @@ export function createFish(state: TankState, species: FishSpeciesId, init: NewFi
     lengthCm: init.lengthCm ?? sp.adultLengthCm,
     finDamage: 0,
     pregnancy: 0,
+    ageDays: init.ageDays ?? (init.lengthCm !== undefined && init.lengthCm < sp.adultLengthCm * 0.9 ? 0 : sp.daysToAdult),
   };
 }
 
@@ -169,7 +172,8 @@ function breed(state: TankState, tf: number, dt: number): void {
 
     // 水溫低於適溫下限時停止繁殖（temperature.md §3）
     const warmEnough = state.water.tempC >= sp.temp.min;
-    const relaxed = warmEnough && mother.health > 0.7 && mother.stress < 0.4 && mother.hunger < 0.7;
+    // 太老的母魚不再懷孕
+    const relaxed = warmEnough && lifeFraction(mother) < 0.9 && mother.health > 0.7 && mother.stress < 0.4 && mother.hunger < 0.7;
     const mate = relaxed && living.some((f) => f.species === mother.species && f.sex === 'male' && !isJuvenile(f));
     if (mate && chance(state.rng, 0.5 / 24, dt)) mother.pregnancy = 0.001;
   }

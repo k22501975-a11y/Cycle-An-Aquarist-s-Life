@@ -13,6 +13,7 @@ export const SYMPTOM_LABELS: Record<Symptom, string> = {
   thin: '看起來很瘦',
   torn_fins: '鰭破破爛爛的（被咬鰭）',
   pregnant: '肚子鼓起來（懷孕／抱卵）',
+  elderly: '顏色變淡、背有點彎（年紀大了）',
 };
 
 export const DEATH_CAUSE_LABELS: Record<string, string> = {
@@ -26,6 +27,7 @@ export const DEATH_CAUSE_LABELS: Record<string, string> = {
   ich: '白點病',
   chronic_stress: '長期緊迫',
   fin_nip: '被咬鰭',
+  old_age: '老死（壽終正寢）',
   unknown: '原因不明',
 };
 
