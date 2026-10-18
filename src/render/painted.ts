@@ -25,39 +25,47 @@ interface PaintedSpec {
 const GUPPY_MALE_BODY = { x: 0.14, y: 0.02, rx: 0.2, ry: 0.11 };
 const GUPPY_FEMALE_BODY = { x: 0.12, y: 0.04, rx: 0.22, ry: 0.14 };
 const SHRIMP_BODY = { x: 0.08, y: -0.02, rx: 0.25, ry: 0.12 };
+const ZEBRA_BODY = { x: 0.1, y: 0.0, rx: 0.3, ry: 0.11 };
+const FRY_BODY = { x: 0.12, y: 0.0, rx: 0.25, ry: 0.1 };
 
 export const PAINTED: Record<string, PaintedSpec> = {
   'guppy-male-bluegrass': { file: 'fish/guppy-male-bluegrass.webp', tail: 0.34, swing: 0.13, body: GUPPY_MALE_BODY },
   'guppy-male-cobra': { file: 'fish/guppy-male-cobra.webp', tail: 0.3, swing: 0.13, body: GUPPY_MALE_BODY },
   'guppy-male-albino-red': { file: 'fish/guppy-male-albino-red.webp', tail: 0.32, swing: 0.13, body: GUPPY_MALE_BODY },
   'guppy-male-tuxedo': { file: 'fish/guppy-male-tuxedo.webp', tail: 0.32, swing: 0.13, body: GUPPY_MALE_BODY },
+  'guppy-male-redcobra': { file: 'fish/guppy-male-redcobra.webp', tail: 0.32, swing: 0.13, body: GUPPY_MALE_BODY },
+  'guppy-fry': { file: 'fish/guppy-fry.webp', tail: 0.24, swing: 0.12, body: FRY_BODY },
+  'zebrafish-male': { file: 'fish/zebrafish-male.webp', tail: 0.2, swing: 0.1, body: ZEBRA_BODY },
+  'zebrafish-female': { file: 'fish/zebrafish-female.webp', tail: 0.2, swing: 0.09, body: ZEBRA_BODY },
   'guppy-female-base': { file: 'fish/guppy-female-base.webp', tail: 0.26, swing: 0.1, body: GUPPY_FEMALE_BODY },
   'guppy-female-pregnant': { file: 'fish/guppy-female-pregnant.webp', tail: 0.24, swing: 0.09, body: GUPPY_FEMALE_BODY },
   'shrimp-cherry-male': { file: 'shrimp/shrimp-cherry-male.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
   'shrimp-cherry-female': { file: 'shrimp/shrimp-cherry-female.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
   'shrimp-cherry-berried': { file: 'shrimp/shrimp-cherry-berried.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY, eggs: true },
+  'shrimp-cherry-juvenile': { file: 'shrimp/shrimp-cherry-juvenile.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
 };
 
-/** 品系名稱 → 素材。沒列到的品系（例如紅蛇王）用程式繪製版。 */
+/** 品系名稱 → 素材。沒列到的品系用程式繪製版。 */
 const GUPPY_MALE_ART: Record<string, string> = {
   藍草: 'guppy-male-bluegrass',
   黃金蛇王: 'guppy-male-cobra',
   白子全紅: 'guppy-male-albino-red',
   藍尾禮服: 'guppy-male-tuxedo',
+  紅蛇王: 'guppy-male-redcobra',
 };
 
-/** 這條魚該用哪張精繪圖；沒有就回傳 null（仔魚、斑馬魚、還沒畫的品系）。 */
+/** 這條魚該用哪張精繪圖；沒有就回傳 null（還沒畫的品系）。 */
 export function paintedKey(species: FishSpeciesId, form: FishForm, variant: number, gravid: boolean): string | null {
-  if (form === 'juvenile') return null;
-  if (species === 'guppy') {
-    if (form === 'female') return gravid ? 'guppy-female-pregnant' : 'guppy-female-base';
-    return GUPPY_MALE_ART[guppyLook(variant).strain] ?? null;
-  }
   if (species === 'cherry_shrimp') {
+    if (form === 'juvenile') return 'shrimp-cherry-juvenile';
     if (form === 'female') return gravid ? 'shrimp-cherry-berried' : 'shrimp-cherry-female';
     return 'shrimp-cherry-male';
   }
-  return null;
+  // 孔雀魚和斑馬魚的仔魚都是半透明的小魚，共用一張
+  if (form === 'juvenile') return 'guppy-fry';
+  if (species === 'zebrafish') return form === 'female' ? 'zebrafish-female' : 'zebrafish-male';
+  if (form === 'female') return gravid ? 'guppy-female-pregnant' : 'guppy-female-base';
+  return GUPPY_MALE_ART[guppyLook(variant).strain] ?? null;
 }
 
 /** 背景與造景（青龍石、沉木）：不做網格，由 scenery.ts 畫進場景的 Canvas。 */
@@ -72,6 +80,7 @@ export const SCENERY: Record<string, string> = {
   'wood-1': 'scape/wood-spider-1.webp',
   'wood-2': 'scape/wood-spider-2.webp',
   'wood-3': 'scape/wood-spider-3.webp',
+  'plant-rotala': 'scape/plant-rotala.webp',
 };
 
 const textures = new Map<string, Texture>();

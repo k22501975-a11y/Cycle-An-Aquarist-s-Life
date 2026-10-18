@@ -227,7 +227,7 @@ export function paintDriftwood(b: TankBounds, hs: number): Texture {
   const wood = sceneryImage('wood-1');
   if (wood) {
     // 精繪的杜鵑根：中景，比前景石頭多一點水的藍色
-    drawSceneryArt(ctx, wood, b.width * 0.42, oy - 4 * hs, 340 * hs, 0.14);
+    drawSceneryArt(ctx, wood, b.width * 0.42, oy - 4 * hs, 320 * hs, 0.14);
     return canvasTexture(canvas, false);
   }
   ctx.lineJoin = 'round';
@@ -493,13 +493,46 @@ export function paintPlant(plant: Plant, hs: number): PlantPainting {
   const high = sp.lightType === 'high';
   const full = high ? (110 + size * 150) * hs : (60 + size * 30) * hs;
   const W = (high ? 220 : 160) * hs * (0.8 + size * 0.3);
-  const H = full + 30 * hs;
+  const H = full * 1.12 + 30 * hs;
   const { canvas, ctx } = makeCanvas(W, H);
   const ax = W / 2;
   const ay = H - 6 * hs;
   ctx.translate(ax, ay);
   ctx.lineCap = 'round';
   const rand = seeded(plant.id * 97 + 13);
+
+  const art = sceneryImage(`plant-${plant.species}`);
+  if (art) {
+    // 精繪水草：依生物量決定高度，溶葉偏黃褐、長藻變暗並有斑點
+    const { w: iw, h: ih } = imageSize(art);
+    const dh = full * 1.1;
+    const dw = Math.min(W, (iw / ih) * dh);
+    const { canvas: tmp, ctx: t } = makeCanvas(dw, dh);
+    t.drawImage(art, 0, 0, dw, dh);
+    t.globalCompositeOperation = 'source-atop';
+    if (melting) {
+      t.fillStyle = 'rgba(184,168,72,0.6)';
+      t.fillRect(0, 0, dw, dh);
+    }
+    if (algae > 0.15) {
+      t.fillStyle = `rgba(60,72,40,${Math.min(0.6, algae * 0.6)})`;
+      t.fillRect(0, 0, dw, dh);
+      t.fillStyle = `rgba(26,42,20,${Math.min(0.9, algae)})`;
+      for (let i = 0; i < 40 * algae; i++) {
+        t.beginPath();
+        t.arc(rand() * dw, rand() * dh, (1.5 + rand() * 2) * hs, 0, Math.PI * 2);
+        t.fill();
+      }
+    }
+    const shade = t.createLinearGradient(0, 0, 0, dh);
+    shade.addColorStop(0, 'rgba(200,245,255,0.08)');
+    shade.addColorStop(0.6, 'rgba(20,80,90,0)');
+    shade.addColorStop(1, 'rgba(5,30,30,0.45)');
+    t.fillStyle = shade;
+    t.fillRect(0, 0, dw, dh);
+    ctx.drawImage(tmp, -dw / 2, -dh * 0.98);
+    return { texture: canvasTexture(canvas), anchorX: ax, anchorY: ay };
+  }
 
   if (high) {
     const stems = Math.max(1, Math.round(1 + size * 2.2));
