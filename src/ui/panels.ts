@@ -1,3 +1,4 @@
+import type { SoundId } from '../audio/sounds';
 import {
   addFish,
   addPlant,
@@ -35,6 +36,8 @@ export interface PanelContext {
   game: Game;
   sheet: Sheet;
   toasts: Toasts;
+  /** 播放音效（沒有聲音引擎時不做事）。 */
+  sound?: (id: SoundId) => void;
 }
 
 const alive = (s: TankState) => s.fish.filter((f) => f.alive);
@@ -48,12 +51,13 @@ function button(label: string, onclick: () => void, kind = ''): HTMLButtonElemen
   return h(`button.btn${kind ? '.' + kind : ''}`, { onclick }, label);
 }
 
-export function feedPanel({ game, sheet, toasts }: PanelContext): Node {
+export function feedPanel({ game, sheet, toasts, sound }: PanelContext): Node {
   const s = game.state;
   const meal = mealSize(s);
   if (meal <= 0) return h('p', {}, '缸裡還沒有魚。');
   const give = (mg: number, label: string) => () => {
     game.act((st) => feed(st, mg));
+    sound?.('feed');
     toasts.show(`餵了${label}（${mg.toFixed(0)} mg）`);
     sheet.close();
   };
@@ -71,7 +75,7 @@ export function feedPanel({ game, sheet, toasts }: PanelContext): Node {
   );
 }
 
-export function waterChangePanel({ game, sheet, toasts }: PanelContext): Node {
+export function waterChangePanel({ game, sheet, toasts, sound }: PanelContext): Node {
   let fraction = 0.3;
   let matchTemp = true;
   const label = h('span', {}, '30%');
@@ -90,6 +94,7 @@ export function waterChangePanel({ game, sheet, toasts }: PanelContext): Node {
     h('label.check', {}, check, ' 新水對好溫度（沒對溫，水溫驟變會讓魚緊迫）'),
     button('開始換水', () => {
       game.act((st) => waterChange(st, fraction, matchTemp ? { tempC: st.water.tempC } : {}));
+      sound?.('water');
       toasts.show(`換了 ${Math.round(fraction * 100)}% 的水`);
       sheet.close();
     }, 'primary'),
@@ -175,7 +180,7 @@ export function fishPanel({ game, sheet }: PanelContext, fishId: number): Node {
   );
 }
 
-export function plantPanel({ game, sheet, toasts }: PanelContext, plantId: number): Node {
+export function plantPanel({ game, sheet, toasts, sound }: PanelContext, plantId: number): Node {
   const plant = game.state.plants.find((p) => p.id === plantId);
   if (!plant) return h('p', {}, '這株水草已經不在了。');
   const sp = PLANT_SPECIES[plant.species];
@@ -193,6 +198,7 @@ export function plantPanel({ game, sheet, toasts }: PanelContext, plantId: numbe
     button(canTrim ? '修剪' : '還太小，不能修剪', () => {
       if (!canTrim) return;
       const cuttings = game.act((st) => trimPlant(st, plantId));
+      sound?.('trim');
       sheet.open(`剪下 ${cuttings} 份插枝`, () =>
         h(
           'div.stack',
@@ -230,10 +236,12 @@ export function shopPanel(ctx: PanelContext, tab: 'fish' | 'plants' | 'gear' = '
     game.act((st) => {
       for (let i = 0; i < count; i++) addFish(st, species);
     });
+    ctx.sound?.('buy');
     toasts.show(`買了 ${count} 隻${FISH_SPECIES[species].name}，剛運到會有點緊迫`);
   };
   const buyPlant = (species: PlantSpeciesId) => () => {
     game.act((st) => addPlant(st, species));
+    ctx.sound?.('buy');
     toasts.show(`種下一株${PLANT_SPECIES[species].name}`);
   };
 

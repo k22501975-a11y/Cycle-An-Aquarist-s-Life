@@ -199,3 +199,10 @@ ul.symptoms { margin: 0; padding: 10px 12px 10px 30px; line-height: 1.9; backgro
 .toast.warn { border-left-color: var(--warn); }
 .toast.bad { border-left-color: var(--bad); }
 .toast.fade { opacity: 0; transform: translateY(-6px); }
+
+/* 選單：聲音設定 */
+.slider-row { display: flex; align-items: center; gap: 12px; font-size: 14px; }
+.slider-row span { flex: 0 0 4.5em; color: var(--muted); }
+.slider-row input[type='range'] { flex: 1; accent-color: var(--gold); }
+.check-row { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.check-row input { width: 18px; height: 18px; accent-color: var(--gold); }
