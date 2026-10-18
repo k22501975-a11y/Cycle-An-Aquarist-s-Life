@@ -43,7 +43,12 @@ export function eventSound(type: SimEventType): SoundId {
       return 'warn';
     case 'snail_eggs':
     case 'snail_hatched':
+    case 'brood_laid':
       return 'birth';
+    case 'brood_eaten':
+      return 'warn';
+    case 'brood_left':
+      return 'quest';
   }
 }
 

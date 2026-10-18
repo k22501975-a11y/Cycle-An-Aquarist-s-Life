@@ -51,6 +51,10 @@ export const PAINTED: Record<string, PaintedSpec> = {
   'shrimp-molt-stuck': { file: 'shrimp/shrimp-molt-stuck.webp', tail: 0.18, swing: 0.0, body: SHRIMP_BODY },
   'guppy-juvenile': { file: 'fish/guppy-juvenile.webp', tail: 0.3, swing: 0.12, body: { x: 0.14, y: 0.0, rx: 0.22, ry: 0.12 } },
   'shrimp-cherry-juvenile': { file: 'shrimp/shrimp-cherry-juvenile.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
+  // 鳳尾短鯛（親魚護幼，parental.ts）：母魚圖是護幼色，平常用濾鏡褪成灰黃
+  'apisto-male': { file: 'fish/apisto-male.webp', tail: 0.26, swing: 0.08, body: { x: 0.02, y: 0.1, rx: 0.26, ry: 0.11 } },
+  'apisto-female': { file: 'fish/apisto-female.webp', tail: 0.24, swing: 0.08, body: { x: 0.06, y: 0.0, rx: 0.3, ry: 0.11 } },
+  'apisto-fry': { file: 'fish/apisto-fry.webp', tail: 0.26, swing: 0.12, body: FRY_BODY },
 };
 
 /**
@@ -96,6 +100,7 @@ export function paintedKey(species: FishSpeciesId, form: FishForm, variant: numb
     if (form === 'female') return gravid ? 'shrimp-cherry-berried' : 'shrimp-cherry-female';
     return 'shrimp-cherry-male';
   }
+  if (species === 'apisto') return form === 'juvenile' ? 'apisto-fry' : form === 'female' ? 'apisto-female' : 'apisto-male';
   // 孔雀魚和斑馬魚的仔魚都是半透明的小魚，共用一張；長到幼魚身體有底色、尾巴變大
   if (form === 'juvenile') return stage && stage !== 'fry' ? 'guppy-juvenile' : 'guppy-fry';
   if (species === 'zebrafish') return form === 'female' ? 'zebrafish-female' : 'zebrafish-male';

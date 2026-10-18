@@ -6,6 +6,7 @@ import { isJuvenile, recordEvent, type Fish, type TankState } from '../state';
 import { crowdingRatio, lifeFraction } from './fauna';
 import { growFish } from '../growth';
 import { tankHabit } from '../acclimation';
+import { guardedPredationFactor, isCaveSpawner } from '../parental';
 import { childInbreeding, cross, matingSuccess, type GuppyGenome } from '../genetics';
 
 /**
@@ -111,7 +112,8 @@ function predation(state: TankState, living: Fish[], hiding: number, dt: number)
     const pressure = Math.min(1, count / 3);
     const smallness = Math.min(1, Math.max(0, (limit - prey.lengthCm) / Math.max(0.01, limit - sp.birthLengthCm)));
     const hungerBonus = 1 + hunger / count;
-    const ratePerHour = (sp.juvenilePredationPerDay / 24) * pressure * smallness * hungerBonus * (1 - hiding);
+    // 跟著媽媽的仔魚：靠近的魚會被趕走
+    const ratePerHour = (sp.juvenilePredationPerDay / 24) * pressure * smallness * hungerBonus * (1 - hiding) * guardedPredationFactor(state, prey);
     if (chance(state.rng, ratePerHour, dt)) {
       eaten.add(prey);
       // 吃剩的碎屑變成有機廢物。
@@ -159,7 +161,8 @@ function breed(state: TankState, tf: number, dt: number): void {
   const living = state.fish.filter((f) => f.alive);
   for (const mother of living) {
     const sp = FISH_SPECIES[mother.species];
-    if (!sp.breeding || mother.sex !== 'female' || isJuvenile(mother)) continue;
+    // 洞穴產卵的魚另外處理（parental.ts）
+    if (!sp.breeding || mother.sex !== 'female' || isJuvenile(mother) || isCaveSpawner(mother.species)) continue;
 
     if (mother.pregnancy > 0) {
       mother.pregnancy += (dt / 24 / sp.breeding.gestationDays) * Math.sqrt(tf);

@@ -34,7 +34,8 @@ const young = (f: Fish) => {
 function preyAtRisk(living: Fish[]): Fish[] {
   const mouths = living.filter((f) => !isJuvenile(f) && FISH_SPECIES[f.species].mouthRatio > 0).map((f) => f.lengthCm * FISH_SPECIES[f.species].mouthRatio);
   const biggest = Math.max(0, ...mouths);
-  return living.filter((f) => isJuvenile(f) && f.lengthCm < biggest);
+  // 媽媽還帶著的仔魚有人保護，先不用撈（離巢後再分）
+  return living.filter((f) => isJuvenile(f) && f.lengthCm < biggest && f.guardian === undefined);
 }
 
 /** 轉色、亞成期看得出公母的自家小魚，公母都有。 */

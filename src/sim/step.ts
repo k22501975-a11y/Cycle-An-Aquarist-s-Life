@@ -9,6 +9,7 @@ import { updateTemperature } from './processes/thermal';
 import { updateWaste } from './processes/waste';
 import { updateQuarantine } from './quarantine';
 import { updateSnails } from './snails';
+import { updateParental } from './parental';
 import { updateEconomy } from './economy';
 import { TEMP_LOG_HOURS, type TankState } from './state';
 
@@ -24,6 +25,7 @@ export function step(state: TankState, dtHours: number = TICK_HOURS): void {
   updateGases(state, dtHours);
   updateFauna(state, dtHours);
   updatePopulation(state, dtHours);
+  updateParental(state, dtHours);
   updateSnails(state, dtHours);
   updateQuarantine(state, dtHours);
   updateEconomy(state, dtHours);

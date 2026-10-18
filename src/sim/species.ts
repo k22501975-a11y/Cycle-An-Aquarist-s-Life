@@ -4,7 +4,7 @@ import type { FoodKind } from './food';
  * 魚種與水草資料。數值是 Phase 0 的初版，之後會依真實資料再調整。
  */
 
-export type FishSpeciesId = 'guppy' | 'zebrafish' | 'cherry_shrimp';
+export type FishSpeciesId = 'guppy' | 'zebrafish' | 'cherry_shrimp' | 'apisto';
 
 export interface FishSpecies {
   id: FishSpeciesId;
@@ -116,6 +116,35 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     longFinnedMales: false,
     // 斑馬魚撒卵且吃卵很兇，Phase 0 先不做（需要產卵盒）。
     breeding: null,
+  },
+  apisto: {
+    id: 'apisto',
+    name: '鳳尾短鯛',
+    temp: { min: 24, max: 29 },
+    tempLethal: { min: 20, max: 32 },
+    ph: { min: 5.5, max: 7.2 },
+    // 鳳尾短鯛是短鯛裡最皮的，偏鹼的自來水也撐得住，只是不太會繁殖
+    phSurvive: { min: 5.0, max: 8.4 },
+    farmWater: { ph: 6.8, gh: 5 },
+    adultLengthCm: 5,
+    bodyMassMg: 1500,
+    dailyFoodMg: 20,
+    // 底層魚：吃沉底的和活餌，搶不太到漂浮的
+    diet: { floating: 0.5, sinking: 1, sticky: 0.6, meat: 1.3 },
+    o2UseMgPerHour: 0.3,
+    hardiness: 0.55,
+    minGroup: 0,
+    susceptibleToIch: true,
+    medicationSensitive: false,
+    birthLengthCm: 0.4,
+    daysToAdult: 150,
+    lifespanDays: 1460,
+    mouthRatio: 0.4,
+    juvenilePredationPerDay: 0.3,
+    finNipPerDay: 0,
+    longFinnedMales: false,
+    // 洞穴產卵、母魚護幼（parental.ts）：一窩約 40 顆卵；gestationDays 不用
+    breeding: { gestationDays: 0, broodMean: 40, broodMin: 15, broodMax: 80 },
   },
   cherry_shrimp: {
     id: 'cherry_shrimp',

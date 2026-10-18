@@ -26,7 +26,7 @@ export function chargeMeal(state: TankState, units = 1): void {
 }
 
 /** 店價：品系孔雀魚在台灣約 50～100 元一隻、斑馬魚 20 元、櫻花蝦 25 元。 */
-export const FISH_PRICES: Record<FishSpeciesId, number> = { guppy: 60, zebrafish: 20, cherry_shrimp: 25 };
+export const FISH_PRICES: Record<FishSpeciesId, number> = { guppy: 60, zebrafish: 20, cherry_shrimp: 25, apisto: 180 };
 export const PLANT_PRICES: Record<PlantSpeciesId, number> = { anubias: 150, rotala: 60 };
 
 /** 設備、底材、造景、藥品、耗材的價格，鍵是「類別:id」。 */

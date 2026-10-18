@@ -1,4 +1,5 @@
 import type { SnailState } from './snails';
+import type { Brood } from './parental';
 import type { FoodLot } from './food';
 import { co2Equilibrium, oxygenSaturation, phFromCo2 } from './chemistry';
 import type { AirPumpSpec, ChillerSpec, Co2Spec, FanSpec, FilterSpec, HardscapeSpec, HeaterSpec, LightSpec, SubstrateSpec, TankSpec } from './equipment';
@@ -231,6 +232,14 @@ export interface Fish {
   stuckMolt?: boolean;
   /** 這尾魚習慣的水（舒適中心，design/acclimation.md）：會慢慢往牠住的水移動。舊存檔沒有，當成習慣目前的缸。 */
   acclimated?: { ph: number; gh: number; tempC: number };
+  /** 洞穴產卵的魚（短鯛）：母魚正在顧的這一窩（parental.ts）。 */
+  brood?: Brood;
+  /** 跟著哪尾母魚（親魚護幼的仔魚）。 */
+  guardian?: number;
+  /** 帶大過幾窩（越有經驗越不會慌）。 */
+  broodsRaised?: number;
+  /** 護幼色 0–1：帶小孩時轉成鮮黃加黑紋。 */
+  broodColor?: number;
 }
 
 export interface Plant {
@@ -259,7 +268,10 @@ export type SimEventType =
   | 'snail_died'
   | 'snail_eggs'
   | 'snail_hatched'
-  | 'trap_rotted';
+  | 'trap_rotted'
+  | 'brood_laid'
+  | 'brood_eaten'
+  | 'brood_left';
 
 export interface SimEvent {
   hours: number;

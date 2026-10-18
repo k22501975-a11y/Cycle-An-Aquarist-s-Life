@@ -1,3 +1,4 @@
+import { territoryStress } from '../parental';
 import { driftAcclimation, habitStress, phBeyondSurvival } from '../acclimation';
 import { freeAmmoniaFraction, temperatureFactor } from '../chemistry';
 import { DEFAULT_BREEDING_CONDITION, DEFAULT_NUTRITION, foodLots, foodQuality, nutritionFactor, pruneFood } from '../food';
@@ -29,6 +30,8 @@ export interface Stressors {
   medication: number;
   disease: number;
   injury: number;
+  /** 被護幼中的母魚趕。 */
+  territory: number;
 }
 
 /** 每項傷害來源的每小時健康損失。 */
@@ -90,6 +93,7 @@ export function computeStressors(state: TankState, fish: Fish): Stressors {
     medication: (sp.medicationSensitive ? water.medication * 2 : 0) + (sp.invertebrate ? (water.copper ?? 0) * 3 : (water.copper ?? 0) * 0.5),
     disease: Math.max(fish.ich.stage === 'visible' ? 0.3 : 0, diseaseStress(fish)),
     injury: fish.finDamage * 0.3,
+    territory: territoryStress(state, fish),
   };
 }
 

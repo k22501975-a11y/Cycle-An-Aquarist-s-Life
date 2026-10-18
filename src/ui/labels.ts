@@ -39,6 +39,13 @@ export const DEATH_CAUSE_LABELS: Record<string, string> = {
   unknown: '原因不明',
 };
 
+/** 母魚為什麼顧不好小孩（design: market-and-breeding.md §1.3.3）。 */
+export const BROOD_ISSUE_LABELS: Record<string, string> = {
+  noisy: '缸裡太吵了，魚太多',
+  water: '水質變動太大',
+  stress: '母魚太緊張了',
+};
+
 export function fishName(fish: Fish): string {
   const shrimp = fish.species === 'cherry_shrimp';
   // 轉色前看不出公母：叫仔魚、幼魚（design/growth.md §6）
@@ -93,6 +100,12 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
       return { text: '蘋果螺在水面上方的缸壁產了一團卵。不想要一堆小螺就摘掉', tone: 'info' };
     case 'snail_hatched':
       return { text: `蘋果螺的卵孵出 ${e.count ?? 0} 隻小螺`, tone: 'info' };
+    case 'brood_laid':
+      return { text: `${fish ? fishName(fish) : '短鯛母魚'} 在洞穴裡產了約 ${e.count ?? 0} 顆卵，轉成護幼色守著。這幾天別大換水、別動造景`, tone: 'info' };
+    case 'brood_eaten':
+      return { text: `${fish ? fishName(fish) : '短鯛母魚'} 把整窩卵吃掉了：${BROOD_ISSUE_LABELS[e.cause ?? 'stress'] ?? '太緊張了'}。新手第一窩常這樣，下次會好一點`, tone: 'warn' };
+    case 'brood_left':
+      return { text: `${fish ? fishName(fish) : '短鯛母魚'} 帶大的 ${e.count ?? 0} 尾小魚離巢了，可以分缸了`, tone: 'info' };
     case 'trap_rotted':
       return { text: '螺陷阱裡的菜放太久爛掉了，弄髒了水', tone: 'warn' };
   }
