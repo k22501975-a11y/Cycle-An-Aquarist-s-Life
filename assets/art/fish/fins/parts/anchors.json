@@ -1,0 +1,68 @@
+{
+  "coordinate_system": "pixels in each PNG, origin top-left; anchor = point that attaches to the body. Fish faces right.",
+  "fins": {
+    "fin-tail-delta": {
+      "width": 356,
+      "height": 507,
+      "anchor": [
+        355,
+        243
+      ],
+      "note": "right edge = where the tail joins the caudal peduncle"
+    },
+    "fin-tail-halfmoon": {
+      "width": 505,
+      "height": 667,
+      "anchor": [
+        504,
+        315
+      ],
+      "note": "right edge = where the tail joins the caudal peduncle"
+    },
+    "fin-tail-swallow": {
+      "width": 586,
+      "height": 659,
+      "anchor": [
+        585,
+        305
+      ],
+      "note": "right edge = where the tail joins the caudal peduncle"
+    },
+    "fin-pectoral-dumbo": {
+      "width": 659,
+      "height": 785,
+      "anchor": [
+        658,
+        455
+      ],
+      "note": "right edge = attaches behind the gills; fan spreads back (left). Scale ~0.5x of body length"
+    },
+    "fin-sword-top": {
+      "width": 529,
+      "height": 606,
+      "anchor": [
+        528,
+        492
+      ],
+      "note": "right end = base at the upper edge of the tail; blade points back-up"
+    },
+    "fin-sword-bottom": {
+      "width": 529,
+      "height": 606,
+      "anchor": [
+        528,
+        32
+      ],
+      "note": "vertical mirror of fin-sword-top; base at the lower edge of the tail"
+    },
+    "fin-tail-doublesword": {
+      "width": 529,
+      "height": 1222,
+      "anchor": [
+        528,
+        611
+      ],
+      "note": "composed from fin-sword-top + mirror; right middle = caudal peduncle"
+    }
+  }
+}
