@@ -6,7 +6,7 @@ import { isJuvenile, recordEvent, type Fish, type TankState } from '../state';
 import { crowdingRatio, lifeFraction } from './fauna';
 import { growFish } from '../growth';
 import { tankHabit } from '../acclimation';
-import { guardedPredationFactor, isCaveSpawner } from '../parental';
+import { guardedPredationFactor, isParentalSpawner } from '../parental';
 import { bettaAggression } from '../betta';
 import { childInbreeding, cross, matingSuccess, type GuppyGenome } from '../genetics';
 
@@ -165,8 +165,8 @@ function breed(state: TankState, tf: number, dt: number): void {
   const living = state.fish.filter((f) => f.alive);
   for (const mother of living) {
     const sp = FISH_SPECIES[mother.species];
-    // 洞穴產卵的魚另外處理（parental.ts）
-    if (!sp.breeding || mother.sex !== 'female' || isJuvenile(mother) || isCaveSpawner(mother.species)) continue;
+    // 洞穴產卵、泡巢的魚另外處理（parental.ts）
+    if (!sp.breeding || mother.sex !== 'female' || isJuvenile(mother) || isParentalSpawner(mother.species)) continue;
 
     if (mother.pregnancy > 0) {
       mother.pregnancy += (dt / 24 / sp.breeding.gestationDays) * Math.sqrt(tf);

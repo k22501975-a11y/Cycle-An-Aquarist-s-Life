@@ -2,12 +2,12 @@ import type { SoundId } from '../audio/sounds';
 import {
   isShrimpSpecies,
   addFish,
-  BREED_PH_MAX,
   CARE_EAT_THRESHOLD,
   careTarget,
   guardianOf,
-  hasCave,
-  isCaveSpawner,
+  hasSpawnSite,
+  isBroodParent,
+  PARENTAL,
   addSnail,
   APPLE_COLOR_LABELS,
   catchPests,
@@ -409,17 +409,30 @@ function cureButton(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish): Node 
   );
 }
 
-/** 親魚護幼（market-and-breeding.md §1.3.3）：母魚在顧哪一窩、護幼值、照顧不好的原因；仔魚跟著誰。 */
+/** 親魚護幼（market-and-breeding.md §1.3.3）：親魚在顧哪一窩、護幼值、照顧不好的原因；仔魚跟著誰。 */
 export function broodLine(state: TankState, fish: Fish): Node | null {
-  if (fish.guardian !== undefined && guardianOf(state, fish)) return h('p', {}, '跟著媽媽：被吃的機率小很多，媽媽會帶去找東西吃');
-  if (!isCaveSpawner(fish.species) || fish.sex !== 'female' || !sexVisible(fish)) return null;
+  const parent = fish.guardian !== undefined ? guardianOf(state, fish) : null;
+  if (parent) return h('p', {}, parent.sex === 'male' ? '跟著爸爸：剛會游的仔魚掉出泡巢，爸爸會含回去' : '跟著媽媽：被吃的機率小很多，媽媽會帶去找東西吃');
+  const spec = PARENTAL[fish.species];
+  if (!spec || !isBroodParent(fish) || !sexVisible(fish)) return null;
+  const nest = spec.site === 'bubble';
   const b = fish.brood;
   if (!b) {
-    const why = !hasCave(state) ? '缸裡沒有洞穴：放石頭或沉木才有地方產卵' : state.water.tempC < 25 ? '水溫 25°C 以上才會產卵' : state.water.ph > BREED_PH_MAX ? `水太鹼（pH ${state.water.ph.toFixed(1)}），要偏酸的軟水才會產卵：放沉木或用水草泥` : !state.fish.some((f) => f.alive && f.species === fish.species && f.sex === 'male' && sexVisible(f)) ? '缸裡沒有成熟的公魚' : '條件都有了，餵點紅蟲之類的肉食會比較快產卵';
+    const living = state.fish.filter((f) => f.alive && f !== fish && f.species === fish.species && sexVisible(f));
+    const why = !hasSpawnSite(state, fish.species)
+      ? nest ? '水流太強，吐不了泡巢：用海綿過濾或關小過濾器（繁殖缸常用水妖精）' : '缸裡沒有洞穴：放石頭或沉木才有地方產卵'
+      : state.water.tempC < spec.minTempC ? `水溫 ${spec.minTempC}°C 以上才會產卵`
+      : state.water.ph > spec.maxPh ? `水太鹼（pH ${state.water.ph.toFixed(1)}），要偏酸的軟水才會產卵：放沉木或用水草泥`
+      : nest && living.some((f) => f.sex === 'male') ? '缸裡還有別的公鬥魚，只會打架不會吐泡巢'
+      : !living.some((f) => f.sex !== spec.guardSex) ? (nest ? '缸裡沒有成熟的母鬥魚' : '缸裡沒有成熟的公魚')
+      : '條件都有了，餵點紅蟲之類的肉食會比較快產卵';
     return h('p.hint', {}, `繁殖：${why}`);
   }
   const days = Math.floor((state.hours - b.hour) / 24);
-  const stage = b.stage === 'eggs' ? `在洞穴裡顧著約 ${Math.round(b.count)} 顆卵（第 ${days + 1} 天，約 3 天孵化）` : b.stage === 'wigglers' ? `卵孵了，仔魚還在洞裡吸卵黃（約 ${Math.round(b.count)} 尾）` : `帶著 ${state.fish.filter((f) => f.alive && f.guardian === fish.id).length} 尾仔魚巡邏（第 ${days + 1} 天，約 4 週後離巢）`;
+  const kids = state.fish.filter((f) => f.alive && f.guardian === fish.id).length;
+  const stage = nest
+    ? b.stage === 'eggs' ? `在泡巢下顧著約 ${Math.round(b.count)} 顆卵（約一天半孵化），母魚要撈走` : b.stage === 'wigglers' ? `卵孵了，約 ${Math.round(b.count)} 尾仔魚吊在泡巢下吸卵黃（再兩三天會平游）` : `${kids} 尾仔魚會游了，公魚再顧一兩天就該撈走`
+    : b.stage === 'eggs' ? `在洞穴裡顧著約 ${Math.round(b.count)} 顆卵（第 ${days + 1} 天，約 3 天孵化）` : b.stage === 'wigglers' ? `卵孵了，仔魚還在洞裡吸卵黃（約 ${Math.round(b.count)} 尾）` : `帶著 ${kids} 尾仔魚巡邏（第 ${days + 1} 天，約 4 週後離巢）`;
   const { issue } = careTarget(state, fish);
   const care = Math.round(b.care * 100);
   return h(

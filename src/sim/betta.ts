@@ -17,6 +17,8 @@ const FIGHT_WINNER_DAMAGE = 0.004;
 export const LONG_FIN_ATTACK_PER_DAY = 0.4;
 /** 會獵蝦的鬥魚佔幾成。 */
 export const SHRIMP_HUNTER_SHARE = 0.3;
+/** 公魚在顧泡巢時追咬母魚：母魚每小時掉多少健康（扣掉自然恢復，不撈走幾天內會被咬死）。 */
+export const NEST_CHASE_DAMAGE = 0.02;
 /** 會獵蝦的鬥魚、缸裡沒水草時，每天吃掉幾隻成蝦。 */
 export const SHRIMP_EATEN_PER_DAY = 1.5;
 
@@ -36,7 +38,7 @@ function hurt(fish: Fish, amount: number, cause: string, fin: number): void {
   fish.recentDamage[cause] = (fish.recentDamage[cause] ?? 0) + amount;
 }
 
-function recentEvent(state: TankState, type: 'betta_fight' | 'betta_ate_shrimp'): boolean {
+function recentEvent(state: TankState, type: 'betta_fight' | 'betta_ate_shrimp' | 'betta_chase_female'): boolean {
   return state.events.some((e) => e.type === type && state.hours - e.hours < 24);
 }
 
@@ -53,6 +55,16 @@ export function bettaAggression(state: TankState, living: Fish[], hiding: number
     const winner = males.reduce((a, b) => (strength(b) > strength(a) ? b : a));
     for (const m of males) hurt(m, (m === winner ? FIGHT_WINNER_DAMAGE : FIGHT_LOSER_DAMAGE) * dt, 'fight', (m === winner ? 0.002 : 0.02) * dt);
     if (!recentEvent(state, 'betta_fight')) recordEvent(state, { type: 'betta_fight', subjectId: winner.id, count: males.length });
+  }
+
+  // 產完卵的公魚守著泡巢，把母魚當成威脅追著咬（現實：產完要馬上把母魚撈出去）
+  const nester = males.find((m) => m.brood);
+  if (nester) {
+    for (const f of bettas) {
+      if (f.sex !== 'female') continue;
+      hurt(f, NEST_CHASE_DAMAGE * dt * (1 - hiding * 0.5), 'betta_attack', 0.01 * dt);
+      if (!recentEvent(state, 'betta_chase_female')) recordEvent(state, { type: 'betta_chase_female', subjectId: f.id });
+    }
   }
 
   // 公鬥魚咬長尾的孔雀魚公魚

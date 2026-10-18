@@ -58,6 +58,12 @@ function eventAlert(state: TankState, e: SimEvent): Omit<ForecastAlert, 'hours' 
       return { category: 'crisis', key: 'power', body: '停電了，過濾和加熱都停了。' };
     case 'betta_fight':
       return { category: 'crisis', key: 'fight', body: '兩尾公鬥魚在打架，打輸的撐不了幾天，快把牠們分開。' };
+    case 'betta_chase_female':
+      return { category: 'crisis', key: 'nest', body: '公鬥魚在顧泡巢，一直追咬母魚。快把母魚撈到別缸。' };
+    case 'brood_laid':
+      return e.cause === 'bubble' ? { category: 'breeding', key: 'nest', body: '鬥魚在泡巢產卵了！把母魚撈走，公魚會自己顧卵。' } : null;
+    case 'brood_left':
+      return speciesOf(state, e.subjectId) === '鬥魚' ? { category: 'breeding', key: 'nest', body: '小鬥魚會自己游了，該把公魚撈走，不然牠會吃小魚。' } : null;
     case 'fry_born':
       return { category: 'breeding', key: 'fry', body: `生了 ${e.count ?? '幾'} 尾仔${speciesOf(state, e.subjectId).includes('蝦') ? '蝦' : '魚'}！成魚會吃小的，記得多種水草讓牠們躲。` };
     default:

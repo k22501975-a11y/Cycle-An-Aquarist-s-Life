@@ -1,5 +1,5 @@
 import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
-import { isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, phenotype, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
+import { isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, phenotype, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
@@ -209,6 +209,8 @@ export class TankView {
   private readonly snails = new SnailView();
   private lastFoodMg = 0;
   private bubbles: Bubble[] = [];
+  /** 公鬥魚的泡巢：魚 id → 泡巢的水平位置和大小（0–1，吐越久越大）。 */
+  private nests = new Map<number, { x: number; size: number }>();
   private motes: Mote[] = [];
   private rays: Ray[] = [];
   private selectedFish: number | null = null;
@@ -1152,7 +1154,8 @@ export class TankView {
       const { swimmer, rig } = view;
       const symptoms = observeSymptoms(state, fish);
       const follow = fish.guardian !== undefined && alive.has(fish.guardian) ? fish.guardian : undefined;
-      updateSwimmer(swimmer, living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined, symptoms, follow, guarding: isGuarding(fish) }, ctx, dt, () => this.rand());
+      const nestX = this.nestFor(fish, swimmer.x, dt);
+      updateSwimmer(swimmer, living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX }, ctx, dt, () => this.rand());
 
       // 景深：魚慢慢在前後之間游動；遠的小一點、模糊偏藍，畫在造景後面。
       if (!isShrimpSpecies(fish.species) && fish.alive) {
@@ -1304,6 +1307,45 @@ export class TankView {
   }
 
 
+  /** 顧泡巢的公鬥魚：泡巢在牠開始顧的地方，吐了半天才長滿；顧完了泡巢慢慢散掉（在 drawNests 裡）。 */
+  private nestFor(fish: Fish, x: number, dt: number): number | undefined {
+    if (!fish.alive || !fish.brood || PARENTAL[fish.species]?.site !== 'bubble') return undefined;
+    let nest = this.nests.get(fish.id);
+    if (!nest) {
+      const w = this.bounds.width;
+      nest = { x: Math.min(w * 0.85, Math.max(w * 0.15, x)), size: 0.15 };
+      this.nests.set(fish.id, nest);
+    }
+    nest.size = Math.min(1, nest.size + dt * 0.08);
+    return nest.x;
+  }
+
+  /** 泡巢：水面一團細小的泡泡，中間厚、邊緣薄，跟著水面輕輕晃。 */
+  private drawNests(state: TankState, g: Graphics, dt: number): void {
+    const hs = this.hs;
+    const surface = this.waterBounds.surface;
+    for (const [id, nest] of this.nests) {
+      const owner = state.fish.find((f) => f.id === id);
+      if (!owner?.alive || !owner.brood) {
+        nest.size -= dt * 0.03;
+        if (nest.size <= 0) this.nests.delete(id);
+      }
+      if (nest.size <= 0) continue;
+      const half = 60 * hs * Math.sqrt(nest.size);
+      const n = Math.round(110 * nest.size);
+      for (let i = 0; i < n; i++) {
+        // 固定的擺法（不每幀亂跳）：越靠中間堆越厚
+        const u = ((i * 0.618034) % 1) * 2 - 1;
+        const v = (i * 0.414214) % 1;
+        const bx = nest.x + u * half + Math.sin(this.time * 0.8 + i) * 0.6 * hs;
+        const by = surface + 4 * hs - v * (1 - u * u) * 9 * hs + (1 - u * u) * 3 * hs;
+        const r = (1.8 + ((i * 0.7548) % 1) * 2.4) * hs;
+        g.circle(bx, by, r).fill({ color: 0xffffff, alpha: 0.28 }).stroke({ color: 0xf2fcff, width: Math.max(0.8, r * 0.3), alpha: 0.75 * Math.min(1, nest.size * 2) });
+        if (i % 3 === 0) g.circle(bx - r * 0.35, by - r * 0.35, r * 0.25).fill({ color: 0xffffff, alpha: 0.8 });
+      }
+    }
+  }
+
   private updateBubbles(state: TankState, dt: number): void {
     const { width, surface, bottom } = this.bounds;
     const hs = this.hs;
@@ -1325,6 +1367,7 @@ export class TankView {
       g.circle(b.x, b.y, r).fill({ color: 0xffffff, alpha: 0.12 }).stroke({ color: 0xe8fbff, width: Math.max(0.8, r * 0.25), alpha: 0.7 });
       g.circle(b.x - r * 0.35, b.y - r * 0.35, r * 0.28).fill({ color: 0xffffff, alpha: 0.85 });
     }
+    this.drawNests(state, g, dt);
   }
 
   private drawOverlay(state: TankState): void {
