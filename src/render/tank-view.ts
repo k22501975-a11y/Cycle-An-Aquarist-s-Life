@@ -2,7 +2,7 @@ import { Application, Container, FederatedPointerEvent, FillGradient, Graphics }
 import { isCo2Injecting, isJuvenile, isLightOn, observeSymptoms, sizeRatio, type TankState } from '../sim';
 import { spawnSwimmer, updateSwimmer, type Swimmer } from './fish-motion';
 import { tankBounds, tankRect, unitScale, type TankBounds, type TankRect } from './layout';
-import { createFishSprite, drawIchSpots, drawPlant, INK, type FishSprite } from './sprites';
+import { bellyShade, createFishSprite, drawBackdropGrass, drawIchSpots, drawPlant, INK, type FishSprite } from './sprites';
 
 interface FoodParticle {
   g: Graphics;
@@ -44,6 +44,11 @@ export class TankView {
   /** 卡通風格的粗黑缸框，蓋在最上面。 */
   private readonly frame = new Graphics();
   private readonly background = new Graphics();
+  /** 會動的環境效果：光束、沙上的波光、水面波紋。 */
+  private readonly ambient = new Graphics();
+  /** 缸頂的燈罩，開燈時下緣發亮。 */
+  private readonly hood = new Graphics();
+  private hoodLit: boolean | null = null;
   private readonly plantLayer = new Container();
   private readonly foodLayer = new Container();
   private readonly fishLayer = new Container();
@@ -65,9 +70,9 @@ export class TankView {
     this.rect = tankRect(app.screen.width, app.screen.height);
     this.bounds = tankBounds(this.rect.width, this.rect.height);
     this.scale = unitScale(this.bounds);
-    this.scene.addChild(this.background, this.gear, this.plantLayer, this.foodLayer, this.fishLayer, this.bubbleLayer, this.overlay);
+    this.scene.addChild(this.background, this.ambient, this.gear, this.plantLayer, this.foodLayer, this.fishLayer, this.bubbleLayer, this.overlay);
     this.scene.mask = this.sceneMask;
-    this.root.addChild(this.room, this.scene, this.sceneMask, this.frame);
+    this.root.addChild(this.room, this.scene, this.sceneMask, this.frame, this.hood);
     this.root.eventMode = 'static';
     this.root.on('pointertap', (e: FederatedPointerEvent) => this.handleTap(e.global.x, e.global.y));
     this.layout();
@@ -95,51 +100,130 @@ export class TankView {
     this.scene.position.set(rx, ry);
     this.sceneMask.clear().roundRect(rx, ry, width, height, radius).fill(0xffffff);
 
-    // 房間：淡色牆面＋木頭缸座
+    const sc = this.scale;
+    this.hoodLit = null;
+
+    // 房間：帶直條壁紙的牆面、踢腳板、木頭缸座（空間夠時畫成有門的櫃子）
     const room = this.room.clear();
-    room.rect(0, 0, screen.width, screen.height).fill(0x24384a);
+    const wall = new FillGradient({
+      type: 'linear',
+      start: { x: 0, y: 0 },
+      end: { x: 0, y: 1 },
+      colorStops: [
+        { offset: 0, color: 0x30506e },
+        { offset: 1, color: 0x1d3046 },
+      ],
+    });
+    room.rect(0, 0, screen.width, screen.height).fill(wall);
+    for (let x = 18; x < screen.width; x += 36) room.rect(x, 0, 10, screen.height).fill({ color: 0xffffff, alpha: 0.025 });
+    // 直向時水缸上方空間大，牆上掛一扇看得到藍天的窗
+    if (ry > 140) {
+      const winW = Math.min(width * 0.55, 260);
+      const winH = Math.min(ry - 60, winW * 0.75);
+      const wx = screen.width / 2 - winW / 2;
+      const wy = Math.max(24, (ry - winH) / 2);
+      room.roundRect(wx - 8, wy - 8, winW + 16, winH + 16, 10).fill(0xc58a52).stroke({ color: INK, width: 3 });
+      const sky = new FillGradient({ type: 'linear', start: { x: 0, y: 0 }, end: { x: 0, y: 1 }, colorStops: [{ offset: 0, color: 0x8fd8ff }, { offset: 1, color: 0xd8f3ff }] });
+      room.roundRect(wx, wy, winW, winH, 6).fill(sky).stroke({ color: INK, width: 2.5 });
+      const cloud = (cx: number, cy: number, r: number) => {
+        room.circle(cx, cy, r).circle(cx + r * 0.9, cy + r * 0.2, r * 0.8).circle(cx - r * 0.9, cy + r * 0.25, r * 0.7).fill(0xffffff);
+      };
+      cloud(wx + winW * 0.3, wy + winH * 0.35, winH * 0.1);
+      cloud(wx + winW * 0.72, wy + winH * 0.6, winH * 0.08);
+      room.rect(wx + winW / 2 - 2.5, wy, 5, winH).fill(0xc58a52).stroke({ color: INK, width: 2 });
+      room.rect(wx, wy + winH / 2 - 2.5, winW, 5).fill(0xc58a52).stroke({ color: INK, width: 2 });
+      room.roundRect(wx - 14, wy + winH + 6, winW + 28, 8, 4).fill(0xd99a5e).stroke({ color: INK, width: 2.5 });
+    }
     const standY = ry + height;
-    const standH = Math.max(14, Math.min(40, screen.height - standY - 4));
-    room.roundRect(rx - 10, standY - 4, width + 20, standH, 6).fill(0x9a6a3c).stroke({ color: INK, width: 3 });
-    room.rect(rx - 6, standY + standH * 0.45, width + 12, 2).fill({ color: 0x6b4526, alpha: 0.8 });
+    const standH = Math.max(14, Math.min(120, screen.height - standY - 2));
+    room.rect(0, standY + standH * 0.6, screen.width, screen.height).fill({ color: 0x142233, alpha: 0.9 });
+    room.ellipse(rx + width / 2, standY + 2, width * 0.55, 10).fill({ color: 0x000000, alpha: 0.18 });
+    const sx = Math.max(3, rx - 12);
+    const sw = Math.min(screen.width - 3, rx + width + 12) - sx;
+    room.roundRect(sx, standY - 6, sw, standH + 4, 8).fill(0xa8713f).stroke({ color: INK, width: 3 });
+    room.rect(sx + 4, standY - 2, sw - 8, Math.min(10, standH * 0.3)).fill(0xc58a52);
+    if (standH > 36) {
+      const doorW = (sw - 16) / 2 - 4;
+      for (const dx of [0, doorW + 8]) {
+        const doorX = sx + 8 + dx;
+        room.roundRect(doorX, standY + 12, doorW, standH - 20, 5).fill(0x96633a).stroke({ color: INK, width: 2 });
+        room.circle(dx === 0 ? doorX + doorW - 10 : doorX + 10, standY + standH / 2, 3).fill(0xffd27a).stroke({ color: INK, width: 1.5 });
+      }
+    } else {
+      for (let i = 1; i < 4; i++) room.moveTo(rx, standY + (standH * i) / 4).lineTo(rx + width, standY + (standH * i) / 4 + 1).stroke({ color: 0x7c5030, width: 1, alpha: 0.6 });
+    }
 
-    // 缸框：粗黑外框＋上緣
+    // 缸框：粗外框＋玻璃反光
     const frame = this.frame.clear();
-    frame.roundRect(rx, ry, width, height, radius).stroke({ color: INK, width: 4 });
-    frame.rect(rx + radius, ry - 1, width - radius * 2, 5).fill({ color: 0xffffff, alpha: 0.25 });
+    frame.roundRect(rx, ry, width, height, radius).stroke({ color: INK, width: 4.5 });
+    frame.roundRect(rx + 3, ry + 3, width - 6, height - 6, Math.max(2, radius - 3)).stroke({ color: 0xffffff, width: 1.5, alpha: 0.25 });
+    const glass = (x0: number, w: number, a: number) =>
+      frame.poly([rx + x0, ry + height * 0.1, rx + x0 + w, ry + height * 0.1, rx + x0 + w - height * 0.25, ry + height * 0.82, rx + x0 - height * 0.25, ry + height * 0.82]).fill({ color: 0xffffff, alpha: a });
+    glass(width * 0.1, 18 * sc, 0.07);
+    glass(width * 0.1 + 26 * sc, 6 * sc, 0.06);
 
-    // 卡通風格：明亮的藍色水、米色底砂、粗黑輪廓。
+    // 水：明亮的藍色漸層；遠景有幾層較深的丘陵增加深度
     const water = new FillGradient({
       type: 'linear',
       start: { x: 0, y: 0 },
       end: { x: 0, y: 1 },
       colorStops: [
-        { offset: 0, color: 0x6fd0f0 },
-        { offset: 1, color: 0x2a8cc4 },
+        { offset: 0, color: 0x74d6f4 },
+        { offset: 0.6, color: 0x3aa3d6 },
+        { offset: 1, color: 0x2580ba },
       ],
     });
     const bg = this.background.clear();
-    bg.rect(0, 0, width, surface).fill(0xd6f1fa);
-    bg.rect(0, surface, width, height - surface).fill(water);
-    bg.moveTo(0, surface).lineTo(width, surface).stroke({ color: 0xffffff, width: 2, alpha: 0.7 });
-    // 微微起伏的沙面
+    bg.rect(0, 0, width, height).fill(water);
+    const hill = (base: number, amp: number, freq: number, phase: number, color: number, alpha: number) => {
+      const pts: number[] = [0, height];
+      for (let i = 0; i <= 24; i++) {
+        const x = (i / 24) * width;
+        pts.push(x, base - amp * (0.6 + 0.4 * Math.sin(i * freq + phase)) * sc);
+      }
+      pts.push(width, height);
+      bg.poly(pts).fill({ color, alpha });
+    };
+    hill(bottom - 6 * sc, 46, 0.55, 1.2, 0x2a7fb4, 0.45);
+    hill(bottom - 2 * sc, 26, 0.9, 2.5, 0x22719f, 0.5);
+    // 背景裝飾長草（深綠，不能點），集中在兩側
+    const grass = [0.03, 0.06, 0.95, 0.975, 0.4, 0.58];
+    grass.forEach((fx, i) => {
+      const h = (bottom - surface) * (0.32 + ((i * 37) % 23) / 100);
+      drawBackdropGrass(bg, width * fx, bottom + 4 * sc, h, sc, i % 2 ? 0x2f9a52 : 0x3bb35d);
+    });
+
+    // 微微起伏的沙面，前景有一條較深的沙帶
     const sand: number[] = [0, height];
     const steps = Math.max(8, Math.round(width / 40));
-    for (let i = 0; i <= steps; i++) {
-      const x = (i / steps) * width;
-      sand.push(x, bottom + Math.sin(i * 1.3) * 3 * this.scale + Math.sin(i * 0.37) * 4 * this.scale);
-    }
+    const sandY = (i: number) => bottom + Math.sin(i * 1.3) * 3 * sc + Math.sin(i * 0.37) * 4 * sc;
+    for (let i = 0; i <= steps; i++) sand.push((i / steps) * width, sandY(i));
     sand.push(width, height);
-    bg.poly(sand).fill(0xe9cc8e).stroke({ color: INK, width: 2.5 });
-    for (let i = 0; i < width / 6; i++) {
+    bg.poly(sand).fill(0xf0d394).stroke({ color: INK, width: 2.5, join: 'round' });
+    const front: number[] = [0, height];
+    for (let i = 0; i <= steps; i++) front.push((i / steps) * width, height - (height - bottom) * (0.42 + 0.08 * Math.sin(i * 0.9)));
+    front.push(width, height);
+    bg.poly(front).fill(0xdfba72);
+    for (let i = 0; i < width / 5; i++) {
       const x = (i * 97) % width;
       const y = bottom + 8 + ((i * 53) % Math.max(1, height - bottom - 10));
-      bg.circle(x, y, 0.8 + (i % 3) * 0.5).fill({ color: i % 2 ? 0xc9a86a : 0xf5dfae, alpha: 0.9 });
+      bg.circle(x, y, 0.8 + (i % 3) * 0.5).fill({ color: i % 2 ? 0xc29a58 : 0xfbe7bb, alpha: 0.9 });
     }
-    // 幾顆卡通石頭
+    // 幾顆彩色小卵石
+    const pebbleColors = [0xf28b82, 0x8ab4f8, 0xfdd663, 0xffffff];
+    for (let i = 0; i < Math.round(width / 70); i++) {
+      const x = ((i * 0.618 + 0.05) % 1) * width;
+      const y = bottom + (height - bottom) * (0.35 + ((i * 0.37) % 1) * 0.5);
+      bg.ellipse(x, y, 3 * sc, 2 * sc).fill(pebbleColors[i % pebbleColors.length]).stroke({ color: INK, width: 1 });
+    }
+    // 卡通石頭：下緣硬邊陰影＋上緣亮面
     for (const [fx, r] of [[0.12, 14], [0.68, 10], [0.9, 17]] as const) {
-      bg.ellipse(width * fx, bottom + 4 * this.scale, r * this.scale * 1.4, r * this.scale * 0.75).fill(0xa4a9ad).stroke({ color: INK, width: 2 });
-      bg.ellipse(width * fx - r * 0.4 * this.scale, bottom, r * 0.45 * this.scale, r * 0.2 * this.scale).fill({ color: 0xffffff, alpha: 0.35 });
+      const cx = width * fx;
+      const cy = bottom + 4 * sc;
+      bg.ellipse(cx, cy, r * sc * 1.4, r * sc * 0.75).fill(0xa9b1b8);
+      bellyShade(bg, cx, cy, r * sc * 1.4, r * sc * 0.75, 0x7f8790, 0.45);
+      bg.ellipse(cx - r * 0.45 * sc, cy - r * 0.35 * sc, r * 0.5 * sc, r * 0.18 * sc).fill({ color: 0xffffff, alpha: 0.45 });
+      bg.ellipse(cx, cy, r * sc * 1.4, r * sc * 0.75).stroke({ color: INK, width: 2 });
     }
     // 重新排列水草（位置依畫面寬度）
     for (const view of this.plants.values()) view.drawnBiomass = -1;
@@ -177,8 +261,57 @@ export class TankView {
     this.syncFish(state, dt);
     this.syncPlants(state, dt);
     this.drawGear(state);
+    this.drawAmbient(state);
+    this.drawHood(state);
     this.updateBubbles(state, dt);
     this.drawOverlay(state);
+  }
+
+  /** 光束、沙上的波光與水面波紋（只是畫面效果）。 */
+  private drawAmbient(state: TankState): void {
+    const { width, height, surface, bottom } = this.bounds;
+    const s = this.scale;
+    const t = performance.now() / 1000;
+    const g = this.ambient.clear();
+    const lit = isLightOn(state);
+    if (lit) {
+      for (let i = 0; i < 5; i++) {
+        const x0 = width * (0.12 + i * 0.2) + Math.sin(t * 0.25 + i * 1.7) * 24 * s;
+        const w = (10 + (i % 3) * 8) * s;
+        const alpha = 0.05 + 0.03 * Math.sin(t * 0.6 + i);
+        g.poly([x0 - w, surface, x0 + w, surface, x0 + w * 2.6 + 30 * s, bottom, x0 - w * 1.2 + 30 * s, bottom]).fill({ color: 0xffffff, alpha });
+      }
+      for (let i = 0; i < Math.round(width / 50); i++) {
+        const x = ((i * 0.618) % 1) * width + Math.sin(t * 0.7 + i) * 10 * s;
+        const y = bottom + 6 * s + ((i * 0.37) % 1) * (height - bottom) * 0.35;
+        g.ellipse(x, y, (7 + (i % 3) * 3) * s * (0.8 + 0.2 * Math.sin(t * 1.3 + i)), 1.6 * s).fill({ color: 0xfff6d5, alpha: 0.35 });
+      }
+    }
+    // 水面：上方是空氣，波紋緩緩起伏
+    const pts: number[] = [0, 0];
+    const steps = Math.max(12, Math.round(width / 24));
+    for (let i = 0; i <= steps; i++) {
+      const x = (i / steps) * width;
+      pts.push(x, surface + Math.sin(x * 0.035 + t * 1.6) * 1.4 * s + Math.sin(x * 0.011 - t * 0.7) * 1.2 * s);
+    }
+    pts.push(width, 0);
+    g.poly(pts).fill(0xd9f3fb);
+    const line = pts.slice(2, -2);
+    g.poly(line, false).stroke({ color: 0xffffff, width: 2.5, alpha: 0.9 });
+  }
+
+  /** 缸頂燈罩：開燈時下緣是暖白色的燈條。 */
+  private drawHood(state: TankState): void {
+    const lit = isLightOn(state);
+    if (lit === this.hoodLit) return;
+    this.hoodLit = lit;
+    const { x, y, width, height } = this.rect;
+    const h = Math.max(8, height * 0.045);
+    const g = this.hood.clear();
+    g.roundRect(x + 6, y - h * 0.35, width - 12, h, h / 2).fill(0x3a4a5a).stroke({ color: INK, width: 3 });
+    g.roundRect(x + 14, y + h * 0.3, width - 28, h * 0.3, h * 0.15).fill(lit ? 0xfff2b0 : 0x5a6a78);
+    if (lit) g.roundRect(x + 14, y + h * 0.3, width - 28, h * 0.9, h * 0.3).fill({ color: 0xfff2b0, alpha: 0.18 });
+    g.circle(x + width - 24, y + h * 0.15, h * 0.18).fill(lit ? 0x7dff9a : 0x2a3540);
   }
 
   private syncFood(state: TankState, dt: number): void {
