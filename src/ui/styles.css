@@ -295,3 +295,11 @@ button.caps { background: none; border: 0; padding: 0; margin: 0; color: inherit
 .crash-msg { max-height: 120px; overflow: auto; font-size: 11px; color: var(--muted); background: rgba(0, 0, 0, 0.3); padding: 8px; border-radius: 8px; white-space: pre-wrap; margin: 0 0 12px; }
 .crash-card .row { display: flex; gap: 8px; flex-wrap: wrap; }
 details.dev summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+
+/* 錢包 */
+.coins { display: inline-flex; align-items: center; gap: 6px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(243, 234, 216, 0.18); border-radius: 999px; padding: 6px 12px 6px 8px; color: var(--text); font-size: 15px; font-variant-numeric: tabular-nums; min-height: 36px; flex: 0 0 auto; }
+.coins b { font-weight: 700; letter-spacing: 0.02em; }
+.coins .coin { width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff1b8, var(--gold) 55%, #9c7a2c); box-shadow: inset 0 0 0 1.5px rgba(120, 88, 30, 0.6); }
+.coins.debt b { color: var(--bad, #e07a6a); }
+.wallet { color: var(--gold); font-size: 14px; letter-spacing: 0.04em; }
+@media (max-width: 520px) { .coins { font-size: 13px; padding: 4px 9px 4px 6px; min-height: 30px; } .coins .coin { width: 13px; height: 13px; } }
