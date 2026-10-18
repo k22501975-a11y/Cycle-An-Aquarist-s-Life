@@ -1,5 +1,5 @@
 import type { KeyValueStore } from '../game/save';
-import { AIR_PUMPS, CHILLERS, CO2_KITS, FANS, FILTERS, FISH_SPECIES, HEATERS, LIGHTS, observeSymptoms, PLANT_SPECIES, TANKS, type Symptom, type TankState } from '../sim';
+import { AIR_PUMPS, CHILLERS, CO2_KITS, FANS, FILTERS, HARDSCAPE, SUBSTRATES, FISH_SPECIES, HEATERS, LIGHTS, observeSymptoms, PLANT_SPECIES, TANKS, type HardscapeSpec, type SubstrateSpec, type Symptom, type TankState } from '../sim';
 
 /**
  * 圖鑑：魚種、水草、設備隨時可以查；疾病要親眼遇過一次才會解鎖（GAME_DESIGN：第一次遇到才開放）。
@@ -91,6 +91,21 @@ function gearEntries(): CodexEntry[] {
     out.push({ id: `gear:fan_${f.id}`, category: 'gear', name: f.name, facts: [['降溫', `水溫比室溫低約 ${f.coolingC} °C`], ['蒸發', `平常的 ${f.evaporationFactor} 倍`]], text: '台灣夏天最便宜的降溫方法：吹水面讓水蒸發帶走熱。代價是水少得很快，要天天補水，不然水質會越來越濃。' });
   for (const c of Object.values(CHILLERS))
     out.push({ id: `gear:chiller_${c.id}`, category: 'gear', name: c.name, facts: [['製冷', `${c.coolingWatts} W`], ['用法', '設定溫度，高於設定就製冷']], text: '像小冰箱一樣把水降到設定溫度，不受室溫影響，養怕熱的魚蝦最安心。很貴、很耗電，停電時也沒用。' });
+  const SUB_TEXT: Record<string, string> = {
+    sand: '最普通的底砂，不會改變水質，也沒有養分。水草要靠根肥，換底材時最單純。',
+    soil: '燒結的黑土顆粒，會吸收水裡的 KH，讓 pH 維持在弱酸，水草和水晶蝦都愛。新土前兩到四週會漏氨，要先養水；緩衝力大約半年到一年用完，之後 KH 會慢慢回升，要換新土。',
+    coral: '碎珊瑚和貝殼，主要是碳酸鈣，會一直把 KH 和 pH 拉高。非洲慈鯛和海水缸用得到；放在草缸裡 CO₂ 會白打。',
+  };
+  for (const sub of Object.values(SUBSTRATES) as SubstrateSpec[])
+    out.push({ id: `gear:substrate_${sub.id}`, category: 'gear', name: sub.name, facts: [['類型', '底材'], ['對水質', sub.carbonate ? '提高 KH、pH' : sub.khAbsorb ? '吸收 KH、pH 變低' : '不影響']], text: SUB_TEXT[sub.id] ?? '' });
+  const ROCK_TEXT: Record<string, string> = {
+    seiryu: '灰藍色帶白紋的石頭，造景很受歡迎，但含碳酸鈣。開 CO₂ 時溶得更快，pH 會一直降不下去，是現實玩家最常踩的坑。',
+    lava: '多孔的玄武岩，不會改變水質。孔隙讓硝化菌有很多地方住，新缸用它養水會快一點。',
+    slate: '一片一片的矽酸鹽岩，不會改變水質。平滑的石板是很多魚喜歡的產卵平台。',
+    driftwood: '泡過水的樹根或樹枝。會慢慢釋出單寧酸，水變淡茶色、pH 稍微降低。新沉木會浮、會長白毛，都是正常的。',
+  };
+  for (const x of Object.values(HARDSCAPE) as HardscapeSpec[])
+    out.push({ id: `gear:hardscape_${x.id}`, category: 'gear', name: x.name, facts: [['類型', x.kind === 'rock' ? '造景石' : '沉木'], ['白醋測試', x.kind === 'rock' ? (x.fizzes ? '會冒泡（含碳酸鈣）' : '不冒泡') : '—']], text: ROCK_TEXT[x.id] ?? '' });
   out.push({ id: 'gear:quarantine', category: 'gear', name: '檢疫盒', facts: [['設備', '小缸＋海綿過濾＋加熱棒'], ['建議觀察', '新魚 3 天']], text: '新魚、新蝦可能帶著還沒發作的病。先在獨立的小缸觀察幾天，病會在這裡現形；在這裡下藥也不會傷到主缸的硝化菌、水草和蝦。省掉檢疫，就是拿整缸去賭。' });
   out.push({ id: 'gear:controller', category: 'gear', name: '控溫器', facts: [['作用', '水溫超過上限就切斷加熱棒電源']], text: '加熱棒的恆溫器卡住時會一直加熱把魚煮熟。控溫器是第二道保險，用另一支溫度探頭監看，超過就斷電。' });
   return out;

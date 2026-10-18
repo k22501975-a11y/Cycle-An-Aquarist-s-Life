@@ -1,6 +1,7 @@
 import { TICK_GAME_SECONDS } from './clock';
 import { updateFauna } from './processes/fauna';
 import { updateGases } from './processes/gases';
+import { updateHardscape } from './processes/hardscape';
 import { updateNitrogen } from './processes/nitrogen';
 import { updatePlants } from './processes/plants';
 import { updatePopulation } from './processes/population';
@@ -15,6 +16,7 @@ export const TICK_HOURS = TICK_GAME_SECONDS / 3600;
 export function step(state: TankState, dtHours: number = TICK_HOURS): void {
   updateTemperature(state, dtHours);
   updateWaste(state, dtHours);
+  updateHardscape(state, dtHours);
   updateNitrogen(state, dtHours);
   updatePlants(state, dtHours);
   updateGases(state, dtHours);

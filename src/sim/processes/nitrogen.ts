@@ -1,5 +1,6 @@
 import { KH_CONSUMED_PER_MG_TAN, O2_PER_MG_NO2_TO_NO3, O2_PER_MG_TAN_TO_NO2, temperatureFactor } from '../chemistry';
 import { BACTERIA_SEED, isFilterRunning, type TankState } from '../state';
+import { hardscapeBacteriaCapacity } from './hardscape';
 
 /** 半飽和常數（mg/L）：受質濃度在此時細菌以一半速度工作。 */
 const HALF_SATURATION = 0.2;
@@ -13,7 +14,7 @@ const SURFACE_CAPACITY_PER_LITER = 0.005;
 
 /** 細菌族群上限：濾材（過濾器運轉中才算）＋缸內表面。 */
 export function bacteriaCapacity(state: TankState): number {
-  const surface = state.equipment.tank.volumeL * SURFACE_CAPACITY_PER_LITER;
+  const surface = state.equipment.tank.volumeL * SURFACE_CAPACITY_PER_LITER + hardscapeBacteriaCapacity(state);
   const filter = state.equipment.filter;
   return surface + (filter && isFilterRunning(state) ? filter.spec.bacteriaCapacityMgPerHour : 0);
 }
@@ -22,7 +23,7 @@ export function bacteriaCapacity(state: TankState): number {
 export function filterBacteriaShare(state: TankState): number {
   const filter = state.equipment.filter;
   if (!filter) return 0;
-  const surface = state.equipment.tank.volumeL * SURFACE_CAPACITY_PER_LITER;
+  const surface = state.equipment.tank.volumeL * SURFACE_CAPACITY_PER_LITER + hardscapeBacteriaCapacity(state);
   return filter.spec.bacteriaCapacityMgPerHour / (filter.spec.bacteriaCapacityMgPerHour + surface);
 }
 
