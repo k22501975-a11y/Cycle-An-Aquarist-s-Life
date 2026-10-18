@@ -29,7 +29,14 @@ export interface Swimmer {
   wander: number;
   /** 尾巴擺動相位。 */
   phase: number;
+  /** 蝦：抱著飼料原地夾著吃。 */
+  eating?: boolean;
+  /** 蝦：受驚往後彈開還剩幾秒（這段時間不轉身）。 */
+  startle?: number;
 }
+
+/** 蝦受驚彈開的時間（秒）。 */
+export const STARTLE_SECONDS = 0.4;
 
 export interface MotionContext {
   bounds: TankBounds;
@@ -69,6 +76,26 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
 
   const sym = new Set(cond.symptoms);
   let speed = p.speed * scale;
+  s.eating = false;
+
+  // 蝦受驚：尾巴一收往後彈開（頭的方向不變），慢慢停下
+  if (p.crawler && (s.startle ?? 0) > 0) {
+    s.startle = Math.max(0, s.startle! - dt);
+    s.vx *= Math.pow(0.02, dt);
+    s.x = Math.min(bounds.width - 16 * scale, Math.max(16 * scale, s.x + s.vx * dt));
+    s.y = bounds.bottom - 3 * scale;
+    return;
+  }
+  if (p.crawler) {
+    for (const o of all) {
+      if (PROFILES[o.species].crawler) continue;
+      if (Math.abs(o.x - s.x) < 16 * scale && Math.abs(o.y - s.y) < 14 * scale && Math.abs(o.vx) > 10 * scale && rand() < dt * 4) {
+        s.startle = STARTLE_SECONDS;
+        s.vx = -(Math.sign(s.vx) || 1) * speed * 9;
+        return;
+      }
+    }
+  }
   if (sym.has('lethargic')) speed *= 0.45;
   if (sym.has('loss_of_balance')) speed *= 0.15;
 
@@ -106,16 +133,26 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   }
 
   // 餓了就追最近的飼料
-  if (cond.hungry && !sym.has('not_eating') && ctx.food.length > 0) {
-    let best = ctx.food[0], bd = Infinity;
-    for (const f of ctx.food) {
+  // 魚只搶水裡的，沉到底沙的留給蝦；蝦只走向沉到下層的
+  const water = bounds.bottom - bounds.surface;
+  const reachable = ctx.food.filter((f) => (p.crawler ? f.y > bounds.bottom - water * 0.4 : f.y < bounds.bottom - 6 * scale));
+  if (cond.hungry && !sym.has('not_eating') && reachable.length > 0) {
+    let best = reachable[0], bd = Infinity;
+    for (const f of reachable) {
       const d = (f.x - s.x) ** 2 + (f.y - s.y) ** 2;
       if (d < bd) { bd = d; best = f; }
     }
     const d = Math.sqrt(bd) + 1;
-    ax += ((best.x - s.x) / d) * 2.5;
-    if (!p.crawler) ay += ((best.y - s.y) / d) * 2.5;
-    speed *= 1.6;
+    if (p.crawler && Math.abs(best.x - s.x) < 8 * scale && best.y > bounds.bottom - 8 * scale) {
+      // 走到飼料旁邊：停下來抱著夾
+      s.eating = true;
+      ax = 0;
+      s.vx *= Math.pow(0.05, dt);
+    } else {
+      ax += ((best.x - s.x) / d) * 2.5;
+      if (!p.crawler) ay += ((best.y - s.y) / d) * 2.5;
+      speed *= 1.6;
+    }
   }
 
   // 避開缸壁
