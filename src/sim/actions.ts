@@ -1,6 +1,7 @@
 import { co2Equilibrium, oxygenSaturation } from './chemistry';
 import { filterBacteriaShare } from './processes/nitrogen';
 import { infect, STORE_DISEASE_CHANCE } from './processes/disease';
+import { lookIndex, phenotype, storeGenome } from './genetics';
 import { createFish } from './processes/population';
 import { roomTemperature } from './processes/thermal';
 import { nextRandom } from './random';
@@ -116,6 +117,8 @@ export interface AddFishOptions {
   sex?: 'male' | 'female';
   /** 店家母魚是否已經懷孕／抱卵。不指定時依機率決定。 */
   pregnant?: boolean;
+  /** 孔雀魚品系（GUPPY_STRAINS 的索引）。不指定時隨機。 */
+  strain?: number;
   /** 帶著哪些潛伏的病（柱狀病、鰓吸蟲）。不指定時依店家機率決定。 */
   carries?: DiseaseKind[];
 }
@@ -140,9 +143,17 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
     ageDays: sp.daysToAdult * (1 + 0.6 * nextRandom(state.rng)),
     ich: carries ? { stage: 'incubating', progress: 0 } : { stage: 'none', progress: 0 },
   });
+  if (species === 'guppy') fish.genome = storeGenome(state.rng, fish.sex, options.strain);
+  fish.lineage = fish.id;
+  fish.generation = 0;
+  fish.inbreeding = 0;
   if (fish.sex === 'female' && sp.breeding) {
     const pregnant = options.pregnant ?? nextRandom(state.rng) < (STORE_PREGNANT_CHANCE[species] ?? 0);
-    if (pregnant) fish.pregnancy = 0.05 + 0.85 * nextRandom(state.rng);
+    if (pregnant) {
+      fish.pregnancy = 0.05 + 0.85 * nextRandom(state.rng);
+      // 在店裡跟同品系的公魚配過
+      if (fish.genome) fish.sire = { genome: storeGenome(state.rng, 'male', options.strain ?? lookIndex(phenotype(fish.genome))), lineage: -fish.id, inbreeding: 0 };
+    }
   }
   // 指定不帶白點（carriesIch: false）視為確認過健康的魚，也不帶其他病
   const carried =

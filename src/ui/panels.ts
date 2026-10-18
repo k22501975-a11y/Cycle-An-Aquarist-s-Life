@@ -6,6 +6,9 @@ import {
   addHardscape,
   addPlant,
   buybackRefusal,
+  GUPPY_STRAIN_PRICES,
+  GUPPY_STRAINS,
+  predictOffspring,
   canClaimStarterPack,
   claimStarterPack,
   chargeMeal,
@@ -29,6 +32,9 @@ import {
   doseDewormer,
   doseQuarantine,
   hasVisible,
+  isJuvenile,
+  phenotype,
+  strainName,
   QUARANTINE_DAYS,
   quarantineDays,
   releaseQuarantine,
@@ -205,6 +211,35 @@ export function trimListPanel(ctx: PanelContext): Node {
   );
 }
 
+/** 孔雀魚的品系、尾鰭分數、代數與近親程度（玩家看得到的外觀與紀錄，看不到隱性基因）。 */
+function geneticsInfo(fish: Fish): Node {
+  const g = fish.genome!;
+  const p = phenotype(g);
+  const rows: [string, string][] = [];
+  // 仔魚和母魚的品系特徵不明顯，只有成年公魚看得出完整品系
+  if (fish.sex === 'male' && !isJuvenile(fish)) rows.push(['品系', strainName(p)]);
+  else rows.push(['看得出的特徵', [p.albino ? '紅眼（白子）' : '', p.gold ? '金色身體' : '', p.tuxedo ? '後半身深色（禮服）' : ''].filter(Boolean).join('、') || '還看不出來']);
+  if (!isJuvenile(fish)) rows.push(['尾鰭', `${g.tail} 分`]);
+  rows.push(['來源', fish.generation ? `自家繁殖第 ${fish.generation} 代` : '水族店']);
+  const inbred = fish.inbreeding ?? 0;
+  if (inbred >= 0.2) rows.push(['血緣', inbred >= 0.45 ? '近親繁殖太多代，體質和尾鰭在退化' : '有點近親，記得引進新血']);
+  const table = h('table.readings', {}, ...rows.map(([k, v]) => h('tr', {}, h('td', {}, k), h('td.value', {}, v))));
+  if (fish.sex !== 'female' || !fish.sire || isJuvenile(fish)) return table;
+  // 母魚會儲存精子：下一胎的爸爸已經決定了，可以預測子代
+  const dad = phenotype(fish.sire.genome);
+  const pred = predictOffspring(g, fish.sire.genome);
+  const list = (items: [string, number][]) => items.slice(0, 4).map(([k, v]) => `${k} ${v}%`).join('、');
+  return h(
+    'div.stack',
+    {},
+    table,
+    h('h3', {}, '下一胎預測'),
+    h('p.hint', {}, `爸爸是${strainName(dad)}（尾鰭 ${fish.sire.genome.tail} 分）。孔雀魚母魚交配一次可以連生好幾胎。`),
+    h('p', {}, `公魚：${list(pred.sons)}`),
+    h('p', {}, `母魚：${list(pred.daughters)}`),
+  );
+}
+
 /** 年齡：未滿兩個月用天，之後用月、年。 */
 export function ageLabel(days: number): string {
   if (days < 60) return `${Math.floor(days)} 天大`;
@@ -234,6 +269,7 @@ export function fishPanel({ game, sheet }: PanelContext, fishId: number): Node {
     'div.stack',
     {},
     h('p', {}, `${fishName(fish)} · 體長約 ${fish.lengthCm.toFixed(1)} cm · ${ageLabel(fish.ageDays)}`),
+    fish.genome ? geneticsInfo(fish) : null,
     symptoms.length
       ? h('ul.symptoms', {}, ...symptoms.map((s) => h('li', {}, SYMPTOM_LABELS[s])))
       : h('p', {}, '游動正常，看起來很健康。'),
@@ -331,14 +367,15 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
   );
   const wallet = h('p.wallet', {}, `錢包：${yuan(coins)}`);
 
-  const buyFish = (species: FishSpeciesId, count: number) => () => {
+  const buyFish = (species: FishSpeciesId, count: number, strain?: number) => () => {
     const quarantined = !!game.state.quarantine;
-    const name = FISH_SPECIES[species].name;
+    const name = strain !== undefined ? `${GUPPY_STRAINS[strain]}孔雀魚` : FISH_SPECIES[species].name;
+    const each = strain !== undefined ? GUPPY_STRAIN_PRICES[strain] : FISH_PRICES[species];
     purchase(
       ctx,
-      FISH_PRICES[species] * count,
+      each * count,
       (st) => {
-        for (let i = 0; i < count; i++) (quarantined ? addFishToQuarantine : addFish)(st, species);
+        for (let i = 0; i < count; i++) (quarantined ? addFishToQuarantine : addFish)(st, species, { strain });
       },
       quarantined ? `買了 ${count} 隻${name}，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天` : `買了 ${count} 隻${name}，剛運到會有點緊迫`,
     );
@@ -368,7 +405,16 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         : h('p.hint', {}, '店裡的魚可能帶著白點蟲或其他病，直接放進主缸可能傳染整缸。商店的「設備」可以買檢疫盒。'),
       h('p.hint', {}, '新缸還沒養好水就放太多魚，會氨中毒。'),
       h('p.hint', {}, '孔雀魚和櫻花蝦會自己繁殖，但成魚會吃仔魚和仔蝦，水草種密一點才躲得掉。斑馬魚會輕微咬孔雀魚公魚的長尾巴。'),
-      ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).map((id) => {
+      h('p.hint', {}, `孔雀魚（${FISH_SPECIES.guppy.temp.min}–${FISH_SPECIES.guppy.temp.max}°C、pH ${FISH_SPECIES.guppy.ph.min}–${FISH_SPECIES.guppy.ph.max}）照品系賣。同品系配對生出來的大多一樣；不同品系混養會生出各種組合，也可能冒出藏在基因裡的白子。`),
+      ...GUPPY_STRAINS.map((strain, i) =>
+        h(
+          'div.item',
+          {},
+          h('div', {}, h('b', {}, `孔雀魚・${strain}`), h('div.hint', {}, `每隻 ${GUPPY_STRAIN_PRICES[i]} 元`)),
+          h('div.row', {}, button('+1', buyFish('guppy', 1, i)), button('+3', buyFish('guppy', 3, i))),
+        ),
+      ),
+      ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).filter((id) => id !== 'guppy').map((id) => {
         const sp = FISH_SPECIES[id];
         const note = [`每隻 ${FISH_PRICES[id]} 元`, `${sp.temp.min}–${sp.temp.max}°C`, `pH ${sp.ph.min}–${sp.ph.max}`, sp.minGroup ? `群游，至少 ${sp.minGroup} 隻` : ''].filter(Boolean).join(' · ');
         return h('div.item', {}, h('div', {}, h('b', {}, sp.name), h('div.hint', {}, note)), h('div.row', {}, button('+1', buyFish(id, 1)), button('+6', buyFish(id, 6))));

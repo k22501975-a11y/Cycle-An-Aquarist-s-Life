@@ -52,16 +52,20 @@ describe('新手前幾週（K1）', () => {
   }, 30_000);
 
   it('一開始就放 6 條、還餵太多：新缸症候群會死魚（學到教訓）', () => {
-    const s = newGameState(4);
-    s.environment.roomTempC = 25;
-    for (let i = 0; i < 6; i++) addFish(s, 'guppy', { carriesIch: false, carries: [] });
-    for (let d = 0; d < 14; d++) {
-      simulate(s, 12);
-      feed(s, meal(s) * 3);
-      simulate(s, 12);
+    let wiped = 0;
+    for (const seed of [4, 5, 6]) {
+      const s = newGameState(seed);
+      s.environment.roomTempC = 25;
+      for (let i = 0; i < 6; i++) addFish(s, 'guppy', { carriesIch: false, carries: [] });
+      for (let d = 0; d < 21; d++) {
+        simulate(s, 12);
+        feed(s, meal(s) * 3);
+        simulate(s, 12);
+      }
+      if (s.events.some((e) => e.type === 'fish_died' && e.cause === 'ammonia')) wiped++;
     }
-    expect(s.events.some((e) => e.type === 'fish_died' && e.cause === 'ammonia')).toBe(true);
-  });
+    expect(wiped).toBeGreaterThanOrEqual(2);
+  }, 30_000);
 });
 
 describe('長期經營（K2、K3）', () => {

@@ -1,5 +1,5 @@
 import { guppyLook } from '../render/strains';
-import { FISH_SPECIES, isJuvenile, PLANT_SPECIES, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
+import { FISH_SPECIES, isJuvenile, phenotype, PLANT_SPECIES, strainName, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
 
 export const SYMPTOM_LABELS: Record<Symptom, string> = {
   hiding: '躲在角落',
@@ -43,7 +43,8 @@ export function fishName(fish: Fish): string {
 
 /** 品系名（目前只有成年的公孔雀魚看得出品系）。 */
 export function fishStrain(fish: Fish): string | null {
-  return fish.species === 'guppy' && fish.sex === 'male' && !isJuvenile(fish) ? guppyLook(fish.id).strain : null;
+  if (fish.species !== 'guppy' || fish.sex !== 'male' || isJuvenile(fish)) return null;
+  return fish.genome ? strainName(phenotype(fish.genome)) : guppyLook(fish.id).strain;
 }
 
 export function describeEvent(state: TankState, e: SimEvent): { text: string; tone: 'bad' | 'warn' | 'info' } | null {
