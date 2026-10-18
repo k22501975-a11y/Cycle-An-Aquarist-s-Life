@@ -40,6 +40,8 @@ export interface LightSpec {
   name: string;
   /** 水草高度處的光照強度（PAR，μmol/m²/s）。 */
   par: number;
+  /** 開燈時讓 40L 缸的水溫比室溫高多少（°C）。燈本身會發熱；舊存檔沒有這個欄位時視為 0。 */
+  heatC?: number;
 }
 
 export interface Co2Spec {
@@ -72,8 +74,8 @@ export const AIR_PUMPS = {
 } satisfies Record<string, AirPumpSpec>;
 
 export const LIGHTS = {
-  basic: { id: 'basic', name: '基本 LED 燈', par: 35 },
-  planted: { id: 'planted', name: '水草燈', par: 120 },
+  basic: { id: 'basic', name: '基本 LED 燈', par: 35, heatC: 0.5 },
+  planted: { id: 'planted', name: '水草燈', par: 120, heatC: 1.2 },
 } satisfies Record<string, LightSpec>;
 
 export const CO2_KITS = {

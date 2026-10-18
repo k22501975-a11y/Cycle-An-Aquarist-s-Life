@@ -1,5 +1,5 @@
 import { chance, nextRandom } from '../random';
-import { hourOfDay, recordEvent, type TankState } from '../state';
+import { hourOfDay, isLightOn, recordEvent, type TankState } from '../state';
 
 /** 加熱棒每小時故障機率（約一年壞一次）。 */
 const HEATER_FAILURE_PER_HOUR = 1 / (365 * 24);
@@ -21,13 +21,20 @@ export function breakHeater(state: TankState): void {
   recordEvent(state, { type: heater.stuckOn ? 'heater_stuck' : 'heater_broke' });
 }
 
+/** 燈具發熱：開燈時水溫往「室溫 + 燈熱」靠。小缸水少，被燈烤得比較熱。 */
+export function lightHeatC(state: TankState): number {
+  const light = state.equipment.light;
+  if (!light || !isLightOn(state)) return 0;
+  return (light.spec.heatC ?? 0) * Math.cbrt(40 / state.equipment.tank.volumeL);
+}
+
 export function updateTemperature(state: TankState, dt: number): void {
   const { water, equipment } = state;
   const volume = equipment.tank.volumeL;
 
   // 小缸散熱快、水溫變化大。
   const lossRate = 0.08 * Math.cbrt(40 / volume);
-  water.tempC += (roomTemperature(state) - water.tempC) * (1 - Math.exp(-lossRate * dt));
+  water.tempC += (roomTemperature(state) + lightHeatC(state) - water.tempC) * (1 - Math.exp(-lossRate * dt));
 
   const heater = equipment.heater;
   const powered = !state.environment.powerOut;
