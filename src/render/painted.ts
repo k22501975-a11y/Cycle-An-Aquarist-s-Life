@@ -81,6 +81,7 @@ export const SCENERY: Record<string, string> = {
   'wood-2': 'scape/wood-spider-2.webp',
   'wood-3': 'scape/wood-spider-3.webp',
   'plant-rotala': 'scape/plant-rotala.webp',
+  'plant-anubias': 'scape/plant-anubias.webp',
 };
 
 const textures = new Map<string, Texture>();

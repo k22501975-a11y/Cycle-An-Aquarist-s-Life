@@ -64,6 +64,10 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .tool .disc { position: relative; display: grid; place-items: center; width: 56px; height: 56px; padding: 13px; border-radius: 50%; background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--c) 45%, #0d2f3b), #0a2430 72%); border: 1px solid var(--line); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 4px 14px rgba(0, 0, 0, 0.35); transition: transform 0.08s, box-shadow 0.2s; }
 .tool .disc::after { content: ''; position: absolute; inset: 3px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--c) 55%, transparent); }
 .tool .ico { display: block; width: 100%; height: 100%; }
+.tool .disc.has-art { overflow: hidden; }
+.tool .disc.has-art .ico { visibility: hidden; }
+.tool .disc .art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scale(1.32); pointer-events: none; }
+.tool .disc.has-art::after { z-index: 1; }
 .tool .lbl { color: var(--text); font-size: 13px; letter-spacing: 0.12em; white-space: nowrap; }
 .tool:hover .disc { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 18px color-mix(in srgb, var(--c) 60%, transparent); }
 .tool:active .disc { transform: scale(0.93); }
