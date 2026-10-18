@@ -9,6 +9,7 @@ import { addFood, DEFAULT_FOOD, type FoodGrade, type FoodKind } from './food';
 import { nextRandom } from './random';
 import { FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 import type { FilterSpec, HardscapeSpec, SubstrateSpec } from './equipment';
+import { onHardscapeAdded, onHardscapeRemoved } from './aquascape';
 import { testWater, type TestKitReading } from './readings';
 import { recordEvent, TEST_LOG_MAX, type DiseaseKind, type Fish, type Plant, type TankState } from './state';
 
@@ -262,11 +263,15 @@ export function replaceSubstrate(state: TankState, spec: SubstrateSpec): void {
 /** 放一組造景石或沉木。 */
 export function addHardscape(state: TankState, spec: HardscapeSpec): void {
   (state.equipment.hardscape ??= []).push(spec);
+  onHardscapeAdded(state);
 }
 
 /** 拿出一組造景石或沉木（同種的拿最後放的那組）。 */
 export function removeHardscape(state: TankState, id: string): void {
   const list = state.equipment.hardscape ?? [];
   const i = list.map((x) => x.id).lastIndexOf(id);
-  if (i >= 0) list.splice(i, 1);
+  if (i < 0) return;
+  const before = [...list];
+  list.splice(i, 1);
+  onHardscapeRemoved(state, i, before);
 }

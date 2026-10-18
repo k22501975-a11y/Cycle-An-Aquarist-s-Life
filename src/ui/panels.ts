@@ -153,6 +153,8 @@ export interface PanelContext {
   sound?: (id: SoundId) => void;
   /** 做一件可能後悔的事，通知上附「復原」按鈕。 */
   undoable?: (run: () => void, text: string, tone?: 'warn' | 'info') => void;
+  /** 進入造景模式（拖曳擺放石頭、沉木、水草）。 */
+  openScape?: () => void;
 }
 
 /** 沒有復原機制時（例如測試）就直接做並顯示通知。 */
@@ -824,6 +826,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       ),
       h('h3', {}, '造景石與沉木'),
       h('p.hint', {}, '有些石頭會慢慢讓水變硬、pH 變高。不確定的話先滴白醋：冒泡就是含碳酸鈣。拿出來的石頭會放回倉庫，不退錢。'),
+      ctx.openScape && ((eq.hardscape ?? []).length > 0 || game.state.plants.length > 0) ? button('進入造景模式：拖曳擺放', () => ctx.openScape!()) : null,
       ...Object.values(HARDSCAPE).map((x) => {
         const count = (eq.hardscape ?? []).filter((y) => y.id === x.id).length;
         const key = `hardscape:${x.id}`;
@@ -979,7 +982,7 @@ export function quarantinePanel(ctx: PanelContext): Node {
   );
 }
 
-export function maintenancePanel({ game, sheet, toasts, undoable }: PanelContext): Node {
+export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: PanelContext): Node {
   const s = game.state;
   const eq = s.equipment;
   const toggle = (label: string, on: boolean, flip: (st: TankState) => void) =>
@@ -1038,8 +1041,13 @@ export function maintenancePanel({ game, sheet, toasts, undoable }: PanelContext
         eq.substrate?.spec.khAbsorb
           ? h(eq.substrate.buffer < 0.15 ? 'div.warn-text' : 'div.hint', {}, `緩衝力剩約 ${Math.round(eq.substrate.buffer * 100)}%${eq.substrate.buffer < 0.15 ? '，KH 會慢慢回升，該換新土了' : ''}`)
           : null,
-        (eq.hardscape ?? []).length > 0 ? h('div.hint', {}, `造景：${summarizeHardscape(eq.hardscape ?? [])}`) : null,
       ),
+    ),
+    h(
+      'div.item',
+      {},
+      h('div', {}, h('b', {}, '造景'), h('div.hint', {}, (eq.hardscape ?? []).length > 0 ? summarizeHardscape(eq.hardscape ?? []) : '還沒放石頭或沉木（商店的「設備」可以買）')),
+      openScape ? button('擺放', () => openScape()) : null,
     ),
     h('h3', {}, '設備'),
     eq.heater
