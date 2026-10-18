@@ -1,8 +1,11 @@
 import { Application } from 'pixi.js';
+import { AudioEngine } from './audio/engine';
+import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
+import { eventSound } from './audio/sounds';
 import { Game, newGameState, SPEED_OPTIONS } from './game/game';
 import { browserStore, catchUp, clearSave, readSave, writeSave } from './game/save';
 import { TankView } from './render/tank-view';
-import { FISH_SPECIES, removeDeadFish, tankSize, useTestKit } from './sim';
+import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, useTestKit } from './sim';
 import { h } from './ui/dom';
 import { ICONS } from './ui/icons';
 import { describeEvent, fishName, fishStrain } from './ui/labels';
@@ -26,6 +29,9 @@ import './ui/styles.css';
 const WIDE = window.matchMedia('(min-width: 1000px) and (min-height: 560px)');
 
 /** 內容沒變就不重建（定時刷新時重建按鈕，會吃掉正在按的點擊）。 */
+/** 多久沒操作就降低畫面更新率（毫秒）。 */
+const IDLE_MS = 20_000;
+
 function memo(): (key: string) => boolean {
   let last = '';
   return (key) => {
@@ -61,7 +67,23 @@ async function start(): Promise<void> {
   (window as unknown as { cycle: unknown }).cycle = debugHandle;
   const sheet = new Sheet(document.body);
   const toasts = new Toasts(document.body);
-  const ctx: PanelContext = { game, sheet, toasts };
+  // 聲音：瀏覽器要等第一次點擊才能出聲
+  let audioSettings = loadAudioSettings(store);
+  const audio = new AudioEngine(audioSettings);
+  document.addEventListener('pointerdown', () => audio.unlock(), { capture: true });
+  document.addEventListener('keydown', () => audio.unlock(), { capture: true });
+  // 一般按鈕都有輕輕的點擊聲；工具列和選單另外處理
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('button') && !target.closest('.tool')) audio.play('tap');
+  });
+  const updateAudio = (patch: Partial<AudioSettings>) => {
+    audioSettings = { ...audioSettings, ...patch };
+    audio.applySettings(audioSettings);
+    saveAudioSettings(store, audioSettings);
+  };
+  const ctx: PanelContext = { game, sheet, toasts, sound: (id) => audio.play(id) };
+  debugHandle.audio = audio;
 
   // ---- 選取卡：點一條魚，顯示名字、品系、健康與壓力 ----
   const selCard = h('div.card.glass.selcard');
@@ -137,6 +159,36 @@ async function start(): Promise<void> {
     h(
       'div.stack',
       {},
+      h('h3', {}, '聲音'),
+      ...(
+        [
+          ['master', '主音量'],
+          ['music', '音樂'],
+          ['sfx', '音效'],
+          ['ambience', '環境音'],
+        ] as const
+      ).map(([key, label]) =>
+        h(
+          'label.slider-row',
+          {},
+          h('span', {}, label),
+          h('input', {
+            type: 'range',
+            min: '0',
+            max: '100',
+            value: String(Math.round(audioSettings[key] * 100)),
+            'aria-label': label,
+            oninput: (e: Event) => updateAudio({ [key]: Number((e.target as HTMLInputElement).value) / 100 }),
+          }),
+        ),
+      ),
+      h(
+        'label.check-row',
+        {},
+        h('input', { type: 'checkbox', checked: audioSettings.muted, onchange: (e: Event) => updateAudio({ muted: (e.target as HTMLInputElement).checked }) }),
+        h('span', {}, '靜音'),
+      ),
+      h('p.hint', {}, '背景音樂是即時彈奏的指彈吉他，每次都不一樣；晚上關燈後會彈得比較輕。'),
       h('h3', {}, '時間倍率（開發用）'),
       h(
         'div.tabs',
@@ -181,6 +233,7 @@ async function start(): Promise<void> {
   const tools = h('div.tools.glass');
   const tool = (key: keyof typeof ICONS, label: string, color: string, onclick: () => void) => {
     const b = h('button.tool', { onclick }, h('span.disc', {}, icon(ICONS[key])), h('span.lbl', {}, label));
+    b.addEventListener('click', () => audio.play(key === 'net' ? 'net' : key === 'test' ? 'test' : 'open'));
     b.style.setProperty('--c', color);
     tools.append(b);
     return b;
@@ -228,6 +281,7 @@ async function start(): Promise<void> {
   measure();
 
   game.onEvent((e) => {
+    audio.play(eventSound(e.type));
     const msg = describeEvent(game.state, e);
     if (msg) toasts.show(msg.text, msg.tone);
   });
@@ -253,10 +307,13 @@ async function start(): Promise<void> {
   // 切到背景時畫面停止更新；回來時以 ×7 補算這段時間，和關掉網頁一樣。
   let hiddenAt: number | null = null;
   document.addEventListener('visibilitychange', () => {
+    audio.setPaused(document.visibilityState === 'hidden');
     if (document.visibilityState === 'hidden') {
+      app.ticker.stop();
       hiddenAt = Date.now();
       save();
     } else if (hiddenAt !== null) {
+      app.ticker.start();
       const away = catchUp({ version: 1, savedAt: hiddenAt, timeScale: game.clock.timeScale, state: game.state });
       hiddenAt = null;
       away.events.forEach((e) => {
@@ -271,9 +328,33 @@ async function start(): Promise<void> {
   renderTodos();
   renderCaps();
   let refreshTimer = 0;
+  // 一段時間沒操作就降到 30 fps，省電；一碰螢幕馬上恢復
+  let lastInput = performance.now();
+  const wake = () => {
+    lastInput = performance.now();
+    app.ticker.maxFPS = 0;
+  };
+  for (const type of ['pointerdown', 'pointermove', 'wheel', 'keydown']) window.addEventListener(type, wake, { passive: true });
+  // 浮動的選取卡不要擋住選到的魚：魚游到卡片後面時，卡片換到另一邊。
+  let lastFlip = 0;
+  const dodgeSelectedFish = () => {
+    if (WIDE.matches || selected === null || !selCard.classList.contains('open')) return;
+    const pos = view.fishPosition(selected);
+    if (!pos || performance.now() - lastFlip < 1200) return;
+    const stageRect = stage.getBoundingClientRect();
+    const r = selCard.getBoundingClientRect();
+    const pad = 36;
+    const x = pos.x + stageRect.left;
+    const y = pos.y + stageRect.top;
+    if (x > r.left - pad && x < r.right + pad && y > r.top - pad && y < r.bottom + pad) {
+      selCard.classList.toggle('left');
+      lastFlip = performance.now();
+    }
+  };
   app.ticker.add((ticker) => {
     game.advance(ticker.deltaMS);
     view.update(game.state, ticker.deltaMS / 1000);
+    dodgeSelectedFish();
 
     clockValue.textContent = `${clockLabel(game.state.hours)}${game.clock.timeScale === 0 ? '・暫停' : ''}`;
     netBtn.classList.toggle('alert', game.state.fish.some((f) => !f.alive));
@@ -286,6 +367,13 @@ async function start(): Promise<void> {
       renderSelCard();
       renderTodos();
       renderCaps();
+      if (performance.now() - lastInput > IDLE_MS && !sheet.isOpen) app.ticker.maxFPS = 30;
+      const st = game.state;
+      audio.setAmbience({
+        filterOn: isFilterRunning(st),
+        airPumpOn: !!st.equipment.airPump?.on && !st.environment.powerOut,
+        calm: game.clock.timeScale === 0 ? 1 : isLightOn(st) ? 0 : 0.8,
+      });
     }
   });
 }

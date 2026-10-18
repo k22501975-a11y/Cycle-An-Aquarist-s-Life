@@ -164,6 +164,12 @@ export class TankView {
     this.selectedFish = id;
   }
 
+  /** 魚目前在畫面上的位置（CSS 像素），讓介面避開不要擋住牠。 */
+  fishPosition(id: number): { x: number; y: number } | null {
+    const view = this.fish.get(id);
+    return view ? { x: view.holder.x, y: view.holder.y } : null;
+  }
+
   private rand(): number {
     this.seed = (this.seed * 16807) % 2147483647;
     return this.seed / 2147483647;

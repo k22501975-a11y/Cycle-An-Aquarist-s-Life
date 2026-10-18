@@ -102,6 +102,7 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 /* 其他時候：選取卡浮在狀態列下方右側，選了魚才出現 */
 #stage .selcard { position: absolute; z-index: 5; right: calc(env(safe-area-inset-right) + 14px); width: min(240px, 48vw); display: none; }
 #stage .selcard.open { display: block; animation: rise 0.22s ease-out; }
+#stage .selcard.left { right: auto; left: calc(env(safe-area-inset-left) + 14px); }
 @media (max-width: 999px), (max-height: 559px) {
   #stage .selcard { width: min(210px, 46vw); padding: 9px 12px; }
   #stage .selcard .card-title { font-size: 13.5px; }
@@ -199,3 +200,10 @@ ul.symptoms { margin: 0; padding: 10px 12px 10px 30px; line-height: 1.9; backgro
 .toast.warn { border-left-color: var(--warn); }
 .toast.bad { border-left-color: var(--bad); }
 .toast.fade { opacity: 0; transform: translateY(-6px); }
+
+/* 選單：聲音設定 */
+.slider-row { display: flex; align-items: center; gap: 12px; font-size: 14px; }
+.slider-row span { flex: 0 0 4.5em; color: var(--muted); }
+.slider-row input[type='range'] { flex: 1; accent-color: var(--gold); }
+.check-row { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.check-row input { width: 18px; height: 18px; accent-color: var(--gold); }

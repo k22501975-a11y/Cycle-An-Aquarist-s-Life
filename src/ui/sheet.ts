@@ -20,6 +20,10 @@ export class Sheet {
     host.append(this.backdrop, this.panel);
   }
 
+  get isOpen(): boolean {
+    return this.render !== null;
+  }
+
   get isLive(): boolean {
     return this.render !== null && this.live;
   }
