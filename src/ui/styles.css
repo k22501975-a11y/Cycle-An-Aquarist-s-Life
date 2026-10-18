@@ -319,3 +319,12 @@ details.dev summary { cursor: pointer; color: var(--muted); font-size: 13px; mar
 @media (max-width: 520px) { .coins { font-size: 13px; padding: 4px 9px 4px 6px; min-height: 30px; } .coins .coin { width: 13px; height: 13px; } }
 .item.column { flex-direction: column; align-items: stretch; gap: 10px; }
 .item.gift { border-color: var(--gold); background: rgba(227, 189, 109, 0.08); }
+
+/* 參觀好友的缸：藏起自己的工具和水質，上方顯示參觀列 */
+.visiting #dock, .visiting .caps, .visiting .todo-btn, .visiting .selcard, .visiting .tank-label, .visiting .tank-chip { display: none !important; }
+.visit-bar { position: absolute; z-index: 4; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 12px); display: flex; align-items: center; gap: 14px; padding: 10px 12px 10px 18px; border-radius: 18px; max-width: calc(100% - 32px); flex-wrap: wrap; justify-content: center; }
+.visit-title { display: flex; align-items: baseline; gap: 8px; color: var(--text); }
+.visit-title .label { color: var(--gold); font-size: 12px; letter-spacing: 0.12em; }
+.visit-title b { font-size: 16px; }
+.visit-title .likes { color: #f0a0b4; font-size: 14px; font-variant-numeric: tabular-nums; }
+.friend-code { font-size: 22px; letter-spacing: 0.18em; color: var(--gold); font-variant-numeric: tabular-nums; }

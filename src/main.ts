@@ -7,6 +7,7 @@ import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, w
 import { installCrashGuard } from './ui/crash';
 import { CloudClient } from './net/cloud';
 import { autoUpload, checkCloudOnStart, cloudPanel, type CloudPanelDeps } from './ui/cloud-panel';
+import { friendsPanel, giftPanel, type FriendsDeps } from './ui/friends-panel';
 import { canPromptInstall, isInstalled, isIos, promptInstall, setupPwa } from './ui/pwa';
 import { loadPaintedArt } from './render/painted';
 import { defaultQuality, isQuality, type Quality, QUALITY_LABELS, qualitySpec } from './render/quality';
@@ -191,6 +192,71 @@ async function start(): Promise<void> {
     },
   };
   debugHandle.cloud = cloud;
+
+  // ---- 參觀好友的缸：畫面換成朋友的缸（照常游動、會動的模擬），自己的缸在背景繼續跑 ----
+  let visiting: { name: string; state: sim.TankState; likes: number } | null = null;
+  const visitClock = new sim.GameClock(7);
+  const visitBar = h('div.visit-bar.glass');
+  const leaveVisit = () => {
+    visiting = null;
+    document.body.classList.remove('visiting');
+    visitBar.remove();
+    select(null);
+    requestAnimationFrame(() => measure());
+  };
+  const renderVisitBar = () => {
+    if (!visiting) return;
+    const v = visiting;
+    visitBar.replaceChildren(
+      h('div.visit-title', {}, h('span.label', {}, '參觀中'), h('b', {}, `${v.name} 的${v.state.label || v.state.equipment.tank.name}`), h('span.likes', {}, `♥ ${v.likes}`)),
+      h(
+        'div.row',
+        {},
+        h('button.btn', {
+          onclick: async () => {
+            const res = await cloud.like(v.name);
+            if (!res.ok) return toasts.show(res.message, 'warn');
+            v.likes = res.value.likes;
+            renderVisitBar();
+            audio.play('quest');
+            toasts.show(`幫 ${v.name} 的缸按了讚`);
+          },
+        }, '按讚'),
+        h('button.btn', { onclick: () => sheet.open(`送禮給 ${v.name}`, () => giftPanel(friendsDeps, v.name, 20)) }, '送禮'),
+        h('button.btn.primary', { onclick: leaveVisit }, '回家'),
+      ),
+    );
+  };
+  const visit = async (username: string) => {
+    const res = await cloud.visit(username);
+    if (!res.ok) return toasts.show(res.message, 'warn');
+    if (!res.value.save) return toasts.show(`${username} 還沒有把水缸存到雲端`);
+    const parsed = parseSave(JSON.stringify(res.value.save));
+    if (!parsed.ok) return toasts.show('讀不出朋友的水缸，可能要先更新遊戲', 'warn');
+    // 朋友上次存檔之後的時間也照算，看到的是他的缸現在的樣子
+    catchUp(parsed.file);
+    const tanks = [parsed.file.state, ...(parsed.file.tanks ?? [])];
+    const st = tanks[parsed.file.active ?? 0] ?? tanks[0];
+    // 朋友缸裡的 id 和自己的會重複；換到另一段，畫面才不會把朋友的魚當成自己的同一條
+    const VISIT_ID = 1_000_000_000;
+    for (const f of st.fish) f.id += VISIT_ID;
+    for (const p of st.plants) p.id += VISIT_ID;
+    st.nextId += VISIT_ID;
+    visiting = { name: res.value.username, state: st, likes: res.value.likes };
+    sheet.close();
+    select(null);
+    document.body.classList.add('visiting');
+    renderVisitBar();
+    stage.append(visitBar);
+    requestAnimationFrame(() => measure());
+  };
+  const friendsDeps: FriendsDeps = { cloud, game, sheet, toasts, visit: (name) => void visit(name), openCloud: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) };
+  const checkGifts = async () => {
+    if (!cloud.session) return;
+    const res = await cloud.gifts();
+    if (res.ok && res.value.length > 0)
+      toasts.show(`${res.value[0].from}${res.value.length > 1 ? ` 等朋友` : ''}送你禮物`, 'info', { label: '看看', run: () => sheet.open('好友', () => friendsPanel(friendsDeps)) });
+  };
   // 可安裝的 App：有新版時提示重新整理（先存檔）
   setupPwa((apply) => toasts.show('有新版本了', 'info', { label: '更新', run: () => (save(), apply()) }));
   const installSection = () => {
@@ -431,6 +497,7 @@ async function start(): Promise<void> {
       'div.stack',
       {},
       h('button.btn', { onclick: () => sheet.open('我的水缸', () => tanksPanel(ctx)) }, '我的水缸：切換、加一缸'),
+      h('button.btn', { onclick: () => sheet.open('好友', () => friendsPanel(friendsDeps)) }, '好友：參觀、按讚、送禮'),
       h('button.btn', { onclick: () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen)) }, '圖鑑：魚蝦、水草、設備、疾病'),
       h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) }, '水質趨勢與事件紀錄'),
       h('button.btn', { onclick: () => (sheet.close(), guide.restart()) }, '重新看阿德老闆的教學'),
@@ -540,7 +607,8 @@ async function start(): Promise<void> {
   const measure = () => {
     const stageRect = stage.getBoundingClientRect();
     const top = hud.getBoundingClientRect().bottom - stageRect.top;
-    const bottom = stageRect.bottom - tools.getBoundingClientRect().top;
+    // 參觀時底部工具列藏起來，改留參觀列的空間
+    const bottom = visiting ? visitBar.offsetHeight + 24 : stageRect.bottom - tools.getBoundingClientRect().top;
     view.setInsets({ top: Math.round(top), bottom: Math.round(bottom) });
     // 任務小卡在左上角；浮動選取卡排在它下面，下緣留給左下角的缸名標籤。
     guide.pill.style.top = `${Math.round(top + 10)}px`;
@@ -592,7 +660,7 @@ async function start(): Promise<void> {
   if (window.matchMedia('(orientation: portrait)').matches) toasts.show('把手機轉成橫向，水缸會更大');
   setInterval(save, 10_000);
   // 雲端：開遊戲時看看別的裝置有沒有玩過；之後每 10 分鐘和切到背景時自動上傳
-  void checkCloudOnStart(cloudDeps);
+  void checkCloudOnStart(cloudDeps).then(checkGifts);
   setInterval(() => void autoUpload(cloudDeps), 10 * 60_000);
   // 切到背景時畫面停止更新；回來時以 ×7 補算這段時間，和關掉網頁一樣。
   let hiddenAt: number | null = null;
@@ -641,7 +709,11 @@ async function start(): Promise<void> {
   function tick(deltaMS: number) {
     const ticker = { deltaMS };
     game.advance(ticker.deltaMS);
-    view.update(game.state, ticker.deltaMS / 1000);
+    if (visiting) {
+      const n = Math.min(visitClock.advance(ticker.deltaMS), 60);
+      for (let i = 0; i < n; i++) sim.step(visiting.state);
+    }
+    view.update(visiting?.state ?? game.state, ticker.deltaMS / 1000);
 
     clockValue.textContent = `${clockLabel(game.state.hours)}${game.clock.timeScale === 0 ? '・暫停' : ''}`;
     netBtn.classList.toggle('alert', game.state.fish.some((f) => !f.alive));
