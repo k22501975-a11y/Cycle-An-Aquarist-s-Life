@@ -591,6 +591,8 @@ const MESH_Y = 5;
  */
 export class FishRig extends Container {
   readonly art: SpeciesArt;
+  /** 程式繪製版的蝦卵由 TankView 另外畫。 */
+  readonly drawsEggs = false;
   private tailMeshes: MeshPlane[] = [];
   private tailRest: Float32Array | null = null;
   private tailHolder = new Container();
