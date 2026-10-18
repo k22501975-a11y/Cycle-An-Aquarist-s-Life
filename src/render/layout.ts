@@ -6,6 +6,13 @@ export interface TankBounds {
   surface: number;
   /** 底砂表面的 y。 */
   bottom: number;
+  /** 沙面的高低起伏：x 處東西會停在哪個 y（沒有就是平的 bottom）。 */
+  floor?: (x: number) => number;
+}
+
+/** x 處的沙面：飼料、蝦、死魚停在這裡。 */
+export function floorAt(b: TankBounds, x: number): number {
+  return b.floor ? b.floor(x) : b.bottom;
 }
 
 /** 狀態列、下方按鈕列蓋住畫面的高度（它們是半透明的，水缸畫在它們後面）。 */
