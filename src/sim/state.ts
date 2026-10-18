@@ -32,6 +32,32 @@ export interface TankState {
   tempLog?: { hours: number; tempC: number }[];
   /** 最近一次換水的時間（遊戲小時）。 */
   lastWaterChangeHours?: number;
+  /** 檢疫盒：買了才有。 */
+  quarantine?: Quarantine | null;
+}
+
+/**
+ * 檢疫盒：獨立的小缸（小缸＋海綿過濾＋加熱棒），不和主缸共用水。
+ * 新魚先放這裡觀察，潛伏的病會在這裡發作，下藥也不會傷到主缸的硝化菌、水草和蝦。
+ * 照顧簡化：每天自動餵、固定 26°C、不追蹤水質。
+ */
+export interface Quarantine {
+  fish: Fish[];
+  /** 每條魚放進來的時間（遊戲小時），以魚的 id 為鍵。 */
+  since: Record<number, number>;
+  antibiotic: number;
+  dewormer: number;
+  ichMedication: number;
+}
+
+export type DiseaseKind = 'columnaris' | 'flukes';
+
+export interface Infection {
+  kind: DiseaseKind;
+  /** 潛伏（看不出來）或發病。 */
+  stage: 'latent' | 'visible';
+  /** 潛伏進度 0–1；發病後固定為 1，用藥會往下降，降到 0 就治好。 */
+  progress: number;
 }
 
 export interface Environment {
@@ -98,6 +124,10 @@ export interface Water {
   ichCysts: number;
   /** 白點藥濃度，1 = 一份標準劑量。 */
   medication: number;
+  /** 抗生素（治柱狀病，也會傷到硝化菌）。 */
+  antibiotic?: number;
+  /** 驅蟲藥（治鰓吸蟲，對蝦安全）。 */
+  dewormer?: number;
   /** 用於偵測水溫、pH 驟變的移動平均（約數小時）。 */
   tempAvgC: number;
   phAvg: number;
@@ -128,6 +158,8 @@ export interface Fish {
   /** 持續處於飢餓狀態的小時數。 */
   starvingHours: number;
   ich: { stage: IchStage; progress: number };
+  /** 白點以外的病（柱狀病、鰓吸蟲）。 */
+  infections?: Infection[];
   /** 個體體質差異（約 0.85–1.15），乘在魚種體質上，讓同一缸的魚不會同時倒下。 */
   constitution: number;
   /** 近期（約一兩天內）各原因造成的健康損失，用來判斷死因與診斷。 */
@@ -158,6 +190,7 @@ export interface Plant {
 export type SimEventType =
   | 'fish_died'
   | 'ich_visible'
+  | 'disease_visible'
   | 'plant_died'
   | 'heater_broke'
   | 'heater_stuck'
@@ -289,7 +322,7 @@ export function isJuvenile(fish: Fish): boolean {
  * 補上舊存檔缺少的欄位（新增欄位時在這裡給預設值），讓存檔版本不用每次都升級。
  */
 export function normalizeState(state: TankState): TankState {
-  for (const fish of state.fish) {
+  for (const fish of [...state.fish, ...(state.quarantine?.fish ?? [])]) {
     const sp = FISH_SPECIES[fish.species];
     fish.sex ??= fish.id % 2 === 0 ? 'female' : 'male';
     fish.lengthCm ??= sp.adultLengthCm;

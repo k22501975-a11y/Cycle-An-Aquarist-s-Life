@@ -91,6 +91,7 @@ function gearEntries(): CodexEntry[] {
     out.push({ id: `gear:fan_${f.id}`, category: 'gear', name: f.name, facts: [['降溫', `水溫比室溫低約 ${f.coolingC} °C`], ['蒸發', `平常的 ${f.evaporationFactor} 倍`]], text: '台灣夏天最便宜的降溫方法：吹水面讓水蒸發帶走熱。代價是水少得很快，要天天補水，不然水質會越來越濃。' });
   for (const c of Object.values(CHILLERS))
     out.push({ id: `gear:chiller_${c.id}`, category: 'gear', name: c.name, facts: [['製冷', `${c.coolingWatts} W`], ['用法', '設定溫度，高於設定就製冷']], text: '像小冰箱一樣把水降到設定溫度，不受室溫影響，養怕熱的魚蝦最安心。很貴、很耗電，停電時也沒用。' });
+  out.push({ id: 'gear:quarantine', category: 'gear', name: '檢疫盒', facts: [['設備', '小缸＋海綿過濾＋加熱棒'], ['建議觀察', '新魚 3 天']], text: '新魚、新蝦可能帶著還沒發作的病。先在獨立的小缸觀察幾天，病會在這裡現形；在這裡下藥也不會傷到主缸的硝化菌、水草和蝦。省掉檢疫，就是拿整缸去賭。' });
   out.push({ id: 'gear:controller', category: 'gear', name: '控溫器', facts: [['作用', '水溫超過上限就切斷加熱棒電源']], text: '加熱棒的恆溫器卡住時會一直加熱把魚煮熟。控溫器是第二道保險，用另一支溫度探頭監看，超過就斷電。' });
   return out;
 }
@@ -143,6 +144,22 @@ const DISEASES: CodexEntry[] = [
     facts: [['原因', '斑馬魚等愛咬的魚數量不足、空間太擠'], ['症狀', '長尾巴破破爛爛']],
     text: '讓群游魚湊到足夠的數量，牠們就會比較少去騷擾別的魚；或把長尾巴的魚分開養。',
     unlock: (s) => anySymptom(s, 'torn_fins') || diedOf(s, 'fin_nip'),
+  },
+  {
+    id: 'disease:columnaris',
+    category: 'disease',
+    name: '柱狀病（爛嘴爛身）',
+    facts: [['原因', '細菌，常跟著新魚進來；水溫高、緊迫時特別兇'], ['症狀', '嘴巴、背上長出白色棉絮狀的斑，鰭爛掉']],
+    text: '發病很快，一兩天就可能死一缸，而且會傳染。馬上下抗生素，同時換水、把水溫降一點。抗生素會殺掉部分硝化菌，治療期間要多測水。新魚先在檢疫盒觀察可以避免。',
+    unlock: (s) => s.events.some((e) => e.type === 'disease_visible' && e.cause === 'columnaris') || diedOf(s, 'columnaris'),
+  },
+  {
+    id: 'disease:flukes',
+    category: 'disease',
+    name: '鰓吸蟲',
+    facts: [['原因', '寄生在鰓上的小蟲，常跟著新魚進來'], ['症狀', '鰓蓋張開、呼吸很快、浮頭']],
+    text: '症狀很像缺氧或氨中毒，容易誤判。先測水：水質正常、打氣也夠，魚還是一直喘，就可能是鰓吸蟲。下驅蟲藥，對蝦和硝化菌都安全。拖久了魚會慢慢衰弱。',
+    unlock: (s) => s.events.some((e) => e.type === 'disease_visible' && e.cause === 'flukes') || diedOf(s, 'flukes'),
   },
   {
     id: 'disease:temperature',

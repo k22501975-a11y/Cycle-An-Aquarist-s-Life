@@ -28,6 +28,8 @@ export interface FishSpecies {
   susceptibleToIch: boolean;
   /** 對藥物（如白點藥）是否敏感（無脊椎動物通常很敏感）。 */
   medicationSensitive: boolean;
+  /** 無脊椎動物（蝦）：不會得魚的細菌病和寄生蟲。 */
+  invertebrate?: boolean;
   /** 剛出生的體長（cm）。 */
   birthLengthCm: number;
   /** 從出生長到成體（約九成體長）的天數。 */
@@ -110,6 +112,7 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     minGroup: 0,
     susceptibleToIch: false,
     medicationSensitive: true,
+    invertebrate: true,
     birthLengthCm: 0.15,
     daysToAdult: 50,
     lifespanDays: 400,
