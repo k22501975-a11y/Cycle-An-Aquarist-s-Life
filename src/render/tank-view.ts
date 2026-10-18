@@ -1,6 +1,7 @@
 import { Application, BlurFilter, Container, FederatedPointerEvent, Graphics, Sprite, Texture, TilingSprite } from 'pixi.js';
 import { FISH_SPECIES, isCo2Injecting, isJuvenile, isLightOn, observeSymptoms, sizeRatio, tankSize, type Fish, type TankState } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
+import { PaintedRig, paintedKey, paintedTexture } from './painted';
 import { spawnSwimmer, updateSwimmer, type Swimmer } from './fish-motion';
 import { pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { canvasTexture, makeCanvas, softDotTexture } from './paint';
@@ -32,7 +33,7 @@ interface FishView {
   /** 放在缸內座標，不縮放（光暈畫在這裡）。 */
   holder: Container;
   /** 魚本體：依大小、景深縮放，面向左右時水平翻轉。 */
-  rig: FishRig;
+  rig: FishRig | PaintedRig;
   rigKey: string;
   glow: Sprite;
   spots: Graphics;
@@ -445,7 +446,7 @@ export class TankView {
     const view: FishView = {
       swimmer,
       holder,
-      rig: null as unknown as FishRig,
+      rig: null as unknown as FishRig | PaintedRig,
       rigKey: '',
       glow,
       spots,
@@ -463,12 +464,16 @@ export class TankView {
   /** 外觀改變（長大、轉成公母、懷孕）時重組圖層。 */
   private applyRig(view: FishView, fish: Fish): void {
     const form = this.formOf(fish);
-    const gravid = form === 'female' && fish.pregnancy > 0.5;
-    const key = `${fish.species}:${form}:${gravid}`;
+    // 魚懷孕後期肚子才看得出來；蝦一抱卵就看得到。
+    const gravid = form === 'female' && fish.pregnancy > (fish.species === 'cherry_shrimp' ? 0 : 0.5);
+    const painted = paintedKey(fish.species, form, fish.id, gravid);
+    const key = `${fish.species}:${form}:${gravid}:${painted ?? ''}`;
     if (key === view.rigKey) return;
     view.rigKey = key;
     view.rig?.destroy({ children: true });
-    view.rig = new FishRig(fish.species, appearance(fish.species, form, fish.id, gravid));
+    const look = appearance(fish.species, form, fish.id, gravid);
+    const tex = paintedTexture(painted);
+    view.rig = tex && painted ? new PaintedRig(painted, tex, look) : new FishRig(fish.species, look);
     view.rig.addChildAt(view.eggs, 0);
     view.rig.addChild(view.spots);
     view.holder.addChild(view.rig);
@@ -541,7 +546,7 @@ export class TankView {
         view.ichDrawn = spotted;
       }
       // 抱卵的母蝦：肚子下面一團黃綠色的卵
-      const berried = fish.alive && fish.species === 'cherry_shrimp' && fish.pregnancy > 0;
+      const berried = fish.alive && fish.species === 'cherry_shrimp' && fish.pregnancy > 0 && !rig.drawsEggs;
       if (berried !== view.eggsDrawn) {
         view.eggs.clear();
         if (berried) {
@@ -648,7 +653,7 @@ export class TankView {
 }
 
 /** 白點病的白點：固定位置的小白點（座標是魚的圖層像素，以魚中心為原點）。 */
-function drawIchSpots(g: Graphics, rig: FishRig, count: number): void {
+function drawIchSpots(g: Graphics, rig: FishRig | PaintedRig, count: number): void {
   g.clear();
   const { bodyEllipse: e, R } = rig.art;
   for (let i = 0; i < count; i++) {
