@@ -68,25 +68,39 @@ export function hardiness(fish: Fish, sp: FishSpecies): number {
   return Math.min(1, sp.hardiness * fish.constitution) * elder;
 }
 
-export function computeStressors(state: TankState, fish: Fish): Stressors {
+/** 整缸共用的數字（擁擠度、各魚種數量）：一步算一次就好，不用每條魚各算一遍（仔魚一多會很慢）。 */
+export interface TankCensus {
+  crowding: number;
+  species: Map<string, number>;
+  /** 游離氨（mg/L）。 */
+  nh3: number;
+}
+
+export function tankCensus(state: TankState): TankCensus {
+  const species = new Map<string, number>();
+  for (const f of state.fish) if (f.alive) species.set(f.species, (species.get(f.species) ?? 0) + 1);
+  return { crowding: crowdingRatio(state), species, nh3: freeAmmonia(state) };
+}
+
+export function computeStressors(state: TankState, fish: Fish, census: TankCensus = tankCensus(state)): Stressors {
   const sp = FISH_SPECIES[fish.species];
   const { water } = state;
   const sensitivity = 1.5 - hardiness(fish, sp);
   const outside = (v: number, r: { min: number; max: number }) => Math.max(0, r.min - v, v - r.max);
-  const sameSpecies = state.fish.filter((f) => f.alive && f.species === fish.species).length;
+  const sameSpecies = census.species.get(fish.species) ?? 0;
 
   return {
     temperature: outside(water.tempC, sp.temp) / 6,
     // 超出存活範圍很危險；在範圍內只看離這尾魚習慣的水多遠（慢慢適應就沒事）
     ph: phBeyondSurvival(state, fish) / 0.4 + habitStress(state, fish),
     // 測試劑讀到 0 的微量不構成壓力。
-    ammonia: (Math.max(0, freeAmmonia(state) - 0.01) / 0.05) * sensitivity,
+    ammonia: (Math.max(0, census.nh3 - 0.01) / 0.05) * sensitivity,
     nitrite: Math.max(0, water.no2 - 0.2) * sensitivity,
     nitrate: Math.max(0, water.no3 - 50) / 100,
     oxygen: Math.max(0, 4 - water.o2) / 2,
     co2: Math.max(0, water.co2 - 30) / 15,
     hunger: Math.max(0, fish.hunger - 0.5),
-    crowding: Math.max(0, crowdingRatio(state) - 1) * 0.8,
+    crowding: Math.max(0, census.crowding - 1) * 0.8,
     group: sp.minGroup > 0 && sameSpecies < sp.minGroup ? 0.1 + (0.3 * (sp.minGroup - sameSpecies)) / sp.minGroup : 0,
     suddenChange:
       Math.max(0, Math.abs(water.tempC - water.tempAvgC) - 1) / 2 + Math.max(0, Math.abs(water.ph - water.phAvg) - 0.3) / 0.5,
@@ -135,6 +149,7 @@ export function updateFauna(state: TankState, dt: number): void {
   const living = state.fish.filter((f) => f.alive);
 
   feed(state, living, dt);
+  const census = tankCensus(state);
 
   for (const fish of living) {
     const sp = FISH_SPECIES[fish.species];
@@ -151,7 +166,7 @@ export function updateFauna(state: TankState, dt: number): void {
     water.co2 += (sp.o2UseMgPerHour * metabolic * 1.375 * tf * dt) / volume;
 
     // 壓力往目標值靠近：上升快、下降慢。
-    const s = computeStressors(state, fish);
+    const s = computeStressors(state, fish, census);
     const target = 1 - Object.values(s).reduce((prod, v) => prod * (1 - Math.min(1, v)), 1);
     const rate = target > fish.stress ? 0.5 : 0.1;
     fish.stress += (target - fish.stress) * (1 - Math.exp(-rate * dt));
