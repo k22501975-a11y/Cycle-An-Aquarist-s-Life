@@ -104,12 +104,21 @@ class MarketTest {
     private static final String SAME_FISH = "\"id\":42,\"species\":\"guppy\",\"sex\":\"male\",\"genome\":{\"tail\":80}";
 
     private static String fish(int price, double health) {
-        return "{\"kind\":\"fish\",\"species\":\"guppy\",\"title\":\"藍蛇王孔雀魚 公\",\"price\":" + price
-                + ",\"item\":{\"id\":42,\"species\":\"guppy\",\"sex\":\"male\",\"health\":" + health + ",\"genome\":{\"tail\":80},\"sire\":null}}";
+        return fish(42, price, health);
     }
 
+    private static String fish(long id, int price, double health) {
+        return "{\"kind\":\"fish\",\"species\":\"guppy\",\"title\":\"藍蛇王孔雀魚 公\",\"price\":" + price
+                + ",\"item\":{\"id\":" + id + ",\"species\":\"guppy\",\"sex\":\"male\",\"health\":" + health + ",\"genome\":{\"tail\":80},\"sire\":null}}";
+    }
+
+    /** 上架一條魚（id 42，出貨時用的 SAME_FISH）。 */
     private long list(Player p, int price) throws Exception {
-        return read(send(post("/api/market/listings"), p, fish(price, 1)).andExpect(status().isCreated())).get("id").asLong();
+        return list(p, 42, price);
+    }
+
+    private long list(Player p, long fishId, int price) throws Exception {
+        return read(send(post("/api/market/listings"), p, fish(fishId, price, 1)).andExpect(status().isCreated())).get("id").asLong();
     }
 
     private JsonNode mine(Player p) throws Exception {
@@ -132,14 +141,14 @@ class MarketTest {
         send(post("/api/market/listings"), p, fish(250, 1)).andExpect(status().isCreated()).andExpect(jsonPath("$.fee").value(3));
         send(post("/api/market/listings"), p, fish(0, 1)).andExpect(status().isBadRequest());
         // 格子用完
-        for (int i = 0; i < 4; i++) list(p, 100);
-        send(post("/api/market/listings"), p, fish(100, 1)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("no_slot"));
+        for (int i = 0; i < 4; i++) list(p, 100 + i, 100);
+        send(post("/api/market/listings"), p, fish(200, 100, 1)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("no_slot"));
         JsonNode m = mine(p);
         assertThat(m.get("listings")).hasSize(5);
         assertThat(m.get("slots").asInt()).isEqualTo(5);
         // 下架後空出格子
         send(delete("/api/market/listings/" + m.get("listings").get(0).get("id").asLong()), p, null).andExpect(status().isNoContent());
-        list(p, 100);
+        list(p, 200, 100);
     }
 
     @Test
@@ -234,10 +243,40 @@ class MarketTest {
         assertThat(refund.get("reason").asText()).isEqualTo("doa");
         assertThat(read(send(post("/api/market/orders/" + order + "/collect"), amy, null)).get("result").asText()).isEqualTo("doa");
 
-        list(amy, 150);
+        list(amy, 43, 150);
         JsonNode seen = read(send(get("/api/market/listings?species=guppy&sort=new"), ben, null)).get(0);
         assertThat(seen.get("seller").get("doaRate").asDouble()).isEqualTo(1.0);
         assertThat(seen.get("seller").get("deals").asInt()).isEqualTo(0);
+    }
+
+    @Test
+    void 同一條魚不能重複上架_下架或訂單取消後可以再上架_出貨後就不行() throws Exception {
+        // #75：以前同一條魚可以上架好幾次、賣好幾次（魚被複製）
+        Player amy = seasoned("amy");
+        Player ben = player("ben");
+        long first = list(amy, 300);
+        send(post("/api/market/listings"), amy, fish(300, 1)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("already_listed"));
+
+        // 下架：魚還在缸裡，可以再上架
+        send(delete("/api/market/listings/" + first), amy, null).andExpect(status().isNoContent());
+        long second = list(amy, 300);
+        // 賣出但賣家取消訂單（魚死了或不見了）：也放回來
+        send(post("/api/market/orders/" + buy(ben, second, "bag") + "/cancel"), amy, null).andExpect(status().isNoContent());
+        long third = list(amy, 300);
+        // 超過期限沒出貨被取消：一樣放回來
+        buy(ben, third, "bag");
+        clock.advance(Duration.ofHours(25));
+        mine(amy);
+        long fourth = list(amy, 300);
+        // 賣出還沒出貨：不能再上架
+        long order = buy(ben, fourth, "bag");
+        send(post("/api/market/listings"), amy, fish(300, 1)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("already_listed"));
+        // 出貨了：魚已經不是賣家的，永遠不能再上架
+        ship(amy, order, 1);
+        clock.advance(Duration.ofDays(7));
+        send(post("/api/market/listings"), amy, fish(300, 1)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("already_listed"));
+        // 別人的 42 號魚不受影響（魚的編號是每個存檔自己的）
+        list(seasoned("cat"), 300);
     }
 
     @Test

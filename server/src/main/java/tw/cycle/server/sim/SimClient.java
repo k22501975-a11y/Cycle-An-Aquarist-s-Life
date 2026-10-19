@@ -13,8 +13,11 @@ public interface SimClient {
     /** 把存檔補算到 now（現實毫秒），回傳新的存檔（savedAt 是 now）。 */
     Advance advance(JsonNode save, long now);
 
-    /** 上傳的存檔跟伺服器上一份比：遊戲時間有沒有跑得比現實快、已經存在的魚身分有沒有被改。 */
-    List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs);
+    /**
+     * 上傳的存檔跟伺服器上一份比：遊戲時間有沒有跑得比現實快、已經存在的魚身分有沒有被改、
+     * 已經在市場出貨的魚（shipped）有沒有又出現。
+     */
+    List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs, List<Long> shipped);
 
     /** 在存檔裡找一條魚；item 是市場用的魚資料。 */
     Inspect inspect(JsonNode save, long fishId);

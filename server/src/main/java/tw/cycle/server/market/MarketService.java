@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.random.RandomGenerator;
 import java.util.regex.Pattern;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,8 @@ import tw.cycle.server.sim.SimClient;
  *
  * <p>伺服器權威模擬（L2，有設定模擬服務時）：上架的魚要在賣家的雲端存檔裡，商品資料用伺服器那份（遊戲端送來的不算）；
  * 之後更新近況、出貨時，魚的身分（品種、性別、基因）都要跟上架時一樣。
+ *
+ * <p>一條魚同時只能有一筆上架或成交（market_fish_claim，#75）：下架或訂單沒出貨就取消時放回來，出貨後就永遠是賣掉的。
  */
 @Service
 public class MarketService {
@@ -94,6 +97,14 @@ public class MarketService {
         db.update("insert into market_listing(seller_id, kind, species, title, item, health, price, fee, status, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)",
                 me, kind, species, title.strip(), data, health(item), price, fee, now(), now());
         long id = db.queryForObject("select max(id) from market_listing where seller_id = ?", Long.class, me);
+        JsonNode fishId = item.get("id");
+        if ("fish".equals(kind) && fishId != null && fishId.canConvertToLong()) {
+            try {
+                db.update("insert into market_fish_claim(seller_id, fish_id, listing_id) values (?, ?, ?)", me, fishId.asLong(), id);
+            } catch (DuplicateKeyException e) {
+                throw new ApiException(HttpStatus.CONFLICT, "already_listed", "這條魚已經在架上或賣出了");
+            }
+        }
         return Map.of("id", id, "fee", fee);
     }
 
@@ -144,6 +155,7 @@ public class MarketService {
     public void cancel(long me, long id) {
         int n = db.update("update market_listing set status = 'cancelled', updated_at = ? where id = ? and seller_id = ? and status = 'open'", now(), id, me);
         if (n == 0) throw new ApiException(HttpStatus.NOT_FOUND, "no_listing", "這件商品已經賣出或下架了");
+        db.update("delete from market_fish_claim where listing_id = ?", id);
     }
 
     // ---- 逛市場、購買 ----
@@ -224,6 +236,7 @@ public class MarketService {
     public void sellerCancel(long me, long id) {
         int n = db.update("update market_order set status = 'cancelled', seller_done = ? where id = ? and seller_id = ? and status = 'paid'", now(), id, me);
         if (n == 0) throw new ApiException(HttpStatus.CONFLICT, "not_paid", "這筆訂單已經出貨或取消了");
+        releaseCancelled();
     }
 
     /**
@@ -304,7 +317,19 @@ public class MarketService {
 
     /** 賣家超過期限沒出貨：取消，款項退給買家。 */
     private void expireUnshipped() {
-        db.update("update market_order set status = 'cancelled' where status = 'paid' and created_at < ?", now().minusHours(MarketRules.SHIP_DEADLINE_HOURS));
+        if (db.update("update market_order set status = 'cancelled' where status = 'paid' and created_at < ?", now().minusHours(MarketRules.SHIP_DEADLINE_HOURS)) > 0)
+            releaseCancelled();
+    }
+
+    /** 訂單沒出貨就取消了：魚還在賣家缸裡，可以再上架。 */
+    private void releaseCancelled() {
+        db.update("delete from market_fish_claim where listing_id in (select listing_id from market_order where status = 'cancelled')");
+    }
+
+    /** 這個帳號已經在市場出貨的魚（存檔裡不該再出現，#75）。 */
+    public List<Long> shippedFish(long me) {
+        return db.queryForList("select c.fish_id from market_fish_claim c join market_order o on o.listing_id = c.listing_id where c.seller_id = ? and o.status = 'shipped' order by c.fish_id",
+                Long.class, me);
     }
 
     private int openListings(long me) {

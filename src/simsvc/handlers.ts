@@ -4,12 +4,13 @@ import { DEFAULT_TIME_SCALE, marketItem, type Fish, type TankState } from '../si
 /**
  * 伺服器權威模擬（L2）：Spring Boot 把存檔丟過來，這裡用跟遊戲同一份模擬程式計算。
  * - advance：離線補算到伺服器的現在時間（玩家改裝置時鐘也沒用）
- * - verify：上傳的存檔跟伺服器上一份比，遊戲時間不能跑得比現實快，已經存在的魚身分（基因、品種、性別）不能被改
+ * - verify：上傳的存檔跟伺服器上一份比，遊戲時間不能跑得比現實快，已經存在的魚身分（基因、品種、性別）不能被改，
+ *   已經在市場出貨的魚不能又出現
  * - inspect：找出存檔裡的某一條魚（市場上架用伺服器這份的資料，不信任遊戲端送來的）
  */
 
 export interface Problem {
-  code: 'time_ahead' | 'identity_changed' | 'gift_removed';
+  code: 'time_ahead' | 'identity_changed' | 'gift_removed' | 'shipped_fish';
   message: string;
 }
 
@@ -60,10 +61,11 @@ export function advance(raw: unknown, now: number): AdvanceResult {
 }
 
 /**
- * 檢查上傳的存檔：previous 是伺服器上一份，elapsedMs 是伺服器收到上一份到現在的現實時間。
+ * 檢查上傳的存檔：previous 是伺服器上一份，elapsedMs 是伺服器收到上一份到現在的現實時間，
+ * shipped 是這個玩家已經在市場出貨的魚（拿出貨前的舊存檔上傳，魚會又回來，#75）。
  * 回傳發現的問題（空的代表沒問題）。
  */
-export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number): Problem[] {
+export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number, shipped: readonly number[] = []): Problem[] {
   const prev = load(previousRaw);
   const next = load(nextRaw);
   const problems: Problem[] = [];
@@ -86,6 +88,11 @@ export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number
     const same = old.species === f.species && old.sex === f.sex && (old.generation ?? 0) === (f.generation ?? 0) && JSON.stringify(old.genome ?? null) === JSON.stringify(f.genome ?? null);
     if (!same) problems.push({ code: 'identity_changed', message: `#${f.id} 這條魚的身分（品種、性別或基因）跟伺服器上的不一樣` });
     if (old.gift && !f.gift) problems.push({ code: 'gift_removed', message: `#${f.id} 是老闆送的魚，不能改成可以賣` });
+  }
+
+  const sold = new Set(shipped);
+  for (const f of allFish(next)) {
+    if (sold.has(f.id)) problems.push({ code: 'shipped_fish', message: `#${f.id} 這條魚已經在市場賣出了，存檔裡不該還有` });
   }
   return problems;
 }

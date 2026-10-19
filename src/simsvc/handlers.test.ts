@@ -59,6 +59,15 @@ describe('模擬小服務（L2）', () => {
     expect(verify(raw, JSON.parse(serializeSave(state, 7, T0)), 0)).toEqual([]);
   });
 
+  it('上傳檢查：已經在市場出貨的魚又出現在存檔裡（拿出貨前的舊存檔上傳），會被擋下', () => {
+    const { state, raw } = saveAt(T0);
+    const sold = state.fish[0];
+    // 出貨後遊戲已經把魚撈走；拿出貨前的存檔來上傳，魚又回來了
+    expect(verify(raw, JSON.parse(serializeSave(state, 7, T0)), 0, [sold.id]).map((p) => p.code)).toEqual(['shipped_fish']);
+    state.fish.splice(0, 1);
+    expect(verify(raw, JSON.parse(serializeSave(state, 7, T0)), 0, [sold.id])).toEqual([]);
+  });
+
   it('查魚：找得到就回傳市場用的資料，找不到回 found=false', () => {
     const { state, raw } = saveAt(T0);
     const fish = state.fish[0];

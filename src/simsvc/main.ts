@@ -51,9 +51,14 @@ function num(body: Record<string, unknown>, key: string): number {
   return v;
 }
 
+/** 魚的編號清單（沒帶就是空的）。 */
+function ids(v: unknown): number[] {
+  return Array.isArray(v) ? v.filter((x): x is number => typeof x === 'number' && Number.isFinite(x)) : [];
+}
+
 const routes: Record<string, (body: Record<string, unknown>) => unknown> = {
   '/advance': (b) => advance(b.save, num(b, 'now')),
-  '/verify': (b) => ({ problems: verify(b.previous, b.next, num(b, 'elapsedMs')) }),
+  '/verify': (b) => ({ problems: verify(b.previous, b.next, num(b, 'elapsedMs'), ids(b.shipped)) }),
   '/inspect': (b) => inspect(b.save, num(b, 'fishId')),
 };
 
