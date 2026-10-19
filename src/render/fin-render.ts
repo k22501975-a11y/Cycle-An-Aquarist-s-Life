@@ -1,4 +1,4 @@
-import { BlurFilter, FillGradient, Graphics, Rectangle, Sprite, type Renderer, type Texture } from 'pixi.js';
+import { BlurFilter, FillGradient, Graphics, Rectangle, Sprite, type GradientOptions, type Renderer, type Texture } from 'pixi.js';
 import { phenotype, type Fish } from '../sim';
 import type { FishRig } from './fish-art';
 import { FIN_COLORS, finShapes, type FinShape, type FinTraits } from './fin-overlay';
@@ -38,6 +38,26 @@ export function finTraitsOf(fish: Fish, painted: string | null): FinLook | null 
 /** 烘好的鰭（每種鰭型、顏色、魚圖大小一張），所有同樣的魚共用（I1 貼圖快取）。 */
 const bakedFins = new Map<string, { tex: Texture; x: number; y: number } | null>();
 
+/** 還沒釋放的漸層（每個漸層各有一張貼圖，烘完或 Graphics 拆掉就要 destroy，不然會一直累積）。 */
+let liveGradients = 0;
+
+export function liveFinGradients(): number {
+  return liveGradients;
+}
+
+function gradient(list: FillGradient[], options: GradientOptions): FillGradient {
+  const f = new FillGradient(options);
+  liveGradients++;
+  list.push(f);
+  return f;
+}
+
+function freeGradients(list: FillGradient[]): void {
+  for (const f of list) f.destroy();
+  liveGradients -= list.length;
+  list.length = 0;
+}
+
 /** 鰭的快取鍵：鰭型、顏色、透明度、身體範圍都一樣，畫出來就一樣。 */
 export function finCacheKey(fins: FinLook, body: { x: number; y: number; rx: number; ry: number }, lengthPx: number, layer: 'back' | 'front'): string {
   const t = fins.traits;
@@ -76,7 +96,8 @@ export function drawFinOverlay(rig: FishRig | PaintedRig, fins: FinLook, rendere
   const back = new Graphics(), front = new Graphics();
   const light = mix(fins.color, 0xffffff, 0.55);
   const deep = mix(fins.color, 0x000000, 0.25);
-  const paint = (g: Graphics, list: FinShape[]) => {
+  const gradients = { back: [] as FillGradient[], front: [] as FillGradient[] };
+  const paint = (g: Graphics, list: FinShape[], made: FillGradient[]) => {
     for (const sh of list) {
       if (sh.soft) {
         // 薄紗鰭：不描邊（邊緣靠模糊柔化），薄膜和鰭條都從根部往尖端漸透
@@ -88,7 +109,7 @@ export function drawFinOverlay(rig: FishRig | PaintedRig, fins: FinLook, rendere
         for (let i = 0; i < n; i += 2) reach = Math.max(reach, Math.hypot(p[i] - rx, p[i + 1] - ry));
         const rgba = (c: number, a: number) => ({ r: (c >> 16) & 255, g: (c >> 8) & 255, b: c & 255, a });
         const base = mix(fins.color, 0xffffff, 0.15);
-        const membrane = new FillGradient({
+        const membrane = gradient(made, {
           type: 'radial',
           center: { x: rx, y: ry },
           innerRadius: 0,
@@ -104,7 +125,7 @@ export function drawFinOverlay(rig: FishRig | PaintedRig, fins: FinLook, rendere
         g.poly(p).fill(membrane);
         // 鰭條也用同一個中心的漸層：根部亮、往尖端漸透，亮暗相間帶一點虹彩
         const rayFill = (c: number) =>
-          new FillGradient({
+          gradient(made, {
             type: 'radial',
             center: { x: rx, y: ry },
             innerRadius: 0,
@@ -130,8 +151,8 @@ export function drawFinOverlay(rig: FishRig | PaintedRig, fins: FinLook, rendere
       }
     }
   };
-  paint(back, shapes.filter((sh) => !sh.front));
-  paint(front, shapes.filter((sh) => sh.front));
+  paint(back, shapes.filter((sh) => !sh.front), gradients.back);
+  paint(front, shapes.filter((sh) => sh.front), gradients.front);
   // 邊緣柔一點，不像剪紙
   const blur = Math.max(0.4, body.ry * 0.015);
   back.filters = [new BlurFilter({ strength: blur, quality: 2 })];
@@ -140,9 +161,14 @@ export function drawFinOverlay(rig: FishRig | PaintedRig, fins: FinLook, rendere
     const pad = Math.ceil(blur * 4 + 2);
     const b = bake(renderer, back, finCacheKey(fins, body, rig.lengthPx, 'back'), pad);
     const f = bake(renderer, front, finCacheKey(fins, body, rig.lengthPx, 'front'), pad);
+    // 已經烘進貼圖了，漸層用不到（#151 審查：沒釋放的話每次烘約漏 2MB）
+    freeGradients(gradients.back);
+    freeGradients(gradients.front);
     if (b) rig.addChildAt(b, 0);
     if (f) rig.addChild(f);
   } else {
+    back.once('destroyed', () => freeGradients(gradients.back));
+    front.once('destroyed', () => freeGradients(gradients.front));
     rig.addChildAt(back, 0);
     rig.addChild(front);
   }
