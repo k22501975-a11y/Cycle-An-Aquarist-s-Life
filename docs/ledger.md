@@ -87,14 +87,14 @@ A 在市場買了東西（雲端 revision +1、ledgerSeq +1），B 還拿著舊�
 
 ### 3.6 同一把鎖
 
-會寫雲端存檔的地方都要拿同一把鎖：`PUT /api/save`、`POST /api/save/advance`、市場的扣款入帳、商城使用道具。
+會寫雲端存檔的地方都要拿同一把鎖：`PUT /api/save`、`POST /api/save/advance`、市場的扣款入帳。（商城使用道具不改存檔，見 §4.2，不用這把鎖。）
 `CloudSaveRepository` 加 `@Lock(PESSIMISTIC_WRITE) findForUpdate(id)`，這幾個地方都改用它讀存檔。
 不然會發生：`advance` 讀了舊的存檔去跑模擬（幾百毫秒），這中間市場扣了款寫回，`advance` 再把舊的錢寫回去，扣款就不見了。
 `advance` 跑模擬時會一直拿著鎖；模擬服務本來就有逾時，同一個帳號的請求本來就不多，可以接受。
 
 ## 4. 商城道具庫存
 
-### 4.1 資料表 `mall_inventory`（V9）
+### 4.1 資料表 `mall_inventory`（V10）
 
 ```sql
 CREATE TABLE mall_inventory (
@@ -116,14 +116,17 @@ CREATE TABLE mall_use (
 );
 ```
 
-用點數買道具時，跟扣點數同一個交易把 `count` 加 1（`point_grant` 照樣留著當購買紀錄）。
-上線時把現有 `pending` 的 `point_grant` 轉進庫存、標成 `claimed`。
+用點數買道具時，跟扣點數同一個交易把 `count` 加 1（`point_grant` 照樣留著當購買紀錄，直接記成 `claimed`）。
+上線時（V10）把現有 `pending` 的 `point_grant` 轉進庫存、標成 `claimed`。原本的 `/api/points/grants` 和領取拿掉。
+`GET /api/points`、`POST /api/points/buy` 的回應都多帶 `bag`（每種道具還有幾個）。
 
 ### 4.2 使用道具
 
-`POST /api/mall/use { item, requestId, baseRevision }`：`requestId` 是遊戲端每次使用產生的 UUID。
-庫存不夠回 422，夠就減 1、寫一筆 `mall_use`（`account_id`、`request_id` 唯一、`item`、`created_at`），回傳剩下的數量。
-同一個 `requestId` 再送一次（網路斷了重送）直接回上次的結果，不會扣兩個。遊戲端拿到成功才套用效果（治魚、擺套缸）。
+`POST /api/points/use { item, requestId }`：`requestId` 是遊戲端每次使用產生的 UUID。
+庫存不夠回 422 `no_item`，夠就減 1、寫一筆 `mall_use`（`account_id`、`request_id` 唯一、`item`、`created_at`），回傳 `{ item, remaining }`。
+同一個 `requestId` 再送一次（網路斷了重送）直接回上次的結果，不會扣兩個；拿同一個編號用別的道具回 409 `request_reused`。
+跟買道具一樣先鎖帳號那一列，同時送兩次也只扣一個。
+不帶 `baseRevision`：用道具只改庫存、不改雲端存檔（效果在遊戲端套用，之後照常上傳），所以不需要存檔版本，也不用 §3.6 的存檔鎖。遊戲端拿到成功才套用效果（治魚、擺套缸）。
 遊戲端的 `economy.mall` 改成只是顯示用的副本，每次打開商城、用道具後照伺服器的數字覆寫；`addMallGrant` 拿掉。
 
 道具效果本身（例如特效藥把症狀消掉）還是遊戲端在跑，沒用道具卻自己把病治好要靠 L2 的模擬比對才抓得到，這不在這份範圍。
@@ -145,7 +148,7 @@ CREATE TABLE mall_use (
 
 1. **這份文件**（架構審查）。
 2. **遊戲幣帳本**：V9 `coin_ledger`、市場三種請求改成伺服器扣款入帳、上傳檢查、遊戲端改套用回傳值。測試：錢不夠不成交、重送收款只入帳一次、舊存檔上傳被擋、兩台裝置強制覆蓋被擋、扣款和成交在同一個交易（成交失敗不扣錢）、`advance` 和扣款同時進來時扣款不會被蓋掉、遊戲端回應晚到時本機的花費不會被加回來。
-3. **商城庫存**：V9 `mall_inventory`、`mall_use`、`/api/mall/use`、遊戲端改顯示伺服器庫存。測試加同一個 `requestId` 重送只扣一個。
+3. **商城庫存**：V10 `mall_inventory`、`mall_use`、`/api/points/use`、遊戲端改顯示伺服器庫存。測試加同一個 `requestId` 重送只扣一個。
 4. 金流另外開 issue。
 
 舊資料：上線前已經成交、遊戲端還沒收款的訂單（`buyer_done`／`seller_done` 是空的），上線後照新流程由伺服器入帳，不會漏也不會重複（之前沒有入帳紀錄，`coin_ledger` 是空的）。

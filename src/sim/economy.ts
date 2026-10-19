@@ -85,7 +85,7 @@ export interface Economy {
   nextTankBlock?: number;
   /** 店家訂單板（M21）；舊存檔沒有，第一次更新時掛上。 */
   orders?: OrderBoard;
-  /** 用儲值點數買的商城道具（背包）；舊存檔沒有。 */
+  /** 用儲值點數買的商城道具（背包）：只是伺服器庫存的副本（docs/ledger.md §4），打開商城、用道具後照伺服器的數字覆寫；舊存檔沒有。 */
   mall?: MallBag;
   /** 已經套用到伺服器帳本的第幾筆（市場的收支，docs/ledger.md）；舊存檔沒有＝0。 */
   ledgerSeq?: number;
@@ -98,8 +98,6 @@ export interface MallBag {
   cure: number;
   /** 熟成套缸幾組（還沒擺出來）。 */
   tankset: number;
-  /** 已經放進背包的伺服器道具編號（同一個不會領兩次）。 */
-  claimed: number[];
 }
 
 /** 保底起步包：整缸死光又沒錢時，水族店老闆送 3 條孔雀魚（GAME_DESIGN 第 14 節）。 */

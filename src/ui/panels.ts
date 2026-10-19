@@ -146,6 +146,7 @@ import {
   type Region,
   type TankState,
   type TestKitReading,
+  type MallItemId,
 } from '../sim';
 import { applySeason, type Game } from '../game/game';
 import { h } from './dom';
@@ -176,6 +177,8 @@ export interface PanelContext {
   fishPic?: (fish: Fish) => string | null;
   /** 拿到錢的演出：金幣從 from 飛進錢包（F8）。 */
   reward?: (from: DOMRect | null, amount: number) => void;
+  /** 用商城道具：先跟伺服器扣一個，成功才 apply；回傳 null 是成功，不然是原因。 */
+  useMall?: (item: MallItemId, apply: () => boolean) => Promise<string | null>;
 }
 
 /** 沒有復原機制時（例如測試）就直接做並顯示通知。 */
@@ -428,7 +431,7 @@ export function ageLabel(days: number): string {
   return `約 ${years < 10 ? (Math.floor(years * 2) / 2).toString() : Math.floor(years)} 歲`;
 }
 
-export function fishPanel({ game, sheet, toasts, fishPic }: PanelContext, fishId: number): Node {
+export function fishPanel({ game, sheet, toasts, fishPic, useMall }: PanelContext, fishId: number): Node {
   const fish = game.state.fish.find((f) => f.id === fishId);
   if (!fish) return h('p', {}, '這條魚已經不在缸裡了。');
   if (!fish.alive) {
@@ -461,20 +464,22 @@ export function fishPanel({ game, sheet, toasts, fishPic }: PanelContext, fishId
     h('p', {}, conditionLine(fish)),
     h('p.hint', {}, '症狀只是線索：先用測試劑檢查水質，再判斷是環境問題還是生病。'),
     game.tanks.length > 1 ? moveFishRow(game, sheet, toasts, fish) : null,
-    cureButton(game, sheet, toasts, fish),
+    cureButton(game, sheet, toasts, fish, useMall),
   );
 }
 
 /** 背包裡有特效藥、這尾魚又用得上時才出現。 */
-function cureButton(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish): Node | null {
+function cureButton(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish, useMall: PanelContext['useMall']): Node | null {
   const left = mallBag(game.tanks).cure;
-  if (left <= 0 || cureRefusal(game.tanks, fish)) return null;
+  if (!useMall || left <= 0 || cureRefusal(game.tanks, fish)) return null;
   return h(
     'div.stack',
     {},
-    button(`用特效藥（背包剩 ${left} 瓶）`, () => {
-      if (!game.actAll((tanks) => useCure(tanks, fish))) return;
-      toasts.show('症狀退了一些。特效藥只治症狀，記得找出生病的原因（水質、病原），不然還會再發');
+    button(`用特效藥（背包剩 ${left} 瓶）`, async () => {
+      // 背包是伺服器庫存的副本：先跟伺服器扣一瓶，成功才治
+      const why = await useMall('cure', () => useCure(game.tanks, fish));
+      if (why) toasts.show(why, 'warn');
+      else toasts.show('症狀退了一些。特效藥只治症狀，記得找出生病的原因（水質、病原），不然還會再發');
       sheet.refresh();
     }),
     h('p.hint', {}, '特效藥只治症狀：水裡的病原和水質問題還在。水質造成的傷，效果只有一半。'),

@@ -140,12 +140,8 @@ export interface PointsCatalog {
   toppedUpThisMonth: number;
   packs: { id: string; twd: number; points: number }[];
   items: { id: string; name: string; note: string; points: number; daily: number; boughtToday: number }[];
-}
-
-export interface PointsGrant {
-  id: number;
-  item: string;
-  createdAt: number;
+  /** 伺服器上的道具庫存（每種還有幾個）。 */
+  bag: Record<string, number>;
 }
 
 export interface PointsEntry {
@@ -315,16 +311,13 @@ export class CloudClient {
     return this.call('POST', '/api/points/topup', JSON.stringify({ pack }));
   }
 
-  pointsBuy(item: string): Promise<CloudResult<{ grant: PointsGrant; balance: number }>> {
+  pointsBuy(item: string): Promise<CloudResult<{ balance: number; bag: Record<string, number> }>> {
     return this.call('POST', '/api/points/buy', JSON.stringify({ item }));
   }
 
-  pointsGrants(): Promise<CloudResult<PointsGrant[]>> {
-    return this.call('GET', '/api/points/grants');
-  }
-
-  pointsClaim(id: number): Promise<CloudResult<void>> {
-    return this.call('POST', `/api/points/grants/${id}/claim`);
+  /** 用掉一個道具；requestId 每次使用產生一個，斷線重送同一個不會扣兩個。 */
+  pointsUse(item: string, requestId: string): Promise<CloudResult<{ item: string; remaining: number }>> {
+    return this.call('POST', '/api/points/use', JSON.stringify({ item, requestId }));
   }
 
   pointsHistory(): Promise<CloudResult<PointsEntry[]>> {
