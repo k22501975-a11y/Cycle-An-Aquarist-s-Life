@@ -1317,7 +1317,8 @@ async function start(): Promise<void> {
       renderCoins();
       renderOrders();
       renderTankChip();
-      guide.update(game.state, game.tanks);
+      // 開缸演出和慶祝卡演完才讓老闆開口（「開缸」任務在演出一開始就完成，不能蓋在演出上，#171）
+      if (!document.body.classList.contains('setting-up') && !celebration.isOpen) guide.update(game.state, game.tanks);
       setupBtn.hidden = !sim.needsSetup(game.tanks[0]) || sheet.isOpen;
       checkDaily();
       celebrateStrains();
