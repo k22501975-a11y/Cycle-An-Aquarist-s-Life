@@ -657,7 +657,7 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .sleep-btn svg { width: 22px; height: 22px; }
 .sleep-btn:hover { border-color: var(--gold); }
 .sleep-btn:active { transform: scale(0.95); }
-@media (max-width: 1100px) { .sleep-btn span { display: none; } .sleep-btn { padding: 4px 8px; } }
+@media (max-width: 1100px) { .sleep-btn .sleep-label { display: none; } .sleep-btn { padding: 4px 8px; } }
 @media (max-width: 520px) { .sleep-btn { min-height: 30px; } .sleep-btn svg { width: 18px; height: 18px; } }
 .night { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px; background: radial-gradient(ellipse at 70% 15%, rgba(60, 70, 140, 0.55), rgba(4, 8, 24, 0.94) 70%); opacity: 0; transition: opacity 0.45s ease, background 1.2s ease; }
 .night.in { opacity: 1; }
@@ -763,3 +763,7 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
   100% { opacity: 0; transform: translate(-50%, 220%); }
 }
 @media (prefers-reduced-motion: reduce) { .bite-tag { animation-duration: 0.01s; animation-fill-mode: none; } }
+
+/* 開缸演出時只留缸（#171）：上方列、任務卡、工具列、缸名先淡出，演完再回來 */
+#hud, #dock, .quest-pill, .tank-label { transition: opacity 0.5s ease; }
+.setting-up #hud, .setting-up #dock, .setting-up .quest-pill, .setting-up .tank-label { opacity: 0; pointer-events: none; }

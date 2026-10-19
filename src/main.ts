@@ -418,8 +418,10 @@ async function start(): Promise<void> {
     onSetupStep: (step) => {
       if (step === 'done') {
         setupSkip.remove();
+        document.body.classList.remove('setting-up');
         moment('first_tank', { art: 'gear/tank-empty.webp', title: '你的第一個缸', sub: '水注滿、設備也裝好了', owner: '先別急著放魚。倒一瓶硝化菌液，讓水先養個幾天。' });
-        guide.start();
+        // 「你的第一個缸」卡片關掉後老闆才開口，不然對話框會從卡片後面露出來（#171）
+        celebration.whenClear(() => guide.start());
         return;
       }
       audio.play(step === 'sand' ? 'feed' : step === 'water' ? 'water' : step === 'gear' ? 'buy' : 'restore');
@@ -433,6 +435,8 @@ async function start(): Promise<void> {
   const setupSkip = h('button.setup-skip', { type: 'button', onclick: () => view.skipSetup() }, '跳過 ›');
   const playSetup = () => {
     view.playSetup();
+    // 演出時只留缸：上方列、任務卡、工具列先藏起來（#171）
+    document.body.classList.add('setting-up');
     stage.append(setupSkip);
   };
   // 第一次打開遊戲：從空缸開始演一次開缸
@@ -512,7 +516,7 @@ async function start(): Promise<void> {
     cloud: () => !!cloud.session,
   });
   // 過一晚（F2）：跳到隔天早上 8 點，醒來看早上報告；雲端模式時間跟著伺服器走，不能跳
-  const sleepBtn = h('button.sleep-btn', { 'aria-label': '過一晚', title: '過一晚：跳到明天早上 8 點，看昨晚發生了什麼', onclick: () => goNight() }, icon(ICONS.moon), h('span', {}, '過一晚'));
+  const sleepBtn = h('button.sleep-btn', { 'aria-label': '過一晚', title: '過一晚：跳到明天早上 8 點，看昨晚發生了什麼', onclick: () => goNight() }, icon(ICONS.moon), h('span.sleep-label', {}, '過一晚'));
   // 商店開在任務要買的那一頁（買水草的任務就直接是水草）
   const openShop = (tab?: ShopTab) => sheet.open('商店', () => shopPanel(ctx, tab ?? guide.shopTab ?? 'fish'));
   const coinsValue = h('b');

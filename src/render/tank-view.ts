@@ -540,43 +540,84 @@ export class TankView {
     const L = setupLook(this.setupT);
     const b = this.bounds;
     const hs = this.hs;
-    const floor = b.bottom;
-    // 底沙：由下往上堆出來
+    const t = this.setupT;
+    const W = b.width;
+    // 底沙：沙從上面倒下來，落點堆成小丘，倒完攤平成前低後高的斜坡
     const sandTop = b.surface + (b.bottom - b.surface) * 0.7;
-    const maskTop = b.height - (b.height - sandTop) * L.sand;
-    this.sandMask.clear().rect(0, maskTop, b.width, b.height - maskTop).fill(0xffffff);
+    const pourX = W * (0.2 + 0.6 * Math.min(1, L.sand * 1.15)) + Math.sin(t * 2.3) * W * 0.03;
+    const rise = (b.height - sandTop) * L.sand;
+    const mound = (x: number) => (L.pouring ? Math.exp(-(((x - pourX) / (W * 0.12)) ** 2)) * 34 * hs * (1 - L.sand * 0.6) : 0);
+    const sandAt = (x: number) => b.height - rise - mound(x) - (x / W - 0.5) * 6 * hs * L.sand;
+    const mask = this.sandMask.clear().moveTo(0, b.height);
+    for (let i = 0; i <= 32; i++) mask.lineTo((W * i) / 32, sandAt((W * i) / 32));
+    mask.lineTo(W, b.height).closePath().fill(0xffffff);
     this.front.mask = this.sandMask;
     // 水位以上是空氣：玻璃後面淡淡的房間色，蓋住後景的水
-    const waterY = b.height - (b.height - b.surface) * L.water;
-    if (waterY > 0) back.rect(0, 0, b.width, waterY).fill({ color: 0xd9e9ee, alpha: 0.94 });
-    // 倒沙：一道沙流從上方落下，落點濺起一點沙
+    // 水從沙面往上漲（沙面以下看不到水）
+    const bed = Math.min(b.height, floorAt(b, W / 2));
+    const waterY = bed - (bed - b.surface) * L.water;
+    if (waterY > 0) back.rect(0, 0, W, waterY).fill({ color: 0xd3e2e8, alpha: 0.94 });
+    // 空缸看得出是一個玻璃缸：上緣黑框、左右玻璃邊的反光、斜斜的玻璃反光帶（開燈後淡出）
+    const glass = 1 - L.light * 0.85;
+    g.rect(0, 0, W, 9 * hs).fill({ color: 0x1b2328, alpha: 0.85 * glass });
+    g.rect(0, 9 * hs, W, 2 * hs).fill({ color: 0xffffff, alpha: 0.35 * glass });
+    for (const x of [0, W - 7 * hs]) {
+      g.rect(x, 0, 7 * hs, b.height).fill({ color: 0xeaf6fa, alpha: 0.28 * glass });
+      g.rect(x + (x === 0 ? 7 : -1.5) * hs, 0, 1.5 * hs, b.height).fill({ color: 0xffffff, alpha: 0.5 * glass });
+    }
+    for (const [x0, w] of [[0.16, 0.05], [0.24, 0.018], [0.68, 0.035]] as const) {
+      const x = W * x0;
+      g.poly([x, 0, x + W * w, 0, x + W * w - b.height * 0.35, b.height, x - b.height * 0.35, b.height]).fill({ color: 0xffffff, alpha: 0.07 * glass });
+    }
+    // 倒沙：袋口在上面，一大把沙粒灑下來，落地濺起
     if (L.pouring) {
-      const x = b.width * 0.38 + Math.sin(this.setupT * 1.7) * b.width * 0.08;
-      const top = b.surface - 10 * hs;
-      const land = floor - (floor - sandTop) * L.sand * 0.6;
-      g.rect(x - 7 * hs, top, 14 * hs, land - top).fill({ color: 0xe2cfa4, alpha: 0.75 });
-      g.rect(x - 3 * hs, top, 6 * hs, land - top).fill({ color: 0xf6ead0, alpha: 0.6 });
-      for (let i = 0; i < 40; i++) {
-        const k = (i * 0.137 + this.setupT * 1.9) % 1;
-        const y = top + (land - top) * k;
-        g.circle(x + Math.sin(i * 12.9) * 10 * hs * k, y, (1.6 + (i % 3) * 0.8) * hs).fill({ color: i % 2 ? 0xc9b48e : 0xf0e4c8, alpha: 0.95 });
+      const top = 14 * hs;
+      // 落點：已經看得到的沙面（沙圖本身的表面，或還在往上堆的那一層，取比較低的）
+      const land = Math.max(sandAt(pourX), floorAt(b, pourX) - 4 * hs);
+      g.roundRect(pourX - 26 * hs, top - 30 * hs, 52 * hs, 34 * hs, 8 * hs).fill({ color: 0x8a6f4a, alpha: 0.95 });
+      g.rect(pourX - 26 * hs, top - 2 * hs, 52 * hs, 4 * hs).fill({ color: 0x5e4a30, alpha: 0.9 });
+      g.poly([pourX - 12 * hs, top, pourX + 12 * hs, top, pourX + 20 * hs, land, pourX - 20 * hs, land]).fill({ color: 0xe6d4aa, alpha: 0.28 });
+      for (let i = 0; i < 140; i++) {
+        const k = (i * 0.0731 + t * 1.6) % 1;
+        const spread = (Math.sin(i * 12.9898) * 0.5 + Math.sin(i * 4.1) * 0.5) * (6 + 18 * k) * hs;
+        g.circle(pourX + spread, top + (land - top) * k * k, (1.2 + (i % 4) * 0.55) * hs).fill({ color: [0xf3e6c6, 0xd9c296, 0xbfa77c, 0xe9dcc0][i % 4], alpha: 0.95 });
       }
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI + this.setupT * 3;
-        g.circle(x + Math.cos(a) * 16 * hs, land - Math.abs(Math.sin(a)) * 8 * hs, 1.5 * hs).fill({ color: 0xd9c49a, alpha: 0.7 });
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI + t * 4;
+        const r = (12 + (i % 4) * 7) * hs;
+        g.circle(pourX + Math.cos(a) * r, land - Math.abs(Math.sin(a * 1.7)) * 10 * hs, 1.6 * hs).fill({ color: 0xd9c49a, alpha: 0.75 });
       }
     }
-    // 注水：水面一條亮線，水裡一開始霧濁、慢慢沉澱變清
+    // 注水：水管從右上角灌水，水面一條會晃的亮線，水裡一串串氣泡，一開始霧濁、慢慢沉澱變清
     if (L.water > 0 && L.water < 1) {
-      g.rect(0, waterY - 1.5 * hs, b.width, 3 * hs).fill({ color: 0xffffff, alpha: 0.55 });
-      const x = b.width * 0.7;
-      g.rect(x - 4 * hs, 0, 8 * hs, waterY).fill({ color: 0xbfe8f5, alpha: 0.45 });
-      for (let i = 0; i < 10; i++) {
-        const a = this.setupT * 6 + i * 2.1;
-        g.circle(x + Math.cos(a) * 18 * hs, waterY + 6 * hs + Math.abs(Math.sin(a)) * 20 * hs, (2 + (i % 3)) * hs).fill({ color: 0xffffff, alpha: 0.5 });
+      const hoseX = W * 0.74;
+      g.roundRect(hoseX - 9 * hs, -4 * hs, 18 * hs, 34 * hs, 6 * hs).fill({ color: 0x2f4a3e, alpha: 0.95 });
+      g.rect(hoseX - 5 * hs, 30 * hs, 10 * hs, waterY - 30 * hs).fill({ color: 0xcdeef8, alpha: 0.55 });
+      g.rect(hoseX - 2 * hs, 30 * hs, 3 * hs, waterY - 30 * hs).fill({ color: 0xffffff, alpha: 0.5 });
+      for (let i = 0; i < 14; i++) {
+        const a = t * 7 + i * 1.9;
+        g.circle(hoseX + Math.cos(a) * (14 + (i % 3) * 8) * hs, waterY - Math.abs(Math.sin(a)) * 9 * hs, (1.8 + (i % 3)) * hs).fill({ color: 0xffffff, alpha: 0.55 });
       }
     }
-    if (L.milk > 0.01) g.rect(0, waterY, b.width, b.height - waterY).fill({ color: 0xdde9e2, alpha: L.milk });
+    if (L.water > 0) {
+      const surf = g.moveTo(0, waterY);
+      for (let i = 0; i <= 40; i++) surf.lineTo((W * i) / 40, waterY + Math.sin(i * 0.9 + t * 5) * 2.2 * hs * (1 - L.light));
+      surf.stroke({ color: 0xffffff, alpha: 0.6 * (L.water < 1 ? 1 : 1 - L.light), width: 2.5 * hs });
+      // 氣泡：注水時從水管下方湧出、往上浮
+      const fizz = Math.max(0, Math.min(1, (1 - L.water) * 3)) + L.milk * 0.6;
+      for (let i = 0; i < 36 && fizz > 0.02; i++) {
+        const k = (i * 0.173 + t * 0.55) % 1;
+        const x = W * (0.55 + 0.35 * ((i * 0.618) % 1)) + Math.sin(t * 3 + i) * 6 * hs;
+        const y = bed - (bed - waterY) * k;
+        if (y < waterY + 4 * hs) continue;
+        g.circle(x, y, (1.4 + (i % 3) * 0.9) * hs).stroke({ color: 0xffffff, alpha: 0.6 * fizz * (1 - k * 0.5), width: 1 * hs });
+      }
+    }
+    if (L.milk > 0.01) {
+      // 濁水：底下最濁，往上漸淡，沉澱時從上面先清
+      g.rect(0, waterY, W, b.height - waterY).fill({ color: 0xdde9e2, alpha: L.milk * 0.7 });
+      g.rect(0, waterY + (b.height - waterY) * 0.45, W, (b.height - waterY) * 0.55).fill({ color: 0xd8d0b8, alpha: L.milk * 0.35 });
+    }
     // 設備：從上面放進缸裡
     for (const c of [this.gearArtLayer, this.gear, this.gearGlow]) {
       c.alpha = L.gear;

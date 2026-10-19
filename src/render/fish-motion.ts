@@ -229,6 +229,12 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
       sepX += sep.x;
       sepY += sep.y;
     }
+    // 蝦在沙面上左右錯開，不會三隻疊成一團紅色（#173）
+    if (p.crawler && PROFILES[o.species].crawler && Math.abs(dy) < 14 * scale) {
+      const gap = Math.max(16 * scale, ((s.size?.halfLen ?? 8 * scale) + (o.size?.halfLen ?? 8 * scale)) * 0.95);
+      const ax2 = Math.abs(dx);
+      if (ax2 < gap) sepX -= (dx === 0 ? (s.id < o.id ? 1 : -1) : Math.sign(dx)) * (1 - ax2 / gap) * 5;
+    }
     if (o.species === s.species && d2 < (120 * scale) ** 2) {
       cx += o.x; cy += o.y; avx += o.vx; avy += o.vy; n++;
     }

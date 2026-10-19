@@ -35,6 +35,8 @@ export async function skipSetupShow(page: Page): Promise<void> {
   await page.waitForFunction(() => !(window as unknown as ViewWindow).cycle!.view!.settingUp, null, { timeout: 30_000 });
   // 卡片在頁面裡直接點掉：用 locator 的話，數到卡片後它剛好自己退場（約 0.4 秒動畫）就會一直等到逾時
   await page.evaluate(() => document.querySelectorAll<HTMLElement>('.celebrate:not(.out)').forEach((c) => c.click()));
+  // 卡片關掉後老闆才開口（#171）：等對話框出來，後面關教學的步驟才找得到它
+  await page.locator('.owner').first().waitFor({ timeout: 10_000 }).catch(() => undefined);
 }
 
 /** 讀目前存檔（localStorage 的 cycle.save.v1），方便核對畫面和模擬狀態。 */
