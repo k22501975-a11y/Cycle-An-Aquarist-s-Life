@@ -1,9 +1,9 @@
 import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
-import { isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
+import { isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, personalitySpec, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedArtVersion, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { SETUP_SECONDS, setupLook, setupStepAt, type SetupStep } from './setup-show';
-import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, hungerLook, sickLook, spawnSwimmer, stepTurn, swimTilt, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
+import { DEATH_SECONDS, POKE_SECONDS, STARTLE_SECONDS, deathPose, hungerLook, sickLook, spawnSwimmer, stepTurn, swimTilt, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { floorAt, keepInRect, nurseryRect, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { dirtSpots, floorY, frontLip, sandSurface, tankSubstrateLook, SUBSTRATE_PALETTES, type SubstrateLook } from './substrate';
 import { celebrateFrame, CELEBRATE_SECONDS, sparkleAlpha, sparkleBurst, type Sparkle } from './celebrate';
@@ -121,11 +121,15 @@ interface Ray {
 export interface TankViewEvents {
   onSelectFish?: (id: number | null) => void;
   onSelectPlant?: (id: number) => void;
+  /** 點到螺（每日小事「找到螺，點一下」）。 */
+  onTapSnail?: () => void;
   /** 造景模式：點選、放開拖曳的物件（x 是 0–1 的橫向位置）。 */
   onScapeSelect?: (target: ScapeTarget | null) => void;
   onScapeDrop?: (target: ScapeTarget, x: number) => void;
   /** 開缸演出進到下一步（放音效、說明字）。 */
   onSetupStep?: (step: SetupStep) => void;
+  /** 玩家撒的這一把飼料，第一口被這尾魚吃到（F6：看得出誰貪吃）。 */
+  onFirstBite?: (fishId: number) => void;
 }
 
 /** 魚畫得比真實比例大一些（遊戲裡要看得清楚品系花紋）。 */
@@ -230,6 +234,11 @@ export class TankView {
   /** 這次按下後拖動過，放開時不算點選。 */
   private dragged = false;
   private ripples: Array<{ x: number; t: number }> = [];
+  private targetHint: 'fish' | 'snail' | null = null;
+  /** 手指點水裡空白處（F6）：好奇的魚游過來看，點的地方泛一圈水波。 */
+  private poke: { x: number; y: number; age: number; seq: number } | null = null;
+  /** 玩家剛撒飼料，還沒有魚吃到第一口。 */
+  private firstBitePending = false;
   private crumbs: Crumb[] = [];
   /** 黏缸壁錠貼在玻璃上的位置；t 記一開始有幾顆碎屑，越吃越小。 */
   private tablet: { x: number; y: number; t: number } | null = null;
@@ -446,6 +455,19 @@ export class TankView {
     this.foodReset = true;
   }
 
+  /** 每日小事要玩家點的東西：畫面上加光圈（null 收掉）。 */
+  setTargetHint(kind: 'fish' | 'snail' | null): void {
+    this.targetHint = kind;
+  }
+
+  /** 「點一尾魚」的光圈只框一尾（全部都框太亂）：挑編號最小、還活著的那尾。 */
+  private hintFish(): Array<{ x: number; y: number; r: number }> {
+    let pick: FishView | undefined;
+    for (const v of this.fish.values()) if (v.deathT < 0 && (!pick || v.swimmer.id < pick.swimmer.id)) pick = v;
+    if (!pick) return [];
+    return [{ x: pick.swimmer.x, y: pick.swimmer.y, r: pick.rig.lengthPx * Math.abs(pick.rig.scale.y) * 0.38 }];
+  }
+
   private handleTap(x: number, y: number): void {
     let best: number | null = null;
     let bestD = Infinity;
@@ -461,6 +483,11 @@ export class TankView {
       this.events.onSelectFish?.(best);
       return;
     }
+    // 螺很小：點的範圍放大到至少 22 像素
+    if (this.snails.targets().some((t) => Math.hypot(t.x - x, t.y - y) < Math.max(22 * this.hs, t.r * 1.4))) {
+      this.events.onTapSnail?.();
+      return;
+    }
     for (const [id, view] of this.plants) {
       const bb = this.plantRect(view);
       if (x >= bb.minX + bb.width * 0.2 && x <= bb.maxX - bb.width * 0.2 && y >= bb.minY && y <= bb.maxY) {
@@ -469,6 +496,9 @@ export class TankView {
       }
     }
     this.events.onSelectFish?.(null);
+    // 點到水裡空白處：好奇的魚會游過來看
+    const w = this.waterBounds;
+    if (y > w.surface && y < floorAt(this.bounds, x) - 6) this.poke = { x, y, age: 0, seq: (this.poke?.seq ?? 0) + 1 };
   }
 
   /** 每個畫面呼叫一次。realDt 為現實經過的秒數（動畫用）。 */
@@ -536,43 +566,84 @@ export class TankView {
     const L = setupLook(this.setupT);
     const b = this.bounds;
     const hs = this.hs;
-    const floor = b.bottom;
-    // 底沙：由下往上堆出來
+    const t = this.setupT;
+    const W = b.width;
+    // 底沙：沙從上面倒下來，落點堆成小丘，倒完攤平成前低後高的斜坡
     const sandTop = b.surface + (b.bottom - b.surface) * 0.7;
-    const maskTop = b.height - (b.height - sandTop) * L.sand;
-    this.sandMask.clear().rect(0, maskTop, b.width, b.height - maskTop).fill(0xffffff);
+    const pourX = W * (0.2 + 0.6 * Math.min(1, L.sand * 1.15)) + Math.sin(t * 2.3) * W * 0.03;
+    const rise = (b.height - sandTop) * L.sand;
+    const mound = (x: number) => (L.pouring ? Math.exp(-(((x - pourX) / (W * 0.12)) ** 2)) * 34 * hs * (1 - L.sand * 0.6) : 0);
+    const sandAt = (x: number) => b.height - rise - mound(x) - (x / W - 0.5) * 6 * hs * L.sand;
+    const mask = this.sandMask.clear().moveTo(0, b.height);
+    for (let i = 0; i <= 32; i++) mask.lineTo((W * i) / 32, sandAt((W * i) / 32));
+    mask.lineTo(W, b.height).closePath().fill(0xffffff);
     this.front.mask = this.sandMask;
     // 水位以上是空氣：玻璃後面淡淡的房間色，蓋住後景的水
-    const waterY = b.height - (b.height - b.surface) * L.water;
-    if (waterY > 0) back.rect(0, 0, b.width, waterY).fill({ color: 0xd9e9ee, alpha: 0.94 });
-    // 倒沙：一道沙流從上方落下，落點濺起一點沙
+    // 水從沙面往上漲（沙面以下看不到水）
+    const bed = Math.min(b.height, floorAt(b, W / 2));
+    const waterY = bed - (bed - b.surface) * L.water;
+    if (waterY > 0) back.rect(0, 0, W, waterY).fill({ color: 0xd3e2e8, alpha: 0.94 });
+    // 空缸看得出是一個玻璃缸：上緣黑框、左右玻璃邊的反光、斜斜的玻璃反光帶（開燈後淡出）
+    const glass = 1 - L.light * 0.85;
+    g.rect(0, 0, W, 9 * hs).fill({ color: 0x1b2328, alpha: 0.85 * glass });
+    g.rect(0, 9 * hs, W, 2 * hs).fill({ color: 0xffffff, alpha: 0.35 * glass });
+    for (const x of [0, W - 7 * hs]) {
+      g.rect(x, 0, 7 * hs, b.height).fill({ color: 0xeaf6fa, alpha: 0.28 * glass });
+      g.rect(x + (x === 0 ? 7 : -1.5) * hs, 0, 1.5 * hs, b.height).fill({ color: 0xffffff, alpha: 0.5 * glass });
+    }
+    for (const [x0, w] of [[0.16, 0.05], [0.24, 0.018], [0.68, 0.035]] as const) {
+      const x = W * x0;
+      g.poly([x, 0, x + W * w, 0, x + W * w - b.height * 0.35, b.height, x - b.height * 0.35, b.height]).fill({ color: 0xffffff, alpha: 0.07 * glass });
+    }
+    // 倒沙：袋口在上面，一大把沙粒灑下來，落地濺起
     if (L.pouring) {
-      const x = b.width * 0.38 + Math.sin(this.setupT * 1.7) * b.width * 0.08;
-      const top = b.surface - 10 * hs;
-      const land = floor - (floor - sandTop) * L.sand * 0.6;
-      g.rect(x - 7 * hs, top, 14 * hs, land - top).fill({ color: 0xe2cfa4, alpha: 0.75 });
-      g.rect(x - 3 * hs, top, 6 * hs, land - top).fill({ color: 0xf6ead0, alpha: 0.6 });
-      for (let i = 0; i < 40; i++) {
-        const k = (i * 0.137 + this.setupT * 1.9) % 1;
-        const y = top + (land - top) * k;
-        g.circle(x + Math.sin(i * 12.9) * 10 * hs * k, y, (1.6 + (i % 3) * 0.8) * hs).fill({ color: i % 2 ? 0xc9b48e : 0xf0e4c8, alpha: 0.95 });
+      const top = 14 * hs;
+      // 落點：已經看得到的沙面（沙圖本身的表面，或還在往上堆的那一層，取比較低的）
+      const land = Math.max(sandAt(pourX), floorAt(b, pourX) - 4 * hs);
+      g.roundRect(pourX - 26 * hs, top - 30 * hs, 52 * hs, 34 * hs, 8 * hs).fill({ color: 0x8a6f4a, alpha: 0.95 });
+      g.rect(pourX - 26 * hs, top - 2 * hs, 52 * hs, 4 * hs).fill({ color: 0x5e4a30, alpha: 0.9 });
+      g.poly([pourX - 12 * hs, top, pourX + 12 * hs, top, pourX + 20 * hs, land, pourX - 20 * hs, land]).fill({ color: 0xe6d4aa, alpha: 0.28 });
+      for (let i = 0; i < 140; i++) {
+        const k = (i * 0.0731 + t * 1.6) % 1;
+        const spread = (Math.sin(i * 12.9898) * 0.5 + Math.sin(i * 4.1) * 0.5) * (6 + 18 * k) * hs;
+        g.circle(pourX + spread, top + (land - top) * k * k, (1.2 + (i % 4) * 0.55) * hs).fill({ color: [0xf3e6c6, 0xd9c296, 0xbfa77c, 0xe9dcc0][i % 4], alpha: 0.95 });
       }
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI + this.setupT * 3;
-        g.circle(x + Math.cos(a) * 16 * hs, land - Math.abs(Math.sin(a)) * 8 * hs, 1.5 * hs).fill({ color: 0xd9c49a, alpha: 0.7 });
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI + t * 4;
+        const r = (12 + (i % 4) * 7) * hs;
+        g.circle(pourX + Math.cos(a) * r, land - Math.abs(Math.sin(a * 1.7)) * 10 * hs, 1.6 * hs).fill({ color: 0xd9c49a, alpha: 0.75 });
       }
     }
-    // 注水：水面一條亮線，水裡一開始霧濁、慢慢沉澱變清
+    // 注水：水管從右上角灌水，水面一條會晃的亮線，水裡一串串氣泡，一開始霧濁、慢慢沉澱變清
     if (L.water > 0 && L.water < 1) {
-      g.rect(0, waterY - 1.5 * hs, b.width, 3 * hs).fill({ color: 0xffffff, alpha: 0.55 });
-      const x = b.width * 0.7;
-      g.rect(x - 4 * hs, 0, 8 * hs, waterY).fill({ color: 0xbfe8f5, alpha: 0.45 });
-      for (let i = 0; i < 10; i++) {
-        const a = this.setupT * 6 + i * 2.1;
-        g.circle(x + Math.cos(a) * 18 * hs, waterY + 6 * hs + Math.abs(Math.sin(a)) * 20 * hs, (2 + (i % 3)) * hs).fill({ color: 0xffffff, alpha: 0.5 });
+      const hoseX = W * 0.74;
+      g.roundRect(hoseX - 9 * hs, -4 * hs, 18 * hs, 34 * hs, 6 * hs).fill({ color: 0x2f4a3e, alpha: 0.95 });
+      g.rect(hoseX - 5 * hs, 30 * hs, 10 * hs, waterY - 30 * hs).fill({ color: 0xcdeef8, alpha: 0.55 });
+      g.rect(hoseX - 2 * hs, 30 * hs, 3 * hs, waterY - 30 * hs).fill({ color: 0xffffff, alpha: 0.5 });
+      for (let i = 0; i < 14; i++) {
+        const a = t * 7 + i * 1.9;
+        g.circle(hoseX + Math.cos(a) * (14 + (i % 3) * 8) * hs, waterY - Math.abs(Math.sin(a)) * 9 * hs, (1.8 + (i % 3)) * hs).fill({ color: 0xffffff, alpha: 0.55 });
       }
     }
-    if (L.milk > 0.01) g.rect(0, waterY, b.width, b.height - waterY).fill({ color: 0xdde9e2, alpha: L.milk });
+    if (L.water > 0) {
+      const surf = g.moveTo(0, waterY);
+      for (let i = 0; i <= 40; i++) surf.lineTo((W * i) / 40, waterY + Math.sin(i * 0.9 + t * 5) * 2.2 * hs * (1 - L.light));
+      surf.stroke({ color: 0xffffff, alpha: 0.6 * (L.water < 1 ? 1 : 1 - L.light), width: 2.5 * hs });
+      // 氣泡：注水時從水管下方湧出、往上浮
+      const fizz = Math.max(0, Math.min(1, (1 - L.water) * 3)) + L.milk * 0.6;
+      for (let i = 0; i < 36 && fizz > 0.02; i++) {
+        const k = (i * 0.173 + t * 0.55) % 1;
+        const x = W * (0.55 + 0.35 * ((i * 0.618) % 1)) + Math.sin(t * 3 + i) * 6 * hs;
+        const y = bed - (bed - waterY) * k;
+        if (y < waterY + 4 * hs) continue;
+        g.circle(x, y, (1.4 + (i % 3) * 0.9) * hs).stroke({ color: 0xffffff, alpha: 0.6 * fizz * (1 - k * 0.5), width: 1 * hs });
+      }
+    }
+    if (L.milk > 0.01) {
+      // 濁水：底下最濁，往上漸淡，沉澱時從上面先清
+      g.rect(0, waterY, W, b.height - waterY).fill({ color: 0xdde9e2, alpha: L.milk * 0.7 });
+      g.rect(0, waterY + (b.height - waterY) * 0.45, W, (b.height - waterY) * 0.55).fill({ color: 0xd8d0b8, alpha: L.milk * 0.35 });
+    }
     // 設備：從上面放進缸裡
     for (const c of [this.gearArtLayer, this.gear, this.gearGlow]) {
       c.alpha = L.gear;
@@ -648,6 +719,29 @@ export class TankView {
   setScapeEdit(edit: ScapeEdit | null): void {
     this.scape.setEdit(edit);
     if (!edit) this.scapeDrag = null;
+  }
+
+  /**
+   * 造景引導（F1-c）：目前這層第一個拖得動的東西（石頭優先），回傳它在畫布上的位置（CSS 像素）。
+   * 這層什麼都沒有就回傳 null。
+   */
+  scapeHintPos(): { x: number; y: number } | null {
+    const edit = this.scape.editing;
+    if (!edit) return null;
+    let r: Rect | null = null;
+    const rock = this.scape.firstInLayer(edit.layer);
+    if (rock !== null) r = this.scape.hardscapeRect(rock);
+    else {
+      for (const view of this.plants.values()) {
+        if (view.holder.parent !== this.scape.plants[edit.layer]) continue;
+        const bb = this.plantRect(view);
+        r = { x0: bb.minX, y0: bb.minY, x1: bb.maxX, y1: bb.maxY };
+        break;
+      }
+    }
+    if (!r) return null;
+    const k = this.app.screen.width / Math.max(1, this.app.canvas.getBoundingClientRect().width);
+    return { x: ((r.x0 + r.x1) / 2 + this.root.x) / k, y: (r.y0 + (r.y1 - r.y0) * 0.6 + this.root.y) / k };
   }
 
   /** 水草在畫面上的範圍（root 座標；getBounds 是畫布座標，要扣掉鏡頭的平移）。 */
@@ -1198,6 +1292,7 @@ export class TankView {
         for (const p of pellets) applyFoodLook(p, kind);
         this.ripples.push({ x: dropX, t: 0 }, { x: dropX - width * 0.02, t: -0.18 }, { x: dropX + width * 0.025, t: -0.35 });
         this.dropT = 0;
+        this.firstBitePending = true;
       }
       for (const p of pellets) {
         const k = (p as Pellet & { kind?: FoodLook }).kind ?? kind;
@@ -1222,6 +1317,10 @@ export class TankView {
       const p = this.food.splice(pick.food, 1)[0];
       if (pick.eater !== null) {
         views[pick.eater].biteT = 0;
+        if (this.firstBitePending) {
+          this.firstBitePending = false;
+          this.events.onFirstBite?.(views[pick.eater].swimmer.id);
+        }
         // 魚咬到飼料冒一兩顆小氣泡
         if (!isShrimpSpecies(views[pick.eater].swimmer.species)) {
           for (let i = 0, n = 1 + Math.floor(this.rand() * 2); i < n; i++) {
@@ -1249,6 +1348,26 @@ export class TankView {
       if (w.t < 0) continue;
       const { r: rr, alpha } = ripple(w.t, 46 * this.hs);
       fx.ellipse(w.x, surface + 3, rr, rr * 0.22).stroke({ color: 0xffffff, alpha, width: Math.max(1, 2 * this.hs) });
+    }
+    // 每日小事的目標（點一尾魚、找到螺）：金色光圈一縮一放，做完才消失（mvp.md §4.4.2 #188）
+    if (this.targetHint) {
+      const pulse = 0.5 + 0.5 * Math.sin(this.time * 4);
+      const spots = this.targetHint === 'snail' ? this.snails.targets() : this.hintFish();
+      for (const t of spots) {
+        const r = Math.max(16 * this.hs, t.r) * (1.25 + 0.15 * pulse);
+        fx.circle(t.x, t.y, r).stroke({ color: 0xf6d891, alpha: 0.45 + 0.4 * pulse, width: Math.max(1.5, 2.4 * this.hs) });
+        fx.circle(t.x, t.y, r * (1.25 + 0.25 * pulse)).stroke({ color: 0xf6d891, alpha: 0.25 * (1 - pulse), width: Math.max(1, 1.5 * this.hs) });
+      }
+    }
+    // 手指點的地方：兩圈淡淡的水波往外散
+    if (this.poke && this.poke.age < 0.9) {
+      for (const lag of [0, 0.25]) {
+        const t = this.poke.age - lag;
+        if (t < 0) continue;
+        const k = t / 0.65;
+        if (k >= 1) continue;
+        fx.circle(this.poke.x, this.poke.y, (8 + 30 * k) * this.hs).stroke({ color: 0xffffff, alpha: 0.55 * (1 - k), width: Math.max(1, 1.6 * this.hs) });
+      }
     }
     this.crumbs = this.crumbs.filter((c) => (c.t += dt) < 0.6);
     for (const c of this.crumbs) {
@@ -1536,7 +1655,8 @@ export class TankView {
     const living = all.filter((s) => alive.has(s.id) && !boxed.has(s.id));
     const inBox = all.filter((s) => boxed.has(s.id));
     const box = nurseryRect(this.waterBounds);
-    const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food, frenzy: this.food.length ? frenzyLevel(this.dropT) : 0 };
+    if (this.poke && (this.poke.age += dt) > POKE_SECONDS) this.poke = null;
+    const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food, frenzy: this.food.length ? frenzyLevel(this.dropT) : 0, poke: this.poke ?? undefined };
     for (const fish of state.fish) {
       const view = this.fish.get(fish.id)!;
       const { swimmer, rig } = view;
@@ -1547,7 +1667,8 @@ export class TankView {
       const halfLen = this.lengthPx(fish) * (0.72 + 0.33 * view.z) * 0.5;
       const body = { halfLen, halfH: halfLen * ('heightPx' in rig ? rig.heightPx / Math.max(1, rig.lengthPx) : 0.35) };
       const caged = boxed.has(fish.id);
-      updateSwimmer(swimmer, caged ? inBox : living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX, body, begging: hungerLook(fish.hunger).begging }, ctx, dt, () => this.rand());
+      const mood = isShrimpSpecies(fish.species) ? undefined : personalitySpec(fish);
+      updateSwimmer(swimmer, caged ? inBox : living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX, body, begging: hungerLook(fish.hunger).begging, mood }, ctx, dt, () => this.rand());
 
       if (caged) {
         if (keepInRect(swimmer, box, this.waterBounds.surface, Math.min(box.w * 0.3, halfLen + 4 * this.motionScale))) swimmer.wander += Math.PI;
@@ -1555,7 +1676,8 @@ export class TankView {
       }
       // 景深：魚慢慢在前後之間游動；遠的小一點、模糊偏藍，畫在造景後面。
       if (!isShrimpSpecies(fish.species) && fish.alive && !caged) {
-        if (this.rand() < dt * 0.04) view.zTarget = this.rand();
+        // 愛炫耀的常游到前面來展示（F6）
+        if (this.rand() < dt * 0.04) view.zTarget = mood && mood.display > 0.5 ? 0.55 + this.rand() * 0.45 : this.rand();
         view.z += (view.zTarget - view.z) * Math.min(1, dt * 0.25);
       }
       const back = view.back ? view.z < BACK_LEAVE : view.z < BACK_ENTER;

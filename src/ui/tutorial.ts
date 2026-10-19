@@ -25,6 +25,8 @@ export interface Quest {
   progress?: (state: TankState) => string | null;
   /** 任務要去商店買東西時，商店直接開在這一頁（不然打開是「魚」，找不到水草）。 */
   shopTab?: QuestShopTab;
+  /** 完成時多一顆「去擺位置」，帶玩家進造景模式（F1-c）。 */
+  doneScape?: boolean;
   /** 完成時老闆給的魚幣（新手任務合計約 800，讓第一次加缸不完全靠賣魚，design/mvp.md §4.3）。 */
   reward: number;
 }
@@ -51,7 +53,8 @@ export const QUESTS: Quest[] = [
     reward: 50,
     title: '種下第一株水草',
     lines: ['先到「商店」買幾株水草種下去吧。水草會吸收養分，讓新缸穩定得快一點。'],
-    done: '種得不錯！水草也會給之後的小魚躲藏的地方。',
+    done: '種得不錯！水草也會給之後的小魚躲藏的地方。缸還空著的時候最好造景，按「造景」可以把草和石頭拖到喜歡的位置。',
+    doneScape: true,
     check: (s) => s.plants.length > 0,
     shopTab: 'plants',
   },

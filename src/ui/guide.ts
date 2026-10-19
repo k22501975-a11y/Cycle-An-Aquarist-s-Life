@@ -10,6 +10,8 @@ interface Page {
   label?: string;
   /** 這一頁多一顆「帶我去商店」，直接開在任務要買的那一頁。 */
   shop?: QuestShopTab;
+  /** 這一頁多一顆「去擺位置」，進造景模式。 */
+  scape?: boolean;
 }
 
 /**
@@ -30,6 +32,8 @@ export class Guide {
   questDone: ((step: number, id: string) => void) | null = null;
   /** 打開商店的某一頁（main 接上）。 */
   openShop: ((tab: QuestShopTab) => void) | null = null;
+  /** 進造景模式（main 接上）。 */
+  openScape: (() => void) | null = null;
   /** 發新手任務獎勵（main 接上，加到共用錢包）；回傳實際發了多少，領過的任務是 0。 */
   reward: ((questId: string, coins: number) => number) | null = null;
   /** 目標完成、發了獎勵（main 接上：存檔、更新畫面）。 */
@@ -74,7 +78,7 @@ export class Guide {
       this.sound('quest');
       const next = currentQuest(this.progress);
       const text = paid > 0 ? `${done.done}（獎勵 ${paid} 魚幣）` : done.done;
-      this.say([{ text, label: next ? '下一個任務' : '謝謝老闆' }, ...(next ? this.questPages() : this.goalPages('接下來可以挑戰這些目標：'))]);
+      this.say([{ text, label: next ? '下一個任務' : '謝謝老闆', scape: done.doneScape }, ...(next ? this.questPages() : this.goalPages('接下來可以挑戰這些目標：'))]);
       return;
     }
     const goals = checkGoals(tanks, this.tutorialOver);
@@ -172,9 +176,14 @@ export class Guide {
       page.shop && this.openShop
         ? h('button.btn.small.go-shop', { onclick: () => this.goShop(page.shop!) }, artImg('shop', 'btn-art'), '帶我去商店')
         : null;
+    // 「去擺位置」：收起對話框進造景模式；下一個任務還在左上角的任務卡上，點了會再說一次
+    const scape =
+      page.scape && this.openScape
+        ? h('button.btn.small.go-shop', { onclick: () => ((this.pages = []), this.renderBubble(), this.openScape?.()) }, artImg('scape', 'btn-art'), '去擺位置')
+        : null;
     this.bubble.replaceChildren(
       avatar,
-      h('div.owner-body', {}, h('div.owner-name', {}, OWNER_NAME), h('p.owner-text', {}, page.text), h('div.owner-actions', {}, skip, shop, next)),
+      h('div.owner-body', {}, h('div.owner-name', {}, OWNER_NAME), h('p.owner-text', {}, page.text), h('div.owner-actions', {}, skip, shop, scape, next)),
     );
     this.bubble.classList.add('open');
   }

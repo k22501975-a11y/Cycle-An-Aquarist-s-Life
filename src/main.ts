@@ -32,6 +32,8 @@ import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, use
 import { h } from './ui/dom';
 import { ICONS } from './ui/icons';
 import { DEATH_ADVICE, describeEvent, fishName, fishStrain } from './ui/labels';
+import { personaChip } from './ui/persona';
+import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
 import {
   debugPanel,
   feedPanel,
@@ -54,7 +56,7 @@ import {
 } from './ui/panels';
 import { Guide } from './ui/guide';
 import { Celebration, type CelebrateSpec } from './ui/celebrate';
-import { firstTime, type DeathAdviceCause, type MomentId } from './ui/moments';
+import { firstTime, loadMoments, type DeathAdviceCause, type MomentId } from './ui/moments';
 import { causeAdvice, HUNGER_LABEL, illnessOf, needsAdvice } from './ui/owner-advice';
 import { ownerGuide, ownerSay } from './ui/owner-ask';
 import { fryArt, guppyArt } from './ui/shop-cards';
@@ -120,6 +122,8 @@ async function start(): Promise<void> {
   const sheet = new Sheet(document.body);
   const toasts = new Toasts(document.body);
   const celebration = new Celebration(document.body);
+  /** 開缸演出到「你的第一個缸」卡片關掉之前，老闆先不開口（#171）。 */
+  let guideHeld = false;
   /** 「第一次」的演出：慶祝卡＋撥弦琶音，每件事只演一次。 */
   const moment = (id: MomentId, spec: CelebrateSpec): boolean => {
     if (!firstTime(store, id)) return false;
@@ -384,7 +388,7 @@ async function start(): Promise<void> {
       close,
       ...(pic ? [h('img.sel-pic', { src: pic, alt: '', draggable: 'false' })] : []),
       h('div.card-title', {}, title, h(`span.hunger-chip.${cond.hunger}`, {}, HUNGER_LABEL[cond.hunger])),
-      h('div.card-sub', {}, sub),
+      h('div.card-sub', {}, sub, personaChip(fish)),
       bar('健康', fish.health, fish.health > 0.6 ? 'ok' : fish.health > 0.3 ? 'warn' : 'bad'),
       bar('壓力', fish.stress, fish.stress < 0.4 ? 'warn' : 'bad'),
       bar('飽足', 1 - cond.hungerValue, hungry ? (cond.hunger === 'starving' ? 'bad' : 'warn') : 'ok'),
@@ -403,15 +407,37 @@ async function start(): Promise<void> {
 
   const view = new TankView(app, {
     onSelectFish: (id) => select(id),
+    // 在缸裡點到螺：打開螺的面板（每日小事「找到螺點一下」也就做完了）
+    onTapSnail: () => sheet.open('螺', () => snailPanel(ctx)),
     onSelectPlant: (id) => sheet.open('水草', () => plantPanel(ctx, id), { live: true }),
     onScapeSelect: (target) => scapeBar.select(target),
     onScapeDrop: (target, x) => scapeBar.drop(target, x),
+    // 手指餵食（F6）：撒下去的第一口被誰吃到，在那尾魚頭上浮一行小字，看得出誰貪吃
+    onFirstBite: (id) => {
+      const fish = game.state.fish.find((f) => f.id === id);
+      if (!fish || game.state.fish.filter((f) => f.alive && !sim.isShrimpSpecies(f.species)).length < 2) return;
+      const pos = view.fishScreenPos(id);
+      if (!pos) return;
+      // 魚在水面搶食，頭上的空間常被狀態列蓋住：太靠上就放在魚的下面
+      const hudBottom = hud.getBoundingClientRect().bottom - stage.getBoundingClientRect().top;
+      const below = pos.y < hudBottom + 56;
+      const tag = h(`div.bite-tag${below ? '.below' : ''}`, { 'aria-hidden': 'true' }, `${sim.personalitySpec(fish).label}的 ${fishName(fish)} 搶到第一口`);
+      tag.style.left = `${Math.round(Math.max(90, Math.min(stage.clientWidth - 90, pos.x)))}px`;
+      tag.style.top = `${Math.round(pos.y)}px`;
+      stage.append(tag);
+      window.setTimeout(() => tag.remove(), 2400);
+    },
     // 開缸演出（F1-b）：每一步一個音效和一行說明，最後是「你的第一個缸」
     onSetupStep: (step) => {
       if (step === 'done') {
         setupSkip.remove();
+        document.body.classList.remove('setting-up');
         moment('first_tank', { art: 'gear/tank-empty.webp', title: '你的第一個缸', sub: '水注滿、設備也裝好了', owner: '先別急著放魚。倒一瓶硝化菌液，讓水先養個幾天。' });
-        guide.start();
+        // 「你的第一個缸」卡片關掉後老闆才開口，不然對話框會從卡片後面露出來（#171）
+        celebration.whenClear(() => {
+          guideHeld = false;
+          guide.start();
+        });
         return;
       }
       audio.play(step === 'sand' ? 'feed' : step === 'water' ? 'water' : step === 'gear' ? 'buy' : 'restore');
@@ -424,7 +450,10 @@ async function start(): Promise<void> {
   // 開缸演出看過的人可以跳過
   const setupSkip = h('button.setup-skip', { type: 'button', onclick: () => view.skipSetup() }, '跳過 ›');
   const playSetup = () => {
+    guideHeld = true;
     view.playSetup();
+    // 演出時只留缸：上方列、任務卡、工具列先藏起來（#171）
+    document.body.classList.add('setting-up');
     stage.append(setupSkip);
   };
   // 開缸演出（F1-b）在挑完設備、按下「開缸」後才演（見 openSetup）
@@ -435,7 +464,38 @@ async function start(): Promise<void> {
     toasts,
     onChange: (edit) => view.setScapeEdit(edit),
     onDone: () => leaveScape(),
+    openShop: (tab) => (leaveScape(), openShop(tab)),
+    onDrop: () => {
+      if (!scapeCoach) return;
+      firstTime(store, 'first_scape_drag');
+      stopCoach();
+    },
   });
+  // 造景引導（F1-c）：第一次進造景模式，一隻手在石頭（或水草）上左右比劃「按住拖拖看」，拖過一次就不再出現
+  let scapeCoach: { el: HTMLElement; raf: number } | null = null;
+  const stopCoach = () => {
+    if (!scapeCoach) return;
+    cancelAnimationFrame(scapeCoach.raf);
+    scapeCoach.el.remove();
+    scapeCoach = null;
+  };
+  const startCoach = () => {
+    if (scapeCoach || loadMoments(store).has('first_scape_drag')) return;
+    const el = h('div.scape-coach', { 'aria-hidden': 'true' }, h('span.scape-coach-hand'), h('span.scape-coach-text', {}, '按住，左右拖拖看'));
+    stage.append(el);
+    const coach = { el, raf: 0 };
+    const follow = () => {
+      const pos = view.scapeHintPos();
+      el.hidden = !pos;
+      if (pos) {
+        el.style.left = `${Math.round(pos.x)}px`;
+        el.style.top = `${Math.round(pos.y)}px`;
+      }
+      coach.raf = requestAnimationFrame(follow);
+    };
+    follow();
+    scapeCoach = coach;
+  };
   const enterScape = () => {
     if (visiting) return;
     sheet.close();
@@ -446,12 +506,14 @@ async function start(): Promise<void> {
     document.body.classList.add('scaping');
     stage.append(scapeBar.el);
     requestAnimationFrame(() => measure());
+    startCoach();
   };
   const leaveScape = () => {
     scaping = false;
     view.setScapeEdit(null);
     document.body.classList.remove('scaping');
     scapeBar.el.remove();
+    stopCoach();
     requestAnimationFrame(() => measure());
   };
   ctx.openScape = enterScape;
@@ -503,13 +565,17 @@ async function start(): Promise<void> {
     cloud: () => !!cloud.session,
   });
   // 過一晚（F2）：跳到隔天早上 8 點，醒來看早上報告；雲端模式時間跟著伺服器走，不能跳
-  const sleepBtn = h('button.sleep-btn', { 'aria-label': '過一晚', title: '過一晚：跳到明天早上 8 點，看昨晚發生了什麼', onclick: () => goNight() }, icon(ICONS.moon), h('span', {}, '過一晚'));
+  const sleepBtn = h('button.sleep-btn', { 'aria-label': '過一晚', title: '過一晚：跳到明天早上 8 點，看昨晚發生了什麼', onclick: () => goNight() }, icon(ICONS.moon), h('span.sleep-label', {}, '過一晚'));
   // 商店開在任務要買的那一頁（買水草的任務就直接是水草）
   const openShop = (tab?: ShopTab) => sheet.open('商店', () => shopPanel(ctx, tab ?? guide.shopTab ?? 'fish'));
   const coinsValue = h('b');
   const coinsBtn = h('button.coins', { 'aria-label': '錢包', title: '錢包：點一下打開商店', onclick: () => openShop() }, h('i.coin'), coinsValue);
   // 拿到錢時金幣飛進錢包（F8）
   ctx.reward = (from, amount) => flyCoins(from, coinsBtn, amount);
+  // 對水對得完美：新魚一進缸就聚光展開尾巴（F5）
+  ctx.welcome = (ids, perfect) => {
+    if (perfect && ids[0] !== undefined) view.celebrate(ids[0]);
+  };
   const renderCoins = () => {
     const coins = sim.economy(game.state).coins;
     const text = coins.toLocaleString('zh-TW');
@@ -789,6 +855,7 @@ async function start(): Promise<void> {
     water: 'icon-waterchange',
     test: 'icon-testkit',
     trim: 'icon-trim',
+    scape: 'icon-scape',
     shop: 'icon-shop',
     gear: 'icon-gear',
     net: 'icon-net',
@@ -828,6 +895,8 @@ async function start(): Promise<void> {
     sheet.open('水質測試', () => testKitPanel(ctx), { live: true });
   });
   tool('trim', '修剪', '#7ccf8a', () => sheet.open('修剪水草', () => trimListPanel(ctx)));
+  // 造景（F1-c）：養水的那幾天能做的事，入口放在主畫面
+  tool('scape', '造景', '#9fd6a0', () => enterScape());
   tool('shop', '商店', '#ef8a6a', () => openShop());
   tool('gear', '設備', '#e3bd6d', () => sheet.open('設備與維護', () => maintenancePanel(ctx)));
   // 店家訂單（#143）：自己的入口，有能交的單亮綠色數字並發光，有沒看過的新單亮小紅點
@@ -887,6 +956,7 @@ async function start(): Promise<void> {
   stage.append(tankLabel);
   const guide = new Guide(stage, store, (id) => audio.play(id), () => requestAnimationFrame(() => measure()));
   guide.openShop = (tab) => openShop(tab);
+  guide.openScape = () => enterScape();
   // 開缸（F1-a）：新遊戲先挑設備，開完缸時間才開始走；關掉面板時主畫面留一個「開缸」按鈕
   const openSetup = () =>
     sheet.open('開缸', () =>
@@ -897,34 +967,51 @@ async function start(): Promise<void> {
         playSetup();
       }),
     );
-  // 每日 3 件小事（F3）：換天出新題、做完一件跳通知，三件都做完可以開寶箱（正式的小卡和寶箱演出由美術與 UI 做）
+  // 每日 3 件小事（F3）：換天出新題、做完一件跳通知（寫明還差哪件）。左上角常駐小卡列出三件，做完打勾，三件都做完按寶箱（#185）
   let dailyDay = sim.dailyTasks(game.tanks)?.day;
-  /** 上次跳「開寶箱」通知的時間（通知消失沒按的話，過一陣子再跳一次）。 */
-  let dailyOffered = -Infinity;
+  const dailyHolder = h('div.daily-holder');
+  stage.append(dailyHolder);
+  const dailyChanged = memo();
+  const claimDailyChest = () => {
+    const coins = game.actAll((tanks) => sim.claimDaily(tanks));
+    if (!coins) return;
+    audio.play('fanfare');
+    flyCoins(dailyHolder.getBoundingClientRect(), coinsBtn, coins);
+    toasts.show(`寶箱裡有 ${coins} 魚幣`);
+    renderDaily();
+  };
+  const goDaily = (id: sim.DailyTaskId) => {
+    if (id === 'test') testBtn.click();
+    else if (id === 'feed') sheet.open('餵食', () => feedPanel(ctx));
+    else if (id === 'water') sheet.open('換水', () => waterChangePanel(ctx));
+    else if (id === 'trim') sheet.open('修剪水草', () => trimListPanel(ctx));
+    else if (id === 'snail') sheet.open('螺', () => snailPanel(ctx));
+    else if (id === 'scape') enterScape();
+    else toasts.show('在缸裡點一尾魚，看看牠今天怎麼樣');
+  };
+  const renderDaily = () => {
+    const d = sim.dailyTasks(game.tanks);
+    const claimable = sim.canClaimDaily(game.tanks);
+    // 要在缸裡點的小事還沒做：魚或螺身上一圈金色光圈提示（#188 第 3 點）
+    const todo = (id: sim.DailyTaskId) => !!d?.tasks.some((t) => t.id === id && !t.done);
+    view.setTargetHint(todo('observe') ? 'fish' : todo('snail') ? 'snail' : null);
+    if (!dailyChanged(JSON.stringify([d?.day, d?.tasks, d?.claimed, claimable]))) return;
+    const card = dailyCard(d, claimable, { go: goDaily, claim: claimDailyChest });
+    dailyHolder.replaceChildren(...(card ? [card] : []));
+    requestAnimationFrame(() => measure());
+  };
   const checkDaily = () => {
     const fresh = sim.updateDaily(game.tanks);
     const d = sim.dailyTasks(game.tanks);
-    if (!d) return;
+    if (!d) return renderDaily();
     if (d.day !== dailyDay) {
       dailyDay = d.day;
-      dailyOffered = -Infinity;
-      if (d.tasks.length) toasts.show(`今天的小事：${d.tasks.map((t) => sim.DAILY_TEXT[t.id]).join('、')}`);
+      // 過一晚時早上報告卡會列出來，不另外跳通知
+      if (d.tasks.length && !sleepingNow) toasts.show(`今天的小事：${d.tasks.map((t) => sim.DAILY_TEXT[t.id]).join('、')}`);
     }
-    const done = d.tasks.filter((t) => t.done).length;
-    for (const id of fresh) toasts.show(`✓ ${sim.DAILY_TEXT[id]}（今天的小事 ${done}/${d.tasks.length}）`);
-    if (sim.canClaimDaily(game.tanks) && performance.now() - dailyOffered > 30_000) {
-      dailyOffered = performance.now();
-      toasts.show('今天的小事都做完了！', 'info', {
-        label: '開寶箱',
-        run: () => {
-          const coins = game.actAll((tanks) => sim.claimDaily(tanks));
-          if (coins) {
-            audio.play('quest');
-            toasts.show(`寶箱裡有 ${coins} 魚幣`);
-          }
-        },
-      });
-    }
+    for (const id of fresh) toasts.show(dailyDoneText(d, id));
+    if (fresh.length && sim.canClaimDaily(game.tanks)) audio.play('quest');
+    renderDaily();
   };
   ctx.openSetup = openSetup;
   const setupBtn = h('button.btn.primary.setup-cta', { onclick: openSetup, hidden: true }, '開缸：挑魚缸和設備');
@@ -942,8 +1029,11 @@ async function start(): Promise<void> {
     // 通知讓出任務卡的寬度
     document.body.style.setProperty('--pill-w', guide.pillVisible ? `${guide.pill.offsetWidth + 14}px` : '0px');
     const pillH = guide.pillVisible ? guide.pill.offsetHeight + 8 : 0;
+    // 每日小事卡排在任務卡下面（#185）
+    dailyHolder.style.top = `${Math.round(top + 10 + pillH)}px`;
+    const dailyH = dailyHolder.offsetHeight > 0 ? dailyHolder.offsetHeight + 8 : 0;
     const dockTop = dock.getBoundingClientRect().top - stageRect.top;
-    cardArea = { x: 0, y: top + 10 + pillH, w: stageRect.width, h: Math.max(0, dockTop - top - 10 - pillH - 34) };
+    cardArea = { x: 0, y: top + 10 + pillH + dailyH, w: stageRect.width, h: Math.max(0, dockTop - top - 10 - pillH - dailyH - 34) };
     placeSelCard();
     stage.style.setProperty('--dock-top', `${Math.round(stageRect.bottom - dockTop - stageRect.top)}px`);
     document.body.style.setProperty('--dock-top', `${Math.round(stageRect.bottom - dockTop - stageRect.top)}px`);
@@ -1154,7 +1244,12 @@ async function start(): Promise<void> {
       save();
       analytics.track('sleep', { hours: r.hours, stopped: r.crisis !== null, items: report.items.length });
       shade.classList.add('dawn');
-      const card = morningCard(report, { picture: reportPicture, go: goReport }, () => {
+      checkDaily(); // 換天出題（早上報告卡要列出今天的小事）
+      const today = sim.dailyTasks(game.tanks);
+      const daily = today
+        ? { tasks: today.tasks.map((t) => ({ id: t.id, art: dailyArt(t.id), text: DAILY_SHORT[t.id], done: t.done })), go: (id: string) => goDaily(id as sim.DailyTaskId) }
+        : undefined;
+      const card = morningCard(report, { picture: reportPicture, go: goReport, daily }, () => {
         shade.classList.remove('in');
         window.setTimeout(() => shade.remove(), 450);
         sleepingNow = false;
@@ -1310,7 +1405,8 @@ async function start(): Promise<void> {
       renderCoins();
       renderOrders();
       renderTankChip();
-      guide.update(game.state, game.tanks);
+      // 開缸演出和「你的第一個缸」卡片演完才讓老闆開口（「開缸」任務在演出一開始就完成，不能蓋在演出上，#171）
+      if (!guideHeld) guide.update(game.state, game.tanks);
       setupBtn.hidden = !sim.needsSetup(game.tanks[0]) || sheet.isOpen;
       checkDaily();
       celebrateStrains();

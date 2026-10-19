@@ -91,6 +91,9 @@ import {
   crowdingRatio,
   COMFORT_BAND,
   dripMinutes,
+  dripGrade,
+  dripTutorialLeft,
+  recordDrip,
   farmHabit,
   habitGap,
   habitOf,
@@ -160,6 +163,7 @@ import {
   unplugHeater,
   trimPlant,
   waterChange,
+  type DripOutcome,
   type Fish,
   type FishSpeciesId,
   type FoodGrade,
@@ -185,6 +189,8 @@ import type { MomentId } from './moments';
 import { READING_TONES, todos } from './status';
 import { overloadWarning } from './tutorial';
 import { ownerAsk } from './owner-ask';
+import { personaLine } from './persona';
+import { openDripGame } from './drip-game';
 
 export interface PanelContext {
   game: Game;
@@ -204,6 +210,8 @@ export interface PanelContext {
   openSetup?: () => void;
   /** 拿到錢的演出：金幣從 from 飛進錢包（F8）。 */
   reward?: (from: DOMRect | null, amount: number) => void;
+  /** 剛放進缸的魚（對水小遊戲對得完美時，魚一進缸就聚光展開尾巴）。 */
+  welcome?: (fishIds: number[], perfect: boolean) => void;
   /** 用商城道具：先跟伺服器扣一個，成功才 apply；回傳 null 是成功，不然是原因。 */
   useMall?: (item: MallItemId, apply: () => boolean) => Promise<string | null>;
 }
@@ -414,6 +422,8 @@ export function trimListPanel(ctx: PanelContext): Node {
 let overloadWarned = false;
 /** 商店放魚的方式：預設慢慢滴水對水。 */
 let shopDrip = true;
+/** 滴水對水時自己玩對水小遊戲（前幾次一定要玩，之後可以選一鍵「慢慢過水」）。 */
+let shopPlay = true;
 
 const TAIL_SHAPE_LABELS = { round: '圓尾', delta: '三角尾', halfmoon: '半月尾' } as const;
 
@@ -481,6 +491,7 @@ export function fishPanel({ game, sheet, toasts, fishPic, useMall }: PanelContex
     {},
     pic ? h('div.fish-hero', {}, h('img', { src: pic, alt: '', draggable: 'false' })) : null,
     h('p', {}, `${fishName(fish)} · 體長約 ${fish.lengthCm.toFixed(1)} cm · ${ageLabel(fish.ageDays)}`),
+    personaLine(fish),
     h('p', {}, growthLine(game.state, fish)),
     h('p', {}, habitLine(game.state, fish)),
     broodLine(game.state, fish),
@@ -787,6 +798,40 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     overloadWarned = true;
     return ownerAsk({ text: warning, yes: '照買', no: '先不要' });
   };
+  /**
+   * 放魚（F5）：滴水對水、又是自己玩（前幾次一定要玩）就先開對水小遊戲，放魚時才付錢；
+   * 檢疫盒、直接倒、一鍵慢慢過水都直接買。add 拿到 drip（true／false 或小遊戲結果），回傳放進去的魚。
+   */
+  const releaseFish = async (species: FishSpeciesId, count: number, art: string, name: string, cost: number, add: (st: TankState, drip: boolean | DripOutcome) => Fish[], done: string, tone: 'info' | 'warn' = 'info') => {
+    const play = !game.state.quarantine && shopDrip && (shopPlay || dripTutorialLeft(game.state) > 0);
+    if (!play) {
+      purchase(ctx, cost, (st) => void add(st, shopDrip), done, tone);
+      return;
+    }
+    if (economy(game.state).coins < cost) {
+      toasts.show(`錢不夠：要 ${cost} 元，現在有 ${economy(game.state).coins} 元`, 'warn');
+      return;
+    }
+    sheet.close();
+    const outcome = await openDripGame({ state: game.state, from: farmHabit(species), art, count, name, sound: ctx.sound });
+    if (!outcome) {
+      sheet.open('商店', () => shopPanel(ctx, 'fish'));
+      return;
+    }
+    let ids: number[] = [];
+    const grade = dripGrade(outcome);
+    purchase(
+      ctx,
+      cost,
+      (st) => {
+        ids = add(st, outcome).map((f) => f.id);
+        recordDrip(st);
+      },
+      `${done.replace(/，慢慢滴水對水後放進缸裡$/, '')}，${grade === 'perfect' ? '對水對得剛好，牠一進缸就展開尾巴' : grade === 'good' ? '對好水放進缸裡' : '對水有點趕，牠嚇到了'}`,
+      grade === 'rushed' ? 'warn' : 'info',
+    );
+    ctx.welcome?.(ids, grade === 'perfect');
+  };
   // sexes 有給就照順序決定每隻的公母（孔雀魚品系：公、母、一公兩母），沒給就隨機
   const buyFish = (species: FishSpeciesId, count: number, strain?: number, finStrain?: (typeof GUPPY_FIN_STRAINS)[number], sexes?: ('male' | 'female')[]) => async () => {
     if (!(await overloadOk(count))) return;
@@ -795,13 +840,15 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     const each = finStrain ? finStrain.price : strain !== undefined ? GUPPY_STRAIN_PRICES[strain] : FISH_PRICES[species];
     const males = sexes?.filter((x) => x === 'male').length ?? 0;
     const sexNote = !sexes ? '' : males === count ? '（公）' : males === 0 ? '（母）' : `（${males} 公 ${count - males} 母）`;
-    const options = { ...(finStrain ? { strain: finStrain.strain, fin: finStrain.fin } : { strain }), drip: shopDrip };
-    purchase(
-      ctx,
+    const options = finStrain ? { strain: finStrain.strain, fin: finStrain.fin } : { strain };
+    const art = finStrain ? guppyArt(finStrain.strain, finStrain.fin) : strain !== undefined ? guppyArt(strain) : speciesArt(species);
+    await releaseFish(
+      species,
+      count,
+      art,
+      name,
       each * count,
-      (st) => {
-        for (let i = 0; i < count; i++) (quarantined ? addFishToQuarantine : addFish)(st, species, { ...options, sex: sexes?.[i] });
-      },
+      (st, drip) => Array.from({ length: count }, (_, i) => (quarantined ? addFishToQuarantine : addFish)(st, species, { ...options, drip, sex: sexes?.[i] })),
       quarantined
         ? `買了 ${count} 隻${name}${sexNote}，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天`
         : shopDrip
@@ -820,18 +867,19 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       const ok = await ownerAsk({ text: '缸裡已經有公鬥魚了。兩尾公鬥魚放一起，會打到一尾死掉。', yes: '照買', no: '先不要' });
       if (!ok) return;
     }
-    purchase(ctx, price, (st) => (quarantined ? addFishToQuarantine : addFish)(st, species, { sex, drip: shopDrip }), `買了一隻${name}${quarantined ? `，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天` : ''}`);
+    await releaseFish(species, 1, speciesArt(species, sex), name, price, (st, drip) => [(quarantined ? addFishToQuarantine : addFish)(st, species, { sex, drip })], `買了一隻${name}${quarantined ? `，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天` : ''}`);
   };
   // 水草可能夾帶害蟲小螺的卵（看不到）；有檢疫盒的人會先泡過，機率低很多（design/snails.md §2）
   const buyPair = (species: FishSpeciesId) => async () => {
     if (!(await overloadOk(2))) return;
     const quarantined = !!game.state.quarantine;
-    purchase(
-      ctx,
+    await releaseFish(
+      species,
+      2,
+      speciesArt(species),
+      FISH_SPECIES[species].name,
       FISH_PRICES[species] * 2,
-      (st) => {
-        for (const sex of ['male', 'female'] as const) (quarantined ? addFishToQuarantine : addFish)(st, species, { sex, drip: shopDrip });
-      },
+      (st, drip) => (['male', 'female'] as const).map((sex) => (quarantined ? addFishToQuarantine : addFish)(st, species, { sex, drip })),
       `買了一對${FISH_SPECIES[species].name}（一公一母）${quarantined ? `，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天` : ''}`,
     );
   };
@@ -853,14 +901,17 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     const farm = farmHabit('guppy');
     // 放魚方式：滴水對水或直接倒（魚怕的是水質突然改變，不是 pH 數字本身）
     const phGap = Math.abs(farm.ph - game.state.water.ph);
+    const tutorialLeft = game.state.quarantine ? 0 : dripTutorialLeft(game.state);
     const dripRow = h(
       'div.drip-row',
       {},
       h('div.drip-water', {}, h('span', {}, `對水 pH ${farm.ph}`), h('i.arrow', {}, '→'), h(`span${phGap > 0.6 ? '.warn' : ''}`, {}, `${game.state.water.ph.toFixed(1)}`)),
+      // 對水方式（F5）：前幾次一定自己滴（對水小遊戲），之後可以選一鍵「慢慢過水」
       h(
         'div.seg.compact',
         {},
-        h(`button.seg-opt${shopDrip ? '.active' : ''}`, { title: `滴水對水約 ${dripMinutes(game.state, farm)} 分鐘`, onclick: () => ((shopDrip = true), sheet.refresh?.()) }, h('b', {}, '滴水對水')),
+        h(`button.seg-opt${shopDrip && (shopPlay || tutorialLeft > 0) ? '.active' : ''}`, { title: '按住滴管，自己慢慢對水', onclick: () => ((shopDrip = true), (shopPlay = true), sheet.refresh?.()) }, h('b', {}, '自己滴', tutorialLeft > 0 ? h('span.seg-badge', { title: `新手還要自己滴 ${tutorialLeft} 次` }, `新手 ${tutorialLeft}`) : null)),
+        tutorialLeft > 0 ? null : h(`button.seg-opt${shopDrip && !shopPlay ? '.active' : ''}`, { title: `一鍵慢慢過水，約 ${dripMinutes(game.state, farm)} 分鐘`, onclick: () => ((shopDrip = true), (shopPlay = false), sheet.refresh?.()) }, h('b', {}, '慢慢過水')),
         h(`button.seg-opt${shopDrip ? '' : '.active'}`, { title: phGap > 0.6 ? '水質差很多：魚會受驚，容易生病' : '水質差不多', onclick: () => ((shopDrip = false), sheet.refresh?.()) }, h('b', {}, '直接倒')),
       ),
     );
