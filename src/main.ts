@@ -49,7 +49,8 @@ import { Celebration, type CelebrateSpec } from './ui/celebrate';
 import { firstTime, type MomentId } from './ui/moments';
 import { causeAdvice, HUNGER_LABEL, needsAdvice } from './ui/owner-advice';
 import { ownerSay } from './ui/owner-ask';
-import { fryArt } from './ui/shop-cards';
+import { fryArt, guppyArt } from './ui/shop-cards';
+import { newStrains, strainOwnerLine } from './ui/strain-moment';
 import { recordsPanel } from './ui/records';
 import { loadCodexSeen, saveCodexSeen, unlockCodex } from './ui/codex';
 import { codexPanel } from './ui/codex-panel';
@@ -868,6 +869,22 @@ async function start(): Promise<void> {
     const msg = describeEvent(game.tanks[tank] ?? game.state, e);
     if (msg) toasts.show(tankPrefix(tank) + msg.text, msg.tone);
   });
+  // 選育成功：自家繁殖的公魚第一次長出沒見過的品系
+  const celebrateStrains = () => {
+    const [top, ...rest] = newStrains(store, game.tanks);
+    if (!top) return;
+    const p = sim.phenotype(top.fish.genome!);
+    const fin = p.bigC ? 'bigC' : p.swallow ? 'swallow' : p.ribbon ? 'ribbon' : p.tailShape === 'halfmoon' ? 'halfmoon' : undefined;
+    if (top.tank === game.active) view.celebrate(top.fish.id);
+    audio.play('fanfare');
+    celebration.show({
+      art: guppyArt(sim.lookIndex(p), fin),
+      title: `${tankPrefix(top.tank)}選育成功：${top.name}！`,
+      sub: `自家繁殖第 ${top.fish.generation} 代・${sim.GUPPY_RARITY_LABELS[top.rarity]}・店家收購約 ${sim.fishBuybackPrice(top.fish)} 元`,
+      owner: strainOwnerLine(top.rarity),
+    });
+    for (const f of rest) toasts.show(`${tankPrefix(f.tank)}又選出新品系：${f.name}`);
+  };
   game.onChange(() => {
     sheet.refresh();
     measure();
@@ -997,6 +1014,7 @@ async function start(): Promise<void> {
       renderCoins();
       renderTankChip();
       guide.update(game.state);
+      celebrateStrains();
       for (const entry of unlockCodex(codexSeen, game.state)) {
         saveCodexSeen(store, codexSeen);
         toasts.show(`圖鑑新增了「${entry.name}」`);

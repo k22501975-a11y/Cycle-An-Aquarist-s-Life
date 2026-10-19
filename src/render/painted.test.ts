@@ -46,7 +46,7 @@ describe('精繪素材對應', () => {
 describe('開機只先載當前缸用到的圖（Issue #81）', () => {
   it('新遊戲只要缸背景、設備和石英砂，不用等全部素材', () => {
     const need = startupArt([newGameState(1)]);
-    expect([...need].sort()).toEqual(['bg-back', 'gear-heater', 'gear-sponge', 'sub-sand-side', 'sub-sand-tile']);
+    expect([...need].sort()).toEqual(['bg-back', 'gear-heater', 'gear-heater-scene', 'gear-intake', 'gear-sponge', 'mid-plants-left', 'mid-plants-right', 'mid-rocks', 'sub-sand-side', 'sub-sand-tile']);
     expect(ART_FILES.length).toBeGreaterThan(70);
   });
 

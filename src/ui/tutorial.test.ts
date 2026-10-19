@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addFish, addPlant, buyQuarantine, createTank, feed, FILTERS, HEATERS, TANKS, useTestKit, waterChange } from '../sim';
-import { advanceQuest, currentQuest, cycleProgress, loadProgress, newProgress, overloadWarning, pendingTip, questShopTab, QUESTS, saveProgress } from './tutorial';
+import { advanceQuest, currentQuest, cycleProgress, loadProgress, newProgress, overloadWarning, pairProgress, pendingTip, questShopTab, QUESTS, saveProgress } from './tutorial';
 
 function tank() {
   return createTank({ tank: TANKS.std40, filter: FILTERS.sponge, heater: { spec: HEATERS.h50, targetC: 25 }, seed: 5 });
@@ -169,5 +169,16 @@ describe('任務直接帶到商店對應的分頁', () => {
     p.step = 0;
     p.skipped = true;
     expect(questShopTab(p)).toBeNull();
+  });
+});
+
+describe('等母魚懷孕的任務卡', () => {
+  it('進度是自己的（公母幾尾），不是上一個任務的硝化菌', () => {
+    const s = tank();
+    expect(pairProgress(s)).toContain('要有公有母');
+    addFish(s, 'guppy', { sex: 'male' });
+    addFish(s, 'guppy', { sex: 'female' });
+    expect(pairProgress(s)).toBe('公 1・母 1');
+    expect(QUESTS.find((q) => q.id === 'babies')?.progress).toBe(pairProgress);
   });
 });
