@@ -34,7 +34,7 @@ export interface Swimmer {
   wander: number;
   /** 尾巴擺動相位。 */
   phase: number;
-  /** 蝦：抱著飼料原地夾著吃。 */
+  /** 蝦：抱著飼料原地夾著吃；魚：停在飼料旁邊吃（不轉身、身體不歪）。 */
   eating?: boolean;
   /** 蝦：受驚往後彈開還剩幾秒（這段時間不轉身）。 */
   startle?: number;
@@ -223,6 +223,15 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
       s.eating = true;
       ax = 0;
       s.vx *= Math.pow(0.05, dt);
+    } else if (!p.crawler && d < Math.max(16 * scale, (cond.body?.halfLen ?? 0) * 1.3)) {
+      // 游到飼料旁邊：煞車停住、身體穩穩的，只張嘴吃（YenWel：吃東西只要動嘴巴，不要整條魚左右晃）
+      s.eating = true;
+      ax = ((best.x - s.x) / d) * 0.4;
+      ay = ((best.y - s.y) / d) * 0.4;
+      s.vx *= Math.pow(0.02, dt);
+      s.vy *= Math.pow(0.02, dt);
+      speed *= 0.3;
+      chasing = true;
     } else {
       const dx = best.x - s.x;
       // 快到飼料正上方時放慢橫向、不再硬拉：不然會衝過頭又折回，看起來左右狂晃
@@ -359,9 +368,10 @@ const TURN_COOLDOWN = 0.9;
 const TURN_URGENT_SPEED = 40;
 
 /** 用彈簧把面向帶到游的方向：稍微衝過頭再彈回，所以轉完會有一下回彈。 */
-export function stepTurn(s: TurnState, vx: number, dt: number): void {
+export function stepTurn(s: TurnState, vx: number, dt: number, hold = false): void {
   const dir = s.dir ?? (Math.sign(s.f) || 1);
-  const want = vx < -TURN_DEADZONE ? 1 : vx > TURN_DEADZONE ? -1 : dir;
+  // hold：停在飼料旁邊吃的時候不轉身，不然一點點橫向漂移就左右翻面
+  const want = hold ? dir : vx < -TURN_DEADZONE ? 1 : vx > TURN_DEADZONE ? -1 : dir;
   s.cool = Math.max(0, (s.cool ?? 0) - dt);
   s.dir = dir;
   if (want !== dir) {
@@ -375,6 +385,12 @@ export function stepTurn(s: TurnState, vx: number, dt: number): void {
   const k = 90, damping = 2 * Math.sqrt(k) * 0.7;
   s.v += (k * (s.dir - s.f) - damping * s.v) * dt;
   s.f = Math.max(-1.2, Math.min(1.2, s.f + s.v * dt));
+}
+
+/** 游泳時身體跟著上下的速度微微仰頭、低頭；停著吃東西時幾乎不歪，不然原地上下漂就前後點頭。 */
+export function swimTilt(s: Swimmer): number {
+  const tilt = Math.max(-0.35, Math.min(0.35, Math.atan2(s.vy, Math.abs(s.vx) + 1) * 0.6));
+  return s.eating && !PROFILES[s.species].crawler ? tilt * 0.15 : tilt;
 }
 
 /** 面向換算成縮放：轉到一半身體壓窄、稍微變高；衝過頭時拉長、變扁。 */
