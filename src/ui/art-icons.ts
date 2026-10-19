@@ -22,7 +22,9 @@ export type ArtIcon =
   | 'guide'
   | 'settings'
   | 'newgame'
-  | 'owner';
+  | 'owner'
+  | 'bacteria'
+  | 'media-transfer';
 
 export function artUrl(name: ArtIcon): string {
   return `${import.meta.env.BASE_URL}art/ui/icon-${name}.webp`;

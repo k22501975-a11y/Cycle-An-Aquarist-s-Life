@@ -1,6 +1,7 @@
 import type { SoundId } from '../audio/sounds';
 import {
   isShrimpSpecies,
+  addBottledBacteria,
   addFish,
   CARE_EAT_THRESHOLD,
   careTarget,
@@ -30,6 +31,8 @@ import {
   addCuttings,
   addHardscape,
   addPlant,
+  transferMedia,
+  mediaAvailable,
   buybackRefusal,
   cureRefusal,
   mallBag,
@@ -141,6 +144,7 @@ import {
 import { applySeason, type Game } from '../game/game';
 import { h } from './dom';
 import { BROOD_ISSUE_LABELS, DEATH_CAUSE_LABELS, fishName, SYMPTOM_LABELS } from './labels';
+import { artImg } from './art-icons';
 import { advice, cardGrid, guppyArt, iconTabs, plantArt, priceTag, shopCard, snailArt, speciesArt } from './shop-cards';
 import type { Sheet, Toasts } from './sheet';
 import { READING_TONES, todos } from './status';
@@ -827,6 +831,18 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         '換底材要拆缸重鋪：底砂裡的細菌和髒污會翻出來，魚也會很緊迫。',
         '有些石頭會慢慢讓水變硬、pH 變高。不確定的話先滴白醋：冒泡就是含碳酸鈣。拿出來的石頭會放回倉庫，不退錢。',
       ]),
+      h('h3', {}, '水質用品'),
+      cardGrid(
+        shopCard({
+          icon: 'bacteria',
+          name: '硝化菌液',
+          price: price('care:bacteria'),
+          unit: '/瓶',
+          chips: ['養水 1～3 天'],
+          note: '幫新缸加一小批硝化菌，要有魚或氨才長得起來',
+          actions: [button('倒一瓶', () => purchase(ctx, price('care:bacteria'), (st) => void addBottledBacteria(st), '倒了一瓶硝化菌液，過一兩天測測看'), 'small')],
+        }),
+      ),
       h('h3', {}, '過濾、加熱、燈'),
       cardGrid(
         ...Object.values(FILTERS).map((f) =>
@@ -1255,6 +1271,24 @@ export function tanksPanel(ctx: PanelContext): Node {
               sheet.close();
               toasts.show(`切換到${tankLabel(game.tanks, i)}`);
             }, 'primary'),
+        // 從這缸分一半濾材到正在看的缸：新缸幾乎不用等養水
+        i !== game.active && mediaAvailable(t) > 0
+          ? h(
+              'button.btn.media-btn',
+              {
+                onclick: () => {
+                  const target = game.state;
+                  const gift = game.actAll(() => transferMedia(t, target));
+                  if (!gift) return;
+                  toasts.show(gift.ich ? `把${tankLabel(game.tanks, i)}的濾材分過來了，但那缸有白點蟲，蟲卵也跟著過來了` : `把${tankLabel(game.tanks, i)}的濾材分過來了，硝化菌一起搬家`, gift.ich ? 'warn' : 'info');
+                  reopen();
+                },
+                title: '分一半濾材到正在看的缸',
+              },
+              artImg('media-transfer', 'btn-art'),
+              '分濾材過來',
+            )
+          : null,
         button('改名', () => {
           const name = prompt('幫這缸取個名字（例如：繁殖缸、紅蛇王專缸）', t.label ?? '')?.trim();
           if (name === undefined) return;

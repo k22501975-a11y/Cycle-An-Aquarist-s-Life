@@ -91,7 +91,7 @@ describe('養水任務進度', () => {
   });
 
   it('養水任務有等待提示，其他任務沒有', () => {
-    expect(QUESTS.find((q) => q.id === 'cycled')?.hint).toContain('3～6 個遊戲週');
+    expect(QUESTS.find((q) => q.id === 'cycled')?.hint).toContain('3～7 天');
     expect(QUESTS.find((q) => q.id === 'plant')?.hint).toBeUndefined();
   });
 });
