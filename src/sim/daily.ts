@@ -33,7 +33,7 @@ export interface DailyState {
   tasks: DailyTask[];
   /** 出題時所有缸的造景數（之後變多就算擺了）。 */
   scapeCount: number;
-  /** 出題時各動作最後一次的時間（之後變了就算做了；同一個小時先做再出題也不會被算進去）。 */
+  /** 出題時各動作最後一次的時間（之後比它晚就算做了；同一個小時先做再出題也不會被算進去）。 */
   before: Partial<Record<TimedTask, number>>;
   /** 畫面回報的動作（找到螺、點魚看）。 */
   marked: DailyTaskId[];
@@ -108,8 +108,10 @@ function isDone(id: DailyTaskId, d: DailyState, tanks: TankState[]): boolean {
     case 'feed':
     case 'water':
     case 'trim': {
+      // 用「比出題時晚」而不是「不一樣」：收掉一缸會讓最後時間變早，不能算做了
       const now = lastTime(id, tanks);
-      return now !== undefined && now !== d.before[id];
+      const before = d.before[id];
+      return now !== undefined && (before === undefined || now > before);
     }
     case 'scape':
       return scapeCount(tanks) > d.scapeCount;

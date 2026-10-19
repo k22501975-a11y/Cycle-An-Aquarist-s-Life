@@ -113,6 +113,27 @@ describe('每日 3 件小事（F3）', () => {
     expect(updateDaily(tanks)).toEqual(['test']);
   });
 
+  it('收掉一缸不會讓題目自動完成', () => {
+    const a = richTank();
+    const b = richTank();
+    useTestKit(a);
+    feed(a, 5);
+    simulate(b, 1);
+    useTestKit(b);
+    feed(b, 5);
+    const tanks = [a, b];
+    updateDaily(tanks);
+    const d = dailyTasks(tanks)!;
+    d.tasks = [{ id: 'test', done: false }, { id: 'feed', done: false }];
+    // 最後一次測水、餵食在 b 缸；收掉 b 之後最後時間變早，不算做了
+    tanks.pop();
+    expect(updateDaily(tanks)).toEqual([]);
+    // 之後在 a 缸再測一次（比出題時 b 缸那次晚）才算
+    simulate(a, 2);
+    useTestKit(a);
+    expect(updateDaily(tanks)).toEqual(['test']);
+  });
+
   it('同一天讀檔重算，題目一樣', () => {
     const a = richTank();
     const b = structuredClone(a);
