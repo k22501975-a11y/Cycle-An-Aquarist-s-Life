@@ -422,8 +422,8 @@ export function trimListPanel(ctx: PanelContext): Node {
 let overloadWarned = false;
 /** 商店放魚的方式：預設慢慢滴水對水。 */
 let shopDrip = true;
-/** 滴水對水時自己玩對水小遊戲（前幾次一定要玩，之後可以選一鍵「慢慢過水」）。 */
-let shopPlay = true;
+/** 滴水對水時自己玩對水小遊戲（第一次一定要玩；之後預設一鍵「慢慢過水」，想玩才按「自己滴」，mvp.md §4.4.3）。 */
+let shopPlay = false;
 
 const TAIL_SHAPE_LABELS = { round: '圓尾', delta: '三角尾', halfmoon: '半月尾' } as const;
 
@@ -799,7 +799,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     return ownerAsk({ text: warning, yes: '照買', no: '先不要' });
   };
   /**
-   * 放魚（F5）：滴水對水、又是自己玩（前幾次一定要玩）就先開對水小遊戲，放魚時才付錢；
+   * 放魚（F5）：滴水對水、又是自己玩（第一次一定要玩）就先開對水小遊戲，放魚時才付錢；
    * 檢疫盒、直接倒、一鍵慢慢過水都直接買。add 拿到 drip（true／false 或小遊戲結果），回傳放進去的魚。
    */
   const releaseFish = async (species: FishSpeciesId, count: number, art: string, name: string, cost: number, add: (st: TankState, drip: boolean | DripOutcome) => Fish[], done: string, tone: 'info' | 'warn' = 'info') => {

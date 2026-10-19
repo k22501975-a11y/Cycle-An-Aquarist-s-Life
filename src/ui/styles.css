@@ -870,3 +870,10 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 @media (orientation: landscape) {
   body:has(.sheet.open) .toasts { right: calc(min(420px, 50vw) + 14px); width: min(400px, calc(100vw - min(420px, 50vw) - 28px)); }
 }
+/* 對水小遊戲的小時鐘：壓縮後的遊戲時間（mvp.md §4.4.3） */
+.drip-clock { display: inline-flex; align-items: center; gap: 5px; }
+.drip-clock b { color: var(--gold); }
+.drip-clock-icon { position: relative; width: 12px; height: 12px; border: 1.5px solid var(--gold); border-radius: 50%; }
+.drip-clock-icon::before, .drip-clock-icon::after { content: ''; position: absolute; left: 50%; top: 50%; width: 1.5px; background: var(--gold); transform-origin: 50% 0; border-radius: 1px; }
+.drip-clock-icon::before { height: 4px; transform: translateX(-50%) rotate(180deg); }
+.drip-clock-icon::after { height: 3.5px; transform: translateX(-50%) rotate(-90deg); }

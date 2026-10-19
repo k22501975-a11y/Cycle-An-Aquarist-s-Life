@@ -21,8 +21,8 @@ export const DRIP_READY_GAP = 0.25;
 const TOLERANCE_PER_S = 0.08;
 /** 不緊張時每秒放鬆多少。 */
 const CALM_PER_S = 0.15;
-/** 前幾次買魚一定要玩對水小遊戲，之後可以一鍵「慢慢過水」。 */
-export const DRIP_TUTORIAL_TIMES = 3;
+/** 第一次買魚一定要玩對水小遊戲，之後預設一鍵「慢慢過水」（mvp.md §4.4.3）。 */
+export const DRIP_TUTORIAL_TIMES = 1;
 
 export interface DripSession {
   /** 袋子裡原本的水（魚習慣的）。 */
@@ -94,6 +94,13 @@ export function stepDrip(s: DripSession, rate: number, dtS: number): void {
   else s.nervous = Math.max(0, s.nervous - CALM_PER_S * dtS);
   s.peakNervous = Math.max(s.peakNervous, s.nervous);
   s.seconds += dtS;
+}
+
+/** 照建議（滴速一直開在綠線上）要滴幾秒才能放魚：小遊戲用來壓縮時間（mvp.md §4.4.3）。 */
+export function dripAdviceSeconds(from: WaterHabit, to: WaterHabit): number {
+  const s: DripSession = { from, to, addedMl: 0, nervous: 0, peakNervous: 0, seconds: 0 };
+  while (!dripReady(s) && s.seconds < 3600) stepDrip(s, safeRate(s), 0.1);
+  return s.seconds;
 }
 
 /** 可以放魚了（差距夠小）。玩家也可以提早放，只是休克大一點。 */
