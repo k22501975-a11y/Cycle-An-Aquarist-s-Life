@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 import tw.cycle.server.auth.AuthInterceptor;
 import tw.cycle.server.config.ApiException;
 import tw.cycle.server.config.CycleProperties;
+import tw.cycle.server.sim.HttpSimClient;
 import tw.cycle.server.sim.SimClient;
 
 /**
@@ -36,6 +37,7 @@ import tw.cycle.server.sim.SimClient;
  * <p>伺服器權威模擬（L2，有設定模擬服務時）：上傳的存檔先跟上一份比（遊戲時間不能比伺服器時鐘快、
  * 已經存在的魚身分不能被改），不對就回 422；玩家可以改用 {@code POST /api/save/advance}
  * 拿伺服器補算到現在的那份。強制覆蓋（兩台裝置選一份）時對不上也收，但幾天內不能在市場上架魚。
+ * 模擬服務檢查不了（連不上回 503、存檔讀不出或太大回 422）時不收，強制覆蓋則照對不上處理（#74）。
  */
 @RestController
 @RequestMapping("/api/save")
@@ -83,7 +85,7 @@ public class SaveController {
         }
         OffsetDateTime now = OffsetDateTime.now(clock);
         Map<String, Object> out = new LinkedHashMap<>();
-        List<SimClient.Problem> problems = check(save, file, now);
+        List<SimClient.Problem> problems = check(save, file, now, upload.force());
         if (!problems.isEmpty()) {
             SimClient.Problem first = problems.get(0);
             if (!upload.force()) throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, first.code(), first.message());
@@ -98,14 +100,18 @@ public class SaveController {
         return out;
     }
 
-    /** 跟伺服器上一份比對。模擬服務暫時連不上時先收下（不讓玩家存不了檔），記一筆。 */
-    private List<SimClient.Problem> check(CloudSave previous, JsonNode next, OffsetDateTime now) throws Exception {
+    /**
+     * 跟伺服器上一份比對。檢查不了就不收（fail-closed，#74）：一般上傳把錯誤丟回去讓遊戲稍後再傳；
+     * 強制覆蓋當成對不上，收下但鎖市場，跟身分對不上的處理一樣。
+     */
+    private List<SimClient.Problem> check(CloudSave previous, JsonNode next, OffsetDateTime now, boolean force) throws Exception {
         if (!sim.enabled() || previous.getData() == null) return List.of();
         try {
             return sim.verify(json.readTree(previous.getData()), next, Duration.between(previous.getUpdatedAt(), now).toMillis());
-        } catch (SimClient.Unavailable e) {
-            log.warn("模擬服務連不上，這次上傳沒有檢查：{}", e.getMessage());
-            return List.of();
+        } catch (SimClient.Unavailable | HttpSimClient.BadSave e) {
+            log.warn("模擬服務檢查不了這次上傳（{}）：{}", force ? "強制覆蓋，鎖市場" : "不收", e.getMessage());
+            if (!force) throw e;
+            return List.of(new SimClient.Problem("unverified", "伺服器這次檢查不了"));
         }
     }
 

@@ -9,8 +9,11 @@ import { advance, BadSave, inspect, verify } from './handlers';
 const PORT = Number(process.env.SIM_PORT ?? 8091);
 const HOST = process.env.SIM_HOST ?? '127.0.0.1';
 const TOKEN = process.env.SIM_TOKEN ?? '';
-/** 存檔上限跟 Spring Boot 一樣（2 MB），verify 一次帶兩份。 */
-const MAX_BODY = 5 * 1024 * 1024;
+/**
+ * Spring Boot 一份存檔上限 4 MB（max-save-bytes），verify 一次帶兩份，所以這裡要大於兩倍；
+ * 太小的話正常存檔也會被 413 擋下，變成存不了檔（#74）。
+ */
+const MAX_BODY = 10 * 1024 * 1024;
 
 class HttpError extends Error {
   constructor(readonly status: number, message: string) {
