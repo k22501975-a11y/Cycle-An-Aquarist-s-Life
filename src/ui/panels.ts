@@ -102,6 +102,7 @@ import {
   QUARANTINE_DAYS,
   quarantineDays,
   releaseQuarantine,
+  moveToQuarantine,
   AIR_PUMPS,
   CHILLERS,
   CO2_KITS,
@@ -1062,6 +1063,23 @@ export function quarantinePanel(ctx: PanelContext): Node {
       );
     }),
     dead > 0 ? h('div.warn-text', {}, `有 ${dead} 條死在檢疫盒裡了。還好沒有放進主缸。`) : null,
+    h('h3', {}, '當產卵盒用'),
+    h('p.hint', {}, '肚子鼓起來的母魚放進來，生下的小魚不會被成魚吃掉。母魚生完放回主缸；小魚長到 1.6 cm 左右，成魚就吞不下了。'),
+    ...game.state.fish
+      .filter((f) => f.alive && f.sex === 'female' && f.pregnancy > 0.5)
+      .map((f) =>
+        h(
+          'div.item',
+          {},
+          h('div', {}, h('b', {}, fishName(f)), h('div.hint', {}, f.pregnancy > 0.85 ? '快生了' : '懷孕中')),
+          button('放進盒子', () => {
+            game.act((st) => moveToQuarantine(st, f.id));
+            ctx.sound?.('net');
+            toasts.show(`把 ${fishName(f)} 放進檢疫盒待產`);
+            sheet.close();
+          }),
+        ),
+      ),
     h('h3', {}, '藥浴（只下在檢疫盒）'),
     h('div.row.wrap', {}, bath('ichMedication', '白點藥'), bath('antibiotic', '抗生素'), bath('dewormer', '驅蟲藥')),
     living.length > 0 || dead > 0 ? button(dead > 0 && living.length === 0 ? '撈掉死魚' : '全部移到主缸', () => release()) : null,
