@@ -10,6 +10,7 @@ export * from './readings';
 export * from './season';
 export * from './quarantine';
 export * from './economy';
+export * from './orders';
 export * from './genetics';
 export * from './household';
 export * from './gifts';

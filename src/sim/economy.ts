@@ -1,6 +1,7 @@
 import { isJuvenile, isLightOn, recordEvent, type Fish, type TankState } from './state';
 import { FISH_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 import { phenotype, type GuppyPhenotype } from './genetics';
+import { updateOrders, type OrderBoard } from './orders';
 
 /**
  * 經濟（GAME_DESIGN 第 7 節、market-and-breeding.md §3.1）：
@@ -82,6 +83,8 @@ export interface Economy {
   starterPackHours?: number;
   /** 下一個新缸用的 id 區段（每缸的魚和水草 id 從不同區段開始，魚換缸也不會撞號）。 */
   nextTankBlock?: number;
+  /** 店家訂單板（M21）；舊存檔沒有，第一次更新時掛上。 */
+  orders?: OrderBoard;
   /** 用儲值點數買的商城道具（背包）；舊存檔沒有。 */
   mall?: MallBag;
 }
@@ -154,6 +157,7 @@ export function powerWatts(state: TankState): number {
 
 export function updateEconomy(state: TankState, dt: number): void {
   const e = economy(state);
+  updateOrders(state);
   e.kwh += (powerWatts(state) / 1000) * dt;
   if (state.hours - e.lastBillHours >= BILL_DAYS * 24) {
     const power = Math.round(e.kwh * KWH_PRICE);

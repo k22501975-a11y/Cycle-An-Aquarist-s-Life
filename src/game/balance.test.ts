@@ -4,7 +4,13 @@ import {
   addFish,
   addPlant,
   fishCondition,
+  addCuttings,
   buyQuarantine,
+  dismissOrder,
+  fulfillOrder,
+  matchingFish,
+  orderBoard,
+  trimPlant,
   buyTank,
   moveToQuarantine,
   PLANT_PRICES,
@@ -189,8 +195,9 @@ describe('長期經營（K2、K3）', () => {
  * 認真玩家 120 天（design/mvp.md §4.3）：買一組品系 1 公 2 母、種莫絲和矮珍珠，每天餵兩餐、測水、超標或每週換水。
  * 快生的母魚放進檢疫盒當產卵盒，小魚長到 1.6 cm 再放出來；成魚（留種的 3 條除外）賣給店家，太擠才賣中魚。
  * 錢夠又快滿了就加缸，分濾材過去、養好後移魚。新手目標獎勵（M19）還沒做，先在第 10 天直接給 800。
+ * takeOrders：每天修剪水草、先交訂單（湊單的魚留著不賣），湊不齊超過 10 天的單撕掉換新。
  */
-function seriousPlayer(seed: number, strain: number): { income: Record<number, number>; coins21: number; tanks: number } {
+function seriousPlayer(seed: number, strain: number, takeOrders = false): { income: Record<number, number>; orders: Record<number, number>; coins21: number; tanks: number } {
   const home = newGameState(seed);
   const tanks: TankState[] = [home];
   linkTanks(tanks);
@@ -207,6 +214,7 @@ function seriousPlayer(seed: number, strain: number): { income: Record<number, n
   const cap = (t: TankState) => Math.round(t.equipment.tank.volumeL / 2);
   const count = (t: TankState) => alive(t).length;
   const income: Record<number, number> = {};
+  const orderIncome: Record<number, number> = {};
   let total = 0;
   let coins21 = 0;
   for (let d = 1; d <= 120; d++) {
@@ -219,8 +227,19 @@ function seriousPlayer(seed: number, strain: number): { income: Record<number, n
       if (heater && (heater.stuckOn || heater.broken)) t.equipment.heater = { spec: heater.spec, targetC: heater.targetC, broken: false, heating: false };
       const r = useTestKit(t);
       if (r.ammonia >= 0.25 || r.nitrite >= 0.25 || r.nitrate >= 40 || d % 7 === 0) waterChange(t, 0.3);
+      // 接訂單：先交得出來的單（留種的魚不交），插枝靠修剪
+      if (takeOrders) {
+        for (const p of t.plants) addCuttings(t, p.species, trimPlant(t, p.id));
+        for (const o of [...orderBoard(t).orders]) {
+          fulfillOrder(tanks, o.id, [...breeders]);
+          // 一直湊不齊的單撕掉換一張
+          if (t.hours - o.postedHours > 10 * 24) dismissOrder(t, o.id);
+        }
+      }
+      // 留著湊訂單的魚先不賣
+      const held = new Set(takeOrders ? orderBoard(t).orders.flatMap((o) => (o.kind === 'fish' ? matchingFish(t, o, [...breeders]).slice(0, o.count).map((f) => f.id) : [])) : []);
       const crowded = count(t) > cap(t) * 1.2;
-      for (const f of alive(t)) if (!breeders.has(f.id) && !buybackRefusal(f) && (crowded || !isJuvenile(f))) total += sellFish(t, f.id);
+      for (const f of alive(t)) if (!breeders.has(f.id) && !held.has(f.id) && !buybackRefusal(f) && (crowded || !isJuvenile(f))) total += sellFish(t, f.id);
     }
     // 產卵盒：快生的母魚放進去，生完放回去；盒裡的小魚長大一點放到最空的缸
     if (!home.quarantine && d >= 14 && economy(home).coins >= price('quarantine:box') + 300) {
@@ -258,8 +277,9 @@ function seriousPlayer(seed: number, strain: number): { income: Record<number, n
       if (from !== t) for (const f of alive(from).filter((x) => !breeders.has(x.id)).slice(0, Math.floor(cap(t) * 0.5))) moveFish(from, t, f.id);
     }
     income[d] = total;
+    orderIncome[d] = orderBoard(home).earned;
   }
-  return { income, coins21, tanks: tanks.length };
+  return { income, orders: orderIncome, coins21, tanks: tanks.length };
 }
 
 describe('經濟（mvp.md §4.3）', () => {
@@ -275,6 +295,15 @@ describe('經濟（mvp.md §4.3）', () => {
       expect(run.income[120]).toBeGreaterThan(run.income[60] * 3);
     }
     expect(albino.income[120]).toBeGreaterThan(tux.income[120]);
+  }, 120_000);
+
+  it('認真玩家 120 天、有接訂單：賣魚加訂單第 60 天 ≥800、第 120 天 ≥3,000', () => {
+    for (const strain of [3, 2]) {
+      const run = seriousPlayer(1, strain, true);
+      const sum = (d: number) => run.income[d] + run.orders[d];
+      expect(sum(60)).toBeGreaterThanOrEqual(800);
+      expect(sum(120)).toBeGreaterThanOrEqual(3000);
+    }
   }, 120_000);
 });
 
