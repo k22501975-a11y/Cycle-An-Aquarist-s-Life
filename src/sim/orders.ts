@@ -369,10 +369,11 @@ export function makeOrder(board: OrderBoard, hours: number, ctx?: OrderContext):
     }],
     [ctx && ctx.fry >= FRY_ORDER_MIN_BROOD && !board.orders.some((x) => x.kind === 'fry') && stage === 'brood' ? 2 : 0, () => {
       // 第一窩：店家收小孔雀當入門魚賣，每尾 5～8 元起（小魚少的話每尾給多一點，一張約 50～100）。
-      // 只要一窩的一半左右，另一半留著養大做更貴的中魚單
+      // 只要一窩的三成：沒有密草的缸，剛出生的仔魚多半會被大魚吃掉，能長到 1.2 cm 的大約這麼多；
+      // 活下來多的留著養大做更貴的中魚單
       o.kind = 'fry';
       o.minCm = FRY_ORDER_MIN_CM;
-      o.count = Math.max(3, Math.min(10, Math.round(ctx!.fry * 0.4)));
+      o.count = Math.max(3, Math.min(10, Math.round(ctx!.fry * 0.3)));
       o.unitPrice = Math.min(25, Math.max(5 + Math.floor(r() * 4), Math.round((50 + r() * 30) / o.count)));
     }],
   ];
