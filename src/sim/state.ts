@@ -48,6 +48,8 @@ export interface TankState {
   snails?: SnailState;
   /** 檢疫盒：買了才有。 */
   quarantine?: Quarantine | null;
+  /** 缸裡正在溶解的假期飼料錠，每顆還剩幾 mg（feeders.ts）。 */
+  holidayTablets?: number[];
 }
 
 /**
@@ -118,6 +120,8 @@ export interface Equipment {
   chiller?: { spec: ChillerSpec; targetC: number; on: boolean; cooling: boolean } | null;
   /** 控溫器：水溫超過上限時切斷加熱棒電源，防止加熱棒卡住把魚煮熟。 */
   controller?: { maxC: number; tripped: boolean } | null;
+  /** 自動餵食器（feeders.ts）：每天定時投一小撮；timesPerDay 一天幾次。 */
+  feeder?: { timesPerDay: 1 | 2 } | null;
   /** 底材。舊存檔沒有，視為石英砂（惰性）。buffer 是水草泥剩下的緩衝力 0–1。 */
   substrate?: { spec: SubstrateSpec; sinceHours: number; buffer: number } | null;
   /** 造景石與沉木，一項是一組。 */

@@ -53,6 +53,8 @@ export const PRICES: Record<string, number> = {
   'controller:basic': 650,
   'quarantine:box': 700,
   'care:bacteria': 30,
+  'care:holiday': 40,
+  'feeder:auto': 600,
   'substrate:sand': 200,
   'substrate:soil': 450,
   'substrate:coral': 300,
@@ -90,6 +92,8 @@ export interface Economy {
   fishSold?: number;
   /** 已經領過獎勵的新手任務（任務進度存在裝置上，換裝置、匯入存檔重跑教學也不能再領）。 */
   questRewards?: string[];
+  /** 手上還沒用的假期飼料錠（目標送的）。 */
+  holidayTablets?: number;
   /** 店家訂單板（M21）；舊存檔沒有，第一次更新時掛上。 */
   orders?: OrderBoard;
   /** 用儲值點數買的商城道具（背包）；舊存檔沒有。 */

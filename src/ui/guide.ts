@@ -235,7 +235,7 @@ export class Guide {
 }
 
 function goalDoneText(g: Goal): string {
-  const prize = [`${g.coins} 魚幣`, ...(g.unlock ? [UNLOCK_LABELS[g.unlock]] : [])].join('，');
+  const prize = [`${g.coins} 魚幣`, ...(g.unlock ? [UNLOCK_LABELS[g.unlock]] : []), ...(g.gift ? ['一顆假期飼料錠'] : [])].join('，');
   return `目標達成：${g.title}！${g.done}（獎勵：${prize}）`;
 }
 
