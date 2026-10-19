@@ -72,9 +72,15 @@ jobs:
       - run: npm test
 
   # 第 3 關：打包並跑遊戲流程測試（Playwright，案例在 e2e/）
+  # 無頭瀏覽器用軟體繪圖很吃 CPU，整關單跑要十幾分鐘，所以切成 3 份平行跑（每份約 7 分鐘內）。
+  # 測試要加到哪份由 Playwright 自動分配；份數不夠時調高 total 和 shard 清單。
   e2e:
-    name: 遊戲流程測試
+    name: 遊戲流程測試 (${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -96,11 +102,11 @@ jobs:
         run: npx playwright install --with-deps chromium
       - if: steps.pw-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
-      - run: npm run e2e
+      - run: npm run e2e -- --shard=${{ matrix.shard }}/3
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/
