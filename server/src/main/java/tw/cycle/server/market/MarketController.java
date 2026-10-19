@@ -29,11 +29,14 @@ public class MarketController {
         this.market = market;
     }
 
-    public record ListBody(@NotBlank String kind, @NotBlank String species, @NotBlank String title, @NotNull JsonNode item, int price) {}
+    /** baseRevision：遊戲端手上那份雲端存檔的版本（錢由伺服器直接改雲端存檔，docs/ledger.md §3.3）。 */
+    public record ListBody(@NotBlank String kind, @NotBlank String species, @NotBlank String title, @NotNull JsonNode item, int price, Long baseRevision) {}
 
     public record ItemBody(@NotNull JsonNode item) {}
 
-    public record BuyBody(@NotBlank String packaging) {}
+    public record BuyBody(@NotBlank String packaging, Long baseRevision) {}
+
+    public record CollectBody(Long baseRevision) {}
 
     public record ShipBody(@NotNull JsonNode item, double bagTemp, double bagPh) {}
 
@@ -46,7 +49,7 @@ public class MarketController {
     @PostMapping("/listings")
     @ResponseStatus(HttpStatus.CREATED)
     public Map<String, Object> list(@RequestAttribute(AuthInterceptor.ACCOUNT_ID) Long me, @Valid @RequestBody ListBody body) throws Exception {
-        return market.list(me, body.kind(), body.species(), body.title(), body.item(), body.price());
+        return market.list(me, body.kind(), body.species(), body.title(), body.item(), body.price(), body.baseRevision());
     }
 
     @PutMapping("/listings/{id}")
@@ -62,8 +65,8 @@ public class MarketController {
     }
 
     @PostMapping("/listings/{id}/buy")
-    public MarketService.Order buy(@RequestAttribute(AuthInterceptor.ACCOUNT_ID) Long me, @PathVariable long id, @Valid @RequestBody BuyBody body) {
-        return market.buy(me, id, body.packaging());
+    public MarketService.Bought buy(@RequestAttribute(AuthInterceptor.ACCOUNT_ID) Long me, @PathVariable long id, @Valid @RequestBody BuyBody body) throws Exception {
+        return market.buy(me, id, body.packaging(), body.baseRevision());
     }
 
     @GetMapping("/mine")
@@ -83,8 +86,9 @@ public class MarketController {
     }
 
     @PostMapping("/orders/{id}/collect")
-    public Map<String, Object> collect(@RequestAttribute(AuthInterceptor.ACCOUNT_ID) Long me, @PathVariable long id) throws Exception {
-        return market.collect(me, id);
+    public Map<String, Object> collect(@RequestAttribute(AuthInterceptor.ACCOUNT_ID) Long me, @PathVariable long id,
+                                       @RequestBody(required = false) CollectBody body) throws Exception {
+        return market.collect(me, id, body == null ? null : body.baseRevision());
     }
 
     @GetMapping("/prices")

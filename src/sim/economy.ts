@@ -87,6 +87,8 @@ export interface Economy {
   orders?: OrderBoard;
   /** 用儲值點數買的商城道具（背包）；舊存檔沒有。 */
   mall?: MallBag;
+  /** 已經套用到伺服器帳本的第幾筆（市場的收支，docs/ledger.md）；舊存檔沒有＝0。 */
+  ledgerSeq?: number;
   /** 玩過幾次對水小遊戲（前幾次強制玩，F5）。 */
   dripsDone?: number;
 }
@@ -123,6 +125,18 @@ export function claimStarterPack(state: TankState, addGuppy: (state: TankState, 
 
 export function economy(state: TankState): Economy {
   return (state.economy ??= { coins: STARTING_COINS, kwh: 0, lastBillHours: state.hours, sold: { day: -1, count: 0 }, cuttings: {} });
+}
+
+/**
+ * 套用一筆伺服器帳本的收支（市場的扣款、入帳，docs/ledger.md §3.3）：照 delta 加減，不用伺服器回傳的餘額覆蓋，
+ * 不然這中間本機花掉的錢會被加回來。已經套用過的（ledgerSeq 不比現在大）不再加。回傳有沒有套用。
+ */
+export function applyLedger(state: TankState, entry: { delta: number; ledgerSeq: number }): boolean {
+  const e = economy(state);
+  if (entry.ledgerSeq <= (e.ledgerSeq ?? 0)) return false;
+  e.coins += entry.delta;
+  e.ledgerSeq = entry.ledgerSeq;
+  return true;
 }
 
 export function price(key: string): number {

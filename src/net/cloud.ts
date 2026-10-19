@@ -112,10 +112,18 @@ export interface MarketMine {
   canListAt: number;
 }
 
+/** 伺服器記帳後的錢包（docs/ledger.md §3.3）：遊戲端照 delta 加減，revision 是改過錢之後的雲端存檔版本。 */
+export interface LedgerWallet {
+  revision: number;
+  coins: number;
+  ledgerSeq: number;
+  delta: number;
+}
+
 export type MarketCollect =
   | { result: 'item'; item: Record<string, unknown>; stress: number; bagTemp: number; bagPh: number; kind: 'fish' | 'plant'; title: string; listingId: number }
-  | { result: 'refund'; reason: 'not_shipped' | 'doa'; amount: number; kind: 'fish' | 'plant'; title: string; listingId: number }
-  | { result: 'payout'; amount: number; kind: 'fish' | 'plant'; title: string; listingId: number }
+  | { result: 'refund'; reason?: 'not_shipped' | 'doa'; amount: number; wallet: LedgerWallet; kind: 'fish' | 'plant'; title: string; listingId: number }
+  | { result: 'payout'; amount: number; wallet: LedgerWallet; kind: 'fish' | 'plant'; title: string; listingId: number }
   | { result: 'doa' | 'cancelled'; kind: 'fish' | 'plant'; title: string; listingId: number };
 
 export interface PricePoint {
@@ -259,8 +267,10 @@ export class CloudClient {
     return this.call('GET', `/api/market/listings?${q}`);
   }
 
-  marketList(listing: { kind: 'fish' | 'plant'; species: string; title: string; item: unknown; price: number }): Promise<CloudResult<{ id: number; fee: number }>> {
-    return this.call('POST', '/api/market/listings', JSON.stringify(listing));
+  // 上架、買、收貨會動到錢：伺服器直接改雲端存檔，要帶手上那份的版本（docs/ledger.md）
+
+  marketList(listing: { kind: 'fish' | 'plant'; species: string; title: string; item: unknown; price: number }): Promise<CloudResult<{ id: number; fee: number; wallet: LedgerWallet }>> {
+    return this.call('POST', '/api/market/listings', JSON.stringify({ ...listing, baseRevision: this.session?.revision ?? 0 }));
   }
 
   marketUpdate(id: number, item: unknown): Promise<CloudResult<void>> {
@@ -271,8 +281,8 @@ export class CloudClient {
     return this.call('DELETE', `/api/market/listings/${id}`);
   }
 
-  marketBuy(id: number, packaging: string): Promise<CloudResult<MarketOrder>> {
-    return this.call('POST', `/api/market/listings/${id}/buy`, JSON.stringify({ packaging }));
+  marketBuy(id: number, packaging: string): Promise<CloudResult<{ order: MarketOrder; wallet: LedgerWallet }>> {
+    return this.call('POST', `/api/market/listings/${id}/buy`, JSON.stringify({ packaging, baseRevision: this.session?.revision ?? 0 }));
   }
 
   marketMine(): Promise<CloudResult<MarketMine>> {
@@ -288,7 +298,7 @@ export class CloudClient {
   }
 
   marketCollect(orderId: number): Promise<CloudResult<MarketCollect>> {
-    return this.call('POST', `/api/market/orders/${orderId}/collect`);
+    return this.call('POST', `/api/market/orders/${orderId}/collect`, JSON.stringify({ baseRevision: this.session?.revision ?? 0 }));
   }
 
   marketPrices(species: string): Promise<CloudResult<PricePoint[]>> {
@@ -349,6 +359,12 @@ export class CloudClient {
     const res = await this.call<void>('DELETE', '/api/account', JSON.stringify({ password }));
     if (res.ok) this.setSession(null);
     return res;
+  }
+
+  /** 伺服器改了雲端存檔（市場收支）之後，記下新的版本號；重送拿到舊結果時不退回。 */
+  advanceRevision(revision: number): void {
+    if (!this.session || revision <= this.session.revision) return;
+    this.setSession({ ...this.session, revision });
   }
 
   /** 採用了雲端那份（或確認兩邊一樣）之後，記下雲端的版本號。 */
