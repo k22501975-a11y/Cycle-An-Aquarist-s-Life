@@ -100,6 +100,9 @@ class MarketTest {
         return p;
     }
 
+    /** 上架那條魚的身分欄位（更新近況、出貨時要一樣）。 */
+    private static final String SAME_FISH = "\"id\":42,\"species\":\"guppy\",\"sex\":\"male\",\"genome\":{\"tail\":80}";
+
     private static String fish(int price, double health) {
         return "{\"kind\":\"fish\",\"species\":\"guppy\",\"title\":\"藍蛇王孔雀魚 公\",\"price\":" + price
                 + ",\"item\":{\"id\":42,\"species\":\"guppy\",\"sex\":\"male\",\"health\":" + health + ",\"genome\":{\"tail\":80},\"sire\":null}}";
@@ -118,7 +121,7 @@ class MarketTest {
     }
 
     private void ship(Player p, long order, double health) throws Exception {
-        send(post("/api/market/orders/" + order + "/ship"), p, "{\"item\":{\"id\":42,\"health\":" + health + "},\"bagTemp\":25.5,\"bagPh\":7.2}").andExpect(status().isOk());
+        send(post("/api/market/orders/" + order + "/ship"), p, "{\"item\":{" + SAME_FISH + ",\"health\":" + health + "},\"bagTemp\":25.5,\"bagPh\":7.2}").andExpect(status().isOk());
     }
 
     @Test
@@ -156,7 +159,10 @@ class MarketTest {
         for (JsonNode l : read(send(get("/api/market/listings"), amy, null))) assertThat(l.get("seller").get("username").asText()).isNotEqualTo(amy.name());
 
         // 賣家更新魚的近況
-        send(put("/api/market/listings/" + id), amy, "{\"item\":{\"id\":42,\"health\":0.9}}").andExpect(status().isNoContent());
+        send(put("/api/market/listings/" + id), amy, "{\"item\":{" + SAME_FISH + ",\"health\":0.9}}").andExpect(status().isNoContent());
+        // 換成別條魚（基因不一樣）不行
+        send(put("/api/market/listings/" + id), amy, "{\"item\":{\"id\":42,\"species\":\"guppy\",\"sex\":\"male\",\"genome\":{\"tail\":99},\"health\":1}}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("not_same_fish"));
 
         send(post("/api/market/listings/" + id + "/buy"), amy, "{\"packaging\":\"bag\"}").andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("own"));
         long order = buy(ben, id, "oxygen");

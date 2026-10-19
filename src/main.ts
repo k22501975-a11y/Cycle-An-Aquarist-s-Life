@@ -184,10 +184,11 @@ async function start(): Promise<void> {
     sheet,
     toasts,
     saveJson: () => serializeSave(game.tanks[0], game.clock.timeScale, Date.now(), undefined, extraTanks()),
-    applyCloud: (file, revision) => {
+    applyCloud: (file, revision, advanced) => {
       const res = parseSave(JSON.stringify(file));
       if (!res.ok) return false;
-      catchUp(res.file);
+      // 伺服器補算過的（L2）不用再補：這台的時鐘可能就是不對的那個
+      if (!advanced) catchUp(res.file);
       game.clock.timeScale = res.file.timeScale;
       game.load(res.file.state, res.file.tanks ?? [], res.file.active ?? 0);
       for (const t of game.tanks) applySeason(t);
@@ -288,7 +289,7 @@ async function start(): Promise<void> {
     }
     await notifier.plan(plannedNotices());
   };
-  const marketDeps: MarketDeps = { cloud, game, sheet, toasts, sound: ctx.sound, openCloud: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) };
+  const marketDeps: MarketDeps = { cloud, game, sheet, toasts, sound: ctx.sound, openCloud: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)), syncSave: () => autoUpload(cloudDeps) };
   const mallDeps: MallDeps = marketDeps;
   const checkGifts = async () => {
     if (!cloud.session) return;
@@ -634,7 +635,8 @@ async function start(): Promise<void> {
         h(
           'div.tabs',
           {},
-          ...SPEED_OPTIONS.map((opt) =>
+          // 登入雲端後遊戲時鐘由伺服器統一（L2）：只能暫停，不能加快
+          ...SPEED_OPTIONS.filter((opt) => !cloud.session || opt.scale <= sim.DEFAULT_TIME_SCALE).map((opt) =>
             h(
               `button.tab${game.clock.timeScale === opt.scale ? '.active' : ''}`,
               {
@@ -648,6 +650,7 @@ async function start(): Promise<void> {
             ),
           ),
         ),
+        cloud.session ? h('p.hint', {}, '登入雲端後時間由伺服器統一，不能加快。') : null,
       ),
       h('h3', {}, '存檔'),
       h('div.row', {}, h('button.btn', { onclick: exportSave }, '匯出存檔'), h('button.btn', { onclick: importSave }, '從檔案匯入')),

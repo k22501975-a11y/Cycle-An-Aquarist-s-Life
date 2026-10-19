@@ -23,13 +23,16 @@ import org.springframework.transaction.annotation.Transactional;
 import tw.cycle.server.config.ApiException;
 import tw.cycle.server.config.CycleProperties;
 import tw.cycle.server.push.PushService;
+import tw.cycle.server.sim.SimClient;
 
 /**
  * 玩家市場（market-and-breeding.md §3）：一口價上架、購買託管、出貨與運輸、到貨收貨、賣家信譽、行情。
  *
- * <p>上架的魚還活在賣家的缸裡（§3.3），由賣家的遊戲在成交後出貨。錢包和魚的模擬目前在遊戲端（伺服器權威模擬是 L2），
- * 所以這裡負責的是「誰買了什麼、錢該給誰」：每筆訂單雙方各自在遊戲裡處理一次（收貨或退款、入帳或取消）。
- * 運輸結果（到貨死亡、緊迫）由伺服器決定。
+ * <p>上架的魚還活在賣家的缸裡（§3.3），由賣家的遊戲在成交後出貨。這裡負責的是「誰買了什麼、錢該給誰」：
+ * 每筆訂單雙方各自在遊戲裡處理一次（收貨或退款、入帳或取消）。運輸結果（到貨死亡、緊迫）由伺服器決定。
+ *
+ * <p>伺服器權威模擬（L2，有設定模擬服務時）：上架的魚要在賣家的雲端存檔裡，商品資料用伺服器那份（遊戲端送來的不算）；
+ * 之後更新近況、出貨時，魚的身分（品種、性別、基因）都要跟上架時一樣。
  */
 @Service
 public class MarketService {
@@ -43,14 +46,16 @@ public class MarketService {
     private final CycleProperties props;
     private final RandomGenerator random;
     private final PushService push;
+    private final SimClient sim;
 
-    public MarketService(JdbcTemplate db, ObjectMapper json, Clock clock, CycleProperties props, RandomGenerator random, PushService push) {
+    public MarketService(JdbcTemplate db, ObjectMapper json, Clock clock, CycleProperties props, RandomGenerator random, PushService push, SimClient sim) {
         this.db = db;
         this.json = json;
         this.clock = clock;
         this.props = props;
         this.random = random;
         this.push = push;
+        this.sim = sim;
     }
 
     public record Seller(String username, int deals, double doaRate, boolean warning) {}
@@ -76,6 +81,7 @@ public class MarketService {
         if (!SPECIES.matcher(species).matches()) throw bad("bad_species", "不認得這個品種");
         if (title.isBlank() || title.length() > 80) throw bad("bad_title", "名稱太長了");
         if (price < MarketRules.MIN_PRICE || price > MarketRules.MAX_PRICE) throw bad("bad_price", "售價要在 1 到 1,000,000 元之間");
+        if ("fish".equals(kind) && sim.enabled()) item = serverFish(me, species, item);
         String data = json.writeValueAsString(item);
         if (data.length() > MarketRules.MAX_ITEM_CHARS) throw bad("too_big", "商品資料太大");
         OffsetDateTime created = db.queryForObject("select created_at from account where id = ?", OffsetDateTime.class, me);
@@ -91,11 +97,45 @@ public class MarketService {
         return Map.of("id", id, "fee", fee);
     }
 
+    /** 伺服器那份存檔裡的這條魚（上架用）。 */
+    private JsonNode serverFish(long me, String species, JsonNode item) throws Exception {
+        Map<String, Object> save = db.query("select data, market_locked_until from cloud_save where account_id = ?",
+                rs -> rs.next() ? Map.of("data", rs.getString("data"), "locked", java.util.Optional.ofNullable(rs.getObject("market_locked_until", OffsetDateTime.class))) : null, me);
+        if (save == null) throw new ApiException(HttpStatus.CONFLICT, "no_cloud_save", "先把存檔同步到雲端才能上架魚");
+        @SuppressWarnings("unchecked")
+        var locked = (java.util.Optional<OffsetDateTime>) save.get("locked");
+        if (locked.isPresent() && now().isBefore(locked.get()))
+            throw new ApiException(HttpStatus.FORBIDDEN, "save_replaced", "雲端存檔最近被一份對不上的存檔覆蓋過，暫時不能上架魚");
+        JsonNode id = item.get("id");
+        if (id == null || !id.canConvertToLong()) throw bad("bad_item", "商品資料不對");
+        SimClient.Inspect found = sim.inspect(json.readTree((String) save.get("data")), id.asLong());
+        if (!found.found()) throw new ApiException(HttpStatus.CONFLICT, "not_in_save", "雲端存檔裡找不到這條魚，先同步存檔再上架");
+        if (!found.alive()) throw new ApiException(HttpStatus.CONFLICT, "dead", "這條魚已經死了");
+        if (!species.equals(found.item().path("species").asText())) throw bad("bad_species", "品種跟魚對不上");
+        return found.item();
+    }
+
+    /** 同一條魚：品種、性別、基因都一樣（植物不檢查）。 */
+    private static boolean sameFish(JsonNode a, JsonNode b) {
+        for (String key : List.of("id", "species", "sex", "genome"))
+            if (!java.util.Objects.equals(a.get(key), b.get(key))) return false;
+        return true;
+    }
+
+    private void requireSameFish(String kind, String listed, JsonNode item) throws Exception {
+        if ("fish".equals(kind) && listed != null && !sameFish(json.readTree(listed), item))
+            throw bad("not_same_fish", "這不是上架的那條魚");
+    }
+
     /** 賣家的遊戲更新魚的近況（健康、長大），買家看到的是即時的狀態（§3.3）。 */
     @Transactional
     public void update(long me, long id, JsonNode item) throws Exception {
         String data = json.writeValueAsString(item);
         if (data.length() > MarketRules.MAX_ITEM_CHARS) throw bad("too_big", "商品資料太大");
+        Map<String, Object> l = db.query("select kind, item from market_listing where id = ? and seller_id = ? and status = 'open'",
+                rs -> rs.next() ? Map.of("kind", rs.getString("kind"), "item", rs.getString("item")) : null, id, me);
+        if (l == null) throw new ApiException(HttpStatus.NOT_FOUND, "no_listing", "這件商品已經不在架上");
+        requireSameFish((String) l.get("kind"), (String) l.get("item"), item);
         int n = db.update("update market_listing set item = ?, health = ?, updated_at = ? where id = ? and seller_id = ? and status = 'open'", data, health(item), now(), id, me);
         if (n == 0) throw new ApiException(HttpStatus.NOT_FOUND, "no_listing", "這件商品已經不在架上");
     }
@@ -166,6 +206,8 @@ public class MarketService {
         String data = json.writeValueAsString(item);
         if (data.length() > MarketRules.MAX_ITEM_CHARS) throw bad("too_big", "商品資料太大");
         String kind = (String) o.get("kind");
+        // 出貨的要是上架的那條魚（品種、性別、基因一樣）
+        requireSameFish(kind, db.queryForObject("select item from market_listing where id = ?", String.class, o.get("listing_id")), item);
         MarketRules.Packaging pack = MarketRules.PACKAGING.get((String) o.get("packaging"));
         int transit = MarketRules.MIN_TRANSIT_HOURS + random.nextInt(MarketRules.MAX_TRANSIT_HOURS - MarketRules.MIN_TRANSIT_HOURS + 1);
         boolean doa = random.nextDouble() < MarketRules.doaChance(kind, (String) o.get("species"), health(item), pack, transit);

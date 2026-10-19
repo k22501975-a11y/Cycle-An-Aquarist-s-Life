@@ -1,0 +1,7 @@
+node_modules
+dist
+dist-sim
+android
+server/build
+server/.gradle
+.git

@@ -22,6 +22,17 @@ export interface CloudSave {
   save: unknown;
 }
 
+/** 伺服器補算（L2）：伺服器用自己的時鐘把雲端存檔補算到現在。 */
+export interface ServerAdvance extends CloudSave {
+  hours: number;
+  capped: boolean;
+  deaths: number;
+  births: number;
+}
+
+/** 上傳時伺服器的模擬檢查沒過（L2）：遊戲時間跑太快、魚的身分被改。 */
+export const SAVE_CHECK_CODES = ['time_ahead', 'identity_changed', 'gift_removed'];
+
 export interface FriendInfo {
   username: string;
   affinity: number;
@@ -185,12 +196,17 @@ export class CloudClient {
    * 上傳存檔（saveJson 是 serializeSave 產生的文字）。
    * 另一台裝置在這之間上傳過會回傳 code: 'conflict'，除非 force。
    */
-  async upload(saveJson: string, force = false): Promise<CloudResult<{ revision: number; savedAt: number }>> {
+  async upload(saveJson: string, force = false): Promise<CloudResult<{ revision: number; savedAt: number; notice?: string }>> {
     if (!this.session) return { ok: false, code: 'no_login', message: '請先登入' };
     const body = `{"baseRevision":${this.session.revision},"force":${force},"save":${saveJson}}`;
-    const res = await this.call<{ revision: number; savedAt: number }>('PUT', '/api/save', body);
+    const res = await this.call<{ revision: number; savedAt: number; notice?: string }>('PUT', '/api/save', body);
     if (res.ok) this.markSynced(res.value.revision);
     return res;
+  }
+
+  /** 請伺服器把雲端存檔補算到現在（伺服器的時鐘），回傳補算後的存檔。 */
+  advance(): Promise<CloudResult<ServerAdvance>> {
+    return this.call<ServerAdvance>('POST', '/api/save/advance');
   }
 
   // ---- 好友（friends.md） ----

@@ -46,6 +46,8 @@ export interface MarketDeps {
   toasts: Toasts;
   sound?: (id: SoundId) => void;
   openCloud: () => void;
+  /** 先把存檔傳到雲端（伺服器上架魚時看的是雲端那份，L2）；沒傳上去回傳 false。 */
+  syncSave?: () => Promise<boolean>;
 }
 
 export type MarketTab = 'browse' | 'shop' | 'arrivals';
@@ -398,13 +400,18 @@ function priceForm(min: number, suggested: number, submit: (price: number) => vo
   );
 }
 
-export function listFishPanel(deps: MarketDeps, fish: Fish): Node {
+export function listFishPanel(deps: MarketDeps, picked: Fish): Node {
   const { cloud, game, sheet, toasts } = deps;
-  const min = minFishPrice(fish);
+  const min = minFishPrice(picked);
   const submit = async (price: number) => {
     if (!(price >= min)) return toasts.show(`最低 ${yuan(min)}`, 'warn');
     const fee = listingFee(price);
     if (economy(game.state).coins < fee) return toasts.show('錢不夠付上架費', 'warn');
+    // 伺服器看的是雲端那份存檔：先同步，剛出生的魚才找得到
+    if (deps.syncSave && !(await deps.syncSave())) return toasts.show('存檔還沒同步到雲端，先處理好存檔再上架', 'warn');
+    // 同步時可能改用了伺服器補算的進度：重新找這條魚
+    const fish = game.tanks.flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])]).find((f) => f.id === picked.id && f.alive);
+    if (!fish) return toasts.show('找不到這條魚了', 'warn');
     const res = await cloud.marketList({ kind: 'fish', species: fish.species, title: listingTitle(fish), item: marketItem(fish), price });
     if (!res.ok) return toasts.show(res.message, 'warn');
     game.act((st) => {
@@ -417,9 +424,9 @@ export function listFishPanel(deps: MarketDeps, fish: Fish): Node {
   return h(
     'div.stack',
     {},
-    h('div.item', {}, h('div', {}, h('b', {}, listingTitle(fish)), h('div.hint', {}, `#${fish.id} · 健康 ${pct(fish.health)} · ${ageLabel(fish.ageDays)}`))),
+    h('div.item', {}, h('div', {}, h('b', {}, listingTitle(picked)), h('div.hint', {}, `#${picked.id} · 健康 ${pct(picked.health)} · ${ageLabel(picked.ageDays)}`))),
     h('p.hint', {}, '上架後魚還在你的缸裡照常養：生病、長大、懷孕都會照實顯示給買家，死了會自動下架。成交後遊戲會把牠撈出來出貨。'),
-    priceForm(min, suggestedFishPrice(fish), (p) => void submit(p)),
+    priceForm(min, suggestedFishPrice(picked), (p) => void submit(p)),
   );
 }
 

@@ -1,0 +1,16 @@
+# 模擬小服務（L2）：跟遊戲同一份 TypeScript 模擬，打包成一個 Node 檔。建置的 context 是 repo 根目錄。
+FROM node:22 AS build
+WORKDIR /src
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY tsconfig.json tsconfig.sim.json tsconfig.simsvc.json vite.simsvc.config.ts ./
+COPY src ./src
+RUN npm run build:sim
+
+FROM node:22-slim
+WORKDIR /app
+COPY --from=build /src/dist-sim/main.js main.js
+ENV SIM_HOST=0.0.0.0 SIM_PORT=8091
+USER node
+EXPOSE 8091
+CMD ["node", "main.js"]
