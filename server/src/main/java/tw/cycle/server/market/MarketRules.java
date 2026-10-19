@@ -28,6 +28,8 @@ public final class MarketRules {
     public static final int PRICE_DAYS = 14;
     /** 一件商品的資料最多幾個字元。 */
     public static final int MAX_ITEM_CHARS = 20_000;
+    /** 一筆水草最多幾株插枝（遊戲一次上架 5 株）。 */
+    public static final int MAX_CUTTINGS = 5;
     /** 到貨死亡率超過這個比例（至少 5 筆）就在商品頁警示。 */
     public static final double DOA_WARNING = 0.15;
 

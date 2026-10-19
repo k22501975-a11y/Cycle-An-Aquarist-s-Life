@@ -44,7 +44,8 @@ export function fryArt(id: FishSpeciesId): string {
     case 'crystal_shrimp':
       return 'shrimp/shrimp-crystal-juvenile.webp';
     default:
-      return 'fish/guppy-fry.webp';
+      // 一群小小的仔魚：單一條放大看起來像成魚
+      return 'fish/guppy-fry-school.webp';
   }
 }
 
