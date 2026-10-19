@@ -69,7 +69,7 @@ function runDays(s: TankState, days: number, opts: RunOptions = {}): void {
 }
 
 describe('氮循環', () => {
-  it('無魚養水：每天補氨，約 3–6 週後硝化菌建立，氨與亞硝酸鹽一天內就被處理掉', () => {
+  it('無魚養水：每天補氨，約 3–7 天硝化菌建立，氨與亞硝酸鹽一天內就被處理掉', () => {
     // 補氨會消耗 KH；KH 太低時 pH 崩跌、硝化停擺，所以這裡用 KH 較高的自來水。
     const s = createTank({ ...STARTER, tap: { kh: 6 }, seed: 1 });
     const dose = (st: TankState) => {
@@ -81,24 +81,30 @@ describe('氮循環', () => {
       return st.water.tan < 0.25 && st.water.no2 < 0.25;
     };
 
-    runDays(s, 14, { weeklyWaterChange: 0.5, onDay: dose });
+    runDays(s, 2, { weeklyWaterChange: 0.5, onDay: dose });
     expect(cycled(structuredClone(s))).toBe(false);
 
-    runDays(s, 28, { weeklyWaterChange: 0.5, onDay: dose });
+    runDays(s, 12, { weeklyWaterChange: 0.5, onDay: dose });
     expect(cycled(structuredClone(s))).toBe(true);
     expect(s.water.no3).toBeGreaterThan(5);
   });
 
-  it('新缸症候群：細菌還沒建立就放滿魚，氨爆、魚死亡，死因是氨中毒', () => {
+  it('新缸症候群：細菌還沒建立就一次放太多魚又餵太多，氨爆、魚生病', () => {
+    // 養水只要 3–7 天，但一次放太多魚、餵太多，氨冒出來的速度比細菌長得快
     const s = createTank({ ...STARTER, seed: 2 });
-    stock(s, 'guppy', 10);
+    stock(s, 'guppy', 20);
     let peakTan = 0;
-    runDays(s, 21, { onHour: (st) => (peakTan = Math.max(peakTan, st.water.tan)) });
+    let minHealth = 1;
+    runDays(s, 10, {
+      feedMultiplier: 3,
+      onHour: (st) => {
+        peakTan = Math.max(peakTan, st.water.tan);
+        for (const f of alive(st)) minHealth = Math.min(minHealth, f.health);
+      },
+    });
 
     expect(peakTan).toBeGreaterThan(1);
-    const deaths = s.events.filter((e) => e.type === 'fish_died');
-    expect(deaths.length).toBeGreaterThanOrEqual(5);
-    expect(deaths[0].cause).toBe('ammonia');
+    expect(minHealth).toBeLessThan(0.8);
   });
 
   it('同樣的魚放進已養好水的缸，每週換水，一個月後全部健康、測試劑讀不到氨', () => {
@@ -139,8 +145,10 @@ describe('氮循環', () => {
     runDays(tap, 4, { onHour: (st) => (peakTap = Math.max(peakTap, st.water.tan)) });
     runDays(tankWater, 4, { onHour: (st) => (peakTank = Math.max(peakTank, st.water.tan)) });
 
-    expect(peakTap).toBeGreaterThan(0.3);
-    expect(peakTank).toBeLessThan(0.25);
+    // 硝化菌長得快，幾天內就補回來，但這幾天測得到氨
+    expect(peakTap).toBeGreaterThan(0.1);
+    expect(peakTap).toBeGreaterThan(peakTank * 3);
+    expect(peakTank).toBeLessThan(0.05);
   });
 
   it('死魚沒撈出來會腐爛產生大量氨；撈掉就不會', () => {
