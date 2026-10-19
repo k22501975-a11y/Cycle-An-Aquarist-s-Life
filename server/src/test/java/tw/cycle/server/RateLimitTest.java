@@ -55,12 +55,15 @@ class RateLimitTest {
         var sim = new CycleProperties.Sim("", "", 20);
         var bad = new CycleProperties(List.of("http://localhost:5173"), 30, 1000, 3, true, null, sim, true, null);
         assertThat(new ProductionGuard(bad, "cycle", "none").problems()).hasSize(5);
-        var good = new CycleProperties(List.of("https://cycle.example.com"), 30, 1000, 3, false, null, new CycleProperties.Sim("http://sim:8091", "s3cret", 20), true, null);
+        var good = new CycleProperties(List.of("https://cycle.example.com", "https://localhost", "capacitor://localhost"), 30, 1000, 3, false, null, new CycleProperties.Sim("http://sim:8091", "s3cret", 20), true, null);
         assertThat(new ProductionGuard(good, "a-long-password", "native").problems()).isEmpty();
         assertThat(new ProductionGuard(good, "a-long-password", "native").warnings()).isEmpty();
         // 沒設 FORWARD_HEADERS 不擋啟動，只提醒放在反向代理後面時頻率限制會變全站共用
         assertThat(new ProductionGuard(good, "a-long-password", "none").problems()).isEmpty();
         assertThat(new ProductionGuard(good, "a-long-password", "none").warnings()).singleElement().asString().contains("FORWARD_HEADERS");
+        // App 的來源可以留，開發用的 localhost（含 127.0.0.1）不行
+        var devOrigin = new CycleProperties(List.of("https://cycle.example.com", "https://localhost", "http://127.0.0.1:5173"), 30, 1000, 3, false, null, new CycleProperties.Sim("http://sim:8091", "s3cret", 20), true, null);
+        assertThat(new ProductionGuard(devOrigin, "a-long-password", "native").problems()).singleElement().asString().contains("ALLOWED_ORIGINS");
         // 本機（沒設 CYCLE_PRODUCTION）不檢查
         var local = new CycleProperties(List.of("http://localhost:5173"), 30, 1000, 3, true, null, sim, false, null);
         assertThat(new ProductionGuard(local, "cycle", "none").problems()).isEmpty();

@@ -47,6 +47,17 @@ public class ProductionGuard implements ApplicationRunner {
         return out;
     }
 
+    /** Android／iOS App 裡的網頁來源，正式環境要留著。 */
+    static final List<String> APP_ORIGINS = List.of("https://localhost", "capacitor://localhost");
+
+    /** 開發用的本機來源（vite 的 http://localhost:5173 之類）；App 的來源不算。 */
+    static boolean isDevOrigin(String origin) {
+        String o = origin.trim().toLowerCase();
+        if (o.endsWith("/")) o = o.substring(0, o.length() - 1);
+        if (APP_ORIGINS.contains(o)) return false;
+        return o.contains("localhost") || o.contains("127.0.0.1");
+    }
+
     public List<String> problems() {
         List<String> out = new ArrayList<>();
         if (!props.production()) return out;
@@ -54,7 +65,7 @@ public class ProductionGuard implements ApplicationRunner {
         if (props.sim().url() == null || props.sim().url().isBlank()) out.add("SIM_SERVICE_URL 沒設定（不做 L2 檢查）");
         if (props.sim().token() == null || props.sim().token().isBlank()) out.add("SIM_TOKEN 沒設定");
         if (props.paymentsSandbox()) out.add("PAYMENTS_SANDBOX 要關掉");
-        if (props.allowedOrigins().stream().anyMatch(o -> o.contains("localhost"))) out.add("ALLOWED_ORIGINS 還有 localhost");
+        if (props.allowedOrigins().stream().anyMatch(ProductionGuard::isDevOrigin)) out.add("ALLOWED_ORIGINS 還有開發用的 localhost（App 的 https://localhost、capacitor://localhost 可以留著）");
         return out;
     }
 }

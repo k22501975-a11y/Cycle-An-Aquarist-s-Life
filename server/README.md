@@ -38,7 +38,7 @@ VITE_API_URL=http://localhost:8080 npm run dev
 | `DATABASE_USER`／`DATABASE_PASSWORD` | cycle／cycle | |
 | `ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:4173,https://localhost` | 遊戲網頁的網址，逗號分隔；`https://localhost` 是 Android App 裡的來源，上線時記得保留 |
 | `MARKET_MIN_ACCOUNT_DAYS` | `3` | 新帳號滿幾天才能在市場上架（防開小號洗錢）；本機測試可以設 `0` |
-| `CYCLE_PRODUCTION` | `false` | 正式環境設 `true`：資料庫用預設密碼、沒設 `SIM_SERVICE_URL` 或 `SIM_TOKEN`、開著 `PAYMENTS_SANDBOX`、`ALLOWED_ORIGINS` 還有 localhost，伺服器就不啟動 |
+| `CYCLE_PRODUCTION` | `false` | 正式環境設 `true`：資料庫用預設密碼、沒設 `SIM_SERVICE_URL` 或 `SIM_TOKEN`、開著 `PAYMENTS_SANDBOX`、`ALLOWED_ORIGINS` 還有開發用的 localhost（App 的 `https://localhost`、`capacitor://localhost` 可以留），伺服器就不啟動 |
 | `FORWARD_HEADERS` | `none` | **放在反向代理（nginx、Caddy、Cloudflare）後面一定要設 `native`**（或 `framework`）。維持 `none` 時所有玩家都被當成代理的 IP，註冊每小時 5 次、登入次數這些頻率限制會變成全站共用；`CYCLE_PRODUCTION=true` 時啟動會記一條警告。見下方「部署注意」 |
 | `PAYMENTS_SANDBOX` | `false` | 儲值測試模式：不收錢直接入帳。金流還沒接，本機測試商城時設 `true`；正式上線前要接上金流、維持 `false` |
 | `PUSH_SUBJECT` | `mailto:admin@localhost` | 推播服務聯絡營運者用的信箱（`mailto:`）或網址，上線時改成真的 |
