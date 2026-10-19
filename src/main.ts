@@ -930,10 +930,14 @@ async function start(): Promise<void> {
   });
   // 快轉時出狀況：遊戲已經切回正常速度，提示玩家並給「去處理」（#142）
   const GEAR_CRISES = new Set(['heater_broke', 'heater_stuck', 'heater_exposed', 'controller_cut', 'power_out', 'too_hot', 'too_cold']);
+  // ---- 過一晚（F2）的狀態：sleepingNow 是夜幕到報告卡關掉，inSleepCall 只有 game.sleep() 那一下 ----
+  let sleepingNow = false;
+  let inSleepCall = false;
   game.onCrisis((c) => {
     speed.render();
     // 只有 game.sleep() 那一下不跳：半夜的危機會寫在早上報告卡最上面；報告卡開著時快轉出的事照常提示
-    if (game.sleeping) return;
+    // （game.sleep() 是事件送完、sleeping 設回 false 之後才通知危機，所以用自己的旗子）
+    if (inSleepCall) return;
     const fix = GEAR_CRISES.has(c.reason)
       ? {
           label: '去處理',
@@ -964,7 +968,7 @@ async function start(): Promise<void> {
     for (const f of rest) toasts.show(`${tankPrefix(f.tank)}又選出新品系：${f.name}`);
   };
   // ---- 過一晚（F2）：畫面暗下來、跳到早上，醒來一張報告卡 ----
-  let sleepingNow = false;
+
   const reportPicture = (item: ReportItem): string | null => {
     const t = game.tanks[item.tank] ?? game.state;
     const fish = item.subjectId !== undefined ? t.fish.find((f) => f.id === item.subjectId) : undefined;
@@ -1028,7 +1032,13 @@ async function start(): Promise<void> {
     requestAnimationFrame(() => shade.classList.add('in'));
     window.setTimeout(() => {
       const before = snapshot(game.tanks);
-      const r = game.sleep();
+      inSleepCall = true;
+      let r: ReturnType<typeof game.sleep>;
+      try {
+        r = game.sleep();
+      } finally {
+        inSleepCall = false;
+      }
       // 半夜出狀況：快轉的話切回正常速度，醒來先處理
       if (r.crisis && game.clock.timeScale > sim.DEFAULT_TIME_SCALE) game.clock.timeScale = sim.DEFAULT_TIME_SCALE;
       const report = morningReport(before, game.tanks, r.hours, r.crisis);
