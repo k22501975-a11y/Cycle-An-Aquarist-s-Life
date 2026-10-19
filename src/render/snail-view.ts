@@ -50,8 +50,6 @@ interface Crawler {
   u: number;
   speed: number;
   phase: number;
-  /** 死掉的大螺（翻過來躺在沙上）。 */
-  dead?: boolean;
 }
 
 export class SnailView {
@@ -64,38 +62,9 @@ export class SnailView {
   private readonly clutches = new Map<number, Sprite>();
   private readonly babies: Sprite[] = [];
   private eggKey = '';
-  /** 每日小事「點一下缸裡的螺」：螺身後一圈光，做完就熄（#188）。 */
-  hint = false;
-  private readonly halo = new Graphics();
 
   constructor() {
-    this.layer.addChild(this.halo, this.eggDots, this.trap);
-  }
-
-  /** 看得到、活著的螺（大螺和小螺）。 */
-  private crawlers(): Crawler[] {
-    return [...[...this.big.values()].filter((c) => !c.dead), ...this.pests].filter((c) => c.sprite.visible && c.sprite.alpha > 0.3);
-  }
-
-  /** (x, y) 有沒有點到一隻螺（螺很小，點的範圍放大一點）。 */
-  hitTest(x: number, y: number, minReach = 22): boolean {
-    return this.crawlers().some((c) => {
-      const w = Math.abs(c.sprite.width);
-      // anchor 在螺的下緣附近，中心往上移一點
-      const cy = c.sprite.y - Math.abs(c.sprite.height) * 0.4;
-      return Math.hypot(c.sprite.x - x, cy - y) < Math.max(minReach, w * 0.8);
-    });
-  }
-
-  private drawHalo(scene: SnailScene): void {
-    const g = this.halo.clear();
-    if (!this.hint) return;
-    const pulse = 0.5 + 0.5 * Math.sin(scene.time * 4);
-    for (const c of this.crawlers().slice(0, 4)) {
-      const r = Math.max(10 * scene.hs, Math.abs(c.sprite.width) * 0.9);
-      const cy = c.sprite.y - Math.abs(c.sprite.height) * 0.4;
-      g.circle(c.sprite.x, cy, r * (1 + 0.15 * pulse)).fill({ color: 0xfff1b8, alpha: 0.12 + 0.12 * pulse }).stroke({ color: 0xffe08a, width: 2 * scene.hs, alpha: 0.5 + 0.4 * pulse });
-    }
+    this.layer.addChild(this.eggDots, this.trap);
   }
 
   sync(state: TankState, scene: SnailScene): void {
@@ -106,7 +75,6 @@ export class SnailView {
     this.syncBabies(s?.appleYoung ?? 0, s?.appleYoungColor, scene);
     this.drawEggDots(s?.neriteEggs ?? 0, scene);
     this.drawTrap(s?.trapHour !== undefined ? state.hours - s.trapHour : null, scene);
-    this.drawHalo(scene);
   }
 
   /** 沿著沙面或玻璃慢慢來回爬：回傳位置和朝向。 */
@@ -123,6 +91,19 @@ export class SnailView {
     c.sprite.scale.set(dir * k, k);
     // 玻璃上的螺有時候往上爬
     c.sprite.rotation = c.onGlass === null ? 0 : (c.phase % 1 > 0.5 ? -1 : 1) * 0.35 * dir;
+  }
+
+  /** 看得到的螺在缸裡的位置（root 座標、大概的半徑）：給點螺、每日小事的光圈用。 */
+  targets(): Array<{ x: number; y: number; r: number }> {
+    const out: Array<{ x: number; y: number; r: number }> = [];
+    for (const c of [...this.big.values(), ...this.pests]) {
+      const s = c.sprite;
+      if (!s.visible || s.destroyed) continue;
+      const r = Math.max(s.width, s.height) / 2;
+      // 錨點在殼底（0.9），中心往上半個身高
+      out.push({ x: s.x, y: s.y - s.height * 0.4, r });
+    }
+    return out;
   }
 
   private syncBig(snails: Snail[], scene: SnailScene): void {
@@ -143,7 +124,6 @@ export class SnailView {
         this.layer.addChild(sprite);
       }
       const len = scene.ppc * SIZE_CM[x.kind] * (x.kind === 'apple' ? Math.min(1, 0.45 + x.ageDays / 160) : 1);
-      c.dead = !x.alive;
       if (x.alive) {
         this.place(c, scene, len, tex);
         c.sprite.alpha = 1;

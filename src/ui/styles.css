@@ -559,7 +559,9 @@ body:has(.sheet.open) .owner.open { bottom: auto; top: calc(env(safe-area-inset-
 .icon-tab .tab-pic { width: 26px; height: 22px; }
 .drip-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
 .drip-water { flex: 0 0 auto; }
-.seg.compact { flex: 0 1 auto; grid-template-columns: auto auto; gap: 4px; }
+.seg.compact { flex: 0 1 auto; grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: auto; gap: 4px; }
+.seg.compact .seg-opt { white-space: nowrap; }
+.seg-badge { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: rgba(227, 189, 109, 0.22); color: var(--gold-bright); font-size: 10.5px; font-weight: 600; vertical-align: 1px; }
 .seg.compact .seg-opt { padding: 4px 12px; border-radius: 999px; }
 .seg.compact .seg-opt b { font-size: 12.5px; }
 /* 商店：老闆的長建議排到商品後面，先看到商品 */
@@ -658,7 +660,7 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .sleep-btn svg { width: 22px; height: 22px; }
 .sleep-btn:hover { border-color: var(--gold); }
 .sleep-btn:active { transform: scale(0.95); }
-@media (max-width: 1100px) { .sleep-btn span { display: none; } .sleep-btn { padding: 4px 8px; } }
+@media (max-width: 1100px) { .sleep-btn .sleep-label { display: none; } .sleep-btn { padding: 4px 8px; } }
 @media (max-width: 520px) { .sleep-btn { min-height: 30px; } .sleep-btn svg { width: 18px; height: 18px; } }
 .night { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px; background: radial-gradient(ellipse at 70% 15%, rgba(60, 70, 140, 0.55), rgba(4, 8, 24, 0.94) 70%); opacity: 0; transition: opacity 0.45s ease, background 1.2s ease; }
 .night.in { opacity: 1; }
@@ -735,24 +737,131 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .item-pic .kit-thermo { height: 30px; margin-bottom: 8px; }
 .item-pic .wc-mini.level { width: 30px; height: 34px; }
 .item-pic .wc-mini.level i { background: rgba(255, 255, 255, 0.08); }
+
+/* 魚的個性（F6）：點魚卡標題下一顆小標籤，詳細面板多一行說明 */
+.persona-chip { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 1px 7px 1px 5px; border-radius: 999px; font-size: 11px; letter-spacing: 0.06em; color: #fff; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.16); vertical-align: 1px; }
+.persona-chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--c, #ccc); box-shadow: 0 0 6px var(--c, #ccc); }
+.persona-chip.shy { --c: #8fd3a8; }
+.persona-chip.greedy { --c: #f2a65a; }
+.persona-chip.showy { --c: #f5d76e; }
+.persona-chip.curious { --c: #7cc8ff; }
+.persona-chip.lazy { --c: #b8a6e8; }
+.persona-line { display: flex; align-items: center; gap: 8px; }
+.persona-line .persona-chip { margin-left: 0; }
+.persona-line span:last-child { color: var(--muted); font-size: 13px; }
+
+/* 第一口被誰吃到：魚頭上浮一行小字，慢慢往上飄走 */
+.bite-tag { position: absolute; z-index: 6; transform: translate(-50%, -150%); padding: 4px 10px; border-radius: 999px; font-size: 12px; color: #fff; white-space: nowrap; pointer-events: none; background: rgba(20, 34, 40, 0.72); border: 1px solid rgba(242, 166, 90, 0.6); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35); animation: bite-tag 2.4s ease-out forwards; }
+@keyframes bite-tag {
+  0% { opacity: 0; transform: translate(-50%, -110%) scale(0.85); }
+  12% { opacity: 1; transform: translate(-50%, -150%) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -230%); }
+}
+.bite-tag.below { animation-name: bite-tag-below; }
+@keyframes bite-tag-below {
+  0% { opacity: 0; transform: translate(-50%, 110%) scale(0.85); }
+  12% { opacity: 1; transform: translate(-50%, 160%) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, 220%); }
+}
+@media (prefers-reduced-motion: reduce) { .bite-tag { animation-duration: 0.01s; animation-fill-mode: none; } }
+
+/* 開缸演出時只留缸（#171）：上方列、任務卡、工具列、缸名先淡出，演完再回來 */
+#hud, #dock, .quest-pill, .tank-label { transition: opacity 0.5s ease; }
+.setting-up #hud, .setting-up #dock, .setting-up .quest-pill, .setting-up .tank-label { opacity: 0; pointer-events: none; }
+
+/* ---- 對水小遊戲（F5）：袋子、滴管、差距條、滴速條 ---- */
+.drip-shade { position: fixed; inset: 0; z-index: 38; display: grid; place-items: center; padding: 12px; background: rgba(4, 12, 20, 0.55); opacity: 0; transition: opacity 0.3s ease; }
+.drip-shade.in { opacity: 1; }
+.drip-game { width: min(640px, 96vw); max-height: 96vh; overflow: auto; display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 20px; }
+.drip-title { color: var(--gold); font-size: 16px; letter-spacing: 0.08em; }
+.drip-main { display: grid; grid-template-columns: minmax(150px, 0.9fr) 1.1fr; gap: 14px; align-items: stretch; }
+.drip-scene { --nervous: 0; position: relative; min-height: 210px; border-radius: 16px; background: radial-gradient(ellipse at 50% 30%, rgba(120, 190, 210, 0.25), rgba(10, 30, 44, 0.6)); overflow: hidden; }
+.drip-tube { --speed: 1.2s; position: absolute; left: 50%; top: 0; width: 6px; height: 34%; transform: translateX(-50%); background: linear-gradient(90deg, rgba(220, 240, 245, 0.35), rgba(255, 255, 255, 0.7), rgba(220, 240, 245, 0.35)); border-radius: 0 0 3px 3px; }
+.drip-valve { position: absolute; left: 50%; top: 22%; width: 20px; height: 12px; transform: translateX(-50%); border-radius: 4px; background: linear-gradient(180deg, #5b8f7b, #2f5a4a); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); }
+.drip-tube.flowing .drip-valve { background: linear-gradient(180deg, #7ed1a8, #3f8a68); }
+.drip-drops { position: absolute; left: 50%; top: 100%; width: 0; height: 60px; transition: opacity 0.2s; }
+.drip-drops::before, .drip-drops::after { content: ''; position: absolute; left: -4px; top: 0; width: 8px; height: 11px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; background: radial-gradient(circle at 35% 35%, #ffffff, #9fdcf0 60%, #5ab2d0); animation: drip-fall var(--speed) linear infinite; }
+.drip-drops::after { animation-delay: calc(var(--speed) / -2); }
+@keyframes drip-fall { 0% { transform: translateY(0) scale(0.6); opacity: 0; } 15% { opacity: 1; transform: translateY(4px) scale(1); } 100% { transform: translateY(58px); opacity: 0.2; } }
+.drip-bag { position: absolute; left: 50%; bottom: 8%; width: 62%; height: 60%; transform: translateX(-50%); border-radius: 18% 18% 46% 46% / 12% 12% 40% 40%; background: rgba(230, 245, 250, 0.1); border: 2px solid rgba(235, 248, 255, 0.45); box-shadow: inset 0 0 18px rgba(255, 255, 255, 0.12), 0 6px 18px rgba(0, 0, 0, 0.35); overflow: hidden; }
+.drip-bag-knot { position: absolute; left: 50%; top: -6px; width: 34%; height: 12px; transform: translateX(-50%); border-radius: 0 0 50% 50%; background: rgba(235, 248, 255, 0.45); }
+.drip-bag-shine { position: absolute; left: 12%; top: 10%; width: 10%; height: 55%; border-radius: 50%; background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), transparent); }
+.drip-bag-water { --mix: 0; position: absolute; left: 0; right: 0; bottom: 0; height: 40%; transition: height 0.15s linear; background: linear-gradient(180deg, color-mix(in srgb, #bfd88f calc((1 - var(--mix)) * 100%), #6fc4dc), color-mix(in srgb, #8fae55 calc((1 - var(--mix)) * 100%), #2f86a6)); opacity: 0.8; }
+.drip-bag-water::before { content: ''; position: absolute; left: 0; right: 0; top: -2px; height: 4px; background: rgba(255, 255, 255, 0.6); border-radius: 50%; }
+.drip-bag-fish { position: absolute; inset: 30% 6% 8%; }
+.drip-fish { position: absolute; width: 58%; left: calc(8% + var(--i) * 16%); top: calc(18% + var(--i) * 18%); object-fit: contain; filter: saturate(calc(1 - var(--nervous) * 0.85)) brightness(calc(1 + var(--nervous) * 0.35)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35)); animation: drip-swim calc(2.4s + var(--i) * 0.5s) ease-in-out infinite alternate; }
+.drip-fish:nth-child(2) { transform: scaleX(-1); }
+@keyframes drip-swim { from { translate: -6px 2px; } to { translate: 8px -3px; } }
+.drip-scene.shaking .drip-fish { animation: drip-shake 0.12s linear infinite; }
+@keyframes drip-shake { 0% { translate: -2px 0; } 50% { translate: 2px 1px; } 100% { translate: -1px -1px; } }
+.drip-side { display: flex; flex-direction: column; gap: 10px; justify-content: center; }
+.drip-meter { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.drip-gap, .drip-rate { position: relative; height: 12px; border-radius: 6px; background: rgba(255, 255, 255, 0.1); overflow: visible; }
+.drip-gap i, .drip-rate i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: linear-gradient(90deg, #d9a43a, #f0c45a); transition: width 0.1s linear; }
+.drip-gap.ok i { background: linear-gradient(90deg, #4fb36a, var(--ok)); }
+.drip-gap-ok { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.drip-rate i { background: linear-gradient(90deg, #4fb36a, #7ed1a8); }
+.drip-rate i.fast { background: linear-gradient(90deg, #d9a43a, #e0574a); }
+.drip-safe { position: absolute; top: -5px; bottom: -5px; width: 3px; border-radius: 2px; background: #fff; box-shadow: 0 0 6px rgba(255, 255, 255, 0.8); transition: left 0.2s; }
+.drip-readings { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.drip-readings b { color: var(--text); font-weight: 600; }
+.drip-hold { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 64px; border-radius: 18px; font-size: 17px; font-weight: 800; color: #08202a; background: linear-gradient(180deg, #bfeaf7, #6fc4dc); border: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 5px 0 #2f86a6, 0 8px 18px rgba(0, 0, 0, 0.35); user-select: none; -webkit-user-select: none; touch-action: none; transition: transform 0.06s, box-shadow 0.06s; }
+.drip-hold.down { transform: translateY(4px); box-shadow: 0 1px 0 #2f86a6, 0 3px 8px rgba(0, 0, 0, 0.35); }
+.drip-hold-icon { width: 16px; height: 22px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; background: radial-gradient(circle at 35% 35%, #ffffff, #4aa6c8); }
+.drip-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.drip-game.done.perfect .drip-fish { filter: saturate(1.2) drop-shadow(0 0 10px rgba(255, 220, 120, 0.8)); }
+@media (max-height: 460px) { .drip-scene { min-height: 170px; } .drip-hold { min-height: 52px; } .drip-game { gap: 8px; padding: 10px 14px; } }
+@media (prefers-reduced-motion: reduce) { .drip-fish, .drip-drops::before, .drip-drops::after { animation: none; } }
+
+/* 造景引導（F1-c）：第一次進造景模式，手指按在石頭上左右比劃 */
+.scape-coach { position: absolute; z-index: 3; pointer-events: none; transform: translate(-50%, -20%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.scape-coach::before { content: ''; position: absolute; left: 50%; top: 2px; width: 120px; height: 3px; transform: translateX(-50%); border-radius: 2px; background: linear-gradient(90deg, transparent, rgba(246, 216, 145, 0.85) 20%, rgba(246, 216, 145, 0.85) 80%, transparent); animation: scape-coach-track 1.8s ease-in-out infinite; }
+.scape-coach-hand { width: 44px; height: 52px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 52'%3E%3Cpath d='M15 6a4 4 0 0 1 8 0v16l2-1a4 4 0 0 1 5 2l1 1a4 4 0 0 1 5 2l1 1a4 4 0 0 1 5 3v9c0 7-5 12-12 12h-5c-4 0-7-2-9-5L6 33a4 4 0 0 1 6-5l3 3Z' fill='%23fff8ea' stroke='%23b8893a' stroke-width='2.2' stroke-linejoin='round'/%3E%3Cpath d='M23 22v8M30 25v6M36 28v4' stroke='%23b8893a' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.45)); animation: scape-coach-drag 1.8s ease-in-out infinite; }
+.scape-coach-text { padding: 4px 12px; border-radius: 999px; background: rgba(10, 32, 42, 0.82); border: 1px solid rgba(246, 216, 145, 0.55); color: var(--gold-bright); font-size: 13px; font-weight: 600; white-space: nowrap; }
+@keyframes scape-coach-drag { 0%, 12% { translate: 0 0; scale: 1; } 22% { translate: 0 0; scale: 0.88; } 50% { translate: -46px 0; scale: 0.88; } 78% { translate: 46px 0; scale: 0.88; } 90%, 100% { translate: 0 0; scale: 1; } }
+@keyframes scape-coach-track { 0%, 18%, 92%, 100% { opacity: 0; } 30%, 80% { opacity: 1; } }
+.scape-empty { display: flex; flex-direction: column; gap: 6px; }
+
 /* 開缸（F1-a）：每類一排設備卡，底下總價和按鈕；關掉面板時主畫面中間留一顆「開缸」按鈕 */
 .setup-cat h3 { margin: 12px 0 6px; font-size: 15px; }
 .setup-cat .card-note { color: var(--gold); }
 .setup-total { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 14px 0 6px; }
-.setup-panel > .row { justify-content: flex-end; gap: 8px; position: sticky; bottom: 0; padding: 8px 0; }
+.setup-panel > .row { justify-content: flex-end; gap: 8px; position: sticky; bottom: calc(-18px - env(safe-area-inset-bottom)); z-index: 2; margin: 0 -20px calc(-18px - env(safe-area-inset-bottom)); padding: 26px 20px calc(18px + env(safe-area-inset-bottom)); /* 卡片捲到按鈕列後面要被蓋住（#186）：上緣淡出、下面不透明 */ background: linear-gradient(180deg, rgba(8, 28, 38, 0) 0, rgb(9, 28, 38) 22px); }
 .setup-cta { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5; font-size: 18px; padding: 14px 22px; box-shadow: 0 0 24px rgba(227, 189, 109, 0.6); }
 .setup-cta[hidden] { display: none; }
 
-/* 今日小事清單（#188）：左上角任務卡下面一張，早上報告卡最上面也有。正式樣式由美術與 UI 再調 */
-.daily-card { position: absolute; left: 14px; z-index: 5; padding: 8px 12px; border-radius: 14px; min-width: 180px; max-width: 260px; }
-.daily-card:empty { display: none; }
-.daily-list { display: flex; flex-direction: column; gap: 2px; }
-.daily-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 13px; }
-.daily-count { color: var(--muted); font-size: 12px; }
-.daily-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: 0; padding: 3px 0; color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
-.daily-item:hover { color: var(--accent, #f0c96a); }
-.daily-check { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.55); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; line-height: 1; }
-.daily-item.done { color: var(--muted); }
-.daily-item.done .daily-check { background: var(--ok); border-color: var(--ok); color: #0c1d1a; }
-.daily-chest { margin-top: 4px; align-self: flex-start; }
-.morning .daily-list { margin: 4px 0 8px; padding: 8px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); }
+/* 每日 3 件小事（F3，#185）：左上角任務卡下面的小卡，三件各一個圖示，做完打勾；全做完發光、出現寶箱 */
+.daily-holder { position: absolute; z-index: 4; left: calc(env(safe-area-inset-left) + 14px); }
+.daily { display: flex; flex-direction: column; gap: 3px; width: min(220px, 40vw); padding: 7px 10px 8px; border-radius: 14px; }
+.daily-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.daily-head b { font-size: 12px; letter-spacing: 0.14em; color: var(--gold); }
+.daily-dots { display: inline-flex; gap: 4px; }
+.daily-dots i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgba(227, 189, 109, 0.7); }
+.daily-dots i.on { background: var(--gold-bright); box-shadow: 0 0 6px var(--gold); }
+.daily-task { display: flex; align-items: center; gap: 8px; padding: 2px 4px 2px 2px; border-radius: 10px; background: none; border: none; color: var(--text); font-size: 13px; text-align: left; cursor: pointer; }
+.daily-task:not(:disabled):hover { background: rgba(255, 255, 255, 0.06); }
+.daily-task img { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 7px; object-fit: contain; }
+.daily-task span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.daily-check { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid rgba(243, 234, 216, 0.4); }
+.daily-task.done { cursor: default; }
+.daily-task.done span { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(169, 188, 192, 0.6); }
+.daily-task.done img { filter: saturate(0.4) brightness(0.8); }
+.daily-task.done .daily-check { border-color: var(--ok); background: var(--ok) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.6 2.6L12 5.6' fill='none' stroke='%230b2a36' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat; }
+.daily.ready { border-color: var(--gold-bright); box-shadow: 0 0 0 1px rgba(246, 216, 145, 0.5), 0 0 22px rgba(246, 216, 145, 0.45); animation: daily-glow 1.8s ease-in-out infinite; }
+@keyframes daily-glow { 50% { box-shadow: 0 0 0 1px rgba(246, 216, 145, 0.7), 0 0 30px rgba(246, 216, 145, 0.7); } }
+.daily-chest { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 4px; padding: 6px 10px; font-size: 13.5px; }
+.daily-chest-icon { width: 24px; height: 20px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 20'%3E%3Cpath d='M2 8h20v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1Z' fill='%23a5652c' stroke='%235a3412' stroke-width='1.2'/%3E%3Cpath d='M2 8c0-4 3-7 10-7s10 3 10 7Z' fill='%23c98a43' stroke='%235a3412' stroke-width='1.2'/%3E%3Cpath d='M2 8h20' stroke='%23f6d891' stroke-width='2'/%3E%3Crect x='10' y='6' width='4' height='6' rx='1' fill='%23f6d891' stroke='%235a3412' stroke-width='1'/%3E%3C/svg%3E") center / contain no-repeat; animation: daily-chest 1.2s ease-in-out infinite; }
+@keyframes daily-chest { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-8deg); } 40% { transform: rotate(8deg); } 60% { transform: rotate(0); } }
+@media (max-height: 460px) { .daily { width: min(190px, 34vw); padding: 5px 8px 6px; gap: 1px; } .daily-task { font-size: 12px; } .daily-task img { width: 22px; height: 22px; } }
+.scaping .daily-holder, .setting-up .daily-holder { display: none; }
+@media (prefers-reduced-motion: reduce) { .daily.ready, .daily-chest-icon { animation: none; } }
+
+/* 早上報告卡的「今天的小事」 */
+.morning-daily { display: flex; flex-direction: column; gap: 6px; }
+.morning-daily-title { font-size: 12px; letter-spacing: 0.14em; color: var(--gold); }
+.morning-daily-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.morning-daily-task { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 6px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(227, 189, 109, 0.3); color: var(--text); font-size: 12.5px; cursor: pointer; }
+.morning-daily-task img { width: 36px; height: 36px; border-radius: 9px; object-fit: contain; }
+.morning-daily-task.done { opacity: 0.55; cursor: default; }

@@ -137,6 +137,11 @@ export class ScapeView {
     return { x0: s.x - w * s.anchor.x, y0: s.y - h * s.anchor.y, x1: s.x + w * (1 - s.anchor.x), y1: s.y };
   }
 
+  /** 這層的第一組石頭、沉木（造景引導指給玩家看）。 */
+  firstInLayer(layer: ScapeLayer): number | null {
+    return this.items.find((v) => v.place.layer === layer)?.index ?? null;
+  }
+
   /** 點到哪一組石頭、沉木（只找目前編輯的那層，前面的優先）。 */
   hitHardscape(x: number, y: number, layer: ScapeLayer): number | null {
     for (const v of [...this.items].reverse()) {
