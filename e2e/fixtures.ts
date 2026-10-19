@@ -33,8 +33,8 @@ export async function skipSetupShow(page: Page): Promise<void> {
   if (!(await page.evaluate(() => (window as unknown as ViewWindow).cycle!.view!.settingUp))) return;
   await page.evaluate(() => (window as unknown as ViewWindow).cycle!.view!.skipSetup());
   await page.waitForFunction(() => !(window as unknown as ViewWindow).cycle!.view!.settingUp, null, { timeout: 30_000 });
-  const card = page.locator('.celebrate');
-  if (await card.count()) await card.first().dispatchEvent('click');
+  // 卡片在頁面裡直接點掉：用 locator 的話，數到卡片後它剛好自己退場（約 0.4 秒動畫）就會一直等到逾時
+  await page.evaluate(() => document.querySelectorAll<HTMLElement>('.celebrate:not(.out)').forEach((c) => c.click()));
 }
 
 /** 讀目前存檔（localStorage 的 cycle.save.v1），方便核對畫面和模擬狀態。 */
