@@ -34,6 +34,10 @@ const FISH_TEXT: Record<string, string> = {
 const PLANT_TEXT: Record<string, string> = {
   anubias: '陰性草，綁在石頭或沉木上，弱光也長得好，長得很慢。光太強時葉面容易長藻。',
   rotala: '陽性草，光照夠、加 CO₂ 時頂端會轉紅，長得很快，需要常常修剪。光不夠會越長越細、慢慢溶掉。',
+  eleocharis: '細長像草地的前景草，一叢叢往旁邊走莖蔓延。中強光、有 CO₂ 才長得密，光不夠會變黃、長不開。',
+  glosso: '最常見的前景鋪地草，小圓葉貼著底沙長成一片綠毯。很吃強光和 CO₂，條件不夠會往上竄、不貼地，甚至溶掉。',
+  hydrocotyle: '小圓葉一層層往外擴散，好種、長得快，中等光就可以，加 CO₂ 會更密。長太亂要常修剪。',
+  moss: '綁在石頭或沉木上的苔蘚，弱光、不加 CO₂ 也能慢慢長。小蝦很愛在裡面找東西吃，仔魚也能躲。太久沒修會堆積髒污。',
 };
 
 function fishEntries(): CodexEntry[] {

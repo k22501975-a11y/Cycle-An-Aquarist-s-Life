@@ -140,6 +140,10 @@ export const SCENERY: Record<string, string> = {
   'wood-3': 'scape/wood-spider-3.webp',
   'plant-rotala': 'scape/plant-rotala.webp',
   'plant-anubias': 'scape/plant-anubias.webp',
+  'plant-eleocharis': 'scape/plant-eleocharis.webp',
+  'plant-glosso': 'scape/plant-glosso.webp',
+  'plant-hydrocotyle': 'scape/plant-hydrocotyle.webp',
+  'plant-moss': 'scape/plant-moss.webp',
   // 底材：俯視紋理（鋪沙面）與前玻璃看進去的斷面條
   'sub-sand-tile': 'substrate/substrate-sand-tile.webp',
   'sub-soil-tile': 'substrate/substrate-soil-tile.webp',

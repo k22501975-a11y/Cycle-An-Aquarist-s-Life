@@ -625,6 +625,9 @@ function paintLeaf(ctx: Ctx, x: number, y: number, angle: number, len: number, w
   ctx.restore();
 }
 
+/** 矮的水草：高度 = [基本, 每單位大小增加]（像素，乘上 hs）。 */
+const LOW_PLANTS: Partial<Record<Plant['species'], [number, number]>> = { eleocharis: [45, 40], glosso: [40, 30], hydrocotyle: [50, 34], moss: [45, 30] };
+
 export interface PlantPainting {
   texture: Texture;
   /** 根部在貼圖上的位置（像素）。 */
@@ -648,8 +651,10 @@ export function paintPlant(plant: Plant, hs: number, scale = 1): PlantPainting {
     return out;
   };
   const high = sp.lightType === 'high';
-  const full = high ? (110 + size * 150) * hs : (60 + size * 30) * hs;
-  const W = (high ? 220 : 160) * hs * (0.8 + size * 0.3);
+  // 前景草、莫絲矮矮的往旁邊長；其他照陰性／陽性草的高度
+  const low = LOW_PLANTS[plant.species];
+  const full = (low ? low[0] + size * low[1] : high ? 110 + size * 150 : 60 + size * 30) * hs;
+  const W = (high || low ? 220 : 160) * hs * (0.8 + size * 0.3);
   const H = full * 1.12 + 30 * hs;
   const { canvas, ctx } = makeCanvas(W, H, scale);
   const ax = W / 2;
