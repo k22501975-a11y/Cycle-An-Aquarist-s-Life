@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addHardscape, addPlant, buyQuarantine, HARDSCAPE, createTank, feed, FILTERS, HEATERS, TANKS, useTestKit, waterChange } from '../sim';
+import { addFish, addHardscape, addPlant, applySetup, buyQuarantine, economy, HARDSCAPE, createTank, feed, FILTERS, HEATERS, RECOMMENDED_SETUP, TANKS, useTestKit, waterChange } from '../sim';
 import { advanceQuest, currentQuest, cycleProgress, loadProgress, newProgress, overloadWarning, pairProgress, pendingTip, questShopTab, QUESTS, saveProgress } from './tutorial';
 
 function tank() {
@@ -9,8 +9,12 @@ function tank() {
 describe('新手引導任務', () => {
   it('照順序一步步完成，每次只前進一步', () => {
     const s = tank();
+    economy(s).setupPending = true;
     const p = newProgress();
-    expect(currentQuest(p)?.id).toBe('plant');
+    expect(currentQuest(p)?.id).toBe('setup');
+    expect(advanceQuest(p, s)).toBeNull();
+    expect(applySetup(s, RECOMMENDED_SETUP)).toBeNull();
+    expect(advanceQuest(p, s)?.id).toBe('setup');
     expect(advanceQuest(p, s)).toBeNull();
     addPlant(s, 'anubias');
     useTestKit(s);
@@ -165,6 +169,7 @@ describe('養水任務進度', () => {
 describe('任務直接帶到商店對應的分頁', () => {
   it('種水草的任務開水草頁、放魚開魚頁、養水開設備頁', () => {
     const p = newProgress();
+    p.step = QUESTS.findIndex((q) => q.id === 'plant');
     expect(questShopTab(p)).toBe('plants');
     p.step = QUESTS.findIndex((q) => q.id === 'fish');
     expect(questShopTab(p)).toBe('fish');

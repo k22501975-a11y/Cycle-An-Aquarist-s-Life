@@ -1,5 +1,5 @@
 import type { KeyValueStore } from '../game/save';
-import { cycleMaturity, isCycled, observeSymptoms, sexVisible, type TankState } from '../sim';
+import { cycleMaturity, isCycled, needsSetup, observeSymptoms, sexVisible, type TankState } from '../sim';
 
 /**
  * 新手引導任務（GAME_DESIGN 定案）：水族館老闆一步步帶玩家開缸、放魚、餵食、換水、養水。
@@ -35,10 +35,22 @@ const living = (s: TankState) => s.fish.filter((f) => f.alive);
 
 export const QUESTS: Quest[] = [
   {
+    id: 'setup',
+    reward: 50,
+    title: '開缸：挑魚缸和設備',
+    short: '開缸',
+    lines: [
+      '歡迎！我是隔壁水族館的阿德。這個空缸送你，設備就用起始資金自己挑吧。',
+      '過濾器決定硝化菌住多少、燈決定能種什麼草、底沙會影響水質。每張卡都寫了好處和代價；拿不定主意就按「推薦組合」。',
+    ],
+    done: '缸開好了！水裡還沒有能分解魚便便的硝化菌，接下來我們一步步把它養起來。',
+    check: (s) => !needsSetup(s),
+  },
+  {
     id: 'plant',
     reward: 50,
     title: '種下第一株水草',
-    lines: ['歡迎！我是隔壁水族館的阿德。這個缸剛開，水裡還沒有能分解魚便便的硝化菌。', '先到「商店」買幾株水草種下去吧。水草會吸收養分，讓新缸穩定得快一點。'],
+    lines: ['先到「商店」買幾株水草種下去吧。水草會吸收養分，讓新缸穩定得快一點。'],
     done: '種得不錯！水草也會給之後的小魚躲藏的地方。',
     check: (s) => s.plants.length > 0,
     shopTab: 'plants',
@@ -78,7 +90,7 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'scape',
-    reward: 100,
+    reward: 50,
     title: '擺一塊石頭或沉木',
     short: '擺石頭',
     lines: ['等硝化菌長起來的這幾天，來佈置一下缸子吧。', '到商店的「設備」買一塊石頭或沉木（火山石最便宜），再用「進入造景模式」拖到你喜歡的位置。石頭和沉木表面也能住硝化菌。'],

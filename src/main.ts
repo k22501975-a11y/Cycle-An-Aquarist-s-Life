@@ -2,7 +2,8 @@ import { Application } from 'pixi.js';
 import { AudioEngine } from './audio/engine';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
 import { eventSound } from './audio/sounds';
-import { applySeason, Game, newGameState } from './game/game';
+import { applySeason, blankGameState, Game } from './game/game';
+import { setupPanel } from './ui/setup-panel';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
 import { menuTile, ownerImg } from './ui/art-icons';
 import { SpeedControl } from './ui/speed-control';
@@ -96,7 +97,7 @@ async function start(): Promise<void> {
   const saved = loaded.file;
   if (saved) for (const t of [saved.state, ...(saved.tanks ?? [])]) applySeason(t);
   const offline = saved ? catchUp(saved) : null;
-  const game = new Game(saved?.state ?? newGameState(), saved?.timeScale ?? 7, saved?.tanks ?? [], saved?.active ?? 0);
+  const game = new Game(saved?.state ?? blankGameState(), saved?.timeScale ?? 7, saved?.tanks ?? [], saved?.active ?? 0);
   for (const t of game.tanks) applySeason(t);
   // 只先等這些缸畫得到的圖（Issue #81），其他的等主畫面出來後在背景載
   await loadPaintedArt(startupArt(game.tanks));
@@ -722,11 +723,11 @@ async function start(): Promise<void> {
         () => {
           if (!confirm('確定要放棄目前的水缸，重新開始嗎？')) return;
           clearSave(store);
-          game.load(newGameState());
+          game.load(blankGameState());
           save();
           sheet.close();
           select(null);
-          toasts.show('開了一個新缸');
+          openSetup();
         },
         '.danger',
       ),
@@ -818,6 +819,17 @@ async function start(): Promise<void> {
   stage.append(tankLabel);
   const guide = new Guide(stage, store, (id) => audio.play(id), () => requestAnimationFrame(() => measure()));
   guide.openShop = (tab) => openShop(tab);
+  // 開缸（F1-a）：新遊戲先挑設備，開完缸時間才開始走；關掉面板時主畫面留一個「開缸」按鈕
+  const openSetup = () =>
+    sheet.open('開缸', () =>
+      setupPanel(ctx, () => {
+        save();
+        audio.play('buy');
+        toasts.show('缸開好了！');
+      }),
+    );
+  const setupBtn = h('button.btn.primary.setup-cta', { onclick: openSetup, hidden: true }, '開缸：挑魚缸和設備');
+  stage.append(setupBtn);
   guide.reward = (id, coins) => game.actAll((tanks) => sim.claimQuestReward(tanks[0], id, coins));
   guide.goalsChanged = () => game.actAll(() => undefined);
   const measure = () => {
@@ -970,6 +982,7 @@ async function start(): Promise<void> {
   renderCaps();
   renderCoins();
   guide.start();
+  if (sim.needsSetup(game.tanks[0])) openSetup();
   let refreshTimer = 0;
   // 一段時間沒操作就降到 30 fps，省電；一碰螢幕馬上恢復
   let lastInput = performance.now();
@@ -1022,6 +1035,7 @@ async function start(): Promise<void> {
       renderCoins();
       renderTankChip();
       guide.update(game.state, game.tanks);
+      setupBtn.hidden = !sim.needsSetup(game.tanks[0]) || sheet.isOpen;
       celebrateStrains();
       for (const entry of unlockCodex(codexSeen, game.state)) {
         saveCodexSeen(store, codexSeen);

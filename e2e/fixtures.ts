@@ -18,11 +18,16 @@ export const test = base.extend<{ pageErrors: string[] }>({
 
 export { expect };
 
-/** 開新遊戲並等到主畫面（水缸畫布與工具列）出現。 */
+/** 開新遊戲並等到主畫面（水缸畫布與工具列）出現。新遊戲會先跳出開缸面板，用推薦組合開缸。 */
 export async function openGame(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page.locator('#stage canvas')).toBeVisible();
   await expect(page.locator('button.tool').first()).toBeVisible();
+  const setup = page.locator('.sheet.open .setup-panel');
+  if (await setup.waitFor({ timeout: 3000 }).then(() => true, () => false)) {
+    await setup.getByRole('button', { name: '開缸', exact: true }).click();
+    await expect(setup).toBeHidden();
+  }
 }
 
 /** 讀目前存檔（localStorage 的 cycle.save.v1），方便核對畫面和模擬狀態。 */
