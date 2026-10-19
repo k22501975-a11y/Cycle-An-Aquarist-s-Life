@@ -500,6 +500,11 @@ export class TankView {
     this.setupT = 0;
   }
 
+  /** 跳過開缸演出：下一格直接演完（設備、燈都到位，照樣通知 'done'）。 */
+  skipSetup(): void {
+    if (this.setupT >= 0) this.setupT = Math.max(this.setupT, SETUP_SECONDS - 1e-4);
+  }
+
   get settingUp(): boolean {
     return this.setupT >= 0;
   }

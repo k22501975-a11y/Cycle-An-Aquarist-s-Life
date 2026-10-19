@@ -45,6 +45,18 @@ export function watchConsoleErrors(page: Page): string[] {
 export async function startGame(page: Page): Promise<void> {
   await openGame(page);
   await waitForCycle(page);
+  await skipSetupShow(page);
+}
+
+/** 新遊戲的開缸演出（倒沙、注水、開燈，約 9 秒）直接跳完，再把演完跳出的「你的第一個缸」慶祝卡關掉。 */
+export async function skipSetupShow(page: Page): Promise<void> {
+  type ViewWindow = { cycle: { view?: { settingUp: boolean; skipSetup(): void } } };
+  await page.waitForFunction(() => !!(window as unknown as ViewWindow).cycle.view, null, { timeout: 30_000 });
+  if (!(await page.evaluate(() => (window as unknown as ViewWindow).cycle.view!.settingUp))) return;
+  await page.evaluate(() => (window as unknown as ViewWindow).cycle.view!.skipSetup());
+  await page.waitForFunction(() => !(window as unknown as ViewWindow).cycle.view!.settingUp, null, { timeout: 30_000 });
+  const card = page.locator('.celebrate');
+  if (await card.count()) await card.first().dispatchEvent('click');
 }
 
 /** 開新遊戲並把開場對話和它打開的面板都關掉，回到乾淨的主畫面。 */

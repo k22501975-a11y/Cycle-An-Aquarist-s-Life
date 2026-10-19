@@ -56,6 +56,8 @@ import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
 import { recordsPanel } from './ui/records';
 import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt, ordersPanel } from './ui/orders-panel';
 import { flyCoins } from './ui/coin-fly';
+import { morningCard } from './ui/morning-card';
+import { morningReport, snapshot, type ReportItem } from './ui/morning-report';
 import { loadCodexSeen, saveCodexSeen, unlockCodex } from './ui/codex';
 import { codexPanel } from './ui/codex-panel';
 import { Sheet, Toasts } from './ui/sheet';
@@ -399,6 +401,7 @@ async function start(): Promise<void> {
     // 開缸演出（F1-b）：每一步一個音效和一行說明，最後是「你的第一個缸」
     onSetupStep: (step) => {
       if (step === 'done') {
+        setupSkip.remove();
         moment('first_tank', { art: 'gear/tank-empty.webp', title: '你的第一個缸', sub: '水注滿、設備也裝好了', owner: '先別急著放魚。倒一瓶硝化菌液，讓水先養個幾天。' });
         guide.start();
         return;
@@ -410,8 +413,14 @@ async function start(): Promise<void> {
     },
   });
   debugHandle.view = view;
+  // 開缸演出看過的人可以跳過
+  const setupSkip = h('button.setup-skip', { type: 'button', onclick: () => view.skipSetup() }, '跳過 ›');
+  const playSetup = () => {
+    view.playSetup();
+    stage.append(setupSkip);
+  };
   // 第一次打開遊戲：從空缸開始演一次開缸
-  if (!saved) view.playSetup();
+  if (!saved) playSetup();
   // 造景模式（aquascape-editor.md）：底部工具列換成造景操作列，在缸裡拖曳石頭、沉木、水草
   let scaping = false;
   const scapeBar = new ScapeBar({
@@ -486,6 +495,8 @@ async function start(): Promise<void> {
     },
     cloud: () => !!cloud.session,
   });
+  // 過一晚（F2）：跳到隔天早上 8 點，醒來看早上報告；雲端模式時間跟著伺服器走，不能跳
+  const sleepBtn = h('button.sleep-btn', { 'aria-label': '過一晚', title: '過一晚：跳到明天早上 8 點，看昨晚發生了什麼', onclick: () => goNight() }, icon(ICONS.moon), h('span', {}, '過一晚'));
   // 商店開在任務要買的那一頁（買水草的任務就直接是水草）
   const openShop = (tab?: ShopTab) => sheet.open('商店', () => shopPanel(ctx, tab ?? guide.shopTab ?? 'fish'));
   const coinsValue = h('b');
@@ -746,14 +757,14 @@ async function start(): Promise<void> {
           save();
           sheet.close();
           select(null);
-          view.playSetup();
+          playSetup();
         },
         '.danger',
       ),
     );
   const menuBtn = h('button.hud-btn', { onclick: () => sheet.open('選單', menu), 'aria-label': '選單' }, icon(ICONS.menu));
   hud.classList.add('glass');
-  hud.append(clock, speed.el, coinsBtn, tankBtn, h('span.hud-sep'), caps, todoBtn, menuBtn);
+  hud.append(clock, speed.el, sleepBtn, coinsBtn, tankBtn, h('span.hud-sep'), caps, todoBtn, menuBtn);
 
   // ---- 下方櫃台：待辦卡｜圓形工具列｜選取卡 ----
   const tools = h('div.tools.glass');
@@ -788,7 +799,7 @@ async function start(): Promise<void> {
   };
   tool('feed', '餵食', '#e8a24a', () => sheet.open('餵食', () => feedPanel(ctx)));
   tool('water', '換水', '#4fb8e0', () => sheet.open('換水', () => waterChangePanel(ctx)));
-  tool('test', '測試', '#a98be8', () => {
+  const testBtn = tool('test', '測試', '#a98be8', () => {
     const cost = sim.price('use:test');
     if (!sim.canAfford(game.state, cost)) {
       toasts.show(`錢不夠買試劑（一次 ${cost} 元）`, 'warn');
@@ -890,6 +901,8 @@ async function start(): Promise<void> {
   // 其他缸的事件也要通知，前面加上缸名
   const tankPrefix = (tank: number) => (game.tanks.length > 1 && tank !== game.active ? `${sim.tankLabel(game.tanks, tank)}：` : '');
   game.onEvent((e, tank) => {
+    // 過一晚的時候不跳提示，早上報告會一條一條列出來
+    if (game.sleeping) return;
     if (e.type === 'fish_died') {
       const t = game.tanks[tank] ?? game.state;
       const fish = t.fish.find((f) => f.id === e.subjectId);
@@ -919,6 +932,7 @@ async function start(): Promise<void> {
   const GEAR_CRISES = new Set(['heater_broke', 'heater_stuck', 'heater_exposed', 'controller_cut', 'power_out', 'too_hot', 'too_cold']);
   game.onCrisis((c) => {
     speed.render();
+    if (sleepingNow) return;
     const fix = GEAR_CRISES.has(c.reason)
       ? {
           label: '去處理',
@@ -948,6 +962,84 @@ async function start(): Promise<void> {
     });
     for (const f of rest) toasts.show(`${tankPrefix(f.tank)}又選出新品系：${f.name}`);
   };
+  // ---- 過一晚（F2）：畫面暗下來、跳到早上，醒來一張報告卡 ----
+  let sleepingNow = false;
+  const reportPicture = (item: ReportItem): string | null => {
+    const t = game.tanks[item.tank] ?? game.state;
+    const fish = item.subjectId !== undefined ? t.fish.find((f) => f.id === item.subjectId) : undefined;
+    if (item.kind === 'birth') return `${import.meta.env.BASE_URL}art/${fryArt(fish?.species ?? 'guppy')}`;
+    if (item.kind === 'snails') return `${import.meta.env.BASE_URL}art/snail/snail-bladder.webp`;
+    if (fish && fish.alive && (item.kind === 'grown' || item.kind === 'disease')) return view.portrait(fish);
+    return null;
+  };
+  const goReport = (item: ReportItem) => {
+    game.switchTo(item.tank);
+    switch (item.action) {
+      case 'remove_dead':
+        netBtn.click();
+        break;
+      case 'test_water':
+        testBtn.click();
+        break;
+      case 'water_change':
+        sheet.open('換水', () => waterChangePanel(ctx));
+        break;
+      case 'feed':
+        sheet.open('餵食', () => feedPanel(ctx));
+        break;
+      case 'equipment':
+        sheet.open('設備與維護', () => maintenancePanel(ctx));
+        break;
+      case 'orders':
+        ordersBtn.click();
+        break;
+      case 'snails':
+        sheet.open('螺', () => snailPanel(ctx));
+        break;
+      case 'trim':
+        sheet.open('修剪水草', () => trimListPanel(ctx));
+        break;
+      case 'fish':
+      case 'treat':
+        if (item.subjectId !== undefined) select(item.subjectId);
+        break;
+    }
+  };
+  const goNight = () => {
+    if (sleepingNow) return;
+    if (cloud.session) {
+      toasts.show('雲端模式的時間跟著伺服器走，不能直接跳過一晚', 'warn');
+      return;
+    }
+    sleepingNow = true;
+    sheet.close();
+    select(null);
+    audio.play('open');
+    const shade = h('div.night', { 'aria-hidden': 'true' }, h('span.night-moon'), h('span.night-z', {}, 'z'), h('span.night-z', {}, 'z'), h('span.night-z', {}, 'z'));
+    document.body.append(shade);
+    requestAnimationFrame(() => shade.classList.add('in'));
+    window.setTimeout(() => {
+      const before = snapshot(game.tanks);
+      const r = game.sleep();
+      // 半夜出狀況：快轉的話切回正常速度，醒來先處理
+      if (r.crisis && game.clock.timeScale > sim.DEFAULT_TIME_SCALE) game.clock.timeScale = sim.DEFAULT_TIME_SCALE;
+      const report = morningReport(before, game.tanks, r.hours, r.crisis);
+      speed.render();
+      save();
+      analytics.track('sleep', { hours: r.hours, stopped: r.crisis !== null, items: report.items.length });
+      shade.classList.add('dawn');
+      const card = morningCard(report, { picture: reportPicture, go: goReport }, () => {
+        shade.classList.remove('in');
+        window.setTimeout(() => shade.remove(), 450);
+        sleepingNow = false;
+      });
+      shade.setAttribute('aria-hidden', 'false');
+      shade.append(card);
+      audio.play(r.crisis ? 'warn' : 'quest');
+    }, 900);
+  };
+  debugHandle.sleep = goNight;
+
   game.onChange(() => {
     sheet.refresh();
     measure();
