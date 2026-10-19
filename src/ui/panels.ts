@@ -1133,7 +1133,7 @@ function sellContent(ctx: PanelContext): Node {
   };
   const sellOne = (id: FishSpeciesId) => () => {
     // 先賣公的，母的留著繁殖；訂單要的魚最後才賣（一般玩家一直按也不會把湊單的魚賣掉）
-    const held = new Set(orderBoard(s).orders.flatMap((o) => (o.kind === 'fish' ? matchingFish(s, o).slice(0, o.count).map((f) => f.id) : [])));
+    const held = new Set(orderBoard(s).orders.flatMap((o) => (o.kind === 'fish' || o.kind === 'fry' ? matchingFish(s, o).slice(0, o.count).map((f) => f.id) : [])));
     const rank = (f: Fish) => (held.has(f.id) ? 2 : 0) + (f.sex === 'male' ? 0 : 1);
     const pick = [...s.fish.filter((f) => f.species === id && !buybackRefusal(f))].sort((a, b) => rank(a) - rank(b))[0];
     if (!pick) return;

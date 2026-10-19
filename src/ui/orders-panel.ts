@@ -1,9 +1,9 @@
 import type { KeyValueStore } from '../game/save';
-import { dismissOrder, FIN_NAMES, fulfillOrder, ORDER_STRAINS, orderBoard, orderRefusal, orderSupply, orderTitle, type OrderStrain, type ShopOrder, type TankState } from '../sim';
+import { dismissOrder, FIN_NAMES, fulfillOrder, ORDER_STRAINS, orderBoard, orderRefusal, orderSupply, orderTitle, orderUnit, type OrderStrain, type ShopOrder, type TankState } from '../sim';
 import { artUrl, ownerImg } from './art-icons';
 import { h } from './dom';
 import type { PanelContext } from './panels';
-import { guppyArt, plantArt, speciesArt } from './shop-cards';
+import { fryArt, guppyArt, plantArt, speciesArt } from './shop-cards';
 
 /**
  * 店家訂單板（#143）：主畫面有自己的入口，每張單是一張圖卡（要什麼魚、出多少錢、湊到幾尾），一鍵交貨。
@@ -20,6 +20,8 @@ const STRAIN_INDEX: Record<OrderStrain, number> = { grass: 0, goldSnake: 1, albi
 
 export function orderArt(o: ShopOrder): string {
   if (o.kind === 'cutting') return plantArt(o.plant!);
+  if (o.kind === 'fry') return fryArt(o.species!);
+  if (o.kind === 'snail') return o.snail === 'appleYoung' ? 'snail/snail-apple-babies.webp' : o.snail === 'bladder' ? 'snail/snail-bladder.webp' : 'snail/snail-ramshorn-red.webp';
   if (o.species === 'guppy' && (o.strain || o.fin)) return guppyArt(o.strain ? STRAIN_INDEX[o.strain] : 0, o.fin);
   return speciesArt(o.species!, o.sex);
 }
@@ -76,6 +78,7 @@ function conditionChips(o: ShopOrder): HTMLElement | null {
   if (o.fin) chips.push(['❧', FIN_NAMES[o.fin], 'fin']);
   if (o.minTail) chips.push(['★', `尾鰭 ${o.minTail}+`, 'tail']);
   if (o.kind === 'cutting') chips.push(['✂', '插枝', 'cutting']);
+  if (o.kind === 'fry') chips.push(['◔', `${o.minCm} cm+`, 'size']);
   if (chips.length === 0) return null;
   return h('div.order-chips', {}, ...chips.map(([icon, text, cls]) => h(`span.order-chip.${cls}`, {}, h('i', {}, icon), text)));
 }
@@ -86,7 +89,7 @@ function orderCard(ctx: PanelContext, o: ShopOrder, refresh: () => void): HTMLEl
   const ready = have >= o.count;
   const img = h('img', { src: ART + orderArt(o), alt: '', loading: 'lazy', draggable: 'false' });
   img.addEventListener('error', () => img.remove());
-  const unit = o.kind === 'cutting' ? '株' : '尾';
+  const unit = orderUnit(o);
   return h(
     `div.shop-card.order-card${ready ? '.ready' : ''}`,
     {},
