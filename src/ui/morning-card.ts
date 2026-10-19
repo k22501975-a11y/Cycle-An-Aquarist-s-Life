@@ -12,6 +12,7 @@ const KIND_ICON: Record<ReportKind, ArtIcon> = {
   crisis: 'gear',
   death: 'net',
   birth: 'owner',
+  eaten: 'net',
   grown: 'owner',
   cycle: 'bacteria',
   cycled: 'bacteria',
@@ -37,6 +38,7 @@ const ACTION_ICON: Record<NonNullable<ReportItem['action']>, ArtIcon> = {
   orders: 'orders',
   snails: 'net',
   trim: 'trim',
+  fry_box: 'net',
 };
 
 /** 點下去會做什麼（按鈕上的小字）。 */
@@ -51,6 +53,7 @@ const ACTION_LABEL: Record<NonNullable<ReportItem['action']>, string> = {
   orders: '看訂單',
   snails: '處理',
   trim: '修剪',
+  fry_box: '救小魚',
 };
 
 export interface MorningCardDeps {

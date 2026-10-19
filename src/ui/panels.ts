@@ -115,7 +115,10 @@ import {
   strainName,
   QUARANTINE_DAYS,
   quarantineDays,
+  readyForTank,
   releaseQuarantine,
+  swallowCm,
+  tooSmallForTank,
   PINCH_MEALS,
   orderBoard,
   matchingFish,
@@ -1249,16 +1252,18 @@ export function quarantinePanel(ctx: PanelContext): Node {
     ...living.map((f) => {
       const days = quarantineDays(game.state, f);
       const symptoms = quarantineSymptoms(f);
+      // 仔魚看大小（#174）：成魚吞得下就先別放回去；店裡買的新魚才看觀察天數
+      const small = tooSmallForTank(game.state, f);
+      const status = symptoms.length
+        ? h('div.warn-text', {}, symptoms.map((x) => SYMPTOM_LABELS[x]).join('、'))
+        : small
+          ? h('div.hint', {}, `還太小，長到約 ${(Math.ceil(swallowCm(game.state) * 10 + 1) / 10).toFixed(1)} cm 成魚就吞不下`)
+          : h('div.hint', {}, readyForTank(game.state, f) ? (isJuvenile(f) ? '長夠大了，可以移到主缸' : '觀察期滿，看起來很健康') : '還在觀察');
       return h(
         'div.item',
         {},
-        h(
-          'div',
-          {},
-          h('b', {}, `${fishName(f)}・第 ${Math.floor(days) + 1} 天`),
-          symptoms.length ? h('div.warn-text', {}, symptoms.map((x) => SYMPTOM_LABELS[x]).join('、')) : h('div.hint', {}, days >= QUARANTINE_DAYS ? '觀察期滿，看起來很健康' : '還在觀察'),
-        ),
-        button('移到主缸', () => release([f.id]), days >= QUARANTINE_DAYS && symptoms.length === 0 ? 'primary' : ''),
+        h('div', {}, h('b', {}, `${fishName(f)}・${f.lengthCm.toFixed(1)} cm・第 ${Math.floor(days) + 1} 天`), status),
+        button('移到主缸', () => release([f.id]), readyForTank(game.state, f) ? 'primary' : ''),
       );
     }),
     dead > 0 ? h('div.warn-text', {}, `有 ${dead} 條死在檢疫盒裡了。還好沒有放進主缸。`) : null,
@@ -1299,7 +1304,12 @@ export function quarantinePanel(ctx: PanelContext): Node {
     })(),
     h('h3', {}, '藥浴（只下在檢疫盒）'),
     h('div.row.wrap', {}, bath('ichMedication', '白點藥'), bath('antibiotic', '抗生素'), bath('dewormer', '驅蟲藥')),
-    living.length > 0 || dead > 0 ? button(dead > 0 && living.length === 0 ? '撈掉死魚' : '全部移到主缸', () => release()) : null,
+    ...(() => {
+      // 一次移的只移長夠大、觀察完的；太小的仔魚留在盒裡（#174）
+      const ready = living.filter((f) => readyForTank(game.state, f)).map((f) => f.id);
+      if (ready.length > 0) return [button(`把長夠大的移到主缸（${ready.length} 條）`, () => release(ready), 'primary')];
+      return dead > 0 ? [button('撈掉死魚', () => release([]))] : [];
+    })(),
   );
 }
 
