@@ -9,6 +9,7 @@ import { updatePopulation } from './processes/population';
 import { updateTemperature } from './processes/thermal';
 import { updateWaste } from './processes/waste';
 import { updateQuarantine } from './quarantine';
+import { updateNursery } from './nursery';
 import { updateSnails } from './snails';
 import { updateParental } from './parental';
 import { updateEconomy } from './economy';
@@ -32,6 +33,7 @@ export function step(state: TankState, dtHours: number = TICK_HOURS): void {
   updateParental(state, dtHours);
   updateSnails(state, dtHours);
   updateQuarantine(state, dtHours);
+  updateNursery(state);
   updateEconomy(state, dtHours);
   // 小時數由很多小 tick 累加，有浮點誤差，加一點點容差再取整
   const before = Math.floor(state.hours + 1e-6);

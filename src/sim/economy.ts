@@ -54,6 +54,7 @@ export const PRICES: Record<string, number> = {
   'chiller:small': 8500,
   'controller:basic': 650,
   'quarantine:box': 700,
+  'nursery:box': 150,
   'care:bacteria': 30,
   'care:holiday': 40,
   'feeder:auto': 600,
@@ -84,6 +85,8 @@ export interface Economy {
   cuttings: Partial<Record<PlantSpeciesId, number>>;
   /** 這一期餵了幾餐（飼料錢跟電費一起每週結算）。 */
   meals?: number;
+  /** 阿德老闆送過育幼盒了（第一次有母魚快生時送一次，nursery.ts）。 */
+  nurseryGifted?: boolean;
   /** 上次領保底起步包的時間（遊戲小時）。 */
   starterPackHours?: number;
   /** 下一個新缸用的 id 區段（每缸的魚和水草 id 從不同區段開始，魚換缸也不會撞號）。 */

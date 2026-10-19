@@ -34,7 +34,8 @@ export type ReportAction =
   | 'orders' // 訂單板
   | 'snails' // 螺
   | 'trim' // 修剪水草
-  | 'fry_box'; // 檢疫盒（把仔魚撈進去）
+  | 'fry_box' // 育幼盒或檢疫盒（把仔魚撈進去）
+  | 'nursery'; // 把快生的母魚放進育幼盒
 
 export type ReportKind =
   | 'crisis'
@@ -51,6 +52,7 @@ export type ReportKind =
   | 'plant_died'
   | 'hungry'
   | 'orders'
+  | 'nursery'
   | 'quiet';
 
 export interface ReportItem {
@@ -169,6 +171,11 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
         count: eaten,
       });
     }
+    // 育幼盒（#187）：老闆送的、小魚長大自己回主缸
+    if (events.some((x) => x.type === 'nursery_gift'))
+      push({ kind: 'nursery', tone: 'good', text: '阿德老闆送了一個育幼盒，掛在缸邊。快生的母魚放進去，小魚就不會被吃', action: 'nursery' });
+    const released = events.filter((x) => x.type === 'nursery_released').reduce((n, e) => n + (e.count ?? 0), 0);
+    if (released > 0) push({ kind: 'nursery', tone: 'good', text: `育幼盒裡 ${released} 尾小魚長到 1.6 cm，回主缸了` });
     if (!snap) return;
     // 長大
     const grown = allFish(t).filter((f) => f.alive && !isJuvenile(f) && snap.fish.get(f.id)?.juvenile);

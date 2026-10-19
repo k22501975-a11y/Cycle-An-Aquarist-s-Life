@@ -64,3 +64,15 @@ export function ownerAsk(ask: OwnerAsk, host: HTMLElement = document.body): Prom
 export function ownerSay(text: string, label = '知道了', host: HTMLElement = document.body): Promise<void> {
   return bubble(text, [{ label, value: undefined, primary: true }], host);
 }
+
+/** 老闆帶玩家做一件事：照做是主要按鈕（例如送了育幼盒、帶你把母魚放進去）。回傳有沒有照做。 */
+export function ownerGuide(text: string, yes: string, later = '等一下', host: HTMLElement = document.body): Promise<boolean> {
+  return bubble(
+    text,
+    [
+      { label: later, value: false },
+      { label: yes, value: true, primary: true },
+    ],
+    host,
+  );
+}

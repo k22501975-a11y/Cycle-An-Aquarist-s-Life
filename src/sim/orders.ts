@@ -4,6 +4,7 @@ import { nextRandom, type RngState } from './random';
 import { PESTS, type PestKind } from './snails';
 import { FISH_SPECIES, isShrimpSpecies, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 import { isJuvenile, type Fish, type TankState } from './state';
+import { hidingFactor } from './processes/population';
 
 /**
  * 店家訂單板（design/mvp.md §4.4，M21）：阿德老闆的店同時掛最多 3 張客人的單，交完一張隔天補一張。
@@ -252,6 +253,10 @@ export interface OrderContext {
   snails: Partial<Record<OrderSnail, number>>;
   /** 自己繁殖、還沒長到店家收購大小的孔雀魚（含產卵盒）。 */
   fry: number;
+  /** 其中在育幼盒、檢疫盒裡，大魚吃不到的。 */
+  safeFry?: number;
+  /** 水草的躲藏係數 0–0.7（hidingFactor）。 */
+  hiding?: number;
 }
 
 /** 這株水草現在修剪得下幾株插枝（跟 trimPlant 一樣：留一半，多的剪下來）。 */
@@ -275,8 +280,19 @@ export function orderContext(state: TankState): OrderContext {
     const n = snailsIn(state, k);
     if (n > 0) snails[k] = n;
   }
-  const fry = bred.filter((f) => f.species === 'guppy' && f.lengthCm < FISH_SPECIES.guppy.adultLengthCm * 0.5).length;
-  return { stage, cuttings, snails, fry };
+  const young = bred.filter((f) => f.species === 'guppy' && f.lengthCm < FISH_SPECIES.guppy.adultLengthCm * 0.5);
+  const boxed = new Set(state.quarantine?.fish ?? []);
+  const safeFry = young.filter((f) => f.nursery || boxed.has(f)).length;
+  return { stage, cuttings, snails, fry: young.length, safeFry, hiding: hidingFactor(state) };
+}
+
+/**
+ * 小孔雀單要幾尾（mvp.md §4.4.1 第 3 點、§4.4.2 第 4 點）：在主缸裡的，沒有密草大約只剩一成五長得到 1.2 cm，草越密留越多，
+ * 全部拿去交；育幼盒、檢疫盒裡的都活得下來，但大多該留著養大交更貴的中魚單，只拿三成。
+ */
+export function fryOrderSize(ctx: OrderContext): number {
+  const safe = Math.min(ctx.fry, ctx.safeFry ?? 0);
+  return safe * 0.3 + (ctx.fry - safe) * (0.15 + 0.3 * (ctx.hiding ?? 0));
 }
 
 /** 前兩階段的小額單（插枝、螺、小孔雀）：到了選育階段也留一張當穩定收入。 */
@@ -369,11 +385,10 @@ export function makeOrder(board: OrderBoard, hours: number, ctx?: OrderContext):
     }],
     [ctx && ctx.fry >= FRY_ORDER_MIN_BROOD && !board.orders.some((x) => x.kind === 'fry') && stage === 'brood' ? 2 : 0, () => {
       // 第一窩：店家收小孔雀當入門魚賣，每尾 5～8 元起（小魚少的話每尾給多一點，一張約 50～100）。
-      // 只要一窩的三成：沒有密草的缸，剛出生的仔魚多半會被大魚吃掉，能長到 1.2 cm 的大約這麼多；
-      // 活下來多的留著養大做更貴的中魚單
+      // 數量見 fryOrderSize：交得出來、又不會把該養大做中魚單的小魚賣光
       o.kind = 'fry';
       o.minCm = FRY_ORDER_MIN_CM;
-      o.count = Math.max(3, Math.min(10, Math.round(ctx!.fry * 0.3)));
+      o.count = Math.max(3, Math.min(10, Math.round(fryOrderSize(ctx!))));
       o.unitPrice = Math.min(25, Math.max(5 + Math.floor(r() * 4), Math.round((50 + r() * 30) / o.count)));
     }],
   ];
@@ -386,6 +401,8 @@ export function makeOrder(board: OrderBoard, hours: number, ctx?: OrderContext):
 
 /** 訂單掛幾天沒交就下架、換新的。 */
 export const ORDER_EXPIRE_DAYS = 7;
+/** 小孔雀單多等幾天：出單時小魚常常還沒長到 1.2 cm，要給牠們時間長（mvp.md §4.4.2 第 4 點）。 */
+export const FRY_ORDER_EXPIRE_DAYS = 10;
 
 /**
  * 補一張新單。板上還沒有現在就交得出來的單時，優先抽交得出來的（可交付保證，§4.4.1 第 2 點）；
@@ -406,14 +423,38 @@ function addOrder(state: TankState, board: OrderBoard, ctx: OrderContext): void 
   board.orders.push(o);
 }
 
+/**
+ * 板子被交不出來的魚單佔滿時，把最舊、交不出來的那張換掉（換了回 true）：
+ * - 開局（還沒有自家的魚）：缸裡剪得出插枝、抓得到螺了，就換一張現在交得出來的（遊戲性 g9：第 1～7 天全是中魚單）。
+ * - 第一窩生出來以後：板上一定要有一張小額單（小孔雀、插枝、螺；mvp.md §4.4.2 第 4 點）。
+ */
+function swapInSmallOrder(state: TankState, board: OrderBoard, ctx: OrderContext): boolean {
+  const canSmall = Object.values(ctx.cuttings).some((n) => (n ?? 0) >= 2) || Object.values(ctx.snails).some((n) => (n ?? 0) >= 3);
+  const start = ctx.stage === 'start' && canSmall && !board.orders.some((o) => deliverableNow(state, o, ctx));
+  const brood = ctx.stage === 'brood' && ctx.fry >= FRY_ORDER_MIN_BROOD && !board.orders.some(isSmallOrder);
+  if (!start && !brood) return false;
+  const stale = board.orders.filter((o) => o.kind === 'fish' && !deliverableNow(state, o, ctx)).sort((a, b) => a.postedHours - b.postedHours)[0];
+  if (!stale) return false;
+  for (let tries = 0; tries < 12; tries++) {
+    const o = makeOrder(board, state.hours, ctx);
+    if (!isSmallOrder(o) || (start && !deliverableNow(state, o, ctx))) continue;
+    board.orders = board.orders.map((x) => (x === stale ? o : x));
+    return true;
+  }
+  return false;
+}
+
 /** 每次模擬更新時呼叫：記下玩家養出了什麼；第一次掛滿 3 張，之後交掉一張隔天補一張。 */
 export function updateOrders(state: TankState): void {
   const board = orderBoard(state);
   noteProgress(state, board);
   // 太久沒人交的單，客人就不等了（不用玩家自己撕）
-  const expired = board.orders.filter((o) => state.hours - o.postedHours >= ORDER_EXPIRE_DAYS * 24);
+  const expired = board.orders.filter((o) => state.hours - o.postedHours >= (o.kind === 'fry' ? FRY_ORDER_EXPIRE_DAYS : ORDER_EXPIRE_DAYS) * 24);
   if (expired.length > 0) board.orders = board.orders.filter((o) => !expired.includes(o));
-  if (board.orders.length >= ORDER_BOARD_SIZE) return;
+  if (board.orders.length >= ORDER_BOARD_SIZE) {
+    if (board.lastChangeHours !== undefined && state.hours - board.lastChangeHours >= ORDER_GAP_HOURS && swapInSmallOrder(state, board, orderContext(state))) board.lastChangeHours = state.hours;
+    return;
+  }
   if (board.lastChangeHours === undefined) {
     const ctx = orderContext(state);
     while (board.orders.length < ORDER_BOARD_SIZE) addOrder(state, board, ctx);

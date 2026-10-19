@@ -1,6 +1,6 @@
 import type { DeathAdviceCause } from './moments';
 import { guppyLook } from '../render/strains';
-import { BOX_CAPACITY, hidingFactor, isJuvenile, isShrimpSpecies, FISH_SPECIES, growthStage, SNAILS, phenotype, PLANT_SPECIES, sexVisible, strainName, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
+import { dueMothers, hidingFactor, nurseryFish, NURSERY_FRY_CAPACITY, NURSERY_RELEASE_CM, isJuvenile, isShrimpSpecies, FISH_SPECIES, growthStage, SNAILS, phenotype, PLANT_SPECIES, sexVisible, strainName, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
 
 export const SYMPTOM_LABELS: Record<Symptom, string> = {
   hiding: '躲在角落',
@@ -138,6 +138,10 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
       return { text: `缸裡有 ${e.count ?? 2} 尾公鬥魚在打架！打輸的撐不了幾天，快把牠們分到不同缸`, tone: 'bad' };
     case 'betta_ate_shrimp':
       return { text: `${fish ? fishName(fish) : '鬥魚'} 吃掉了一隻蝦。這尾鬥魚會獵蝦，多種水草讓蝦躲，或分開養`, tone: 'warn' };
+    case 'nursery_gift':
+      return { text: `阿德老闆送你一個育幼盒！${fish ? fishName(fish) : '有尾母魚'}快生了，把牠放進去，生下的小魚就不會被大魚吃掉`, tone: 'info' };
+    case 'nursery_released':
+      return { text: `育幼盒裡 ${e.count ?? 0} 尾小魚長到 1.6 cm，大魚吞不下了，已經放回主缸`, tone: 'info' };
     case 'trap_rotted':
       return { text: '螺陷阱裡的菜放太久爛掉了，弄髒了水', tone: 'warn' };
   }
@@ -154,31 +158,32 @@ export function fryEatenText(state: TankState, count: number, shrimp: boolean): 
   const who = shrimp ? '隻小蝦' : '尾小魚';
   const head = `${count} ${who}${pick(shrimp ? ['被魚吃掉了', '沒躲好，被魚叼走了'] : ['被大魚吃掉了', '沒躲好，被成魚吞下去了', '被大魚當點心吃了'], day)}`;
   const hiding = hidingFactor(state);
-  const box = state.quarantine;
-  const boxFish = box?.fish.filter((f) => f.alive) ?? [];
-  const boxRoom = !!box && boxFish.length < BOX_CAPACITY;
+  // 育幼盒（#191）：母魚放進去生，小魚長到 1.6 cm 自動放回主缸
+  const box = !!state.nurseryBox;
+  const boxFish = nurseryFish(state);
+  const boxRoom = box && boxFish.filter((f) => isJuvenile(f)).length < NURSERY_FRY_CAPACITY;
   const momInBox = boxFish.some((f) => f.sex === 'female' && !isJuvenile(f));
-  const fry = state.fish.filter((f) => f.alive && isJuvenile(f) && f.lengthCm < 1.6 && !isShrimpSpecies(f.species)).length;
-  const due = state.fish.some((f) => f.alive && f.sex === 'female' && f.pregnancy > 0.85);
+  const fry = state.fish.filter((f) => f.alive && !f.nursery && isJuvenile(f) && f.lengthCm < NURSERY_RELEASE_CM && !isShrimpSpecies(f.species)).length;
+  const due = dueMothers(state).length > 0;
   let tip: string;
   if (shrimp) {
     tip = hiding < 0.35
       ? pick(['小蝦最愛躲在莫絲裡，多綁幾團就好', '缸裡能躲的地方太少，莫絲和矮珍珠是小蝦的家'], day)
       : pick(['水草已經不少，被吃掉一些是正常的，蝦群會慢慢補回來', '小蝦長到看得清楚的大小，魚就不太吃了，再撐幾天'], day);
   } else if (due && boxRoom && !momInBox) {
-    tip = pick(['又有母魚肚子很鼓了，生之前先放進檢疫盒，生下的就一尾都不會少', '下一胎快生了，趁現在把母魚放進檢疫盒'], day);
+    tip = pick(['又有母魚肚子很鼓了，生之前先放進育幼盒，生下的就一尾都不會少', '下一胎快生了，趁現在把母魚放進育幼盒'], day);
   } else if (due && !box) {
-    tip = pick(['又有母魚快生了。商店的檢疫盒掛在缸上就能當產卵盒，生下的小魚不會被吃', '下一胎快生了，想多留幾尾，可以先買個檢疫盒當產卵盒'], day);
+    tip = pick(['又有母魚快生了。商店的育幼盒掛在缸上，母魚在裡面生，小魚就不會被吃', '下一胎快生了，想多留幾尾，可以先買個育幼盒'], day);
   } else if (fry > 0 && boxRoom) {
-    tip = pick([`主缸還有 ${fry} 尾小魚，撈進檢疫盒，長到 1.6 cm 再放回來`, `剩下的 ${fry} 尾小魚趕快撈進檢疫盒，大魚就吃不到了`], day);
+    tip = pick([`主缸還有 ${fry} 尾小魚，撈進育幼盒，長到 1.6 cm 會自己放回來`, `剩下的 ${fry} 尾小魚趕快撈進育幼盒，大魚就吃不到了`], day);
   } else if (fry > 0 && box) {
-    tip = pick(['檢疫盒滿了，盒裡大一點的先放回主缸，騰出位子給更小的', '盒子塞不下了，把盒裡快 1.6 cm 的先放出去'], day);
+    tip = pick(['育幼盒滿了，盒裡大一點的先放回主缸，騰出位子給更小的', '盒子塞不下了，把盒裡快 1.6 cm 的先放出去'], day);
   } else if (hiding < 0.35) {
     tip = pick(['水草太少，大魚一眼就看到小魚。莫絲、矮珍珠這種又密又低的草最好躲', '多種一點莫絲或矮珍珠，小魚鑽進去大魚就抓不到', '缸裡空蕩蕩的，小魚沒地方躲；密一點的水草能救下不少'], day);
   } else if (!box) {
-    tip = pick(['水草已經夠密了，還是會被吃掉幾尾，這是正常的。想全部留下，商店的檢疫盒能當產卵盒', '草夠密了，剩下的就靠運氣；下次母魚肚子鼓起來，可以放進檢疫盒生'], day);
+    tip = pick(['水草已經夠密了，還是會被吃掉幾尾，這是正常的。想全部留下，商店有育幼盒', '草夠密了，剩下的就靠運氣；下次母魚肚子鼓起來，可以放進育幼盒生'], day);
   } else {
-    tip = pick(['水草夠密了，被吃掉幾尾是正常的。下次母魚快生時放進檢疫盒，就能全部留下', '躲得過的會長大，長到 1.6 cm 大魚就吞不下了'], day);
+    tip = pick(['水草夠密了，被吃掉幾尾是正常的。下次母魚快生時放進育幼盒，就能全部留下', '躲得過的會長大，長到 1.6 cm 大魚就吞不下了'], day);
   }
   return `${head}。${tip}`;
 }

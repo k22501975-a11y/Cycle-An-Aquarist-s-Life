@@ -16,6 +16,10 @@ import {
   makeOrder,
   moveToQuarantine,
   ORDER_EXPIRE_DAYS,
+  FRY_ORDER_MIN_BROOD,
+  fryOrderSize,
+  buyNurseryBox,
+  moveToNursery,
   ORDER_BOARD_SIZE,
   ORDER_GAP_HOURS,
   orderBoard,
@@ -230,6 +234,48 @@ describe('店家訂單板（M21）', () => {
         expect(orders.some((o) => o.kind === 'cutting' || o.kind === 'snail')).toBe(true);
         expect(orders.some((o) => o.kind === 'fry')).toBe(false);
       }
+    });
+  });
+
+  describe('第一窩出生後的小額單（mvp.md §4.4.2 第 4 點）', () => {
+    const brood = (s: TankState, n: number) =>
+      Array.from({ length: n }, () => {
+        const f = addFish(s, 'guppy', { carriesIch: false, carries: [] });
+        f.lengthCm = 0.7;
+        f.ageDays = 1;
+        f.generation = 1;
+        return f;
+      });
+
+    it('板子被中魚單佔滿也會換一張小額單上來', () => {
+      const s = tank(5);
+      simulate(s, 1);
+      const board = orderBoard(s);
+      board.orders = [0, 1, 2].map((i) => ({ id: 900 + i, kind: 'fish', species: 'guppy', size: 'juvenile', count: 3, unitPrice: 45, postedHours: s.hours }) as ShopOrder);
+      brood(s, FRY_ORDER_MIN_BROOD + 4);
+      simulate(s, ORDER_GAP_HOURS + 1);
+      expect(board.orders).toHaveLength(ORDER_BOARD_SIZE);
+      expect(board.orders.some((o) => o.kind !== 'fish')).toBe(true);
+    });
+
+    it('開局板上全是中魚單：缸裡抓得到螺了，隔天換一張交得出來的（遊戲性 g9）', () => {
+      const s = tank(8);
+      simulate(s, 1);
+      const board = orderBoard(s);
+      board.orders = [0, 1, 2].map((i) => ({ id: 950 + i, kind: 'fish', species: 'guppy', size: 'juvenile', count: 3, unitPrice: 45, postedHours: s.hours }) as ShopOrder);
+      snailState(s).pests.bladder = 6;
+      simulate(s, ORDER_GAP_HOURS + 1);
+      expect(board.orders.some((o) => deliverableNow(s, o))).toBe(true);
+    });
+
+    it('小孔雀單的數量：主缸裡的只算活得下來的一成五（草密多一點），盒子裡的算三成', () => {
+      const s = tank(6);
+      const fry = brood(s, 20);
+      expect(fryOrderSize(orderContext(s))).toBeCloseTo(20 * (0.15 + 0.3 * orderContext(s).hiding!), 5);
+      buyNurseryBox(s);
+      for (const f of fry) moveToNursery(s, f.id);
+      expect(orderContext(s).safeFry).toBe(20);
+      expect(fryOrderSize(orderContext(s))).toBeCloseTo(6, 5);
     });
   });
 });

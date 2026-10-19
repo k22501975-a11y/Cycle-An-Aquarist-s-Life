@@ -125,6 +125,8 @@ export function moveFish(from: TankState, to: TankState, fishId: number): boolea
   const dPh = Math.abs(from.water.ph - to.water.ph);
   fish.stress = Math.min(1, Math.max(fish.stress, 0.3 + Math.min(0.5, dT * 0.08 + dPh * 0.15)));
   from.fish = from.fish.filter((f) => f !== fish);
+  // 從育幼盒撈出來換缸：到了新缸就是在缸裡游（#191）
+  fish.nursery = undefined;
   to.fish.push(fish);
   return true;
 }
