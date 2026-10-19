@@ -27,7 +27,7 @@ export const DAILY_SHORT: Record<DailyTaskId, string> = {
   trim: '修剪水草',
   snail: '找到螺點一下',
   observe: '點一尾魚看看',
-  scape: '擺塊石頭',
+  scape: '移動一塊造景',
 };
 
 export function dailyArt(id: DailyTaskId): string {

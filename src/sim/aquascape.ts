@@ -141,6 +141,7 @@ export function placeHardscape(state: TankState, index: number, change: Partial<
   const before = all[index];
   const after = clampPlacement({ ...before, ...change });
   all[index] = after;
+  if (after.x !== before.x || after.layer !== before.layer || after.flip !== before.flip || after.scale !== before.scale) state.lastScapeHours = state.hours;
   const size = hardscapeSizeCm(list[index]);
   const movedCm = Math.abs(after.x - before.x) * tankSize(state.equipment.tank).w;
   const moved = movedCm > 1 || after.layer !== before.layer;
@@ -162,6 +163,7 @@ export function placePlant(state: TankState, plantId: number, change: Partial<Om
   const after = clampPlacement({ ...before, ...change, scale: undefined });
   plant.place = after;
   if (Math.abs(after.x - before.x) < 0.01 && after.layer === before.layer && after.flip === before.flip) return NONE;
+  state.lastScapeHours = state.hours;
   // 拔起來重種：掉一些葉子
   plant.biomassG *= 0.95;
   return disturb(state, 0.06, 0.2);
