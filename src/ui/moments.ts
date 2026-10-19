@@ -4,7 +4,7 @@ import type { KeyValueStore } from '../game/save';
  * 「第一次」的有感演出（MVP M20）：養水完成、第一次賣魚…每件事只慶祝一次。
  * 記在這台裝置上（跟新手教學的進度一樣），不進存檔。
  */
-export type MomentId = 'cycled' | 'first_sale' | 'first_fry';
+export type MomentId = 'cycled' | 'first_sale' | 'first_fry' | 'first_tank';
 
 export const MOMENTS_KEY = 'cycle.moments.v1';
 

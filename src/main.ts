@@ -23,6 +23,7 @@ import { FrameMonitor, lowerQuality } from './game/frame-monitor';
 import { FpsMeter, formatFps } from './game/fps-meter';
 import { defaultQuality, isQuality, type Quality, QUALITY_LABELS, qualitySpec } from './render/quality';
 import { TankView } from './render/tank-view';
+import { SETUP_CAPTIONS } from './render/setup-show';
 import { ScapeBar } from './ui/scape-bar';
 import * as sim from './sim';
 import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, useTestKit } from './sim';
@@ -393,8 +394,22 @@ async function start(): Promise<void> {
     onSelectPlant: (id) => sheet.open('水草', () => plantPanel(ctx, id), { live: true }),
     onScapeSelect: (target) => scapeBar.select(target),
     onScapeDrop: (target, x) => scapeBar.drop(target, x),
+    // 開缸演出（F1-b）：每一步一個音效和一行說明，最後是「你的第一個缸」
+    onSetupStep: (step) => {
+      if (step === 'done') {
+        moment('first_tank', { art: 'gear/tank-empty.webp', title: '你的第一個缸', sub: '水注滿、設備也裝好了', owner: '先別急著放魚。倒一瓶硝化菌液，讓水先養個幾天。' });
+        guide.start();
+        return;
+      }
+      audio.play(step === 'sand' ? 'feed' : step === 'water' ? 'water' : step === 'gear' ? 'buy' : 'restore');
+      // 燈有定時：還沒到開燈時間就說幾點會亮，不說「開燈！」卻是暗的
+      const light = game.state.equipment.light;
+      toasts.show(step === 'light' && light && !sim.isLightOn(game.state) ? `燈設好定時了，${light.startHour}:00 會亮` : SETUP_CAPTIONS[step]);
+    },
   });
   debugHandle.view = view;
+  // 第一次打開遊戲：從空缸開始演一次開缸
+  if (!saved) view.playSetup();
   // 造景模式（aquascape-editor.md）：底部工具列換成造景操作列，在缸裡拖曳石頭、沉木、水草
   let scaping = false;
   const scapeBar = new ScapeBar({
@@ -727,7 +742,7 @@ async function start(): Promise<void> {
           save();
           sheet.close();
           select(null);
-          toasts.show('開了一個新缸');
+          view.playSetup();
         },
         '.danger',
       ),
@@ -983,7 +998,8 @@ async function start(): Promise<void> {
   renderTodos();
   renderCaps();
   renderCoins();
-  guide.start();
+  // 開缸演出播完才開始教學，不然老闆的對話框會擋住整段演出
+  if (!view.settingUp) guide.start();
   let refreshTimer = 0;
   // 一段時間沒操作就降到 30 fps，省電；一碰螢幕馬上恢復
   let lastInput = performance.now();
