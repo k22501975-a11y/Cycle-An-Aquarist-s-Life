@@ -12,6 +12,7 @@ import { installCrashGuard } from './ui/crash';
 import { Analytics } from './net/analytics';
 import { isNativeApp, saveTextFile } from './ui/native';
 import { CloudClient } from './net/cloud';
+import { FEATURES } from './features';
 import { autoUpload, checkCloudOnStart, cloudPanel, type CloudPanelDeps } from './ui/cloud-panel';
 import { friendsPanel, giftPanel, type FriendsDeps } from './ui/friends-panel';
 import { knownArrivals, marketPanel, syncMarket, type MarketDeps } from './ui/market-panel';
@@ -30,7 +31,7 @@ import * as sim from './sim';
 import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, useTestKit } from './sim';
 import { h } from './ui/dom';
 import { ICONS } from './ui/icons';
-import { describeEvent, fishName, fishStrain } from './ui/labels';
+import { DEATH_ADVICE, describeEvent, fishName, fishStrain } from './ui/labels';
 import {
   debugPanel,
   feedPanel,
@@ -49,7 +50,7 @@ import {
 } from './ui/panels';
 import { Guide } from './ui/guide';
 import { Celebration, type CelebrateSpec } from './ui/celebrate';
-import { firstTime, type MomentId } from './ui/moments';
+import { firstTime, type DeathAdviceCause, type MomentId } from './ui/moments';
 import { causeAdvice, HUNGER_LABEL, illnessOf, needsAdvice } from './ui/owner-advice';
 import { ownerSay } from './ui/owner-ask';
 import { fryArt, guppyArt } from './ui/shop-cards';
@@ -203,8 +204,8 @@ async function start(): Promise<void> {
     input.click();
   };
   const crash = installCrashGuard({ save, exportSave });
-  // 雲端存檔：有設定伺服器網址（VITE_API_URL）才開放
-  const cloud = new CloudClient(import.meta.env.VITE_API_URL, store);
+  // 雲端存檔：功能開關打開、又有設定伺服器網址（VITE_API_URL）才開放；關著時市場、好友、商城的同步都不會動
+  const cloud = new CloudClient(FEATURES.cloudSave ? import.meta.env.VITE_API_URL : undefined, store);
   const cloudDeps: CloudPanelDeps = {
     cloud,
     sheet,
@@ -567,7 +568,7 @@ async function start(): Promise<void> {
   };
   const notifySection = (): Node[] => {
     if (!notifier.available)
-      return [h('p.hint', {}, isIos() && !isInstalled() ? 'iPhone 要先把遊戲加到主畫面，才收得到通知。' : cloud.available ? '這個瀏覽器收不到通知。' : '通知要等伺服器上線才能用（Android App 版不用等）。')];
+      return [h('p.hint', {}, isIos() && !isInstalled() ? 'iPhone 要先把遊戲加到主畫面，才收得到通知。' : cloud.available ? '這個瀏覽器收不到通知。' : '這個版本的通知只有 Android App 版收得到。')];
     const reopen = () => sheet.open('設定', settings);
     const p = notifier.prefs;
     return [
@@ -590,8 +591,8 @@ async function start(): Promise<void> {
             h('label.check-row', {}, h('input', { type: 'checkbox', checked: p.categories[c], onchange: (e: Event) => void notifier.setCategory(c, (e.target as HTMLInputElement).checked) }), h('span', {}, CATEGORY_LABELS[c])),
           )
         : []),
-      ...(p.enabled && notifier.platform?.kind === 'web' && !cloud.session ? [h('p.hint', {}, '市場和好友的通知要登入雲端存檔才收得到。')] : []),
-      ...(p.enabled && notifier.platform?.kind === 'native' ? [h('p.hint', {}, 'App 版目前收得到水缸的提醒和到貨通知；有人買了你的東西、好友送禮，要打開遊戲才看得到。')] : []),
+      ...(p.enabled && notifier.platform?.kind === 'web' && cloud.available && !cloud.session ? [h('p.hint', {}, '市場和好友的通知要登入雲端存檔才收得到。')] : []),
+      ...(p.enabled && notifier.platform?.kind === 'native' && cloud.available ? [h('p.hint', {}, 'App 版目前收得到水缸的提醒和到貨通知；有人買了你的東西、好友送禮，要打開遊戲才看得到。')] : []),
     ];
   };
   const privacySection = () => [
@@ -720,8 +721,9 @@ async function start(): Promise<void> {
       h('h3', {}, '存檔'),
       h('div.row', {}, h('button.btn', { onclick: exportSave }, '匯出存檔'), h('button.btn', { onclick: importSave }, '從檔案匯入')),
       h('p.hint', {}, '遊戲每 10 秒自動存檔，每 30 分鐘自動備份一次；存檔壞掉時會自動用備份還原。換手機時可以匯出成檔案帶過去。'),
-      h('h3', {}, '雲端存檔'),
-      h('button.btn', { onclick: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) }, cloud.session ? `雲端存檔（${cloud.session.username}）` : '登入雲端存檔'),
+      ...(FEATURES.cloudSave
+        ? [h('h3', {}, '雲端存檔'), h('button.btn', { onclick: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) }, cloud.session ? `雲端存檔（${cloud.session.username}）` : '登入雲端存檔')]
+        : []),
       h('h3', {}, '通知'),
       ...notifySection(),
       h('h3', {}, '隱私'),
@@ -740,9 +742,9 @@ async function start(): Promise<void> {
         'div.menu-grid',
         {},
         menuTile('tanks', '我的水缸', '切換、加一缸', () => sheet.open('我的水缸', () => tanksPanel(ctx))),
-        menuTile('friends', '好友', '參觀、按讚、送禮', () => sheet.open('好友', () => friendsPanel(friendsDeps))),
-        menuTile('market', '市場', '買賣魚蝦和水草', () => sheet.open('市場', () => marketPanel(marketDeps))),
-        menuTile('mall', '商城', '點數、特效藥、套缸', () => sheet.open('商城', () => mallPanel(mallDeps))),
+        FEATURES.friends ? menuTile('friends', '好友', '參觀、按讚、送禮', () => sheet.open('好友', () => friendsPanel(friendsDeps))) : null,
+        FEATURES.market ? menuTile('market', '市場', '買賣魚蝦和水草', () => sheet.open('市場', () => marketPanel(marketDeps))) : null,
+        FEATURES.mall ? menuTile('mall', '商城', '點數、特效藥、套缸', () => sheet.open('商城', () => mallPanel(mallDeps))) : null,
         menuTile('codex', '圖鑑', '魚蝦、水草、疾病', () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen))),
         menuTile('records', '紀錄', '水質趨勢、事件', () => sheet.open('紀錄', () => recordsPanel(ctx))),
         menuTile('guide', '教學', '再聽阿德老闆說一次', () => (sheet.close(), guide.restart())),
@@ -953,6 +955,9 @@ async function start(): Promise<void> {
       const t = game.tanks[tank] ?? game.state;
       const fish = t.fish.find((f) => f.id === e.subjectId);
       analytics.track('fish_died', { cause: e.cause ?? 'unknown', species: fish?.species ?? 'unknown', day: Math.floor(t.hours / 24) });
+      // 第一次餓死、病死：阿德老闆直接說原因和下次怎麼做（#169）
+      const cause = e.cause as DeathAdviceCause | undefined;
+      if (cause && cause in DEATH_ADVICE && firstTime(store, `died_${cause}`)) void ownerSay(DEATH_ADVICE[cause]);
     }
     audio.play(eventSound(e.type));
     if (e.type === 'fry_born' && (e.count ?? 0) > 0) {
@@ -992,7 +997,15 @@ async function start(): Promise<void> {
             sheet.open('設備與維護', () => maintenancePanel(ctx));
           },
         }
-      : undefined;
+      : c.reason === 'starving'
+        ? {
+            label: '去餵食',
+            run: () => {
+              game.switchTo(c.tank);
+              sheet.open('餵食', () => feedPanel(ctx));
+            },
+          }
+        : undefined;
     toasts.show(tankPrefix(c.tank) + crisisText(c), 'warn', fix);
   });
   // 選育成功：自家繁殖的公魚第一次長出沒見過的品系
@@ -1148,6 +1161,8 @@ async function start(): Promise<void> {
         art: 'gear/bottle-bacteria.webp',
         title: '養水完成！',
         sub: '硝化菌長好了，氨和亞硝酸鹽都是 0。現在可以慢慢多加魚',
+        // 魚開始多了：先講出門時誰來餵（#169，評測裡第 6 週整缸餓死）
+        owner: '水養好了！提醒你一件事：關掉遊戲時間也照樣走，魚每天都要吃。要出門好幾天，商店「設備」最下面有假期飼料錠，一顆撐 7 天。',
       });
   };
   setInterval(() => void analytics.flush(), 60_000);

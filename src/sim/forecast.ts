@@ -1,5 +1,6 @@
 import { linkTanks } from './household';
-import { freeAmmonia, STRESS_CAUSE_LABELS, type StressKey } from './processes/fauna';
+import { hasSteadyFood } from './feeders';
+import { freeAmmonia, hoursUntilStarving, STRESS_CAUSE_LABELS, type StressKey } from './processes/fauna';
 import { FISH_SPECIES } from './species';
 import { TICK_HOURS, step } from './step';
 import type { SimEvent, TankState } from './state';
@@ -119,5 +120,16 @@ export function forecast(tanks: TankState[], hoursAhead = FORECAST_HOURS): Forec
       }
     });
   }
+  // 沒有餵食器、飼料錠的缸：都不餵的話幾天後會開始餓死，提前一天提醒（離線時間照常跑，mvp.md §4.7）
+  tanks.forEach((t, i) => {
+    const alive = t.fish.filter((f) => f.alive);
+    if (alive.length === 0 || hasSteadyFood(t)) return;
+    const hours = Math.min(...alive.map((f) => hoursUntilStarving(t, f)));
+    if (hours <= hoursAhead || hours > STARVE_NOTICE_HOURS) return;
+    out.push({ hours: Math.round(hours - 24), category: 'crisis', tank: i, key: 'starve', body: tankName(tanks, i) + '魚明天開始會餓壞，打開遊戲餵一下。出遠門前可以放假期飼料錠或裝自動餵食器。' });
+  });
   return out;
 }
+
+/** 離線補算最多兩週，再遠的餓死提醒不排。 */
+const STARVE_NOTICE_HOURS = 14 * 24;

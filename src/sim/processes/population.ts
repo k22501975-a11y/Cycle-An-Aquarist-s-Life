@@ -185,7 +185,7 @@ function breed(state: TankState, tf: number, dt: number): void {
     // 水溫低於適溫下限時停止繁殖（temperature.md §3）
     const warmEnough = state.water.tempC >= sp.temp.min;
     // 太老的母魚不再懷孕
-    const relaxed = warmEnough && lifeFraction(mother) < 0.9 && mother.health > 0.7 && mother.stress < 0.4 && mother.hunger < 0.7;
+    const relaxed = warmEnough && lifeFraction(mother) < 0.9 && mother.health > 0.7 && mother.stress < 0.4 && mother.hunger < 0.7 && mother.starvingHours < 24;
     const males = relaxed ? living.filter((f) => f.species === mother.species && f.sex === 'male' && !isJuvenile(f)) : [];
     // 緞帶、大C 的公魚交接器太長配不了，燕尾的也很難配（strains.md §1.3）
     const fertility = males.map((m) => (m.genome ? matingSuccess(m.genome) : 1));
