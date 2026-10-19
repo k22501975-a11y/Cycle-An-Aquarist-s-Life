@@ -294,9 +294,15 @@ button.caps { background: none; border: 0; padding: 0; margin: 0; color: inherit
 .event-time { flex: 0 0 auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 
 /* 圖鑑 */
-.codex-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
-.codex-item { flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; color: var(--text); font: inherit; cursor: pointer; }
-.codex-item.locked { opacity: 0.5; cursor: default; }
+/* 圖鑑：跟商店一樣的圖卡 */
+.codex-grid { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); }
+.codex-card { padding: 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.codex-card .card-pic { height: 74px; }
+.codex-card .card-body { gap: 2px; padding: 6px 9px 8px; }
+.codex-card.locked { opacity: 0.55; cursor: default; }
+.codex-q { font-size: 30px; color: rgba(243, 234, 216, 0.5); }
+.codex-head { display: flex; align-items: center; gap: 12px; }
+.codex-hero { flex: none; width: 132px; height: 92px; border-radius: 14px; border: 1px solid rgba(227, 189, 109, 0.3); }
 .codex-sub { font-size: 12px; color: var(--muted); }
 .codex-name { margin: 4px 0 0; font-size: 18px; }
 .codex-text { font-size: 14px; line-height: 1.7; margin: 0; }
@@ -575,3 +581,20 @@ body > .owner { position: fixed; }
   font: 11px/1.4 ui-monospace, monospace;
   pointer-events: none;
 }
+/* 我的水缸：每缸一張有圖示的列 */
+.tank-row { align-items: center; gap: 10px; }
+.tank-row-art { flex: none; width: 44px; height: 44px; }
+.tank-row-text { flex: 1; min-width: 0; }
+/* 面板空的時候：一張圖、老闆一句話、去商店 */
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 8px 0 4px; text-align: center; }
+.empty-art { width: 150px; height: 96px; object-fit: contain; filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.45)); opacity: 0.9; }
+.empty-owner { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; border-radius: 14px; background: rgba(4, 22, 30, 0.55); text-align: left; font-size: 14px; line-height: 1.45; }
+.empty-avatar { width: 40px; height: 40px; flex: none; border-radius: 50%; border: 2px solid var(--gold); object-fit: cover; object-position: 50% 20%; }
+.empty-state .go-shop { display: inline-flex; align-items: center; gap: 6px; }
+/* 速度選單打開時先藏起老闆對話框（#app 是 fixed，自成一層，狀態列再高也蓋不過掛在 body 的對話框）（#114） */
+body.speed-open > .owner { visibility: hidden; }
+/* 狀態列疊到下方工具列上面；矮螢幕時選單自己捲動 */
+#hud.menu-open { z-index: 12; }
+.speed-pop { max-height: calc(100vh - env(safe-area-inset-top) - 80px); overflow-y: auto; }
+/* 分頁籤的圖不要被長字擠扁 */
+.icon-tab .tab-pic { flex: none; }
