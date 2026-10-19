@@ -190,13 +190,13 @@ export function buybackRefusal(fish: Fish): string | null {
 export type GuppyRarity = 'common' | 'strain' | 'rare' | 'prized';
 export const GUPPY_RARITY_LABELS: Record<GuppyRarity, string> = { common: '普通', strain: '品系', rare: '稀有', prized: '極稀有' };
 
+/** 五個常見品系的收購倍率（市場建議價以它為 1）。 */
+export const STRAIN_TIER = 0.6;
+
 /**
  * 孔雀魚的收購倍率（相對店價 60 元）：野生型或混種 0.3、5 個品系 0.6、白子或黃金 1、
  * 每多一種鰭型再乘上去，大C 至少 3.5。選育出好魚的收入是隨便生的 5～10 倍。
  */
-/** 五個常見品系的收購倍率（市場建議價以它為 1）。 */
-export const STRAIN_TIER = 0.6;
-
 export function guppyBuybackTier(p: GuppyPhenotype): number {
   const strain = p.albino || p.gold ? 1 : p.snake || p.grass || p.tuxedo || p.red ? STRAIN_TIER : 0.3;
   const fins = (p.ribbon ? 1.8 : 1) * (p.swallow ? 1.8 : 1) * (p.dumbo ? 1.6 : 1) * (p.sword === 3 ? 1.6 : p.sword ? 1.3 : 1) * (p.tailShape === 'halfmoon' ? 1.3 : 1);
