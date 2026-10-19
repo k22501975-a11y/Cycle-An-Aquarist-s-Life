@@ -1226,8 +1226,9 @@ async function start(): Promise<void> {
     speed.render();
     netBtn.classList.toggle('alert', game.state.fish.some((f) => !f.alive));
 
-    // 每半秒更新一次卡片與數值
-    refreshTimer += ticker.deltaMS;
+    // 每半秒更新一次卡片與數值。用現實經過的時間：deltaMS 每幀最多只算 100ms，
+    // 畫面很卡時會變成好幾秒才更新一次（任務、待辦、金幣跟著慢；新手任務流程測試在 CI 上因此卡住）
+    refreshTimer += elapsedMS;
     if (refreshTimer > 500) {
       refreshTimer = 0;
       for (const t of game.tanks) applySeason(t);
