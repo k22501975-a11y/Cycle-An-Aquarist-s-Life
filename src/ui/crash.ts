@@ -14,7 +14,9 @@ export function installCrashGuard(hooks: { save: () => void; exportSave: () => v
     } catch {
       // 存不了也要讓玩家看到錯誤畫面
     }
-    const message = error instanceof Error ? (error.stack ?? `${error.name}: ${error.message}`) : String(error);
+    const detail = error instanceof Error ? (error.stack ?? `${error.name}: ${error.message}`) : String(error);
+    // 附上版本，回報問題時才知道是哪一版出錯
+    const message = `版本 ${__APP_VERSION__}\n${detail}`;
     const copy = h('button.btn', {}, '複製錯誤訊息');
     copy.addEventListener('click', () => {
       void navigator.clipboard?.writeText(message).then(() => (copy.textContent = '已複製'));
