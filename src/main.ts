@@ -19,6 +19,7 @@ import { Forecaster } from './game/forecaster';
 import { canPromptInstall, isInstalled, isIos, promptInstall, setupPwa } from './ui/pwa';
 import { loadPaintedArt, startupArt } from './render/painted';
 import { FrameMonitor, lowerQuality } from './game/frame-monitor';
+import { FpsMeter, formatFps } from './game/fps-meter';
 import { defaultQuality, isQuality, type Quality, QUALITY_LABELS, qualitySpec } from './render/quality';
 import { TankView } from './render/tank-view';
 import { ScapeBar } from './ui/scape-bar';
@@ -134,9 +135,9 @@ async function start(): Promise<void> {
   const uiPrefs = (() => {
     try {
       const raw = JSON.parse(store.getItem(UI_KEY) ?? '{}');
-      return { bigText: raw.bigText === true, quality: isQuality(raw.quality) ? raw.quality : autoQuality, qualityManual: raw.qualityManual === true };
+      return { bigText: raw.bigText === true, quality: isQuality(raw.quality) ? raw.quality : autoQuality, qualityManual: raw.qualityManual === true, showFps: raw.showFps === true };
     } catch {
-      return { bigText: false, quality: autoQuality, qualityManual: false };
+      return { bigText: false, quality: autoQuality, qualityManual: false, showFps: false };
     }
   })();
   const saveUiPrefs = () => {
@@ -437,6 +438,19 @@ async function start(): Promise<void> {
     toasts.show(`畫面有點卡，畫質自動調成「${QUALITY_LABELS[lower]}」。可以在設定裡改回來`, 'info');
   });
   app.stage.addChild(view.root);
+  // 開發用幀率顯示：設定裡打開，或網址加 ?fps
+  const fpsMeter = new FpsMeter();
+  const fpsEl = h('div.fps-meter');
+  let fpsShown = false;
+  let fpsTimer = 0;
+  const setShowFps = (on: boolean) => {
+    uiPrefs.showFps = on;
+    saveUiPrefs();
+    fpsShown = on || new URLSearchParams(location.search).has('fps');
+    if (fpsShown) document.body.appendChild(fpsEl);
+    else fpsEl.remove();
+  };
+  setShowFps(uiPrefs.showFps);
 
   // ---- 狀態列：時間、水質膠囊（沒測過顯示「?」）、待辦、選單 ----
   const clockValue = h('span.value');
@@ -679,6 +693,7 @@ async function start(): Promise<void> {
       ...(isNativeApp() ? [] : [h('h3', {}, '安裝'), ...installSection()]),
       h('h3', {}, '開發者'),
       h('button.btn', { onclick: () => sheet.open('開發者數值', () => debugPanel(ctx), { live: true }) }, '開發者數值'),
+      h('label.check-row', {}, h('input', { type: 'checkbox', checked: uiPrefs.showFps, onchange: (e: Event) => setShowFps((e.target as HTMLInputElement).checked) }), h('span', {}, '顯示幀率（實機量效能用）')),
     );
   const menu = () =>
     h(
@@ -941,7 +956,16 @@ async function start(): Promise<void> {
   for (const type of ['pointerdown', 'pointermove', 'wheel', 'keydown']) window.addEventListener(type, wake, { passive: true });
   app.ticker.add((ticker) => {
     try {
+      const t0 = performance.now();
       tick(ticker.deltaMS);
+      if (fpsShown) {
+        const now = performance.now();
+        fpsMeter.add(ticker.deltaMS, now - t0, now);
+        if (now - fpsTimer > 500) {
+          fpsTimer = now;
+          fpsEl.textContent = formatFps(fpsMeter.stats());
+        }
+      }
     } catch (error) {
       app.ticker.stop();
       crash(error);
