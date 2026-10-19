@@ -21,6 +21,9 @@ export interface SetupChoice {
   air: 'none' | keyof typeof AIR_PUMPS;
 }
 
+/** 開缸畫面上玩家選到一半的設備：一開始什麼都沒選（不預選），每一類都選了才能開缸。 */
+export type SetupDraft = Partial<SetupChoice>;
+
 /** 一張設備卡（美術與 UI 照這個畫卡片）。 */
 export interface SetupOption {
   id: string;
@@ -119,16 +122,16 @@ export function setupOptionPrice(category: SetupCategory, id: string): number {
 }
 
 /** 推薦的選項：加熱棒跟著缸的大小，其他照推薦組合。 */
-export function recommendedFor(choice: SetupChoice, category: SetupCategory): string {
-  if (category === 'heater') return HEATER_FOR_TANK[choice.tank];
+export function recommendedFor(choice: SetupDraft, category: SetupCategory): string {
+  if (category === 'heater') return HEATER_FOR_TANK[choice.tank ?? RECOMMENDED_SETUP.tank];
   return RECOMMENDED_SETUP[category];
 }
 
 /** 照目前其他選擇，選這張時阿德老闆要提醒什麼（只提醒，不擋）。 */
-function warningFor(choice: SetupChoice, category: SetupCategory, id: string): string | undefined {
+function warningFor(choice: SetupDraft, category: SetupCategory, id: string): string | undefined {
   const big = choice.tank === 'std40';
   if (category === 'heater' && big && id === 'h25') return '40L 用 25W，冬天寒流水溫會掉，菌長得慢、魚也容易生病';
-  if (category === 'heater' && !big && id === 'h100') return '20L 用 100W，萬一加熱棒卡住，水溫幾小時就會衝到危險';
+  if (category === 'heater' && choice.tank === 'nano20' && id === 'h100') return '20L 用 100W，萬一加熱棒卡住，水溫幾小時就會衝到危險';
   if (category === 'filter' && big && id === 'sponge') return '水妖精顧 40L 有點吃力，魚別放太多';
   if (category === 'filter' && id === 'canister' && choice.air === 'none') return '圓桶水面攪動少，魚多時記得加打氣';
   if (category === 'light' && id === 'planted') return '水草燈不配 CO₂ 很容易長藻，記得多換水、多種草';
@@ -136,7 +139,7 @@ function warningFor(choice: SetupChoice, category: SetupCategory, id: string): s
 }
 
 /** 每一類的卡片（給開缸畫面用）。locked 的卡畫成灰的、不能點。 */
-export function setupCards(choice: SetupChoice = RECOMMENDED_SETUP): SetupCategoryCards[] {
+export function setupCards(choice: SetupDraft = {}): SetupCategoryCards[] {
   return SETUP_CATEGORIES.map(({ category, title }) => ({
     category,
     title,
@@ -154,15 +157,23 @@ export function setupCards(choice: SetupChoice = RECOMMENDED_SETUP): SetupCatego
   }));
 }
 
-/** 這套要花多少錢。 */
-export function setupCost(choice: SetupChoice): number {
-  return SETUP_CATEGORIES.reduce((sum, { category }) => sum + setupOptionPrice(category, choice[category]), 0);
+/** 這套要花多少錢（還沒選的類不算）。 */
+export function setupCost(choice: SetupDraft): number {
+  return SETUP_CATEGORIES.reduce((sum, { category }) => {
+    const id = choice[category];
+    return id === undefined ? sum : sum + setupOptionPrice(category, id);
+  }, 0);
+}
+
+/** 還沒選的類（標題），照畫面上的順序。 */
+export function missingSetup(choice: SetupDraft): string[] {
+  return SETUP_CATEGORIES.filter(({ category }) => choice[category] === undefined).map(({ title }) => title);
 }
 
 /** 換了缸之後，加熱棒跟著換成適合的（玩家之後還可以自己改）。 */
-export function withTank(choice: SetupChoice, tank: SetupChoice['tank']): SetupChoice {
-  const heater = choice.heater === HEATER_FOR_TANK[choice.tank] ? HEATER_FOR_TANK[tank] : choice.heater;
-  return { ...choice, tank, heater };
+export function withTank(choice: SetupDraft, tank: SetupChoice['tank']): SetupDraft {
+  if (choice.tank === undefined || choice.heater !== HEATER_FOR_TANK[choice.tank]) return { ...choice, tank };
+  return { ...choice, tank, heater: HEATER_FOR_TANK[tank] };
 }
 
 /** 這個新遊戲還在等玩家開缸（還沒開缸時時間不走）。 */
@@ -171,8 +182,10 @@ export function needsSetup(state: TankState): boolean {
 }
 
 /** 為什麼不能用這套開缸；可以就回傳 null。 */
-export function setupRefusal(state: TankState, choice: SetupChoice): string | null {
+export function setupRefusal(state: TankState, choice: SetupDraft): string | null {
   if (!needsSetup(state)) return '已經開過缸了';
+  const missing = missingSetup(choice);
+  if (missing.length > 0) return `還沒選：${missing.join('、')}`;
   for (const { category } of SETUP_CATEGORIES) {
     const card = CARDS[category].find((c) => c.id === choice[category]);
     if (!card) return '有一類還沒選';
@@ -183,9 +196,10 @@ export function setupRefusal(state: TankState, choice: SetupChoice): string | nu
 }
 
 /** 開缸：付錢、裝上設備、鋪好底沙。不行就回傳原因（什麼都不改）。 */
-export function applySetup(state: TankState, choice: SetupChoice): string | null {
-  const refusal = setupRefusal(state, choice);
+export function applySetup(state: TankState, draft: SetupDraft): string | null {
+  const refusal = setupRefusal(state, draft);
   if (refusal) return refusal;
+  const choice = draft as SetupChoice;
   const e = economy(state);
   e.coins -= setupCost(choice);
   delete e.setupPending;

@@ -6,7 +6,7 @@ PR 要合併到 `main`，必須同時符合：
    - 靜態檢查：`npm run lint`（ESLint）、`npm run typecheck`（四份 tsconfig：主程式、模擬核心、模擬服務、e2e）、`npm run check:assets`（素材預算）、`npm audit --omit=dev --audit-level=high`（遊戲本體用的套件不能有 high 以上的已知漏洞）
    - 安全檢查：gitleaks 掃整個 git 歷史有沒有金鑰、密碼（設定在 `.gitleaks.toml`）；PR 新增或升級的套件用 dependency-review 檢查，有 high 以上漏洞就擋
    - 單元測試：`npm test`（Vitest）
-   - 遊戲流程測試：打包、檢查 JS 大小、`npm run e2e`（Playwright，案例在 `e2e/`）
+   - 遊戲流程測試：打包、檢查 JS 大小、`npm run e2e`（Playwright，案例在 `e2e/`）；切成 3 份平行跑
    - 伺服器：`./gradlew test bootJar`
    - Android：打包測試版 APK
 
@@ -31,7 +31,8 @@ PR 要合併到 `main`，必須同時符合：
 - 設定在 `playwright.config.ts`，模擬手機橫向 915×412。
 - `e2e/smoke.spec.ts` 是冒煙測試；QA 角色把遊戲流程測試加在 `e2e/flows/`。
 - 頁面有未捕捉的錯誤時，測試自動失敗（`e2e/fixtures.ts`）。
-- 失敗時 CI 會上傳 `playwright-report` 讓你看截圖和 trace。
+- 失敗時 CI 會上傳 `playwright-report-N`（N 是第幾份）讓你看截圖和 trace。
+- CI 把流程測試切成 3 份平行跑（`--shard`），每份的預算是 10 分鐘。單一測試最長不要超過 8 分鐘：比這更長的流程（例如新手任務全程）先想辦法縮短或拆開；份數不夠時由架構調高 `ci.yml` 的 shard 數。本機跑全部用 `npm run e2e`，只跑其中一份用 `npm run e2e -- --shard=1/3`。
 
 ## 標籤
 

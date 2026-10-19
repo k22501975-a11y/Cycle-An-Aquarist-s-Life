@@ -1,6 +1,7 @@
 import { growthStage, sexVisible } from './growth';
 import { moveFish } from './household';
 import { crowdingRatio } from './processes/fauna';
+import { moveToQuarantine } from './quarantine';
 import { FISH_SPECIES } from './species';
 import { isJuvenile, type Fish, type TankState } from './state';
 
@@ -52,7 +53,7 @@ export function splitAdvice(state: TankState): SplitAdvice[] {
   if (crowd > 1) out.push({ reason: 'crowded', tone: 'bad', text: `缸裡太擠了（${living.length} 條），缺氧、氨升高，最弱的會先死：分缸、賣掉一些或換大缸`, plan: hasYoung ? 'by_size' : 'half' });
   else if (crowd > 0.8) out.push({ reason: 'crowded', tone: 'warn', text: `魚快養滿了（${living.length} 條），該分缸或賣掉一些了`, plan: hasYoung ? 'by_size' : 'half' });
   const prey = preyAtRisk(living);
-  if (prey.length > 0) out.push({ reason: 'fry_with_adults', tone: prey.length >= 5 ? 'bad' : 'warn', text: `成魚會吃小魚：把 ${prey.length} 條仔魚撈到別缸`, plan: 'by_size' });
+  if (prey.length > 0) out.push({ reason: 'fry_with_adults', tone: prey.length >= 5 ? 'bad' : 'warn', text: `成魚會吃小魚：把 ${prey.length} 條仔魚撈到${state.quarantine ? '檢疫盒（當育幼盒）或別缸' : '別缸'}`, plan: 'by_size' });
   const pairs = youngPairs(living);
   if (pairs.males.length > 0 && pairs.females.length > 0 && pairs.males.some((m) => (m.generation ?? 0) > 0))
     out.push({ reason: 'sexes_mixed', tone: 'warn', text: `小魚分得出公母了（${pairs.males.length} 條小公魚）：公母分開，免得太早亂配`, plan: 'by_sex' });
@@ -81,5 +82,16 @@ export function splitTank(from: TankState, to: TankState, plan: SplitPlan): numb
   if (from === to) return 0;
   let moved = 0;
   for (const f of splitGroup(from, plan)) if (moveFish(from, to, f.id)) moved++;
+  return moved;
+}
+
+/**
+ * 只有一缸時的仔魚救援（#144）：把會被吃的仔魚撈進檢疫盒，盒子當育幼盒用，長到成魚吞不下再放回主缸。
+ * 沒有檢疫盒回 0；回傳撈了幾條。
+ */
+export function rescueFryToBox(state: TankState): number {
+  if (!state.quarantine) return 0;
+  let moved = 0;
+  for (const f of splitGroup(state, 'by_size')) if (isJuvenile(f) && moveToQuarantine(state, f.id)) moved++;
   return moved;
 }

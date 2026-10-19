@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { blankGameState, Game, newGameState } from '../game/game';
-import { applySetup, economy, needsSetup, RECOMMENDED_SETUP, setupCards, setupCost, setupRefusal, STARTING_COINS, withTank, type SetupChoice } from '.';
+import { applySetup, economy, missingSetup, needsSetup, RECOMMENDED_SETUP, setupCards, setupCost, setupRefusal, STARTING_COINS, withTank, type SetupChoice, type SetupDraft } from '.';
 
 describe('開缸（F1-a）', () => {
   it('新遊戲是空缸＋起始資金，還沒有設備', () => {
@@ -57,12 +57,27 @@ describe('開缸（F1-a）', () => {
       expect(c.options.filter((o) => o.recommended)).toHaveLength(1);
       for (const o of c.options) expect(o.pro && o.con).toBeTruthy();
     }
-    const heater = (choice: SetupChoice) => setupCards(choice).find((c) => c.category === 'heater')!.options.find((o) => o.recommended)!.id;
+    const heater = (choice: SetupDraft) => setupCards(choice).find((c) => c.category === 'heater')!.options.find((o) => o.recommended)!.id;
     expect(heater(RECOMMENDED_SETUP)).toBe('h50');
     expect(heater(withTank(RECOMMENDED_SETUP, 'nano20'))).toBe('h25');
     expect(withTank(RECOMMENDED_SETUP, 'nano20').heater).toBe('h25');
     // 玩家自己改過的加熱棒，換缸時不幫他改回去
     expect(withTank({ ...RECOMMENDED_SETUP, heater: 'h100' }, 'nano20').heater).toBe('h100');
+  });
+
+  it('不預選：一開始什麼都沒選，每一類都選了才能開缸', () => {
+    const s = blankGameState(1);
+    expect(setupCost({})).toBe(0);
+    expect(missingSetup({})).toHaveLength(6);
+    const partial: SetupDraft = { tank: 'std40', filter: 'hangOn', heater: 'h50', light: 'basic', substrate: 'sand' };
+    expect(setupCost(partial)).toBe(setupCost(RECOMMENDED_SETUP));
+    expect(setupRefusal(s, partial)).toMatch('打氣機');
+    expect(applySetup(s, partial)).toMatch('還沒選');
+    expect(needsSetup(s)).toBe(true);
+    expect(economy(s).coins).toBe(STARTING_COINS);
+    // 還沒選加熱棒就換缸，不會幫玩家選加熱棒
+    expect(withTank({}, 'nano20')).toEqual({ tank: 'nano20' });
+    expect(applySetup(s, { ...partial, air: 'none' })).toBeNull();
   });
 
   it('選錯不擋，卡上有老闆的提醒', () => {

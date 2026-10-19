@@ -13,6 +13,13 @@ export function speedChoices(cloud: boolean): SpeedOption[] {
   return SPEED_OPTIONS.filter((opt) => !cloud || opt.scale <= DEFAULT_TIME_SCALE);
 }
 
+/**
+ * 雲端模式的時間倍率最多 ×7（#112）：登入前開著的快轉、讀進來或從雲端下載的存檔裡記著的倍率，都不能帶進來。
+ */
+export function cloudTimeScale(scale: number, cloud: boolean): number {
+  return cloud && scale > DEFAULT_TIME_SCALE ? DEFAULT_TIME_SCALE : scale;
+}
+
 export type SpeedGlyph = 'pause' | 'play' | 'fast' | 'faster';
 
 /** 按鈕上的圖示：暫停、播放、快轉（雙箭頭）、更快（三箭頭）。 */

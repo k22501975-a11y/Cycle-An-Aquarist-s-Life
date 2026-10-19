@@ -34,7 +34,7 @@ class HttpSimClientTest {
         });
         server.start();
         String url = "http://127.0.0.1:" + server.getAddress().getPort();
-        CycleProperties props = new CycleProperties(null, 30, 4000000, 3, false, null, new CycleProperties.Sim(url, null, 5));
+        CycleProperties props = new CycleProperties(null, 30, 4000000, 3, false, null, new CycleProperties.Sim(url, null, 5), false, null);
         return new HttpSimClient(props, json);
     }
 

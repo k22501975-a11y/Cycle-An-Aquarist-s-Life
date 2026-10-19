@@ -73,7 +73,7 @@ self.addEventListener('push', (event) => {
     data = { body: event.data ? event.data.text() : '' };
   }
   event.waitUntil(
-    self.registration.showNotification(data.title || '水族人生', {
+    self.registration.showNotification(data.title || "Aquarist's Life", {
       body: data.body || '',
       tag: data.tag || undefined,
       icon: './icons/icon-192.png',

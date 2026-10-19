@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addFish, feed } from '../sim';
-import { newGameState } from './game';
+import { blankGameState, newGameState } from './game';
 import { catchUp, clearSave, MAX_OFFLINE_HOURS, readSave, SAVE_KEY, writeSave, type KeyValueStore } from './save';
 
 function memoryStore(): KeyValueStore & { data: Map<string, string> } {
@@ -66,6 +66,15 @@ describe('離線補算', () => {
     const store = memoryStore();
     writeSave(store, newGameState(2), 21600, 0);
     expect(catchUp(readSave(store)!, HOUR_MS).hours).toBeCloseTo(7);
+  });
+
+  it('還沒開缸就關掉，回來不補算', () => {
+    const store = memoryStore();
+    const state = blankGameState(2);
+    writeSave(store, state, 7, 0);
+    const file = readSave(store)!;
+    expect(catchUp(file, 24 * HOUR_MS).hours).toBe(0);
+    expect(file.state.hours).toBe(state.hours);
   });
 
   it('暫停時存檔，不補算', () => {

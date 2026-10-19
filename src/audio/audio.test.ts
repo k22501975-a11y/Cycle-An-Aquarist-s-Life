@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { barNotes, chordForBar, midiToFreq, pluckSamples, PROGRESSION } from './music';
+import { barNotes, BPM, chordForBar, midiToFreq, pluckSamples, PROGRESSION } from './music';
 import { DEFAULT_AUDIO_SETTINGS, loadAudioSettings, normalizeAudioSettings, saveAudioSettings } from './settings';
 import { eventSound, Throttle } from './sounds';
 
@@ -25,22 +25,36 @@ describe('聲音設定', () => {
 });
 
 describe('背景音樂', () => {
-  it('和弦四小節一輪，同一小節每次彈的都一樣', () => {
+  it('一個和弦撐兩小節，八小節一輪，同一小節每次彈的都一樣', () => {
     expect(chordForBar(0)).toBe(PROGRESSION[0]);
-    expect(chordForBar(5)).toBe(PROGRESSION[1]);
+    expect(chordForBar(1)).toBe(PROGRESSION[0]);
+    expect(chordForBar(2)).toBe(PROGRESSION[1]);
+    expect(chordForBar(9)).toBe(PROGRESSION[0]);
     expect(barNotes(7)).toEqual(barNotes(7));
   });
 
   it('每個音都在和弦裡、位置在小節內', () => {
     for (let bar = 0; bar < 32; bar++) {
       const chord = chordForBar(bar);
-      const allowed = new Set([chord.root, chord.fifth, ...chord.treble, chord.treble.at(-1)! + 12]);
+      const allowed = new Set([chord.root, chord.fifth, ...chord.treble, chord.treble.at(-1)! + 12, chord.treble.at(-2)! + 12]);
       for (const n of barNotes(bar)) {
         expect(allowed.has(n.midi)).toBe(true);
         expect(n.step).toBeGreaterThanOrEqual(0);
         expect(n.step).toBeLessThan(8);
         expect(n.velocity).toBeGreaterThan(0);
         expect(n.velocity).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('安靜：慢板、每小節最多 5 個音、音量輕，沒有重低音（YenWel：吉他太躁）', () => {
+    expect(BPM).toBeLessThanOrEqual(70);
+    for (let bar = 0; bar < 64; bar++) {
+      const notes = barNotes(bar);
+      expect(notes.length).toBeLessThanOrEqual(5);
+      for (const n of notes) {
+        expect(n.velocity).toBeLessThanOrEqual(0.45);
+        expect(n.midi).toBeGreaterThanOrEqual(45);
       }
     }
   });

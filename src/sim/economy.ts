@@ -100,6 +100,8 @@ export interface Economy {
   setupPending?: boolean;
   /** 今天的每日小事（F3）；舊存檔沒有，開完缸第一次更新時出題。 */
   daily?: DailyState;
+  /** 玩過幾次對水小遊戲（前幾次強制玩，F5）。 */
+  dripsDone?: number;
 }
 
 export interface MallBag {
