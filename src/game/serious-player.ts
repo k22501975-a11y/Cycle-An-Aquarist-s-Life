@@ -61,6 +61,8 @@ export function seriousPlayer(seed: number, strain: number, takeOrders = false):
   linkTanks(tanks);
   home.environment.roomTempC = 25;
   home.environment.roomSwingC = 2;
+  // 起始水溫也固定：newGameState 照現實日期給室溫當水溫，不固定的話結果會隨跑測試的日期、時間變
+  home.water.tempC = home.water.tempAvgC = 25;
   const plantUp = (t: TankState) => {
     for (const p of ['moss', 'moss', 'glosso'] as const) addPlant(t, p);
     economy(home).coins -= 2 * PLANT_PRICES.moss + PLANT_PRICES.glosso;
@@ -152,6 +154,8 @@ export function casualPlayer(seed: number, takeOrders: boolean, days = 90): { in
   const tanks = [s];
   s.environment.roomTempC = 25;
   s.environment.roomSwingC = 2;
+  // 起始水溫也固定：newGameState 照現實日期給室溫當水溫，不固定的話結果會隨跑測試的日期、時間變
+  s.water.tempC = s.water.tempAvgC = 25;
   addPlant(s, 'anubias');
   for (const sex of ['male', 'female', 'female'] as const) addFish(s, 'guppy', { carriesIch: false, carries: [], sex, strain: 0 });
   const breeders = [...s.fish.map((f) => f.id)];
