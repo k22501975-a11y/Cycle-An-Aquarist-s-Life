@@ -1,4 +1,4 @@
-import { addCuttings, BUYBACK_SHARE, economy, fishBuybackPrice, plantBuybackPrice } from './economy';
+import { addCuttings, BETTA_FEMALE_PRICE, economy, FISH_PRICES, fishBuybackPrice, guppyBuybackTier, JUVENILE_SHARE, PLANT_PRICES, plantBuybackPrice, STRAIN_TIER } from './economy';
 import { phenotype, strainName } from './genetics';
 import { hasVisible } from './processes/disease';
 import { createFish } from './processes/population';
@@ -62,13 +62,22 @@ export function minPlantPrice(species: PlantSpeciesId, count: number): number {
   return plantBuybackPrice(species) * count;
 }
 
-/** 建議售價：差不多水族店的店價（收購價約店價五成）。 */
+/**
+ * 建議售價：魚種店價 × 稀有度倍率（跟收購同一套分級，以普通品系為 1），不設店售價上限。
+ * 普通品系的成年孔雀魚約 60 元，自己選育的稀有品系可以比店價高（mvp.md §4.3）。
+ */
 export function suggestedFishPrice(fish: Fish): number {
-  return Math.max(minFishPrice(fish), Math.round(fishBuybackPrice(fish) / BUYBACK_SHARE));
+  const base = fish.genome
+    ? FISH_PRICES.guppy * (guppyBuybackTier(phenotype(fish.genome)) / STRAIN_TIER) * (0.5 + fish.genome.tail / 100)
+    : fish.species === 'betta' && fish.sex === 'female'
+      ? BETTA_FEMALE_PRICE
+      : FISH_PRICES[fish.species];
+  return Math.max(minFishPrice(fish), Math.round(base * (isJuvenile(fish) ? JUVENILE_SHARE : 1)));
 }
 
+/** 插枝建議售價：約一盆店價的三分之一（一株插枝的店價）。 */
 export function suggestedPlantPrice(species: PlantSpeciesId, count: number): number {
-  return Math.max(minPlantPrice(species, count), Math.round((plantBuybackPrice(species) / BUYBACK_SHARE) * count));
+  return Math.max(minPlantPrice(species, count), Math.round((PLANT_PRICES[species] / 3) * count));
 }
 
 /** 上架或出貨時送給市場的魚資料（listing 是自己這邊的標記，不帶過去）。 */
