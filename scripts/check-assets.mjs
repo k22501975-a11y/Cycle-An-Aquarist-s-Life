@@ -2,7 +2,7 @@
 // 用法：node scripts/check-assets.mjs（打包後加 --dist，順便檢查 dist/ 的 JS 大小）
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
-import { join, extname } from 'node:path';
+import { join, extname, sep } from 'node:path';
 
 const KB = 1024;
 const RULES = {
@@ -20,6 +20,8 @@ const RULES = {
 
 function walk(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    // .DS_Store、.gitkeep 這類隱藏檔不算素材
+    if (e.name.startsWith('.')) return [];
     const p = join(dir, e.name);
     return e.isDirectory() ? walk(p) : [{ path: p, size: statSync(p).size }];
   });
@@ -29,10 +31,10 @@ const errors = [];
 const files = walk('public');
 const total = files.reduce((s, f) => s + f.size, 0);
 for (const f of files) {
-  if (f.path.startsWith(join('public', 'art'))) {
+  if (f.path.startsWith(join('public', 'art') + sep)) {
     if (!RULES.artExts.has(extname(f.path))) errors.push(`${f.path}：public/art 只能放 .webp`);
     if (f.size > RULES.artFileMax) errors.push(`${f.path}：${Math.round(f.size / KB)} KB，超過單張 ${RULES.artFileMax / KB} KB 上限`);
-  } else if (f.path.startsWith(join('public', 'icons')) && f.size > RULES.iconFileMax) {
+  } else if (f.path.startsWith(join('public', 'icons') + sep) && f.size > RULES.iconFileMax) {
     errors.push(`${f.path}：${Math.round(f.size / KB)} KB，超過圖示 ${RULES.iconFileMax / KB} KB 上限`);
   }
 }

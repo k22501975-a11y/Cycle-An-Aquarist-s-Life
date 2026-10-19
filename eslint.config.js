@@ -4,7 +4,7 @@ import tseslint from 'typescript-eslint';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'dist-sim/**', 'android/**', 'server/**', 'public/**', 'scripts/**', 'playwright-report/**', 'test-results/**'] },
+  { ignores: ['dist/**', 'dist-sim/**', 'android/**', 'server/**', 'public/**', 'playwright-report/**', 'test-results/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -20,6 +20,12 @@ export default tseslint.config(
       // 介面文字常用全形空白排版
       'no-irregular-whitespace': ['error', { skipStrings: true, skipTemplates: true }],
     },
+  },
+  {
+    // 工具腳本在 Node 上跑（ui-icons/render.mjs 有一段在瀏覽器頁面裡執行）
+    files: ['scripts/**/*.{js,mjs}', '*.config.{js,ts}'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+    rules: { 'no-console': 'off' },
   },
   {
     // 模擬核心不能碰畫面層或 DOM（tsconfig.sim.json 也會擋 DOM 型別）

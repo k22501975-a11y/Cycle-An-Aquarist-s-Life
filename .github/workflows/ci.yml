@@ -49,7 +49,17 @@ jobs:
       - run: npm run build
       - run: node scripts/check-assets.mjs --dist
       - run: npm run build:sim
-      - run: npx playwright install --with-deps chromium
+      - id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
       - run: npm run e2e
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -121,18 +131,17 @@ jobs:
           if-no-files-found: ignore
 
   # 分支保護只要求這一個檢查：上面全部通過才會綠。
+  # 被條件略過（skipped）的工作視為通過；失敗或取消就擋下。
   gate:
     name: 品質閘門
     if: always()
     needs: [static, unit, e2e, server, android]
     runs-on: ubuntu-latest
     steps:
-      - name: 檢查所有關卡
-        env:
-          RESULTS: ${{ toJSON(needs) }}
+      - name: 有關卡失敗或被取消
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
         run: |
-          echo "$RESULTS"
-          if echo "$RESULTS" | grep -E '"result": "(failure|cancelled|skipped)"'; then
-            echo "有關卡沒過，不能合併"; exit 1
-          fi
-          echo "全部通過"
+          echo '${{ toJSON(needs) }}'
+          echo "有關卡沒過，不能合併"
+          exit 1
+      - run: echo "全部通過"

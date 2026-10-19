@@ -8,6 +8,8 @@ PR 要合併到 `main`，必須同時符合：
    - 遊戲流程測試：打包、檢查 JS 大小、`npm run e2e`（Playwright，案例在 `e2e/`）
    - 伺服器：`./gradlew test bootJar`
    - Android：打包測試版 APK
+
+   有工作失敗或被取消，品質閘門就是紅的；被 `if:` 條件略過（skipped）的工作視為通過。新增工作時記得加進 `gate` 的 `needs`，否則它失敗也擋不住合併。
 2. **架構角色審查通過**（照 [coding-standards.md](coding-standards.md) 和 [performance-budget.md](performance-budget.md)）。
 3. **沒有和這個 PR 相關、未解決的 `severity:critical` 或 `severity:major` 問題**。
 4. 由**總控**合併（2026-10-19 起，各角色不自己合併）。
@@ -45,7 +47,7 @@ PR 要合併到 `main`，必須同時符合：
 3. Target branches → **Add target** → **Include default branch**。
 4. 勾 **Restrict deletions**、**Block force pushes**。
 5. 勾 **Require a pull request before merging**，Required approvals 設 **0**（審查由架構角色用留言完成，同一個帳號無法核准自己的 PR）。
-6. 勾 **Require status checks to pass** → **Add checks** 搜尋並加入 **品質閘門**；勾 **Require branches to be up to date before merging**。
+6. 勾 **Require status checks to pass** → **Add checks** 搜尋並加入 **品質閘門**。先**不要**勾 Require branches to be up to date：同時開很多 PR 時，每合併一個其他 PR 都要重跑 CI。
 7. 按 **Create**。
 
 設定後，「品質閘門」沒綠的 PR 在 GitHub 上就按不了合併。

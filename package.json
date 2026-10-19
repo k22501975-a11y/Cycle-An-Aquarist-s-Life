@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.sim.json && tsc --noEmit -p tsconfig.simsvc.json",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.sim.json && tsc --noEmit -p tsconfig.simsvc.json && tsc --noEmit -p tsconfig.e2e.json",
     "build:sim": "vite build --config vite.simsvc.config.ts",
     "sim": "node dist-sim/main.js",
     "test": "vitest run",
