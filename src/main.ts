@@ -50,7 +50,7 @@ import { firstTime, type MomentId } from './ui/moments';
 import { causeAdvice, HUNGER_LABEL, needsAdvice } from './ui/owner-advice';
 import { ownerSay } from './ui/owner-ask';
 import { fryArt, guppyArt } from './ui/shop-cards';
-import { newStrains, strainOwnerLine } from './ui/strain-moment';
+import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
 import { recordsPanel } from './ui/records';
 import { loadCodexSeen, saveCodexSeen, unlockCodex } from './ui/codex';
 import { codexPanel } from './ui/codex-panel';
@@ -870,8 +870,9 @@ async function start(): Promise<void> {
     if (msg) toasts.show(tankPrefix(tank) + msg.text, msg.tone);
   });
   // 選育成功：自家繁殖的公魚第一次長出沒見過的品系
+  const strains = new StrainTracker(store);
   const celebrateStrains = () => {
-    const [top, ...rest] = newStrains(store, game.tanks);
+    const [top, ...rest] = strains.check(game.tanks);
     if (!top) return;
     const p = sim.phenotype(top.fish.genome!);
     const fin = p.bigC ? 'bigC' : p.swallow ? 'swallow' : p.ribbon ? 'ribbon' : p.tailShape === 'halfmoon' ? 'halfmoon' : undefined;

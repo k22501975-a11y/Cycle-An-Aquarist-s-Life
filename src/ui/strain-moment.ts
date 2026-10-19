@@ -35,33 +35,45 @@ function load(store: KeyValueStore): Set<string> | null {
 }
 
 /**
- * 找出這次新出現的品系（同一個品系只回傳最稀有、最大的那條）。
- * 第一次執行（舊存檔剛更新）只把現有的品系記下來，不補放演出，免得一開遊戲連跳好幾張卡。
+ * 記得已經慶祝過哪些品系：開遊戲時從裝置讀一次，之後存在記憶體（每半秒檢查一次，不每次讀 localStorage），有新品系才寫回。
  */
-export function newStrains(store: KeyValueStore, tanks: TankState[]): StrainFind[] {
-  const seen = load(store);
-  const found = new Map<string, StrainFind>();
-  tanks.forEach((t, tank) => {
-    for (const fish of t.fish) {
-      if (!showsStrain(fish)) continue;
-      const p = phenotype(fish.genome!);
-      const rarity = guppyRarity(p);
-      if (rarity === 'common') continue;
-      const name = strainName(p);
-      const prev = found.get(name);
-      if (!prev || RANK[rarity] > RANK[prev.rarity] || (rarity === prev.rarity && fish.lengthCm > prev.fish.lengthCm)) found.set(name, { tank, fish, name, rarity });
-    }
-  });
-  const fresh = seen ? [...found.values()].filter((f) => !seen.has(f.name)) : [];
-  if (!seen || fresh.length) {
-    const all = new Set([...(seen ?? []), ...found.keys()]);
-    try {
-      store.setItem(STRAINS_KEY, JSON.stringify([...all]));
-    } catch {
-      // 存不了（無痕模式）就每次開遊戲重新記
-    }
+export class StrainTracker {
+  /** null：這台裝置還沒有紀錄（舊存檔剛更新）。 */
+  private seen: Set<string> | null;
+
+  constructor(private readonly store: KeyValueStore) {
+    this.seen = load(store);
   }
-  return fresh.sort((a, b) => RANK[b.rarity] - RANK[a.rarity]);
+
+  /**
+   * 找出這次新出現的品系（同一個品系只回傳最稀有、最大的那條）。
+   * 第一次執行（舊存檔剛更新）只把現有的品系記下來，不補放演出，免得一開遊戲連跳好幾張卡。
+   */
+  check(tanks: TankState[]): StrainFind[] {
+    const found = new Map<string, StrainFind>();
+    tanks.forEach((t, tank) => {
+      for (const fish of t.fish) {
+        if (!showsStrain(fish)) continue;
+        const p = phenotype(fish.genome!);
+        const rarity = guppyRarity(p);
+        if (rarity === 'common') continue;
+        const name = strainName(p);
+        const prev = found.get(name);
+        if (!prev || RANK[rarity] > RANK[prev.rarity] || (rarity === prev.rarity && fish.lengthCm > prev.fish.lengthCm)) found.set(name, { tank, fish, name, rarity });
+      }
+    });
+    const seen = this.seen;
+    const fresh = seen ? [...found.values()].filter((f) => !seen.has(f.name)) : [];
+    if (!seen || fresh.length) {
+      this.seen = new Set([...(seen ?? []), ...found.keys()]);
+      try {
+        this.store.setItem(STRAINS_KEY, JSON.stringify([...this.seen]));
+      } catch {
+        // 存不了（無痕模式）就只記在這次遊戲裡
+      }
+    }
+    return fresh.sort((a, b) => RANK[b.rarity] - RANK[a.rarity]);
+  }
 }
 
 /** 阿德老闆對新品系說的話。 */
