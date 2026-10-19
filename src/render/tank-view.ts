@@ -4,7 +4,7 @@ import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { floorAt, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
-import { dirtSpots, floorY, frontLip, sandSurface, substrateLook, SUBSTRATE_PALETTES, type SubstrateLook } from './substrate';
+import { dirtSpots, floorY, frontLip, sandSurface, tankSubstrateLook, SUBSTRATE_PALETTES, type SubstrateLook } from './substrate';
 import { applyFoodLook, BITE_SECONDS, biteKick, mouthOpenness, pickEaten, pickFoodKind, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type FoodLook, type Mouth, type Pellet } from './feeding';
 import { canvasTexture, flakeTextures, makeCanvas, mix, pelletTextures, softDotTexture, tabletTexture, wormTextures } from './paint';
 import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame, TEST_SECONDS, WATER_CHANGE_SECONDS, type KitParam } from './ops-fx';
@@ -333,9 +333,8 @@ export class TankView {
     }
     this.cam.pan = clampPan(this.cam.pan, this.cam.span, screen.width);
     this.root.x = -this.cam.pan;
-    // 套缸附一層石英砂：存檔沒記底材（新缸、舊存檔）就是石英砂，和商店的「目前使用」一致；明確拆掉（null）才是裸缸
-    const sub = state.equipment.substrate;
-    const look = substrateLook(sub === null ? null : (sub?.spec.id ?? 'sand'));
+    // 和商店的「目前使用」一致：沒記底材就是石英砂
+    const look = tankSubstrateLook(state.equipment.substrate);
     // 石頭沉木只畫玩家買來擺的（scape-view.ts）：新缸沒買造景就只有底沙，不送預設裝飾
     const decor = false;
     const key = `${screen.width}x${screen.height}:${this.insets.top},${this.insets.bottom}:${size.w}x${size.h}:${this.cam.span}:${look}:${decor}`;

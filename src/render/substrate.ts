@@ -10,6 +10,11 @@ export function substrateLook(id: string | null | undefined): SubstrateLook {
   return 'bare';
 }
 
+/** 缸裡實際畫哪種底：套缸附一層石英砂，存檔沒記底材（新缸、舊存檔）就是石英砂；明確拆掉（null）才是裸缸。 */
+export function tankSubstrateLook(sub: { spec: { id: string } } | null | undefined): SubstrateLook {
+  return substrateLook(sub === null ? null : (sub?.spec.id ?? 'sand'));
+}
+
 interface Palette {
   /** 沙面受光漸層：後（暗）→ 前（亮）。 */
   top: [string, string, string];
