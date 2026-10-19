@@ -4,6 +4,7 @@ import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audi
 import { eventSound } from './audio/sounds';
 import { applySeason, Game, newGameState, SPEED_OPTIONS } from './game/game';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
+import { menuTile } from './ui/art-icons';
 import { installCrashGuard } from './ui/crash';
 import { Analytics } from './net/analytics';
 import { isNativeApp, saveTextFile } from './ui/native';
@@ -670,28 +671,32 @@ async function start(): Promise<void> {
     h(
       'div.stack',
       {},
-      h('button.btn', { onclick: () => sheet.open('我的水缸', () => tanksPanel(ctx)) }, '我的水缸：切換、加一缸'),
-      h('button.btn', { onclick: () => sheet.open('好友', () => friendsPanel(friendsDeps)) }, '好友：參觀、按讚、送禮'),
-      h('button.btn', { onclick: () => sheet.open('市場', () => marketPanel(marketDeps)) }, '市場：買賣魚蝦和水草'),
-      h('button.btn', { onclick: () => sheet.open('商城', () => mallPanel(mallDeps)) }, '商城：儲值點數、特效藥、熟成套缸'),
-      h('button.btn', { onclick: () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen)) }, '圖鑑：魚蝦、水草、設備、疾病'),
-      h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) }, '水質趨勢與事件紀錄'),
-      h('button.btn', { onclick: () => (sheet.close(), guide.restart()) }, '重新看阿德老闆的教學'),
-      h('button.btn', { onclick: () => sheet.open('設定', settings) }, '設定：聲音、顯示、時間、存檔'),
       h(
-        'button.btn',
-        {
-          onclick: () => {
-            if (!confirm('確定要放棄目前的水缸，重新開始嗎？')) return;
-            clearSave(store);
-            game.load(newGameState());
-            save();
-            sheet.close();
-            select(null);
-            toasts.show('開了一個新缸');
-          },
-        },
+        'div.menu-grid',
+        {},
+        menuTile('tanks', '我的水缸', '切換、加一缸', () => sheet.open('我的水缸', () => tanksPanel(ctx))),
+        menuTile('friends', '好友', '參觀、按讚、送禮', () => sheet.open('好友', () => friendsPanel(friendsDeps))),
+        menuTile('market', '市場', '買賣魚蝦和水草', () => sheet.open('市場', () => marketPanel(marketDeps))),
+        menuTile('mall', '商城', '點數、特效藥、套缸', () => sheet.open('商城', () => mallPanel(mallDeps))),
+        menuTile('codex', '圖鑑', '魚蝦、水草、疾病', () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen))),
+        menuTile('records', '紀錄', '水質趨勢、事件', () => sheet.open('紀錄', () => recordsPanel(ctx))),
+        menuTile('guide', '教學', '再聽阿德老闆說一次', () => (sheet.close(), guide.restart())),
+        menuTile('settings', '設定', '聲音、顯示、存檔', () => sheet.open('設定', settings)),
+      ),
+      menuTile(
+        'newgame',
         '新遊戲',
+        '放棄目前的水缸，從頭開始',
+        () => {
+          if (!confirm('確定要放棄目前的水缸，重新開始嗎？')) return;
+          clearSave(store);
+          game.load(newGameState());
+          save();
+          sheet.close();
+          select(null);
+          toasts.show('開了一個新缸');
+        },
+        '.danger',
       ),
     );
   const menuBtn = h('button.hud-btn', { onclick: () => sheet.open('選單', menu), 'aria-label': '選單' }, icon(ICONS.menu));
