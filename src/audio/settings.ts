@@ -11,7 +11,7 @@ export interface AudioSettings {
 
 export const AUDIO_SETTINGS_KEY = 'cycle.audio.v1';
 
-export const DEFAULT_AUDIO_SETTINGS: AudioSettings = { master: 0.8, music: 0.45, sfx: 0.8, ambience: 0.5, muted: false };
+export const DEFAULT_AUDIO_SETTINGS: AudioSettings = { master: 0.8, music: 0.3, sfx: 0.8, ambience: 0.5, muted: false };
 
 const clamp01 = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : fallback);
 

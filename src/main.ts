@@ -663,7 +663,7 @@ async function start(): Promise<void> {
         h('input', { type: 'checkbox', checked: audioSettings.muted, onchange: (e: Event) => updateAudio({ muted: (e.target as HTMLInputElement).checked }) }),
         h('span', {}, '靜音'),
       ),
-      h('p.hint', {}, '背景音樂是即時彈奏的指彈吉他，每次都不一樣；晚上關燈後會彈得比較輕。'),
+      h('p.hint', {}, '背景音樂是即時彈奏的慢板指彈吉他，每次都不一樣；晚上關燈後會彈得更輕。音樂和音效的音量可以分開調。'),
       h('h3', {}, '顯示'),
       h(
         'label.check-row',
