@@ -23,7 +23,10 @@ import tw.cycle.server.config.CycleProperties;
 /** 註冊、登入、登出、用 token 找出是誰。 */
 @Service
 public class AuthService {
-    /** 同一個帳號連續登入失敗幾次就暫停一陣子（擋暴力猜密碼）。 */
+    /**
+     * 同一個帳號從同一個 IP 連續登入失敗幾次就暫停一陣子（擋暴力猜密碼）。
+     * 只看帳號的話，別人可以故意把指定玩家鎖住（#79）；換 IP 噴灑密碼由 RateLimitInterceptor 擋。
+     */
     static final int MAX_FAILURES = 8;
     static final Duration LOCKOUT = Duration.ofMinutes(10);
 
@@ -55,13 +58,14 @@ public class AuthService {
     }
 
     @Transactional
-    public Login login(String username, String password) {
-        String key = username.toLowerCase();
+    public Login login(String username, String password, String ip) {
+        String key = username.toLowerCase() + "|" + ip;
         Failures f = failures.get(key);
         if (f != null && f.count() >= MAX_FAILURES && Duration.between(f.last(), clock.instant()).compareTo(LOCKOUT) < 0)
             throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "locked", "密碼錯太多次了，請 10 分鐘後再試");
         Optional<Account> account = accounts.findByUsernameIgnoreCase(username);
         if (account.isEmpty() || !encoder.matches(password, account.get().getPasswordHash())) {
+            if (failures.size() > 10_000) failures.values().removeIf(old -> Duration.between(old.last(), clock.instant()).compareTo(LOCKOUT) >= 0);
             failures.merge(key, new Failures(1, clock.instant()), (a, b) -> new Failures(a.count() + 1, b.last()));
             throw new ApiException(HttpStatus.UNAUTHORIZED, "bad_login", "帳號或密碼不對");
         }

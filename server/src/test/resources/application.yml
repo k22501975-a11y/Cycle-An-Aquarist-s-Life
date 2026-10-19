@@ -13,3 +13,9 @@ cycle:
   max-save-bytes: 2000
   market-min-account-days: 3
   payments-sandbox: true
+  # 測試從同一個 IP 註冊很多帳號；頻率限制在 RateLimitTest 另外測
+  rate-limit:
+    register-per-hour: 100000
+    login-per-ten-minutes: 100000
+    events-per-minute: 100000
+    push-per-minute: 100000
