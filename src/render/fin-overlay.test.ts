@@ -29,7 +29,10 @@ describe('鰭型補畫（J18）', () => {
   });
 
   it('燕尾拖出細絲、緞帶垂兩條、大耳的胸鰭畫在前面', () => {
-    expect(finShapes({ swallow: true }, body, 100).filter((f) => f.kind === 'line').length).toBeGreaterThanOrEqual(6);
+    const sw = finShapes({ swallow: true }, body, 100);
+    expect(sw.filter((f) => f.kind === 'line').length).toBeGreaterThanOrEqual(6);
+    // 細絲都從尾巴拖出去，不會在背上方多一條浮著的弧線（畫面評測 V16）
+    expect(sw.every((f) => f.points[0] > body.x + body.rx * 0.5)).toBe(true);
     expect(finShapes({ ribbon: true }, body, 100)).toHaveLength(2);
     const d = finShapes({ dumbo: true }, body, 100);
     expect(d[0].front).toBe(true);

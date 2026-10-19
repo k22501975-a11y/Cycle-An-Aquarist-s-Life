@@ -862,7 +862,8 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         '換底材要拆缸重鋪：底砂裡的細菌和髒污會翻出來，魚也會很緊迫。',
         '有些石頭會慢慢讓水變硬、pH 變高。不確定的話先滴白醋：冒泡就是含碳酸鈣。拿出來的石頭會放回倉庫，不退錢。',
       ]),
-      h('h3', {}, '水質用品'),
+      // 硝化菌液排第一張（養水任務帶到這頁），跟設備放同一排，不會一張卡佔一整列（畫面評測 V20）
+      h('h3', {}, '養水與設備'),
       cardGrid(
         shopCard({
           icon: 'bacteria',
@@ -873,9 +874,6 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
           note: '幫新缸加一小批硝化菌，要有魚或氨才長得起來',
           actions: [button('倒一瓶', () => purchase(ctx, price('care:bacteria'), (st) => void addBottledBacteria(st), '倒了一瓶硝化菌液，過一兩天測測看'), 'small')],
         }),
-      ),
-      h('h3', {}, '過濾、加熱、燈'),
-      cardGrid(
         ...Object.values(FILTERS).map((f) =>
           item(f.name, `filter:${f.id}`, eq.filter?.spec.id === f.id, () => {
             purchase(ctx, price(`filter:${f.id}`), (st) => replaceFilter(st, f), `換上${f.name}，濾材要重新養菌`, 'warn', true);

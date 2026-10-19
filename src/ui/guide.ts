@@ -133,14 +133,14 @@ export class Guide {
       q && this.progress.step === 0
         ? h('button.btn.small', { onclick: () => this.skip() }, '跳過教學')
         : null;
+    // 「帶我去商店」不是主要按鈕、也不放在最右邊：連點「下一步」的人不會不小心打開商店（畫面評測第 2 輪）
     const shop =
       page.shop && this.openShop
-        ? h('button.btn.small.primary.go-shop', { onclick: () => this.goShop(page.shop!) }, artImg('shop', 'btn-art'), '帶我去商店')
+        ? h('button.btn.small.go-shop', { onclick: () => this.goShop(page.shop!) }, artImg('shop', 'btn-art'), '帶我去商店')
         : null;
-    if (shop) next.classList.remove('primary');
     this.bubble.replaceChildren(
       avatar,
-      h('div.owner-body', {}, h('div.owner-name', {}, OWNER_NAME), h('p.owner-text', {}, page.text), h('div.owner-actions', {}, skip, next, shop)),
+      h('div.owner-body', {}, h('div.owner-name', {}, OWNER_NAME), h('p.owner-text', {}, page.text), h('div.owner-actions', {}, skip, shop, next)),
     );
     this.bubble.classList.add('open');
   }

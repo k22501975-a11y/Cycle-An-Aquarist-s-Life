@@ -170,7 +170,7 @@ const PROPS: Record<string, string> = {
   'gear-sponge': 'gear/sponge-filter.webp',
   // 螺（design/snails.md）
   ...Object.fromEntries(
-    ['snail-apple-gold', 'snail-apple-blue', 'snail-apple-babies', 'snail-apple-eggs', 'snail-nerite-zebra', 'snail-assassin', 'snail-ramshorn-red', 'snail-bladder', 'snail-mts'].map((k) => [k, `snail/${k}.webp`]),
+    ['snail-apple-gold', 'snail-apple-blue', 'snail-apple-purple', 'snail-apple-ivory', 'snail-apple-babies', 'snail-apple-eggs', 'snail-nerite-zebra', 'snail-assassin', 'snail-ramshorn-red', 'snail-bladder', 'snail-mts'].map((k) => [k, `snail/${k}.webp`]),
   ),
 };
 

@@ -26,7 +26,7 @@ export interface SnailScene {
  */
 const SIZE_CM = { apple: 3, nerite: 1.7, assassin: 1.8, ramshorn: 1.1, bladder: 1, mts: 1.4, babies: 1.6, eggs: 3.2 };
 const TEX = {
-  apple: (c?: string) => (c === 'blue' ? 'snail-apple-blue' : 'snail-apple-gold'),
+  apple: (c?: string) => `snail-apple-${c === 'blue' || c === 'purple' || c === 'ivory' ? c : 'gold'}`,
   nerite: 'snail-nerite-zebra',
   assassin: 'snail-assassin',
   ramshorn: 'snail-ramshorn-red',

@@ -424,25 +424,35 @@ function paintSubstrate(ctx: Ctx, b: TankBounds, hs: number, look: Exclude<Subst
   const rand = seeded(4242);
   paintGrains(ctx, rand, pal, hs, 0, bottom - 16 * hs, w, 50 * hs, art ? 3 : 1);
   if (look === 'sand' || look === 'coral') {
-    // 小卵石、貝殼碎片
-    for (let i = 0; i < w / 45; i++) {
-      const x = rand() * w;
-      const yy = sandSurface(look, x, w, bottom, hs) + 4 * hs + rand() * 20 * hs;
-      const r = (2 + rand() * 4) * Math.max(0.6, hs);
-      const pg = ctx.createRadialGradient(x - r * 0.3, yy - r * 0.4, 0, x, yy, r);
-      const tone = look === 'coral' ? [0xf4ece0, 0xe6c8b8, 0xfaf6ee, 0xd8cfc0][i % 4] : [0xd9cbb0, 0xa89a86, 0x8c8478, 0xe8e0d0][i % 4];
-      pg.addColorStop(0, rgba(mix(tone, 0xffffff, 0.4), 1));
-      pg.addColorStop(1, rgba(mix(tone, 0x000000, 0.3), 1));
-      ctx.fillStyle = pg;
-      ctx.beginPath();
-      if (look === 'coral') {
-        // 珊瑚碎片是有稜角的
-        ctx.moveTo(x - r * 1.4, yy);
-        ctx.lineTo(x - r * 0.2, yy - r);
-        ctx.lineTo(x + r * 1.3, yy - r * 0.3);
-        ctx.lineTo(x + r * 0.5, yy + r * 0.7);
-      } else ctx.ellipse(x, yy, r * 1.3, r, 0, 0, Math.PI * 2);
-      ctx.fill();
+    // 小卵石、貝殼碎片（畫面評測 V19：原本是灰色的亮面圓球，像黏在沙上的氣泡）
+    // 改成扁扁的、顏色跟沙接近的小石子，三五顆聚在一起，底下有一點接觸陰影
+    const groups = Math.round(w / 140);
+    for (let gi = 0; gi < groups; gi++) {
+      const gx = rand() * w;
+      const count = 2 + Math.floor(rand() * 4);
+      for (let k = 0; k < count; k++) {
+        const x = gx + (rand() - 0.5) * 26 * hs;
+        const yy = sandSurface(look, x, w, bottom, hs) + 5 * hs + rand() * 18 * hs;
+        const r = (1.4 + rand() * 2.6) * Math.max(0.6, hs);
+        const tone = look === 'coral' ? [0xf4ece0, 0xe6c8b8, 0xfaf6ee, 0xd8cfc0][(gi + k) % 4] : [0xc9b48e, 0xb09a78, 0x9a8a74, 0xd8c8a6, 0x8d7a62][(gi + k) % 5];
+        ctx.fillStyle = 'rgba(60,45,25,0.22)';
+        ctx.beginPath();
+        ctx.ellipse(x + r * 0.2, yy + r * 0.45, r * 1.5, r * 0.45, 0, 0, Math.PI * 2);
+        ctx.fill();
+        const pg = ctx.createLinearGradient(x, yy - r * 0.7, x, yy + r * 0.7);
+        pg.addColorStop(0, rgba(mix(tone, 0xffffff, 0.25), 1));
+        pg.addColorStop(1, rgba(mix(tone, 0x000000, 0.18), 1));
+        ctx.fillStyle = pg;
+        ctx.beginPath();
+        if (look === 'coral') {
+          // 珊瑚碎片是有稜角的
+          ctx.moveTo(x - r * 1.4, yy);
+          ctx.lineTo(x - r * 0.2, yy - r);
+          ctx.lineTo(x + r * 1.3, yy - r * 0.3);
+          ctx.lineTo(x + r * 0.5, yy + r * 0.7);
+        } else ctx.ellipse(x, yy, r * (1.2 + rand() * 0.5), r * 0.7, (rand() - 0.5) * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
   // 沙面最後面的陰影（水草、石頭根部）
@@ -537,6 +547,50 @@ function paintGrains(ctx: Ctx, rand: () => number, pal: (typeof SUBSTRATE_PALETT
   }
 }
 
+/**
+ * 焦散網紋的亮度（0–1）：細胞狀的網（Voronoi 的邊，F2−F1 接近 0 的地方），再用低頻的波扭一下讓網線彎彎的。
+ * size 是貼圖邊長，cells 每邊幾格；點的位置用整數頻率包回去，所以可以無縫拼接。
+ * 畫面評測 V17：原本三組大波疊出來的是幾條粗白曲線，像煙；水底的光紋應該是細細一張網。
+ */
+export function causticsField(size: number, cells: number, seed = 7): Float32Array {
+  let r = seed;
+  const rand = () => (r = (r * 16807) % 2147483647) / 2147483647;
+  const pts: number[] = [];
+  for (let i = 0; i < cells * cells; i++) pts.push(rand(), rand());
+  const cell = size / cells;
+  const T = (Math.PI * 2) / size;
+  const out = new Float32Array(size * size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      // 扭曲：整數頻率，拼接處接得起來
+      const amp = cell * 0.22;
+      const wx = x + amp * (Math.sin(2 * y * T + 1.3) + 0.5 * Math.sin(5 * y * T + 3 * x * T));
+      const wy = y + amp * (Math.sin(2 * x * T) + 0.5 * Math.sin(4 * x * T - 3 * y * T + 2));
+      const gx = Math.floor(wx / cell);
+      const gy = Math.floor(wy / cell);
+      let f1 = Infinity;
+      let f2 = Infinity;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const cx = gx + dx;
+          const cy = gy + dy;
+          const k = (((cy % cells) + cells) % cells) * cells + (((cx % cells) + cells) % cells);
+          const px = (cx + pts[k * 2]) * cell;
+          const py = (cy + pts[k * 2 + 1]) * cell;
+          const d = Math.hypot(wx - px, wy - py);
+          if (d < f1) {
+            f2 = f1;
+            f1 = d;
+          } else if (d < f2) f2 = d;
+        }
+      }
+      const e = (f2 - f1) / cell;
+      out[y * size + x] = Math.exp(-((e / 0.08) ** 2));
+    }
+  }
+  return out;
+}
+
 /** 可以無縫拼接的焦散光紋（水面的波浪把光聚成網狀亮線）。 */
 let caustics: Texture | null = null;
 export function causticsTexture(): Texture {
@@ -544,21 +598,12 @@ export function causticsTexture(): Texture {
   const N = 256;
   const { canvas, ctx } = makeCanvas(N, N);
   const img = ctx.createImageData(N, N);
-  const T = (Math.PI * 2) / N;
-  for (let y = 0; y < N; y++) {
-    for (let x = 0; x < N; x++) {
-      const u = x * T;
-      const v = y * T;
-      // 三組整數頻率的波疊加 → 可無縫拼接；值接近 0 的等高線就是焦散亮線
-      const s = Math.sin(3 * u + 1.6 * Math.sin(2 * v)) + Math.sin(3 * v + 1.6 * Math.sin(2 * u + 1)) + Math.sin(2 * (u + v) + Math.sin(3 * u - v));
-      const s2 = Math.sin(5 * u - 2 * v + Math.sin(4 * v)) * 0.6;
-      const line = Math.exp(-((s + s2) ** 2) * 6);
-      const i = (y * N + x) * 4;
-      img.data[i] = 255;
-      img.data[i + 1] = 255;
-      img.data[i + 2] = 255;
-      img.data[i + 3] = Math.round(255 * Math.min(1, line));
-    }
+  const field = causticsField(N, 7);
+  for (let i = 0; i < N * N; i++) {
+    img.data[i * 4] = 235;
+    img.data[i * 4 + 1] = 252;
+    img.data[i * 4 + 2] = 255;
+    img.data[i * 4 + 3] = Math.round(255 * field[i]);
   }
   ctx.putImageData(img, 0, 0);
   caustics = canvasTexture(canvas, false);
