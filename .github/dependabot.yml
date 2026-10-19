@@ -1,0 +1,17 @@
+# Dependabot：每週檢查套件更新與安全公告，開 PR 後照一般流程走品質閘門、架構審查、總控合併。
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly, day: monday, time: "09:00", timezone: Asia/Taipei }
+    open-pull-requests-limit: 5
+    groups:
+      dev-tools:
+        dependency-type: development
+  - package-ecosystem: gradle
+    directory: /server
+    schedule: { interval: weekly, day: monday, time: "09:00", timezone: Asia/Taipei }
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly }
