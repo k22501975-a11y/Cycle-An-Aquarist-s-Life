@@ -50,7 +50,7 @@ import { Celebration, type CelebrateSpec } from './ui/celebrate';
 import { firstTime, type MomentId } from './ui/moments';
 import { causeAdvice, HUNGER_LABEL, needsAdvice } from './ui/owner-advice';
 import { ownerSay } from './ui/owner-ask';
-import { fryArt, guppyArt } from './ui/shop-cards';
+import { fryArt, guppyArt, speciesArt } from './ui/shop-cards';
 import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
 import { recordsPanel } from './ui/records';
 import { loadCodexSeen, saveCodexSeen, unlockCodex } from './ui/codex';
@@ -821,7 +821,14 @@ async function start(): Promise<void> {
   const guide = new Guide(stage, store, (id) => audio.play(id), () => requestAnimationFrame(() => measure()));
   guide.openShop = (tab) => openShop(tab);
   guide.reward = (id, coins) => game.actAll((tanks) => sim.claimQuestReward(tanks[0], id, coins));
-  guide.goalsChanged = () => game.actAll(() => undefined);
+  guide.goalsChanged = (goals) => {
+    game.actAll(() => undefined);
+    // 解鎖新魚種是大事（M20）：跳出慶祝卡，老闆的說明照樣在對話框
+    const species = goals.map((g) => g.unlock).find((u) => u === 'betta' || u === 'crystal_shrimp');
+    if (!species) return;
+    audio.play('fanfare');
+    celebration.show({ art: speciesArt(species), title: `解鎖新魚種：${sim.FISH_SPECIES[species].name}！`, sub: sim.UNLOCK_LABELS[species] });
+  };
   const measure = () => {
     const stageRect = stage.getBoundingClientRect();
     const top = hud.getBoundingClientRect().bottom - stageRect.top;
