@@ -3,7 +3,7 @@
 PR 要合併到 `main`，必須同時符合：
 
 1. **CI「品質閘門」綠燈**（`.github/workflows/ci.yml` 最後一個工作），它要求下面全部通過：
-   - 靜態檢查：`npm run lint`（ESLint）、`npm run typecheck`（三份 tsconfig）、`npm run check:assets`（素材預算）
+   - 靜態檢查：`npm run lint`（ESLint）、`npm run typecheck`（四份 tsconfig：主程式、模擬核心、模擬服務、e2e）、`npm run check:assets`（素材預算）
    - 單元測試：`npm test`（Vitest）
    - 遊戲流程測試：打包、檢查 JS 大小、`npm run e2e`（Playwright，案例在 `e2e/`）
    - 伺服器：`./gradlew test bootJar`
