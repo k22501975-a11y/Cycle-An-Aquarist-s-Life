@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addFish, addPlant, createTank, feed, FILTERS, HEATERS, TANKS, useTestKit, waterChange } from '../sim';
-import { advanceQuest, currentQuest, cycleProgress, loadProgress, newProgress, pendingTip, QUESTS, saveProgress } from './tutorial';
+import { advanceQuest, currentQuest, cycleProgress, loadProgress, newProgress, pendingTip, questShopTab, QUESTS, saveProgress } from './tutorial';
 
 function tank() {
   return createTank({ tank: TANKS.std40, filter: FILTERS.sponge, heater: { spec: HEATERS.h50, targetC: 25 }, seed: 5 });
@@ -99,5 +99,25 @@ describe('養水任務進度', () => {
   it('養水任務有等待提示，其他任務沒有', () => {
     expect(QUESTS.find((q) => q.id === 'cycled')?.hint).toContain('3～7 天');
     expect(QUESTS.find((q) => q.id === 'plant')?.hint).toBeUndefined();
+  });
+});
+
+describe('任務直接帶到商店對應的分頁', () => {
+  it('種水草的任務開水草頁、放魚開魚頁、養水開設備頁', () => {
+    const p = newProgress();
+    expect(questShopTab(p)).toBe('plants');
+    p.step = QUESTS.findIndex((q) => q.id === 'fish');
+    expect(questShopTab(p)).toBe('fish');
+    p.step = QUESTS.findIndex((q) => q.id === 'cycled');
+    expect(questShopTab(p)).toBe('gear');
+  });
+
+  it('不用買東西的任務、跳過教學都照原本的頁', () => {
+    const p = newProgress();
+    p.step = QUESTS.findIndex((q) => q.id === 'test');
+    expect(questShopTab(p)).toBeNull();
+    p.step = 0;
+    p.skipped = true;
+    expect(questShopTab(p)).toBeNull();
   });
 });

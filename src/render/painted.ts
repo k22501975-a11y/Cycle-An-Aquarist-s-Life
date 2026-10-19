@@ -6,7 +6,10 @@ import { canvasTexture, makeCanvas } from './paint';
 import { parseRecipeKey, patternBase, recolorImage } from './phenotype-art';
 import { guppyLook } from './strains';
 import { tankSubstrateLook } from './substrate';
-import { toneImage, toneKey } from './tone';
+import { rimLight, toneImage, toneKey } from './tone';
+
+/** 邊緣光的強度（畫面評測 V15）。 */
+const RIM_STRENGTH = 0.45;
 
 /**
  * 精繪素材（AI 生圖，design/art-assets-ai.md）。
@@ -162,6 +165,9 @@ export const SCENERY: Record<string, string> = {
 /** 小道具：蝦脫下來的空殼、螺。 */
 const PROPS: Record<string, string> = {
   'shrimp-molt': 'shrimp/shrimp-molt.webp',
+  // 缸內設備（原本只有程式畫的細線輪廓）
+  'gear-heater': 'gear/heater.webp',
+  'gear-sponge': 'gear/sponge-filter.webp',
   // 螺（design/snails.md）
   ...Object.fromEntries(
     ['snail-apple-gold', 'snail-apple-blue', 'snail-apple-babies', 'snail-apple-eggs', 'snail-nerite-zebra', 'snail-assassin', 'snail-ramshorn-red', 'snail-bladder', 'snail-mts'].map((k) => [k, `snail/${k}.webp`]),
@@ -199,10 +205,11 @@ const SPECIES_ART: Record<FishSpeciesId, RegExp> = {
 
 /**
  * 開機先載哪些圖（Issue #81）：只要這些缸現在畫得到的，其他的進遊戲後在背景慢慢載。
- * 新遊戲只有缸背景和底沙三張，不用等全部 4MB。
+ * 新遊戲只有缸背景、設備和底沙幾張，不用等全部 4MB。
  */
 export function startupArt(tanks: TankState[]): Set<string> {
-  const want: RegExp[] = [/^bg-back$/];
+  // 缸背景和缸內設備（加熱棒、海綿過濾器）每缸都看得到
+  const want: RegExp[] = [/^bg-back$/, /^gear-/];
   for (const t of tanks) {
     const look = tankSubstrateLook(t.equipment.substrate);
     if (look !== 'bare') want.push(new RegExp(`^sub-${look}-`));
@@ -283,7 +290,7 @@ function derivedTexture(key: string): Texture | null {
  */
 export function tonedTexture(key: string, sat: number, bright: number, eating = false): Texture | null {
   const base = eating ? (textures.get(`${key}#eating`) ?? null) : paintedTexture(key);
-  if (!base || (sat === 0 && bright === 1)) return base;
+  if (!base) return base;
   const cacheKey = `${key}${eating ? '#eating' : ''}@${toneKey(sat, bright)}`;
   const hit = toned.get(cacheKey);
   if (hit) return hit;
@@ -292,6 +299,8 @@ export function tonedTexture(key: string, sat: number, bright: number, eating = 
   ctx.drawImage(img, 0, 0);
   const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
   toneImage(data.data, sat, bright);
+  // 背上的邊緣光，厚度約圖高的 2%
+  rimLight(data.data, canvas.width, canvas.height, Math.max(2, Math.round(canvas.height * 0.02)), RIM_STRENGTH);
   ctx.putImageData(data, 0, 0);
   const tex = canvasTexture(canvas);
   toned.set(cacheKey, tex);

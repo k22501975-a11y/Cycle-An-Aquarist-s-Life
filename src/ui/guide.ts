@@ -2,12 +2,14 @@ import type { SoundId } from '../audio/sounds';
 import type { KeyValueStore } from '../game/save';
 import type { TankState } from '../sim';
 import { h } from './dom';
-import { ownerImg } from './art-icons';
-import { advanceQuest, currentQuest, loadProgress, newProgress, OWNER_NAME, pendingTip, QUESTS, saveProgress, type TutorialProgress } from './tutorial';
+import { artImg, ownerImg } from './art-icons';
+import { advanceQuest, currentQuest, loadProgress, newProgress, OWNER_NAME, pendingTip, QUESTS, questShopTab, saveProgress, type QuestShopTab, type TutorialProgress } from './tutorial';
 
 interface Page {
   text: string;
   label?: string;
+  /** 這一頁多一顆「帶我去商店」，直接開在任務要買的那一頁。 */
+  shop?: QuestShopTab;
 }
 
 /**
@@ -16,6 +18,8 @@ interface Page {
 export class Guide {
   readonly pill = h('button.quest-pill.glass');
   private readonly progressEl = h('span.quest-progress');
+  private readonly meterFill = h('i');
+  private readonly meterEl = h('span.quest-meter', {}, this.meterFill);
   private shownProgress = '';
   private readonly bubble = h('div.owner.glass');
   private progress: TutorialProgress;
@@ -23,6 +27,8 @@ export class Guide {
   private onDone: (() => void) | null = null;
   /** 完成任務時通知（匿名數據分析用來看新手卡在哪一步）。 */
   questDone: ((step: number) => void) | null = null;
+  /** 打開商店的某一頁（main 接上）。 */
+  openShop: ((tab: QuestShopTab) => void) | null = null;
 
   constructor(
     host: HTMLElement,
@@ -32,7 +38,9 @@ export class Guide {
   ) {
     this.progress = loadProgress(store);
     this.pill.addEventListener('click', () => this.showQuest());
-    host.append(this.pill, this.bubble);
+    // 對話框掛在 body：面板（商店等）開著時也在最上層，按鈕按得到
+    host.append(this.pill);
+    document.body.append(this.bubble);
     this.renderPill();
   }
 
@@ -73,6 +81,11 @@ export class Guide {
     this.showQuest();
   }
 
+  /** 商店該開哪一頁：照目前的任務（買水草的任務就開水草頁）。 */
+  get shopTab(): QuestShopTab | null {
+    return questShopTab(this.progress);
+  }
+
   private showQuest(): void {
     if (!currentQuest(this.progress)) return;
     this.say(this.questPages());
@@ -81,7 +94,10 @@ export class Guide {
   private questPages(): Page[] {
     const q = currentQuest(this.progress);
     if (!q) return [];
-    return q.lines.map((text, i) => ({ text, label: i === q.lines.length - 1 ? '好，我來試試' : '然後呢？' }));
+    return q.lines.map((text, i) => {
+      const last = i === q.lines.length - 1;
+      return { text, label: last ? '好，我來試試' : '然後呢？', shop: last ? q.shopTab : undefined };
+    });
   }
 
   private say(pages: Page[], onDone?: () => void): void {
@@ -106,9 +122,14 @@ export class Guide {
       q && this.progress.step === 0
         ? h('button.btn.small', { onclick: () => this.skip() }, '跳過教學')
         : null;
+    const shop =
+      page.shop && this.openShop
+        ? h('button.btn.small.primary.go-shop', { onclick: () => (this.pages = [], this.renderBubble(), this.openShop!(page.shop!)) }, artImg('shop', 'btn-art'), '帶我去商店')
+        : null;
+    if (shop) next.classList.remove('primary');
     this.bubble.replaceChildren(
       avatar,
-      h('div.owner-body', {}, h('div.owner-name', {}, OWNER_NAME), h('p.owner-text', {}, page.text), h('div.owner-actions', {}, skip, next)),
+      h('div.owner-body', {}, h('div.owner-name', {}, OWNER_NAME), h('p.owner-text', {}, page.text), h('div.owner-actions', {}, skip, next, shop)),
     );
     this.bubble.classList.add('open');
   }
@@ -128,9 +149,9 @@ export class Guide {
       this.pill.replaceChildren(
         ownerPortrait('quest-avatar'),
         h('span.quest-step', {}, `任務 ${this.progress.step + 1}/${QUESTS.length}`),
-        h('span.quest-title', {}, q.title),
+        h('span.quest-title', { title: q.title }, q.short ?? q.title),
         this.progressEl,
-        q.hint ? h('span.quest-hint', {}, q.hint) : '',
+        this.meterEl,
       );
     }
     this.onLayout();
@@ -138,7 +159,11 @@ export class Guide {
 
   /** 任務卡上的進度（硝化菌 40% 之類），變了才改 DOM。 */
   private renderProgress(state: TankState): void {
-    const text = currentQuest(this.progress)?.progress?.(state) ?? '';
+    const q = currentQuest(this.progress);
+    const m = q?.meter?.(state);
+    this.meterEl.hidden = m === undefined;
+    if (m !== undefined) this.meterFill.style.width = `${Math.round(m * 100)}%`;
+    const text = q?.progress?.(state) ?? '';
     if (text === this.shownProgress) return;
     this.shownProgress = text;
     this.progressEl.textContent = text;

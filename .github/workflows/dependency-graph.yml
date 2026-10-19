@@ -1,0 +1,25 @@
+name: 相依套件圖
+
+# GitHub 看不懂 Gradle 的相依，要在 main 上實際解析一次再送上去，
+# Dependabot 漏洞提醒和 PR 的「新增套件檢查」才涵蓋得到伺服器（server/）。
+on:
+  push:
+    branches: [main]
+    paths: [server/**]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  gradle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/dependency-submission@v4
+        with:
+          build-root-directory: server

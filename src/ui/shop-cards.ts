@@ -32,6 +32,22 @@ export function speciesArt(id: FishSpeciesId, sex?: 'male' | 'female'): string {
   return SPECIES_ART[id];
 }
 
+/** 剛出生的小魚、小蝦（生小魚的慶祝卡）。 */
+export function fryArt(id: FishSpeciesId): string {
+  switch (id) {
+    case 'betta':
+      return 'fish/betta-fry.webp';
+    case 'apisto':
+      return 'fish/apisto-fry.webp';
+    case 'cherry_shrimp':
+      return 'shrimp/shrimp-cherry-juvenile.webp';
+    case 'crystal_shrimp':
+      return 'shrimp/shrimp-crystal-juvenile.webp';
+    default:
+      return 'fish/guppy-fry.webp';
+  }
+}
+
 export function snailArt(kind: SnailKind, color?: AppleColor): string {
   if (kind === 'apple') return `snail/snail-apple-${color === 'blue' ? 'blue' : 'gold'}.webp`;
   return kind === 'nerite' ? 'snail/snail-nerite-zebra.webp' : 'snail/snail-assassin.webp';

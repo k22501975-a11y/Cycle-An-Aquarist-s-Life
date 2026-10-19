@@ -68,6 +68,22 @@ export function softDotTexture(): Texture {
   return softDot;
 }
 
+/** 聚光：中間透明、外圍暗（生小魚的特寫）。 */
+let spotlight: Texture | null = null;
+export function spotlightTexture(): Texture {
+  if (spotlight) return spotlight;
+  const { canvas, ctx } = makeCanvas(256, 256);
+  const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+  g.addColorStop(0, 'rgba(4,12,22,0)');
+  g.addColorStop(0.08, 'rgba(4,12,22,0)');
+  g.addColorStop(0.22, 'rgba(4,12,22,0.68)');
+  g.addColorStop(1, 'rgba(4,12,22,0.74)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 256, 256);
+  spotlight = canvasTexture(canvas);
+  return spotlight;
+}
+
 /** 沉底顆粒、藻片：圓圓的小顆粒，帶立體亮面。 */
 let pellets: Texture[] | null = null;
 export function pelletTextures(): Texture[] {
@@ -82,8 +98,9 @@ export function pelletTextures(): Texture[] {
     ctx.beginPath();
     ctx.ellipse(16, 16, 12, 10, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(40,20,5,0.4)';
-    ctx.lineWidth = 1.2;
+    // 淺色描邊：暗缸裡也分得出顆粒
+    ctx.strokeStyle = 'rgba(255,236,196,0.6)';
+    ctx.lineWidth = 1.8;
     ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
     ctx.beginPath();
@@ -182,8 +199,8 @@ export function flakeTextures(): Texture[] {
     g.addColorStop(1, base);
     ctx.fillStyle = g;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(90,40,10,0.35)';
-    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = 'rgba(255,240,206,0.65)';
+    ctx.lineWidth = 1.8;
     ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.beginPath();
