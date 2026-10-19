@@ -35,6 +35,21 @@ const GRAZING_BONUS = 1.3;
 const isYoung = (fish: Fish) => fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * YOUNG_LENGTH;
 const fastSpec = (fish: Fish) => (isYoung(fish) ? YOUNG_FAST : ADULT_FAST);
 
+/**
+ * 餓到要叫醒玩家（快轉、過一晚停下來）：成魚一開始消耗體力就算；仔魚、幼魚兩倍快變餓，一天只餵一次也常碰到門檻，
+ * 要連續消耗體力 12 小時（撐得住的一半，離餓死還有半天）才算，剛碰到門檻只在早上報告提醒一天餵兩次（#193）。
+ */
+export const CRISIS_STARVING_HOURS = { young: 12, adult: 0 };
+
+export function starvingCrisis(fish: Fish): boolean {
+  return isStarving(fish) && fish.starvingHours >= (isYoung(fish) ? CRISIS_STARVING_HOURS.young : CRISIS_STARVING_HOURS.adult);
+}
+
+/** 仔魚、幼魚已經餓到快開始消耗體力（門檻的四分之三）：一天只餵一次的話，下一餐前就會撐不住，早上報告提醒一天餵兩次。 */
+export function youngGettingHungry(fish: Fish): boolean {
+  return isYoung(fish) && fish.hunger >= YOUNG_FAST.start * 0.75;
+}
+
 /** 這條魚現在是不是餓到在消耗體力（餵飽以後體力還在慢慢補回來的不算）。 */
 export function isStarving(fish: Fish): boolean {
   return fish.hunger >= fastSpec(fish).start;

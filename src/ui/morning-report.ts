@@ -10,6 +10,7 @@ import {
   orderBoard,
   pestCount,
   tankLabel,
+  youngGettingHungry,
   type FishSpeciesId,
   type SimEvent,
   type TankState,
@@ -188,6 +189,9 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     // 餓
     const living = t.fish.filter((f) => f.alive);
     if (living.length > 0 && living.reduce((a, f) => a + f.hunger, 0) / living.length > HUNGRY) push({ kind: 'hungry', tone: 'warn', text: '魚在水面游來游去討食，該餵了', action: 'feed' });
+    // 小魚兩倍快變餓：一天只餵一次的話，下一餐前就會餓到消耗體力，還沒到要叫醒的程度就在這裡提醒（#193）
+    else if (living.some((f) => !isShrimpSpecies(f.species) && youngGettingHungry(f)))
+      push({ kind: 'hungry', tone: 'info', text: '小魚長得快、餓得也快，一天餵兩次比較好', action: 'feed' });
     // 訂單
     const fresh = orderBoard(t).orders.filter((o) => !snap.orders.has(o.id)).length;
     if (fresh > 0 && index === 0) push({ kind: 'orders', tone: 'info', text: `阿德那邊來了 ${fresh} 張新訂單`, action: 'orders', count: fresh });
