@@ -34,6 +34,17 @@ public class CloudSave {
     @Column(name = "market_locked_until")
     private OffsetDateTime marketLockedUntil;
 
+    /** 沒有跟上一份比對過（第一次上傳、強制覆蓋）：市場不能上架魚（#76）。 */
+    @Column(nullable = false)
+    private boolean unverified;
+
+    /** 強制覆蓋前最後一份驗證過的存檔：之後上傳的存檔要跟這份比對通過才解除未驗證。 */
+    @Column(name = "verified_data", columnDefinition = "TEXT")
+    private String verifiedData;
+
+    @Column(name = "verified_at")
+    private OffsetDateTime verifiedAt;
+
     protected CloudSave() {}
 
     public CloudSave(Long accountId) {
@@ -71,6 +82,33 @@ public class CloudSave {
 
     public OffsetDateTime getMarketLockedUntil() {
         return marketLockedUntil;
+    }
+
+    public boolean isUnverified() {
+        return unverified;
+    }
+
+    public String getVerifiedData() {
+        return verifiedData;
+    }
+
+    public OffsetDateTime getVerifiedAt() {
+        return verifiedAt;
+    }
+
+    /** 標成未驗證；原本驗證過的這份留下來，之後拿來比對。 */
+    public void markUnverified() {
+        if (!unverified && data != null) {
+            verifiedData = data;
+            verifiedAt = updatedAt;
+        }
+        unverified = true;
+    }
+
+    public void markVerified() {
+        unverified = false;
+        verifiedData = null;
+        verifiedAt = null;
     }
 
     public void lockMarketUntil(OffsetDateTime until) {

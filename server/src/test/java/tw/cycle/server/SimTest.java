@@ -37,11 +37,14 @@ class SimTest {
     static class FakeSim implements SimClient {
         final ObjectMapper json = new ObjectMapper();
         List<Problem> problems = List.of();
+        /** problems 只在上一份符合這個條件時回傳（分得出跟上一份比、跟驗證過的那份比）。 */
+        java.util.function.Predicate<JsonNode> problemsFor = previous -> true;
         boolean down;
         boolean unreadable;
         final List<Long> verifiedElapsed = new ArrayList<>();
         final List<Long> advancedFrom = new ArrayList<>();
         final List<List<JsonNode>> verifiedShipped = new ArrayList<>();
+        final List<List<JsonNode>> verifiedReceived = new ArrayList<>();
         Inspect inspect = new Inspect(false, false, null);
 
         @Override
@@ -59,14 +62,15 @@ class SimTest {
         }
 
         @Override
-        public List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs, List<JsonNode> shipped) {
+        public List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs, List<JsonNode> shipped, List<JsonNode> received) {
             if (down) throw new Unavailable("down", null);
             if (unreadable) throw new HttpSimClient.BadSave("讀不出這份存檔");
             verifiedElapsed.add(elapsedMs);
             verifiedShipped.add(shipped);
+            verifiedReceived.add(received);
             // 假的：只要伺服器說有出貨的魚，就當成存檔裡又出現了
             if (!shipped.isEmpty()) return List.of(new Problem("shipped_fish", "#" + shipped.get(0).get("id") + " 已經在市場賣出了"));
-            return problems;
+            return problemsFor.test(previous) ? problems : List.of();
         }
 
         @Override
@@ -99,11 +103,13 @@ class SimTest {
     @BeforeEach
     void reset() {
         sim.problems = List.of();
+        sim.problemsFor = previous -> true;
         sim.down = false;
         sim.unreadable = false;
         sim.verifiedElapsed.clear();
         sim.advancedFrom.clear();
         sim.verifiedShipped.clear();
+        sim.verifiedReceived.clear();
         sim.inspect = new SimClient.Inspect(false, false, null);
     }
 
@@ -123,7 +129,17 @@ class SimTest {
     }
 
     private static String saveBody(long base, boolean force) {
-        return "{\"baseRevision\":" + base + ",\"force\":" + force + ",\"save\":{\"version\":3,\"savedAt\":1000,\"timeScale\":7,\"state\":{\"hours\":12}}}";
+        return saveBody(base, force, 12);
+    }
+
+    private static String saveBody(long base, boolean force, int hours) {
+        return "{\"baseRevision\":" + base + ",\"force\":" + force + ",\"save\":{\"version\":3,\"savedAt\":1000,\"timeScale\":7,\"state\":{\"hours\":" + hours + "}}}";
+    }
+
+    /** 第一次上傳是未驗證的，再上傳一次通過比對才能上架魚（#76）。 */
+    private void verifiedSave(String token) throws Exception {
+        send(put("/api/save"), token, saveBody(0, false)).andExpect(status().isOk());
+        send(put("/api/save"), token, saveBody(1, false)).andExpect(status().isOk());
     }
 
     private static final String FISH = "{\"kind\":\"fish\",\"species\":\"guppy\",\"title\":\"孔雀魚 公\",\"price\":200,\"item\":{\"id\":7,\"species\":\"guppy\",\"sex\":\"male\",\"genome\":{\"tail\":100}}}";
@@ -226,6 +242,8 @@ class SimTest {
         clock.advance(Duration.ofDays(3));
         send(post("/api/market/listings"), me, FISH).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("no_cloud_save"));
         send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        send(post("/api/market/listings"), me, FISH).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("save_unverified"));
+        send(put("/api/save"), me, saveBody(1, false)).andExpect(status().isOk());
         send(post("/api/market/listings"), me, FISH).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("not_in_save"));
 
         // 遊戲端說尾鰭 100 分，伺服器那份是 60 分：上架的是伺服器那份
@@ -251,28 +269,32 @@ class SimTest {
         String me = player();
         String buyer = player();
         clock.advance(Duration.ofDays(3));
-        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        verifiedSave(me);
         JsonNode real = json.readTree("{\"id\":7,\"species\":\"guppy\",\"sex\":\"male\",\"genome\":{\"tail\":60},\"health\":1}");
         sim.inspect = new SimClient.Inspect(true, true, real);
         long listing = read(send(post("/api/market/listings"), me, FISH).andExpect(status().isCreated())).get("id").asLong();
         long order = read(send(post("/api/market/listings/" + listing + "/buy"), buyer, "{\"packaging\":\"bag\"}").andExpect(status().isOk())).get("id").asLong();
 
         // 還沒出貨：魚還在缸裡，正常上傳
-        send(put("/api/save"), me, saveBody(1, false)).andExpect(status().isOk());
-        assertThat(sim.verifiedShipped.get(0)).isEmpty();
+        send(put("/api/save"), me, saveBody(2, false)).andExpect(status().isOk());
+        assertThat(sim.verifiedShipped.get(1)).isEmpty();
 
         send(post("/api/market/orders/" + order + "/ship"), me, "{\"item\":" + real + ",\"bagTemp\":25,\"bagPh\":7}").andExpect(status().isOk());
-        send(put("/api/save"), me, saveBody(2, false))
+        send(put("/api/save"), me, saveBody(3, false))
                 .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("shipped_fish"));
         // 交給模擬服務比對的是編號＋身分（新遊戲同編號的別條魚不算，handlers.test.ts）
-        JsonNode sold = sim.verifiedShipped.get(1).get(0);
-        assertThat(sim.verifiedShipped.get(1)).hasSize(1);
+        JsonNode sold = sim.verifiedShipped.get(2).get(0);
+        assertThat(sim.verifiedShipped.get(2)).hasSize(1);
         assertThat(sold.get("id").asLong()).isEqualTo(7);
         assertThat(sold.get("genome").get("tail").asInt()).isEqualTo(60);
         assertThat(sold.has("health")).isFalse();
-        send(put("/api/save"), me, saveBody(2, true))
+        // #76：買家上傳時，到貨的魚交給模擬服務當成新魚的來源
+        verifiedSave(buyer);
+        JsonNode got = sim.verifiedReceived.get(sim.verifiedReceived.size() - 1).get(0);
+        assertThat(got.get("genome").get("tail").asInt()).isEqualTo(60);
+        send(put("/api/save"), me, saveBody(3, true))
                 .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("shipped_fish"));
-        assertThat(read(send(get("/api/save"), me, null)).get("revision").asLong()).isEqualTo(2);
+        assertThat(read(send(get("/api/save"), me, null)).get("revision").asLong()).isEqualTo(3);
     }
 
     @Test
@@ -281,7 +303,7 @@ class SimTest {
         String me = player();
         String buyer = player();
         clock.advance(Duration.ofDays(3));
-        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        verifiedSave(me);
         JsonNode real = json.readTree("{\"id\":7,\"species\":\"guppy\",\"sex\":\"female\",\"genome\":{\"tail\":60},\"sire\":{\"genome\":{\"tail\":10},\"lineage\":3,\"inbreeding\":0},\"health\":1}");
         sim.inspect = new SimClient.Inspect(true, true, real);
         String fish = "{\"kind\":\"fish\",\"species\":\"guppy\",\"title\":\"孔雀魚 母\",\"price\":200,\"item\":{\"id\":7}}";
@@ -302,14 +324,23 @@ class SimTest {
     void 強制覆蓋一份對不上的存檔_收下但暫時不能上架魚() throws Exception {
         String me = player();
         clock.advance(Duration.ofDays(3));
-        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
-        sim.problems = List.of(new SimClient.Problem("identity_changed", "#7 這條魚的身分跟伺服器上的不一樣"));
-        JsonNode r = read(send(put("/api/save"), me, saveBody(0, true)).andExpect(status().isOk()));
+        verifiedSave(me);
+        sim.problems = List.of(new SimClient.Problem("unknown_fish", "#9 這條魚不是店裡買的、市場買的，也對不上缸裡哪條母魚生的"));
+        JsonNode r = read(send(put("/api/save"), me, saveBody(0, true, 20)).andExpect(status().isOk()));
         assertThat(r.get("notice").asText()).contains("不能在市場上架魚");
 
         sim.inspect = new SimClient.Inspect(true, true, json.readTree("{\"id\":7,\"species\":\"guppy\",\"sex\":\"male\"}"));
         send(post("/api/market/listings"), me, FISH).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("save_replaced"));
+
+        // #76：之後正常上傳一次，偽造的魚不會就此洗白：要跟覆蓋前最後一份驗證過的（遊戲時間 12）比對通過
+        sim.problemsFor = previous -> previous.path("state").path("hours").asInt() == 12;
+        send(put("/api/save"), me, saveBody(3, false, 25)).andExpect(status().isOk());
         clock.advance(Duration.ofDays(3).plusMinutes(1));
+        send(post("/api/market/listings"), me, FISH).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("save_unverified"));
+
+        // 偽造的魚不見了（賣掉、死掉），比對通過就能再上架
+        sim.problems = List.of();
+        send(put("/api/save"), me, saveBody(4, false, 30)).andExpect(status().isOk());
         send(post("/api/market/listings"), me, FISH).andExpect(status().isCreated());
     }
 }

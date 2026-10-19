@@ -15,9 +15,10 @@ public interface SimClient {
 
     /**
      * 上傳的存檔跟伺服器上一份比：遊戲時間有沒有跑得比現實快、已經存在的魚身分有沒有被改、
-     * 已經在市場出貨的魚（shipped：市場用的魚資料，編號＋身分都一樣才算同一條）有沒有又出現。
+     * 已經在市場出貨的魚（shipped：市場用的魚資料，編號＋身分都一樣才算同一條）有沒有又出現、
+     * 新出現的魚說不說得出來源（店裡買的、received 裡市場到貨的、缸裡生的，#76）。
      */
-    List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs, List<JsonNode> shipped);
+    List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs, List<JsonNode> shipped, List<JsonNode> received);
 
     /** 在存檔裡找一條魚；item 是市場用的魚資料。 */
     Inspect inspect(JsonNode save, long fishId);

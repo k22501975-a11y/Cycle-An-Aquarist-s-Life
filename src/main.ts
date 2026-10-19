@@ -102,9 +102,9 @@ async function start(): Promise<void> {
   await loadPaintedArt(startupArt(game.tanks));
   const extraTanks = () => ({ tanks: game.tanks.slice(1), active: game.active });
   const save = () => writeSave(store, game.tanks[0], game.clock.timeScale, Date.now(), extraTanks());
-  // 開發用：在瀏覽器主控台用 cycle.game、cycle.sim 直接操作（截圖、調平衡）。
+  // 開發用：在瀏覽器主控台用 cycle.game、cycle.sim 直接操作（截圖、調平衡）。正式版不開（#76）。
   const debugHandle = { game, sim } as Record<string, unknown>;
-  (window as unknown as { cycle: unknown }).cycle = debugHandle;
+  if (import.meta.env.DEV) (window as unknown as { cycle: unknown }).cycle = debugHandle;
   const sheet = new Sheet(document.body);
   const toasts = new Toasts(document.body);
   const celebration = new Celebration(document.body);

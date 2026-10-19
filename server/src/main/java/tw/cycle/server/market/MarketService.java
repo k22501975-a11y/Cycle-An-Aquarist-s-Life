@@ -112,13 +112,15 @@ public class MarketService {
 
     /** 伺服器那份存檔裡的這條魚（上架用）。 */
     private JsonNode serverFish(long me, String species, JsonNode item) throws Exception {
-        Map<String, Object> save = db.query("select data, market_locked_until from cloud_save where account_id = ?",
-                rs -> rs.next() ? Map.of("data", rs.getString("data"), "locked", java.util.Optional.ofNullable(rs.getObject("market_locked_until", OffsetDateTime.class))) : null, me);
+        Map<String, Object> save = db.query("select data, market_locked_until, unverified from cloud_save where account_id = ?",
+                rs -> rs.next() ? Map.of("data", rs.getString("data"), "locked", java.util.Optional.ofNullable(rs.getObject("market_locked_until", OffsetDateTime.class)), "unverified", rs.getBoolean("unverified")) : null, me);
         if (save == null) throw new ApiException(HttpStatus.CONFLICT, "no_cloud_save", "先把存檔同步到雲端才能上架魚");
         @SuppressWarnings("unchecked")
         var locked = (java.util.Optional<OffsetDateTime>) save.get("locked");
         if (locked.isPresent() && now().isBefore(locked.get()))
             throw new ApiException(HttpStatus.FORBIDDEN, "save_replaced", "雲端存檔最近被一份對不上的存檔覆蓋過，暫時不能上架魚");
+        if ((Boolean) save.get("unverified"))
+            throw new ApiException(HttpStatus.FORBIDDEN, "save_unverified", "雲端存檔還沒通過伺服器檢查，再玩一下讓遊戲同步一次就能上架");
         JsonNode id = item.get("id");
         if (id == null || !id.canConvertToLong()) throw bad("bad_item", "商品資料不對");
         SimClient.Inspect found = sim.inspect(json.readTree((String) save.get("data")), id.asLong());
@@ -419,6 +421,14 @@ public class MarketService {
             for (String key : List.of("id", "species", "sex", "generation", "genome")) if (item.has(key)) fish.set(key, item.get(key));
             if (fish.path("id").canConvertToLong()) out.add(fish);
         }
+        return out;
+    }
+
+    /** 這個帳號在市場買到、已經到貨的魚（市場用的魚資料）：存檔裡新出現的魚可以是這些（#76）。 */
+    public List<JsonNode> receivedFish(long me) throws Exception {
+        List<JsonNode> out = new ArrayList<>();
+        for (String data : db.queryForList("select item from market_order where buyer_id = ? and kind = 'fish' and status = 'shipped' and doa = false order by id", String.class, me))
+            out.add(json.readTree(data));
         return out;
     }
 
