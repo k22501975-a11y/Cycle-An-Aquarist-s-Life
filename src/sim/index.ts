@@ -33,4 +33,5 @@ export * from './snails';
 export * from './parental';
 export * from './aquascape';
 export * from './betta';
+export * from './setup';
 export * from './personality';

@@ -2,8 +2,9 @@ import { Application } from 'pixi.js';
 import { AudioEngine } from './audio/engine';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
 import { eventSound } from './audio/sounds';
-import { applySeason, Game, newGameState } from './game/game';
+import { applySeason, blankGameState, Game } from './game/game';
 import { crisisText } from './game/crisis';
+import { setupPanel } from './ui/setup-panel';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
 import { menuTile, ownerImg } from './ui/art-icons';
 import { cloudTimeScale, SpeedControl } from './ui/speed-control';
@@ -102,7 +103,7 @@ async function start(): Promise<void> {
   const saved = loaded.file;
   if (saved) for (const t of [saved.state, ...(saved.tanks ?? [])]) applySeason(t);
   const offline = saved ? catchUp(saved) : null;
-  const game = new Game(saved?.state ?? newGameState(), saved?.timeScale ?? 7, saved?.tanks ?? [], saved?.active ?? 0);
+  const game = new Game(saved?.state ?? blankGameState(), saved?.timeScale ?? 7, saved?.tanks ?? [], saved?.active ?? 0);
   for (const t of game.tanks) applySeason(t);
   // 只先等這些缸畫得到的圖（Issue #81），其他的等主畫面出來後在背景載
   await loadPaintedArt(startupArt(game.tanks));
@@ -420,8 +421,7 @@ async function start(): Promise<void> {
     view.playSetup();
     stage.append(setupSkip);
   };
-  // 第一次打開遊戲：從空缸開始演一次開缸
-  if (!saved) playSetup();
+  // 開缸演出（F1-b）在挑完設備、按下「開缸」後才演（見 openSetup）
   // 造景模式（aquascape-editor.md）：底部工具列換成造景操作列，在缸裡拖曳石頭、沉木、水草
   let scaping = false;
   const scapeBar = new ScapeBar({
@@ -754,11 +754,11 @@ async function start(): Promise<void> {
         () => {
           if (!confirm('確定要放棄目前的水缸，重新開始嗎？')) return;
           clearSave(store);
-          game.load(newGameState());
+          game.load(blankGameState());
           save();
           sheet.close();
           select(null);
-          playSetup();
+          openSetup();
         },
         '.danger',
       ),
@@ -873,6 +873,19 @@ async function start(): Promise<void> {
   stage.append(tankLabel);
   const guide = new Guide(stage, store, (id) => audio.play(id), () => requestAnimationFrame(() => measure()));
   guide.openShop = (tab) => openShop(tab);
+  // 開缸（F1-a）：新遊戲先挑設備，開完缸時間才開始走；關掉面板時主畫面留一個「開缸」按鈕
+  const openSetup = () =>
+    sheet.open('開缸', () =>
+      setupPanel(ctx, () => {
+        save();
+        sheet.close();
+        // 挑好設備：從空缸開始演倒沙、注水、裝設備、開燈，演完「你的第一個缸」後開始教學
+        playSetup();
+      }),
+    );
+  ctx.openSetup = openSetup;
+  const setupBtn = h('button.btn.primary.setup-cta', { onclick: openSetup, hidden: true }, '開缸：挑魚缸和設備');
+  stage.append(setupBtn);
   guide.reward = (id, coins) => game.actAll((tanks) => sim.claimQuestReward(tanks[0], id, coins));
   guide.goalsChanged = () => game.actAll(() => undefined);
   const measure = () => {
@@ -1140,8 +1153,9 @@ async function start(): Promise<void> {
   renderTodos();
   renderCaps();
   renderCoins();
-  // 開缸演出播完才開始教學，不然老闆的對話框會擋住整段演出
-  if (!view.settingUp) guide.start();
+  // 還沒開缸：先挑設備，開缸演出播完才開始教學；演出還在播也一樣等它播完（不然老闆的對話框會擋住整段演出）
+  if (sim.needsSetup(game.tanks[0])) openSetup();
+  else if (!view.settingUp) guide.start();
   let refreshTimer = 0;
   // 一段時間沒操作就降到 30 fps，省電；一碰螢幕馬上恢復
   let lastInput = performance.now();
@@ -1198,6 +1212,7 @@ async function start(): Promise<void> {
       renderOrders();
       renderTankChip();
       guide.update(game.state, game.tanks);
+      setupBtn.hidden = !sim.needsSetup(game.tanks[0]) || sheet.isOpen;
       celebrateStrains();
       for (const entry of unlockCodex(codexSeen, game.state)) {
         saveCodexSeen(store, codexSeen);

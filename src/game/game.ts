@@ -3,15 +3,16 @@ import {
   DEFAULT_TIME_SCALE,
   monthOf,
   roomClimate,
-  FILTERS,
   GameClock,
-  HEATERS,
-  LIGHTS,
   step,
   TANKS,
   TICK_HOURS,
   linkTanks,
   syncRoom,
+  applySetup,
+  economy,
+  needsSetup,
+  RECOMMENDED_SETUP,
   type SimEvent,
   type TankState,
 } from '../sim';
@@ -57,19 +58,24 @@ export function applySeason(state: TankState, date = new Date()): void {
   env.roomSwingC = climate.swingC;
 }
 
-/** 新遊戲：一個 40L 新缸、基本設備，還沒養水（真實的起點）。 */
-export function newGameState(seed = Date.now() % 2147483647): TankState {
-  const state = createTank({
-    tank: TANKS.std40,
-    filter: FILTERS.hangOn,
-    heater: { spec: HEATERS.h50, targetC: 25 },
-    light: { spec: LIGHTS.basic },
-    seed,
-  });
+/**
+ * 新遊戲（F1 開缸）：阿德老闆送的空缸、起始資金，設備還沒買。玩家開完缸（applySetup）之前時間不走。
+ * 缸的大小先當 40L，開缸時照玩家選的換掉。
+ */
+export function blankGameState(seed = Date.now() % 2147483647): TankState {
+  const state = createTank({ tank: TANKS.std40, seed });
   // 從第一天早上 8 點開始，玩家很快就能看到開燈。
   state.hours = 8;
   applySeason(state);
   state.water.tempC = state.water.tempAvgC = state.environment.roomTempC;
+  economy(state).setupPending = true;
+  return state;
+}
+
+/** 已經用「推薦組合」開好缸的新遊戲（40L、外掛過濾、50W、基本燈、石英砂），還沒養水。測試和劇本從這裡開始。 */
+export function newGameState(seed = Date.now() % 2147483647): TankState {
+  const state = blankGameState(seed);
+  applySetup(state, RECOMMENDED_SETUP);
   return state;
 }
 
@@ -127,6 +133,11 @@ export class Game {
 
   /** 推進現實時間 realMs，回傳實際執行的 tick 數。 */
   advance(realMs: number): number {
+    // 還沒開缸：時鐘照樣吃掉現實時間（開完缸不會一口氣補算），模擬不動
+    if (needsSetup(this.tanks[0])) {
+      this.clock.advance(realMs);
+      return 0;
+    }
     const ticks = Math.min(this.clock.advance(realMs), MAX_TICKS_PER_FRAME);
     const fast = this.clock.timeScale > DEFAULT_TIME_SCALE;
     let ran = 0;
