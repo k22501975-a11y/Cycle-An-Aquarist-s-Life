@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { aliveCount, closeSheet, expectNoCrash, fastForward, gameState, seedRng, setSpeed, sheetButton, startGame, tool, watchConsoleErrors, type CycleWindow } from './helpers';
+import { aliveCount, closeSheet, expectNoCrash, finishDrip, fastForward, gameState, seedRng, setSpeed, sheetButton, startGame, tool, watchConsoleErrors, type CycleWindow } from './helpers';
 
 // 長時間快轉只看會不會當，用 1 倍密度省 CPU（無頭瀏覽器用軟體繪圖）
 test.use({ deviceScaleFactor: 1, actionTimeout: 20_000 });
@@ -20,6 +20,7 @@ test('一公兩母快轉 3 週以上：生小魚、長大，畫面不當機', as
   await tool(page, '商店');
   await page.locator('.sheet.open button.icon-tab', { hasText: '魚' }).click();
   await sheetButton(page, '一公兩母');
+  await finishDrip(page);
   await closeSheet(page);
 
   for (let day = 1; day <= 24; day++) {

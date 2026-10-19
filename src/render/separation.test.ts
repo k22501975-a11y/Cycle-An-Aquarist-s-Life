@@ -54,3 +54,23 @@ describe('魚不會疊成一團（#147）', () => {
     expect(personalSpace(a, { ...a, id: 2, x: 200 }, 1)).toEqual({ x: 0, y: 0 });
   });
 });
+
+describe('蝦在沙面上左右錯開（#173）', () => {
+  it('五隻櫻花蝦在缸底走 2 分鐘，疊在一起的時間不到一成', () => {
+    let frames = 0, stacked = 0;
+    for (const seed of [17, 23, 31]) {
+      const rand = rng(seed);
+      const bounds = { width: 600, height: 500, surface: 40, bottom: 440 };
+      const body = { halfLen: 28, halfH: 9 };
+      const shrimp = [1, 2, 3, 4, 5].map((id) => spawnSwimmer(id, 'cherry_shrimp', bounds, rand));
+      const ctx = { bounds, scale: 1, food: [] };
+      for (let i = 0; i < 30 * 120; i++) {
+        for (const s of shrimp) updateSwimmer(s, shrimp, { alive: true, hungry: false, symptoms: [], body }, ctx, 1 / 30, rand);
+        if (i % 20) continue;
+        frames++;
+        if (shrimp.some((a, k) => shrimp.slice(k + 1).some((b) => Math.abs(a.x - b.x) < body.halfLen))) stacked++;
+      }
+    }
+    expect(stacked / frames).toBeLessThan(0.1);
+  });
+});
