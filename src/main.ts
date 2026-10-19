@@ -929,7 +929,7 @@ async function start(): Promise<void> {
     analytics.track('quest_done', { step });
     if (id === 'cycled')
       moment('cycled', {
-        art: 'ui/icon-bacteria.webp',
+        art: 'gear/bottle-bacteria.webp',
         title: '養水完成！',
         sub: '硝化菌長好了，氨和亞硝酸鹽都是 0。現在可以慢慢多加魚',
       });
