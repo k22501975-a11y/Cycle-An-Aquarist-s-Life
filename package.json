@@ -16,7 +16,8 @@
     "lint": "eslint . --max-warnings 0",
     "e2e": "playwright test",
     "check:assets": "node scripts/check-assets.mjs",
-    "check": "npm run lint && npm run typecheck && npm test && npm run check:assets"
+    "check": "npm run lint && npm run typecheck && npm test && npm run check:assets",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.6.9",
