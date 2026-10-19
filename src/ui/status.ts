@@ -11,7 +11,8 @@ export const READING_TONES: Record<keyof TestKitReading, (v: number) => Tone> = 
   ammonia: (v) => (v === 0 ? 'ok' : v <= 0.25 ? 'warn' : 'bad'),
   nitrite: (v) => (v === 0 ? 'ok' : v <= 0.25 ? 'warn' : 'bad'),
   nitrate: (v) => (v <= 20 ? 'ok' : v <= 40 ? 'warn' : 'bad'),
-  ph: (v) => (v >= 6.6 && v <= 8 ? 'ok' : 'warn'),
+  // 台灣自來水常在 pH 8 左右，孔雀魚、米蝦都能適應，8.4 以上才提醒
+  ph: (v) => (v >= 6.5 && v <= 8.4 ? 'ok' : 'warn'),
   kh: (v) => (v >= 3 ? 'ok' : v >= 1 ? 'warn' : 'bad'),
 };
 
@@ -157,7 +158,7 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
     const sinceChange = state.hours - (state.lastWaterChangeHours ?? 0);
     if (sinceChange > 7 * 24) out.push({ text: `該換水了（${Math.floor(sinceChange / 24)} 天沒換）`, tone: 'warn' });
     const hunger = living.reduce((sum, f) => sum + f.hunger, 0) / living.length;
-    if (hunger > 0.5) out.push({ text: '魚餓了，該餵食', tone: 'warn' });
+    if (hunger > 0.6) out.push({ text: '魚餓了，該餵食', tone: 'warn' });
   }
 
   const pregnant = symptoms.filter((x) => x.s.includes('pregnant'));

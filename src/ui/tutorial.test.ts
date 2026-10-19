@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, createTank, feed, FILTERS, HEATERS, TANKS, useTestKit, waterChange } from '../sim';
-import { advanceQuest, currentQuest, cycleProgress, loadProgress, newProgress, pendingTip, questShopTab, QUESTS, saveProgress } from './tutorial';
+import { addFish, addPlant, buyQuarantine, createTank, feed, FILTERS, HEATERS, TANKS, useTestKit, waterChange } from '../sim';
+import { advanceQuest, currentQuest, cycleProgress, loadProgress, newProgress, overloadWarning, pendingTip, questShopTab, QUESTS, saveProgress } from './tutorial';
 
 function tank() {
   return createTank({ tank: TANKS.std40, filter: FILTERS.sponge, heater: { spec: HEATERS.h50, targetC: 25 }, seed: 5 });
@@ -78,6 +78,55 @@ describe('情境提示', () => {
     const s2 = tank();
     s2.equipment.heater!.stuckOn = true;
     expect(pendingTip(newProgress(), s2)?.id).toBe('heater');
+  });
+});
+
+describe('新手卡關（玩家體驗評測第 1 輪）', () => {
+  it('換水任務：不用等測到氨，先換一次就過', () => {
+    const q = QUESTS.find((x) => x.id === 'water')!;
+    expect(q.lines[0]).toContain('先試一次換水');
+    const s = tank();
+    addFish(s, 'guppy');
+    s.hours = 10;
+    expect(q.check(s)).toBe(false);
+    waterChange(s, 0.3);
+    expect(q.check(s)).toBe(true);
+  });
+
+  it('養水任務和任務卡都不看硝酸鹽', () => {
+    const q = QUESTS.find((x) => x.id === 'cycled')!;
+    expect([q.title, ...q.lines, q.hint ?? ''].join('')).not.toMatch(/(?<!亞)硝酸鹽/);
+  });
+
+  it('新缸一次放太多魚，買之前老闆提醒；有檢疫盒或缸養好了就不提醒', () => {
+    const s = tank();
+    expect(overloadWarning(s, 3)).toBeNull();
+    expect(overloadWarning(s, 18)).toMatch(/18 條.*容易生病/);
+    for (let i = 0; i < 3; i++) addFish(s, 'guppy');
+    expect(overloadWarning(s, 1)).not.toBeNull();
+    const boxed = tank();
+    buyQuarantine(boxed);
+    expect(overloadWarning(boxed, 18)).toBeNull();
+    const cycled = tank();
+    cycled.bacteria.aob = cycled.bacteria.nob = 1;
+    cycled.water.tan = cycled.water.no2 = 0;
+    expect(overloadWarning(cycled, 18)).toBeNull();
+  });
+
+  it('新缸 pH 8 左右會解釋這是正常的', () => {
+    const s = tank();
+    s.lastTest = { hours: s.hours, reading: { ammonia: 0, nitrite: 0, nitrate: 0, ph: 8.2, kh: 6 } };
+    expect(pendingTip(newProgress(), s)?.id).toBe('alkaline');
+  });
+
+  it('養好水了但孔雀魚都同一種性別：老闆提醒要一公一母', () => {
+    const s = tank();
+    s.bacteria.aob = s.bacteria.nob = 1;
+    s.water.tan = s.water.no2 = 0;
+    for (let i = 0; i < 3; i++) addFish(s, 'guppy', { sex: 'male', carriesIch: false });
+    expect(pendingTip(newProgress(), s)?.id).toBe('pair');
+    addFish(s, 'guppy', { sex: 'female', carriesIch: false });
+    expect(pendingTip(newProgress(), s)).toBeNull();
   });
 });
 
