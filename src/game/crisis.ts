@@ -1,4 +1,4 @@
-import { DISEASE_SPECS, FISH_SPECIES, type DiseaseKind, type Fish, type SimEvent, type SimEventType, type TankState } from '../sim';
+import { DISEASE_SPECS, FISH_SPECIES, hasVisible, type DiseaseKind, type Fish, type SimEvent, type SimEventType, type TankState } from '../sim';
 
 /**
  * 快轉時遇到的危機（#142）：設備故障、停電、生病、死魚，或水質、水溫突然變危險。
@@ -50,6 +50,12 @@ function carrying(state: TankState, illness: Illness): boolean {
   return state.fish.some(has) || (state.quarantine?.fish.some(has) ?? false);
 }
 
+/** 缸裡（含檢疫盒）有沒有魚正在發這個病（看得到症狀）。 */
+function showing(state: TankState, illness: Illness): boolean {
+  const sick = (f: Fish) => f.alive && (illness === 'ich' ? f.ich.stage === 'visible' : hasVisible(f, illness));
+  return state.fish.some(sick) || (state.quarantine?.fish.some(sick) ?? false);
+}
+
 /** 一個病在缸裡完全沒有魚帶著超過這麼久（遊戲小時，約白點一個潛伏期），才算這一波過了。 */
 const WAVE_OVER_HOURS = 72;
 
@@ -96,7 +102,8 @@ export class CrisisWatch {
     this.seen = new Map(tanks.map((t) => [t, t.events.at(-1)]));
     this.alarms = new Map(tanks.map((t) => [t, waterAlarms(t)]));
     const all: Illness[] = ['ich', ...(Object.keys(DISEASE_SPECS) as DiseaseKind[])];
-    this.illnesses = new Map(tanks.map((t) => [t, new Map(all.filter((i) => carrying(t, i)).map((i) => [i, t.hours]))]));
+    // 只記正在發病的：潛伏中的（例如店魚帶來的）還沒回報過，之後真的發病要打斷
+    this.illnesses = new Map(tanks.map((t) => [t, new Map(all.filter((i) => showing(t, i)).map((i) => [i, t.hours]))]));
   }
 
   /** 還有魚帶著的病更新時間；完全沒有魚帶著超過 WAVE_OVER_HOURS 就忘掉（這一波過了）。 */

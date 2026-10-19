@@ -152,4 +152,18 @@ describe('快轉遇到危機自動切回正常速度（#142）', () => {
     }
     expect(crises.filter((r) => r === 'ich_visible')).toEqual(['ich_visible']);
   });
+
+  it('建立時只有潛伏的白點（店魚帶來的）不算回報過，之後真的發病要打斷（#167 審查）', () => {
+    const s = cycledTank();
+    s.fish[0].ich = { stage: 'incubating', progress: 0.5 };
+    const game = new Game(s, 3600);
+    const crises: string[] = [];
+    game.onCrisis((c) => crises.push(c.reason));
+    game.act((st) => {
+      st.fish[0].ich = { stage: 'visible', progress: 0 };
+      recordEvent(st, { type: 'ich_visible', subjectId: st.fish[0].id });
+    });
+    game.advance(1000);
+    expect(crises).toContain('ich_visible');
+  });
 });
