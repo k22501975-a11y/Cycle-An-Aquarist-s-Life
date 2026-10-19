@@ -1,10 +1,10 @@
-import { DISEASE_SPECS, FISH_SPECIES, hasVisible, type DiseaseKind, type Fish, type SimEvent, type SimEventType, type TankState } from '../sim';
+import { DISEASE_SPECS, FISH_SPECIES, hasVisible, isStarving, type DiseaseKind, type Fish, type SimEvent, type SimEventType, type TankState } from '../sim';
 
 /**
- * 快轉時遇到的危機（#142）：設備故障、停電、生病、死魚，或水質、水溫突然變危險。
+ * 快轉時遇到的危機（#142）：設備故障、停電、生病、死魚，水質、水溫突然變危險，或魚餓到開始消耗體力（#169）。
  * 快轉下幾十秒就可能整缸死光，遇到這些就切回正常速度，讓玩家來得及處理。
  */
-export type WaterAlarm = 'too_hot' | 'too_cold' | 'ammonia' | 'nitrite';
+export type WaterAlarm = 'too_hot' | 'too_cold' | 'ammonia' | 'nitrite' | 'starving';
 export type CrisisReason = SimEventType | WaterAlarm;
 
 export interface Crisis {
@@ -63,6 +63,8 @@ const WAVE_OVER_HOURS = 72;
 const TEMP_MARGIN_C = 2;
 /** 總氨、亞硝酸超過多少算危險（測試劑讀到 0.5 以上）；降到一半以下才解除，避免在門檻附近一直觸發。 */
 const TOXIC_MG_L = 0.4;
+/** 餵飽到平均多少以下才解除挨餓警報（一天兩餐約 0.4）：同一缸餓一次只打斷一次，餵過以後再餓才重新算。 */
+const FED_HUNGER = 0.5;
 
 /** 這缸現在有哪些水質警報（只看有活魚的缸）。prev 是上一次的警報，用來做解除的緩衝。 */
 export function waterAlarms(state: TankState, prev: ReadonlySet<WaterAlarm> = new Set()): Set<WaterAlarm> {
@@ -77,6 +79,9 @@ export function waterAlarms(state: TankState, prev: ReadonlySet<WaterAlarm> = ne
   }
   if (tan > (prev.has('ammonia') ? TOXIC_MG_L / 2 : TOXIC_MG_L)) alarms.add('ammonia');
   if (no2 > (prev.has('nitrite') ? TOXIC_MG_L / 2 : TOXIC_MG_L)) alarms.add('nitrite');
+  // 挨餓：有魚餓到開始消耗體力（成魚完全不餵約 8 天）。蝦會自己找東西吃，不算
+  const eaters = state.fish.filter((f) => f.alive && !FISH_SPECIES[f.species].invertebrate);
+  if (prev.has('starving') ? eaters.some((f) => f.hunger >= FED_HUNGER) : eaters.some(isStarving)) alarms.add('starving');
   return alarms;
 }
 
@@ -158,6 +163,7 @@ const ALARM_TEXT: Record<WaterAlarm, string> = {
   too_cold: '水溫太低',
   ammonia: '氨超標',
   nitrite: '亞硝酸超標',
+  starving: '魚餓壞了，再不餵會餓死',
 };
 
 const EVENT_TEXT: Partial<Record<SimEventType, string>> = {

@@ -5,12 +5,14 @@ import { gameState, startClean, startGame, watchConsoleErrors, type CycleWindow 
 // 軟體繪圖在高像素密度下慢三倍，這裡不測畫質，用 1 讓 CI 慢的時候也跑得完
 test.use({ deviceScaleFactor: 1, actionTimeout: 20_000 });
 
-test('新遊戲：錢 2,000、任務 1/9、速度 ×7，畫面有畫出東西，沒有 console 錯誤', async ({ page }) => {
+test('新遊戲：開完缸錢 2,050、任務 2/10、速度 ×7，畫面有畫出東西，沒有 console 錯誤', async ({ page }) => {
   const consoleErrors = watchConsoleErrors(page);
   await startGame(page);
   await expect(page.locator('button.speed-btn')).toHaveText(/×7/);
-  await expect(page.locator('button.coins')).toHaveText(/2,000/);
-  await expect(page.locator('.quest-pill')).toContainText('任務 1/9');
+  // 推薦組合開缸剩 2,000，再加「開缸」任務的獎勵 50
+  await expect(page.locator('button.coins')).toHaveText(/2,050/);
+  // 第 1 個任務「開缸」在開新遊戲時就完成了，接著是第 2 個
+  await expect(page.locator('.quest-pill')).toContainText('任務 2/10');
   // PNG 壓縮後太小代表畫布幾乎是單色（黑畫面）
   expect((await page.locator('#stage canvas').screenshot()).byteLength).toBeGreaterThan(20_000);
   expect(consoleErrors).toEqual([]);

@@ -17,6 +17,7 @@ import { NEWBIE_HEALTHY_DAYS, recordEvent, TEST_LOG_MAX, type DiseaseKind, type 
 /** 投餵飼料（mg）。沒指定就是標準的漂浮薄片；吃不完的會腐敗。 */
 export function feed(state: TankState, mg: number, kind: FoodKind = DEFAULT_FOOD.kind, grade: FoodGrade = DEFAULT_FOOD.grade): void {
   addFood(state.water, kind, grade, Math.max(0, mg));
+  if (mg > 0) state.lastFedHours = state.hours;
 }
 
 export interface WaterChangeOptions {
@@ -219,6 +220,7 @@ export function trimPlant(state: TankState, plantId: number): number {
   const keep = sp.maxBiomassG * 0.5;
   const cuttings = Math.max(0, Math.floor((plant.biomassG - keep) / sp.cuttingMassG));
   plant.biomassG -= cuttings * sp.cuttingMassG;
+  if (cuttings > 0) state.lastTrimHours = state.hours;
   return cuttings;
 }
 

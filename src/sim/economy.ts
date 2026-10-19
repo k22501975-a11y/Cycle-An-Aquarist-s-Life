@@ -3,6 +3,7 @@ import { FISH_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species
 import { phenotype, type GuppyPhenotype } from './genetics';
 import { updateOrders, type OrderBoard } from './orders';
 import type { GoalState } from './goals';
+import type { DailyState } from './daily';
 
 /**
  * 經濟（GAME_DESIGN 第 7 節、market-and-breeding.md §3.1）：
@@ -10,7 +11,8 @@ import type { GoalState } from './goals';
  * 單機版沒有玩家市場，店家是唯一出口：收購價約店價五成，孔雀魚依稀有度分級（design/mvp.md §4.3）。
  */
 
-export const STARTING_COINS = 2000;
+/** 起始資金：買完「推薦組合」（1,400）剩 2,000，跟以前送設備時一樣多，經濟節奏（mvp.md §4.3）不變。 */
+export const STARTING_COINS = 3400;
 /** 台灣住宅電費約每度 3 元。 */
 export const KWH_PRICE = 3;
 /** 電費多久結算一次（遊戲天數）。 */
@@ -53,6 +55,8 @@ export const PRICES: Record<string, number> = {
   'controller:basic': 650,
   'quarantine:box': 700,
   'care:bacteria': 30,
+  'care:holiday': 40,
+  'feeder:auto': 600,
   'substrate:sand': 200,
   'substrate:soil': 450,
   'substrate:coral': 300,
@@ -90,10 +94,16 @@ export interface Economy {
   fishSold?: number;
   /** 已經領過獎勵的新手任務（任務進度存在裝置上，換裝置、匯入存檔重跑教學也不能再領）。 */
   questRewards?: string[];
+  /** 手上還沒用的假期飼料錠（目標送的）。 */
+  holidayTablets?: number;
   /** 店家訂單板（M21）；舊存檔沒有，第一次更新時掛上。 */
   orders?: OrderBoard;
   /** 用儲值點數買的商城道具（背包）：只是伺服器庫存的副本（docs/ledger.md §4），打開商城、用道具後照伺服器的數字覆寫；舊存檔沒有。 */
   mall?: MallBag;
+  /** 新遊戲還沒開缸（還沒挑設備）；開完缸就刪掉。舊存檔沒有＝已經開過。 */
+  setupPending?: boolean;
+  /** 今天的每日小事（F3）；舊存檔沒有，開完缸第一次更新時出題。 */
+  daily?: DailyState;
   /** 已經套用到伺服器帳本的第幾筆（市場的收支，docs/ledger.md）；舊存檔沒有＝0。 */
   ledgerSeq?: number;
   /** 玩過幾次對水小遊戲（前幾次強制玩，F5）。 */
