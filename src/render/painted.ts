@@ -5,7 +5,7 @@ import type { FishForm } from './fish-art';
 import { canvasTexture, makeCanvas } from './paint';
 import { parseRecipeKey, patternBase, recolorImage } from './phenotype-art';
 import { guppyLook } from './strains';
-import { trimLru } from './lru';
+import { RefLru } from './lru';
 import { tankSubstrateLook } from './substrate';
 import { rimLight, toneImage, toneKey } from './tone';
 
@@ -181,25 +181,9 @@ export const FIN_PARTS: Record<string, { file: string; anchor: [number, number] 
 
 const textures = new Map<string, Texture>();
 const scenery = new Map<string, Texture>();
-const toned = new Map<string, Texture>();
 /** 調色快取最多留幾張；超過時把最久沒用、也沒有魚在用的圖釋放掉（GPU 記憶體）。 */
 export const TONED_MAX = 64;
-const tonedRefs = new Map<Texture, number>();
-
-function retainToned(t: Texture | null): void {
-  if (t) tonedRefs.set(t, (tonedRefs.get(t) ?? 0) + 1);
-}
-
-function releaseToned(t: Texture | null): void {
-  if (!t) return;
-  const n = (tonedRefs.get(t) ?? 0) - 1;
-  if (n > 0) tonedRefs.set(t, n);
-  else tonedRefs.delete(t);
-}
-
-function trimToned(): void {
-  trimLru(toned, TONED_MAX, (t) => tonedRefs.has(t), (t) => t.destroy(true));
-}
+const toned = new RefLru<string, Texture>(TONED_MAX, (t) => t.destroy(true));
 
 /** 每個素材的鍵、檔案和放進哪個快取（精繪魚蝦、小道具、單片鰭、造景）。 */
 export const ART_FILES: { key: string; file: string; scenery: boolean }[] = [
@@ -312,12 +296,7 @@ export function tonedTexture(key: string, sat: number, bright: number, eating = 
   if (!base) return base;
   const cacheKey = `${key}${eating ? '#eating' : ''}@${toneKey(sat, bright)}`;
   const hit = toned.get(cacheKey);
-  if (hit) {
-    // 移到最後面：剛用過
-    toned.delete(cacheKey);
-    toned.set(cacheKey, hit);
-    return hit;
-  }
+  if (hit) return hit;
   const img = base.source.resource as CanvasImageSource & { width: number; height: number };
   const { canvas, ctx } = makeCanvas(img.width, img.height);
   ctx.drawImage(img, 0, 0);
@@ -326,10 +305,7 @@ export function tonedTexture(key: string, sat: number, bright: number, eating = 
   // 背上的邊緣光，厚度約圖高的 2%
   rimLight(data.data, canvas.width, canvas.height, Math.max(2, Math.round(canvas.height * 0.02)), RIM_STRENGTH);
   ctx.putImageData(data, 0, 0);
-  const tex = canvasTexture(canvas);
-  toned.set(cacheKey, tex);
-  trimToned();
-  return tex;
+  return toned.add(cacheKey, canvasTexture(canvas));
 }
 
 /** 快取裡有幾張貼圖（開發者數值、測試用）。 */
@@ -430,12 +406,13 @@ export class PaintedRig extends Container {
     const tone = `${sat}:${bright}`;
     if (tone === this.tone) return;
     this.tone = tone;
+    // 拿到就先 retain，再拿下一張：不然建吃東西那張時，剛拿到的 rest 可能被清掉
     const rest = tonedTexture(this.key, sat, bright);
+    toned.retain(rest);
     const eating = textures.has(`${this.key}#eating`) ? tonedTexture(this.key, sat, bright, true) : null;
-    retainToned(rest);
-    retainToned(eating);
-    releaseToned(this.tonedRest);
-    releaseToned(this.tonedEating);
+    toned.retain(eating);
+    toned.release(this.tonedRest);
+    toned.release(this.tonedEating);
     this.tonedRest = rest;
     this.tonedEating = eating;
     this.restTexture = rest ?? this.restTexture;
@@ -445,8 +422,8 @@ export class PaintedRig extends Container {
   }
 
   override destroy(options?: DestroyOptions): void {
-    releaseToned(this.tonedRest);
-    releaseToned(this.tonedEating);
+    toned.release(this.tonedRest);
+    toned.release(this.tonedEating);
     this.tonedRest = null;
     this.tonedEating = null;
     super.destroy(options);

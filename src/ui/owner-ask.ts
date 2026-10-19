@@ -14,20 +14,26 @@ export interface OwnerAsk {
   no: string;
 }
 
-let open: HTMLElement | null = null;
+/** 開著的對話框：收起它並回傳主要按鈕的值（老闆建議的那個）。 */
+let dismissOpen: (() => void) | null = null;
 
-/** 疊一個老闆對話框；按任何一顆按鈕就收起來並回傳那顆的值。 */
+/**
+ * 疊一個老闆對話框；按任何一顆按鈕就收起來並回傳那顆的值。
+ * 舊的還開著又來一個新的，舊的當作按了主要按鈕（問句就是「不要」），等它的人不會一直卡著。
+ */
 function bubble<T>(text: string, buttons: Array<{ label: string; value: T; primary?: boolean }>, host: HTMLElement): Promise<T> {
-  open?.remove();
+  dismissOpen?.();
   // 老闆的話可能帶著「阿德老闆：」開頭（模擬那邊寫的），對話框已經有名字了就去掉
   const body = text.replace(new RegExp(`^${OWNER_NAME}[：:]\\s*`), '');
   return new Promise((resolve) => {
     const el = h('div.owner.glass.open.owner-ask', { role: 'dialog', 'aria-label': OWNER_NAME });
     const answer = (value: T) => {
       el.remove();
-      if (open === el) open = null;
+      if (dismissOpen === dismiss) dismissOpen = null;
       resolve(value);
     };
+    const fallback = buttons.find((b) => b.primary) ?? buttons[buttons.length - 1];
+    const dismiss = () => answer(fallback.value);
     el.append(
       h('div.owner-avatar.has-art', {}, ownerImg('owner-art')),
       h(
@@ -39,7 +45,7 @@ function bubble<T>(text: string, buttons: Array<{ label: string; value: T; prima
       ),
     );
     host.append(el);
-    open = el;
+    dismissOpen = dismiss;
   });
 }
 
