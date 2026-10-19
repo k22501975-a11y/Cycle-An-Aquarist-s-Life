@@ -1,4 +1,4 @@
-import { dueMothers, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
+import { dueMothers, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -190,6 +190,8 @@ const SHARED_TODO = /^(停電中|錢包透支|整缸都沒了)/;
  * 多缸的待辦：目前這缸的全部列出，其他缸有要處理的事也提醒一行（缸越多越難顧）。
  */
 export function householdTodos(tanks: TankState[], active: number): Todo[] {
+  // 開機前（挑設備、開缸演出中）不出待辦（#204）
+  if (tanks[0] && !tankStarted(tanks[0])) return [];
   const current = tanks[active];
   const others = tanks.filter((_, i) => i !== active);
   const out = todos(current, others);

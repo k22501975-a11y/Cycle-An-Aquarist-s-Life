@@ -108,6 +108,8 @@ export interface Economy {
   mall?: MallBag;
   /** 新遊戲還沒開缸（還沒挑設備）；開完缸就刪掉。舊存檔沒有＝已經開過。 */
   setupPending?: boolean;
+  /** 設備付錢裝好了、還沒按下「開機」（開缸 4 步的最後一步，mvp.md §4.4.4）；開機就刪掉。舊存檔沒有＝已經開機。 */
+  powerPending?: boolean;
   /** 今天的每日小事（F3）；舊存檔沒有，開完缸第一次更新時出題。 */
   daily?: DailyState;
   /** 已經套用到伺服器帳本的第幾筆（市場的收支，docs/ledger.md）；舊存檔沒有＝0。 */

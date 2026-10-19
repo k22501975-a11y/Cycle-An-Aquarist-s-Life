@@ -1,5 +1,5 @@
 import type { KeyValueStore } from '../game/save';
-import { dismissOrder, FIN_NAMES, fulfillOrder, ORDER_STRAINS, orderBoard, orderRefusal, orderSupply, orderTitle, orderUnit, type OrderStrain, type ShopOrder, type TankState } from '../sim';
+import { dismissOrder, FIN_NAMES, fulfillOrder, ORDER_STRAINS, orderBoard, orderRefusal, orderSupply, orderTitle, orderUnit, tankStarted, type OrderStrain, type ShopOrder, type TankState } from '../sim';
 import { artUrl, ownerImg } from './art-icons';
 import { h } from './dom';
 import type { PanelContext } from './panels';
@@ -63,6 +63,8 @@ export interface OrderAlert {
  * 玩家還沒自己繁殖出任何東西前（新手期），新單不提醒，免得一開局就有個紅點吵人。
  */
 export function orderAlert(tanks: TankState[], seen: Set<number>): OrderAlert {
+  // 開機前不提示訂單（#204）
+  if (!tankStarted(tanks[0])) return { ready: [], fresh: 0 };
   const board = orderBoard(tanks[0]);
   const ready = board.orders.filter((o) => orderSupply(tanks, o) >= o.count);
   const fresh = board.seen.length > 0 ? board.orders.filter((o) => !seen.has(o.id)).length : 0;

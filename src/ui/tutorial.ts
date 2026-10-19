@@ -1,5 +1,5 @@
 import type { KeyValueStore } from '../game/save';
-import { cycleMaturity, freeAmmonia, hasVisible, isCycled, needsSetup, observeSymptoms, sexVisible, type TankState } from '../sim';
+import { cycleMaturity, freeAmmonia, hasVisible, isCycled, observeSymptoms, tankStarted, sexVisible, type TankState } from '../sim';
 
 /**
  * 新手引導任務（GAME_DESIGN 定案）：水族館老闆一步步帶玩家開缸、放魚、餵食、換水、養水。
@@ -46,7 +46,8 @@ export const QUESTS: Quest[] = [
       '過濾器決定硝化菌住多少、燈決定能種什麼草、底沙會影響水質。每張卡都寫了好處和代價；拿不定主意就按「推薦組合」。',
     ],
     done: '缸開好了！水裡還沒有能分解魚便便的硝化菌，接下來我們一步步把它養起來。',
-    check: (s) => !needsSetup(s),
+    // 按下「開機」才算開好缸（#204），付錢裝設備還不算
+    check: (s) => tankStarted(s),
   },
   {
     id: 'plant',

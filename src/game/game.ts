@@ -11,7 +11,8 @@ import {
   syncRoom,
   applySetup,
   economy,
-  needsSetup,
+  powerOn,
+  tankStarted,
   RECOMMENDED_SETUP,
   type SimEvent,
   type TankState,
@@ -59,7 +60,7 @@ export function applySeason(state: TankState, date = new Date()): void {
 }
 
 /**
- * 新遊戲（F1 開缸）：阿德老闆送的空缸、起始資金，設備還沒買。玩家開完缸（applySetup）之前時間不走。
+ * 新遊戲（F1 開缸）：阿德老闆送的空缸、起始資金，設備還沒買。玩家開完缸（applySetup）、按下開機（powerOn）之前時間不走。
  * 缸的大小先當 40L，開缸時照玩家選的換掉。
  */
 export function blankGameState(seed = Date.now() % 2147483647): TankState {
@@ -72,10 +73,11 @@ export function blankGameState(seed = Date.now() % 2147483647): TankState {
   return state;
 }
 
-/** 已經用「推薦組合」開好缸的新遊戲（40L、外掛過濾、50W、基本燈、石英砂），還沒養水。測試和劇本從這裡開始。 */
+/** 已經用「推薦組合」開好缸、開了機的新遊戲（40L、外掛過濾、50W、基本燈、石英砂），還沒養水。測試和劇本從這裡開始。 */
 export function newGameState(seed = Date.now() % 2147483647): TankState {
   const state = blankGameState(seed);
   applySetup(state, RECOMMENDED_SETUP);
+  powerOn(state);
   return state;
 }
 
@@ -133,8 +135,8 @@ export class Game {
 
   /** 推進現實時間 realMs，回傳實際執行的 tick 數。 */
   advance(realMs: number): number {
-    // 還沒開缸：時鐘照樣吃掉現實時間（開完缸不會一口氣補算），模擬不動
-    if (needsSetup(this.tanks[0])) {
+    // 還沒開機（挑設備、開缸演出中）：時鐘照樣吃掉現實時間（開機後不會一口氣補算），模擬不動
+    if (!tankStarted(this.tanks[0])) {
       this.clock.advance(realMs);
       return 0;
     }

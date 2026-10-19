@@ -430,6 +430,9 @@ async function start(): Promise<void> {
     // 開缸（F1-b，mvp.md §4.4.4）：玩家每做完一步，提示換下一步；開機做完是「你的第一個缸」
     onSetupStep: (_finished, next) => {
       if (next !== 'done') return renderSetupPrompt();
+      // 開機做完：時間從這時開始走，第一天的小事、待辦也從這時才出（#204）
+      game.act((s) => sim.powerOn(s));
+      save();
       setupPrompt.remove();
       document.body.classList.remove('setting-up');
       moment('first_tank', { art: 'gear/tank-empty.webp', title: '你的第一個缸', sub: '水注滿、設備也開機了', owner: '先別急著放魚。倒一瓶硝化菌液，讓水先養個幾天。' });
@@ -493,7 +496,7 @@ async function start(): Promise<void> {
   const playSetup = () => {
     guideHeld = true;
     // 開缸時其他通知（今天的小事、畫質自動調整…）先排隊，「你的第一個缸」關掉再跳（#199）。
-    // 開缸 4 步等玩家動手，多久都可能，不設保險：開機做完一定會走到 whenClear 放出來（重新整理會從挑設備重來）
+    // 開缸 4 步等玩家動手，多久都可能，不設保險：開機做完一定會走到 whenClear 放出來（重新整理會從倒沙重來）
     toasts.hold(0);
     view.playSetup();
     // 演出時只留缸：上方列、任務卡、工具列先藏起來（#171）
@@ -1416,6 +1419,8 @@ async function start(): Promise<void> {
   renderCoins();
   // 還沒開缸：先挑設備，開缸演出播完才開始教學；演出還在播也一樣等它播完（不然老闆的對話框會擋住整段演出）
   if (sim.needsSetup(game.tanks[0])) openSetup();
+  // 設備裝好、4 步沒做完就關掉遊戲：從倒沙重來一次，開機做完才開機
+  else if (sim.awaitingPowerOn(game.tanks[0])) playSetup();
   else if (!view.settingUp) guide.start(game.state);
   let refreshTimer = 0;
   // 一段時間沒操作就降到 30 fps，省電；一碰螢幕馬上恢復
