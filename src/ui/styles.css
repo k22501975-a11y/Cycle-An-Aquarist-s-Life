@@ -549,3 +549,16 @@ body:has(.sheet.open) .owner.open { bottom: auto; top: calc(env(safe-area-inset-
 /* 商店：老闆的長建議排到商品後面，先看到商品 */
 .shop-stack > .stack > details.advice { order: 99; }
 body > .owner { position: fixed; }
+/* 開發用幀率顯示（設定 → 開發者 → 顯示幀率，或網址加 ?fps） */
+.fps-meter {
+  position: fixed;
+  right: calc(env(safe-area-inset-right, 0px) + 4px);
+  top: 50%;
+  z-index: 9999;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #9f9;
+  font: 11px/1.4 ui-monospace, monospace;
+  pointer-events: none;
+}
