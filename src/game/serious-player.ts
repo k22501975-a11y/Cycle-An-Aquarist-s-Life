@@ -85,11 +85,11 @@ export function seriousPlayer(seed: number, strain: number, takeOrders = false):
       if (heater && (heater.stuckOn || heater.broken)) t.equipment.heater = { spec: heater.spec, targetC: heater.targetC, broken: false, heating: false };
       const r = useTestKit(t);
       if (r.ammonia >= 0.25 || r.nitrite >= 0.25 || r.nitrate >= 40 || d % 7 === 0) waterChange(t, 0.3);
-      // 接訂單：先交得出來的單（留種的魚不交），插枝靠修剪
+      // 接訂單：先交得出來的單（留種的魚不交），插枝靠修剪；小孔雀單不交，仔魚要留著挑種（mvp.md §4.4.1 第 3 點）
       if (takeOrders) {
         for (const p of t.plants) addCuttings(t, p.species, trimPlant(t, p.id));
         for (const o of [...orderBoard(t).orders]) {
-          fulfillOrder(tanks, o.id, [...breeders]);
+          if (o.kind !== 'fry') fulfillOrder(tanks, o.id, [...breeders]);
           // 一直湊不齊的單撕掉換一張
           if (t.hours - o.postedHours > 10 * 24) dismissOrder(t, o.id);
         }
@@ -167,7 +167,9 @@ export function casualPlayer(seed: number, takeOrders: boolean, days = 90): { in
     if (d === 10) economy(s).coins += 800;
     checkGoals(tanks, d >= 10);
     // 有接訂單的話：交得出來就交，訂單要的魚先留著不賣
-    if (takeOrders) for (const o of [...orderBoard(s).orders]) fulfillOrder(tanks, o.id, breeders);
+    // 小孔雀單：板上有中魚單時聽阿德的提醒先不賣，留著養大（mvp.md §4.4.1 第 3 點）
+    const growing = orderBoard(s).orders.some((o) => o.kind === 'fish' && o.size === 'juvenile');
+    if (takeOrders) for (const o of [...orderBoard(s).orders]) if (o.kind !== 'fry' || !growing) fulfillOrder(tanks, o.id, breeders);
     const held = new Set(takeOrders ? orderBoard(s).orders.flatMap((o) => (o.kind === 'fish' ? matchingFish(s, o, breeders).slice(0, o.count).map((f) => f.id) : [])) : []);
     for (const f of alive(s)) if (!breeders.includes(f.id) && !held.has(f.id) && !buybackRefusal(f)) total += sellFish(s, f.id);
     income[d] = total;

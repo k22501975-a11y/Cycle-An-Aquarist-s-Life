@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addCuttings,
   addFish,
+  addPlant,
   buyQuarantine,
   createTank,
+  deliverableNow,
   dismissOrder,
   economy,
   FILTERS,
@@ -16,11 +19,15 @@ import {
   ORDER_BOARD_SIZE,
   ORDER_GAP_HOURS,
   orderBoard,
+  orderContext,
   orderRefusal,
   orderTitle,
   sellsLeftToday,
   simulate,
+  snailState,
   TANKS,
+  trimPlant,
+  updateOrders,
   type Fish,
   type ShopOrder,
   type TankState,
@@ -150,5 +157,79 @@ describe('店家訂單板（M21）', () => {
     expect(orderRefusal([s], o.id)).toBeNull();
     expect(fulfillOrder([s], o.id)).toBe(135);
     expect(s.quarantine!.fish).toHaveLength(0);
+  });
+
+  describe('前期訂單（mvp.md §4.4.1）', () => {
+    /** 清掉板子讓它重新掛單（新單照現在的缸況出題）。 */
+    const refill = (s: TankState) => {
+      const board = orderBoard(s);
+      board.orders = [];
+      board.lastChangeHours = undefined;
+      updateOrders(s);
+      return board.orders;
+    };
+
+    it('起步：還沒有自己繁殖的魚，板上至少一張修剪一下就交得出來的插枝單；修剪後交得掉', () => {
+      const s = tank(5);
+      s.fish = [];
+      const plant = addPlant(s, 'rotala', 14);
+      expect(orderContext(s).stage).toBe('start');
+      const orders = refill(s);
+      const easy = orders.find((o) => deliverableNow(s, o));
+      expect(easy?.kind).toBe('cutting');
+      expect(easy!.plant).toBe('rotala');
+      expect(easy!.count * easy!.unitPrice).toBeGreaterThanOrEqual(40);
+      expect(easy!.count * easy!.unitPrice).toBeLessThanOrEqual(120);
+      // 修剪下來就能交
+      addCuttings(s, 'rotala', trimPlant(s, plant.id));
+      expect(orderRefusal([s], easy!.id)).toBeNull();
+      expect(fulfillOrder([s], easy!.id)).toBe(easy!.count * easy!.unitPrice);
+    });
+
+    it('起步：餵太多長出來的扁卷螺可以交螺單，交掉的螺從缸裡拿走', () => {
+      const s = tank(6);
+      s.fish = [];
+      snailState(s).pests.ramshorn = 12;
+      const o: ShopOrder = { id: 900, kind: 'snail', snail: 'ramshorn', count: 5, unitPrice: 10, postedHours: s.hours };
+      orderBoard(s).orders = [o];
+      expect(orderTitle(o)).toBe('5 隻扁卷螺');
+      expect(fulfillOrder([s], o.id)).toBe(50);
+      expect(snailState(s).pests.ramshorn).toBe(7);
+      snailState(s).pests.ramshorn = 2;
+      const again: ShopOrder = { ...o, id: 901 };
+      orderBoard(s).orders = [again];
+      expect(orderRefusal([s], again.id)).toBe('缸裡的只有 2 隻，還差 3 隻');
+    });
+
+    it('第一窩：有仔魚就出小孔雀單，收 1.2 cm 以上自己繁殖的小魚（還沒到店家收購的大小也收）', () => {
+      const s = tank(7);
+      const fry = Array.from({ length: 10 }, (_, i) => {
+        const f = addFish(s, 'guppy', { carriesIch: false, carries: [] });
+        f.generation = 1;
+        f.lengthCm = i < 6 ? 1.3 : 0.8;
+        return f;
+      });
+      expect(orderContext(s).stage).toBe('brood');
+      expect(orderContext(s).fry).toBe(10);
+      const o: ShopOrder = { id: 902, kind: 'fry', species: 'guppy', minCm: 1.2, count: 5, unitPrice: 8, postedHours: s.hours };
+      orderBoard(s).orders = [o];
+      expect(orderTitle(o)).toBe('5 尾小孔雀，1.2 cm 以上');
+      expect(fishMatchesOrder(fry[0], o)).toBe(true);
+      expect(fishMatchesOrder(fry[9], o)).toBe(false);
+      expect(fulfillOrder([s], o.id)).toBe(40);
+      expect(s.fish.filter((f) => f.lengthCm >= 1.2)).toHaveLength(1);
+    });
+
+    it('選育階段（有中魚）照樣出中魚單；有剪得下來的水草時也留一張小額單', () => {
+      const s = tank(8);
+      juveniles(s, 4);
+      addPlant(s, 'rotala', 14);
+      expect(orderContext(s).stage).toBe('breeding');
+      for (let i = 0; i < 5; i++) {
+        const orders = refill(s);
+        expect(orders.some((o) => o.kind === 'cutting' || o.kind === 'snail')).toBe(true);
+        expect(orders.some((o) => o.kind === 'fry')).toBe(false);
+      }
+    });
   });
 });
