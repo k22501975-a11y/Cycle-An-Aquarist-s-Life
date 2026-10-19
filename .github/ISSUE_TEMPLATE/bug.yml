@@ -1,0 +1,46 @@
+name: 錯誤回報
+description: 遊戲或伺服器的錯誤（當機、數值不對、畫面壞掉）
+title: "[錯誤] "
+labels: ["type:bug", "role:debug"]
+body:
+  - type: dropdown
+    id: severity
+    attributes:
+      label: 嚴重度
+      description: critical＝當機／存檔損毀／無法繼續；major＝主要功能錯誤；minor＝小瑕疵可繞過。建立後請加上對應的 severity 標籤。
+      options: [critical, major, minor]
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: main 的 commit、PR 編號或 APK 的建置編號
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重現步驟
+      placeholder: "1. 開新遊戲\n2. 點餵食 → 一小撮\n3. 加速到 1時/秒 跑 3 天"
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes:
+      label: 預期結果
+    validations: { required: true }
+  - type: textarea
+    id: actual
+    attributes:
+      label: 實際結果
+      description: 附截圖、錄影或 console 錯誤訊息
+    validations: { required: true }
+  - type: textarea
+    id: save
+    attributes:
+      label: 存檔或日誌
+      description: localStorage 的 cycle.save.v1（太長可附檔）、伺服器日誌
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      multiple: true
+      options: [Android APK, 手機瀏覽器, 桌機瀏覽器, 伺服器]

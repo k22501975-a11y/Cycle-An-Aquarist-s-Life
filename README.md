@@ -11,7 +11,12 @@ npm install
 npm run dev        # 本機開發伺服器
 npm test           # 單元測試（Vitest）
 npm run build      # 型別檢查 + 打包
+npm run lint       # ESLint
+npm run check      # lint + 型別 + 單元測試 + 素材預算（開 PR 前跑）
+npm run e2e        # 遊戲流程測試（Playwright，要先 build）
 ```
+
+合併規則與 CI 品質閘門：[docs/quality-gate.md](docs/quality-gate.md)；程式碼規範：[docs/coding-standards.md](docs/coding-standards.md)；效能預算：[docs/performance-budget.md](docs/performance-budget.md)。
 
 ## 怎麼玩（Phase 0 原型）
 
