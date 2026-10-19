@@ -1,4 +1,4 @@
-import { BlurFilter, Graphics, Rectangle, Sprite, type Renderer, type Texture } from 'pixi.js';
+import { BlurFilter, FillGradient, Graphics, Rectangle, Sprite, type Renderer, type Texture } from 'pixi.js';
 import { phenotype, type Fish } from '../sim';
 import type { FishRig } from './fish-art';
 import { FIN_COLORS, finShapes, type FinShape, type FinTraits } from './fin-overlay';
@@ -78,8 +78,46 @@ export function drawFinOverlay(rig: FishRig | PaintedRig, fins: FinLook, rendere
   const deep = mix(fins.color, 0x000000, 0.25);
   const paint = (g: Graphics, list: FinShape[]) => {
     for (const sh of list) {
-      if (sh.inner) {
-        g.poly(sh.points).fill({ color: fins.color, alpha: fins.alpha * 0.16 });
+      if (sh.soft) {
+        // 薄紗鰭：不描邊（邊緣靠模糊柔化），薄膜和鰭條都從根部往尖端漸透
+        const sheen = mix(fins.color, 0xbff6ff, 0.45);
+        // 薄膜用放射漸層：以鰭根為中心，根部濃、往尖端越來越透，顏色漸漸帶一點虹彩
+        const p = sh.points, n = p.length;
+        const rx = (p[0] + p[n - 2]) / 2, ry = (p[1] + p[n - 1]) / 2;
+        let reach = 1;
+        for (let i = 0; i < n; i += 2) reach = Math.max(reach, Math.hypot(p[i] - rx, p[i + 1] - ry));
+        const rgba = (c: number, a: number) => ({ r: (c >> 16) & 255, g: (c >> 8) & 255, b: c & 255, a });
+        const base = mix(fins.color, 0xffffff, 0.15);
+        const membrane = new FillGradient({
+          type: 'radial',
+          center: { x: rx, y: ry },
+          innerRadius: 0,
+          outerCenter: { x: rx, y: ry },
+          outerRadius: reach,
+          colorStops: [
+            { offset: 0, color: rgba(base, fins.alpha * 0.7) },
+            { offset: 0.5, color: rgba(mix(base, sheen, 0.3), fins.alpha * 0.48) },
+            { offset: 1, color: rgba(sheen, fins.alpha * 0.2) },
+          ],
+          textureSpace: 'global',
+        });
+        g.poly(p).fill(membrane);
+        // 鰭條也用同一個中心的漸層：根部亮、往尖端漸透，亮暗相間帶一點虹彩
+        const rayFill = (c: number) =>
+          new FillGradient({
+            type: 'radial',
+            center: { x: rx, y: ry },
+            innerRadius: 0,
+            outerCenter: { x: rx, y: ry },
+            outerRadius: reach,
+            colorStops: [
+              { offset: 0, color: rgba(c, Math.min(1, fins.alpha * 1.1)) },
+              { offset: 1, color: rgba(c, fins.alpha * 0.15) },
+            ],
+            textureSpace: 'global',
+          });
+        const rayColors = [mix(fins.color, 0xffffff, 0.35), sheen, light].map(rayFill);
+        (sh.rays ?? []).forEach((ray, i) => g.poly(ray, false).stroke({ fill: rayColors[i % 3], width: Math.max(0.7, body.ry * 0.035), cap: 'round', join: 'round' }));
       } else if (sh.kind === 'fill') {
         // 底色深一點、上面再疊一層亮的，看起來是薄薄一片透光的鰭
         g.poly(sh.points).fill({ color: deep, alpha: fins.alpha * 0.5 });
