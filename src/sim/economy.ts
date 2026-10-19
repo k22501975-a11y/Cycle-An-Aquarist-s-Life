@@ -98,6 +98,8 @@ export interface Economy {
   orders?: OrderBoard;
   /** 用儲值點數買的商城道具（背包）；舊存檔沒有。 */
   mall?: MallBag;
+  /** 玩過幾次對水小遊戲（前幾次強制玩，F5）。 */
+  dripsDone?: number;
 }
 
 export interface MallBag {

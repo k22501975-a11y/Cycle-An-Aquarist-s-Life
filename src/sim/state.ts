@@ -1,3 +1,4 @@
+import type { Personality } from './personality';
 import type { SnailState } from './snails';
 import type { Brood } from './parental';
 import type { FoodLot } from './food';
@@ -182,6 +183,8 @@ export type IchStage = 'none' | 'incubating' | 'visible';
 export interface Fish {
   id: number;
   species: FishSpeciesId;
+  /** 個性（F6）；沒有就由編號決定（personality.ts）。只影響畫面上的行為。 */
+  personality?: Personality;
   alive: boolean;
   /** 健康 0–1，歸零即死亡。 */
   health: number;

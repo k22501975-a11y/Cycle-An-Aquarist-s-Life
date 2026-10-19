@@ -4,13 +4,18 @@ import { advance, BadSave, inspect, verify, type ShippedFish } from './handlers'
 
 /**
  * 模擬小服務：給 Spring Boot 在內部呼叫（不要對外開放）。
- * SIM_PORT 預設 8091；SIM_TOKEN 有設定時，每個請求都要帶 X-Sim-Token。
+ * SIM_PORT 預設 8091；每個請求都要帶 X-Sim-Token（等於 SIM_TOKEN）。
+ * 沒設 SIM_TOKEN 就不啟動（#79）；本機真的要不設密碼，另外設 SIM_INSECURE_NO_TOKEN=1。
  */
 const PORT = Number(process.env.SIM_PORT ?? 8091);
 const HOST = process.env.SIM_HOST ?? '127.0.0.1';
 const TOKEN = process.env.SIM_TOKEN ?? '';
+if (!TOKEN && process.env.SIM_INSECURE_NO_TOKEN !== '1') {
+  console.error('沒有設定 SIM_TOKEN，模擬小服務不啟動（本機測試可以設 SIM_INSECURE_NO_TOKEN=1）');
+  process.exit(1);
+}
 /**
- * Spring Boot 一份存檔上限 4 MB（max-save-bytes），verify 一次帶兩份，所以這裡要大於兩倍；
+ * Spring Boot 一份存檔上限 3 MB（max-save-bytes），verify 一次帶兩份，所以這裡要大於兩倍；
  * 太小的話正常存檔也會被 413 擋下，變成存不了檔（#74）。
  */
 const MAX_BODY = 10 * 1024 * 1024;

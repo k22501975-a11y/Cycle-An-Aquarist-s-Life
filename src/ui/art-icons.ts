@@ -24,7 +24,8 @@ export type ArtIcon =
   | 'newgame'
   | 'owner'
   | 'bacteria'
-  | 'media-transfer';
+  | 'media-transfer'
+  | 'orders';
 
 export function artUrl(name: ArtIcon): string {
   return `${import.meta.env.BASE_URL}art/ui/icon-${name}.webp`;
@@ -58,6 +59,7 @@ const SHEET_ART: Record<string, ArtIcon> = {
   雲端存檔: 'settings',
   開發者數值: 'settings',
   商店: 'shop',
+  訂單: 'orders',
   購買: 'shop',
   設備與維護: 'gear',
   餵食: 'feed',

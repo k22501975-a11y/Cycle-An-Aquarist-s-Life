@@ -242,13 +242,36 @@ export const TIPS: Tip[] = [
 ];
 
 export interface TutorialProgress {
-  /** 目前在第幾個任務（等於 QUESTS.length 表示全部完成）。 */
+  /** 目前在第幾個任務（等於 QUESTS.length 表示全部完成）。存檔時另外記任務 id（quest），任務清單改了也對得回來。 */
   step: number;
   skipped: boolean;
   seenTips: string[];
 }
 
 export const TUTORIAL_KEY = 'cycle.tutorial.v1';
+
+/** 存檔裡記「目前任務 id」以前（只有數字 step）的任務順序；舊進度照這份換算。 */
+export const LEGACY_QUEST_IDS = ['plant', 'test', 'fish', 'feed', 'water', 'cycled', 'babies'];
+/** 存檔裡表示教學全部做完的任務 id。 */
+const ALL_DONE = 'done';
+
+/** 任務 id 換成目前清單的第幾個；做完或找不到（任務被拿掉）就回 null。 */
+function stepOf(id: string): number | null {
+  if (id === ALL_DONE) return QUESTS.length;
+  const i = QUESTS.findIndex((q) => q.id === id);
+  return i >= 0 ? i : null;
+}
+
+/**
+ * 讀回存的進度是第幾個任務。新存檔看任務 id；舊存檔只有數字，照 LEGACY_QUEST_IDS 換算，
+ * 新插進來的任務（擺石頭、取名…）排在玩家已經走過的位置之前就直接略過，不會讓做完教學的玩家重跑、重領獎勵。
+ */
+function restoreStep(p: { step?: unknown; quest?: unknown }): number {
+  const raw = typeof p.step === 'number' && p.step >= 0 ? Math.floor(p.step) : 0;
+  if (typeof p.quest === 'string') return stepOf(p.quest) ?? Math.min(QUESTS.length, raw);
+  if (raw >= LEGACY_QUEST_IDS.length) return QUESTS.length;
+  return stepOf(LEGACY_QUEST_IDS[raw]) ?? Math.min(QUESTS.length, raw);
+}
 
 export function newProgress(): TutorialProgress {
   return { step: 0, skipped: false, seenTips: [] };
@@ -284,9 +307,9 @@ export function loadProgress(store: KeyValueStore): TutorialProgress {
   try {
     const raw = store.getItem(TUTORIAL_KEY);
     if (!raw) return newProgress();
-    const p = JSON.parse(raw) as Partial<TutorialProgress>;
+    const p = JSON.parse(raw) as Partial<TutorialProgress> & { quest?: unknown };
     return {
-      step: typeof p.step === 'number' && p.step >= 0 ? Math.min(QUESTS.length, Math.floor(p.step)) : 0,
+      step: restoreStep(p),
       skipped: p.skipped === true,
       seenTips: Array.isArray(p.seenTips) ? p.seenTips.filter((t): t is string => typeof t === 'string') : [],
     };
@@ -297,7 +320,7 @@ export function loadProgress(store: KeyValueStore): TutorialProgress {
 
 export function saveProgress(store: KeyValueStore, p: TutorialProgress): void {
   try {
-    store.setItem(TUTORIAL_KEY, JSON.stringify(p));
+    store.setItem(TUTORIAL_KEY, JSON.stringify({ ...p, quest: QUESTS[p.step]?.id ?? ALL_DONE }));
   } catch {
     // 存不了就算了
   }

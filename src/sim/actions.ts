@@ -1,3 +1,4 @@
+import { dripShock, type DripOutcome } from './drip';
 import { farmHabit, releaseShock } from './acclimation';
 import { co2Equilibrium, oxygenSaturation } from './chemistry';
 import { filterBacteriaShare } from './processes/nitrogen';
@@ -128,8 +129,11 @@ export interface AddFishOptions {
   strain?: number;
   /** 鰭型品系（GUPPY_FIN_STRAINS）。 */
   fin?: FinTrait;
-  /** 慢慢滴水對水（預設）；false 是直接倒進缸裡，水質差很多會休克（design/acclimation.md §2）。 */
-  drip?: boolean;
+  /**
+   * 慢慢滴水對水（預設）；false 是直接倒進缸裡，水質差很多會休克（design/acclimation.md §2）；
+   * 玩過對水小遊戲就傳結果（drip.ts），照剩下的差距和魚被嚇到的程度算休克。
+   */
+  drip?: boolean | DripOutcome;
   /** 帶著哪些潛伏的病（柱狀病、鰓吸蟲）。不指定時依店家機率決定。 */
   carries?: DiseaseKind[];
 }
@@ -158,7 +162,8 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
   if (species === 'guppy') fish.genome = storeGenome(state.rng, fish.sex, options.strain, options.fin);
   // 店裡的魚習慣魚場的水；直接倒進差很多的缸會休克
   fish.acclimated = farmHabit(species);
-  const shock = releaseShock(state, fish.acclimated, options.drip ?? true);
+  const drip = options.drip ?? true;
+  const shock = typeof drip === 'boolean' ? releaseShock(state, fish.acclimated, drip) : dripShock(state, fish.acclimated, drip);
   fish.stress = Math.min(1, fish.stress + shock.stress);
   if (shock.harm > 0) {
     fish.health = Math.max(0.01, fish.health - shock.harm);
