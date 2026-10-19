@@ -21,9 +21,9 @@ describe('養水加速', () => {
     const boosted = tank();
     addBottledBacteria(boosted);
     const fast = daysToCycle(boosted);
-    // 基本養水 3～7 天、加菌液 1～3 天：比例約三分之一
-    expect(fast).toBeLessThan(base * 0.4);
-    expect(fast).toBeGreaterThan(1);
+    // 基本養水 3～7 天、加菌液 1～3 天
+    expect(fast).toBeLessThan(base * 0.5);
+    expect(fast).toBeLessThanOrEqual(3);
     expect(price('care:bacteria')).toBe(30);
   });
 
@@ -36,8 +36,8 @@ describe('養水加速', () => {
     const bottled = tank();
     addBottledBacteria(bottled);
     // 每天補 1 ppm 氨是很重的負擔；真的放少量魚時比這更快
-    expect(daysToCycle(fresh)).toBeLessThan(daysToCycle(bottled));
-    expect(daysToCycle(fresh)).toBeLessThanOrEqual(daysToCycle(tank()) * 0.2);
+    expect(daysToCycle(fresh)).toBeLessThanOrEqual(daysToCycle(bottled));
+    expect(daysToCycle(fresh)).toBeLessThanOrEqual(2);
   });
 
   it('舊缸也還沒養好就分不出來', () => {

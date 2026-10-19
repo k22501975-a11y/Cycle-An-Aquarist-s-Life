@@ -67,8 +67,8 @@ export function receiveCuttings(state: TankState, species: string, count: number
   return true;
 }
 
-/** 一瓶硝化菌液接種多少菌：濾材容量的這個比例（成熟濾材是一半，所以只是加快、不會立刻好）。 */
-export const BOTTLED_BACTERIA_SHARE = 0.04;
+/** 一瓶硝化菌液接種多少菌：濾材容量的這個比例（成熟濾材是一半）。無魚補氨約 3 天養好，自己養要 7 天。 */
+export const BOTTLED_BACTERIA_SHARE = 0.12;
 
 /**
  * 倒一瓶硝化菌液：給新缸一小批菌，把養水從幾天縮短到一兩天。
