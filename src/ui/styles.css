@@ -450,6 +450,7 @@ details.danger[open] { display: flex; flex-direction: column; gap: 8px; }
 .price-tag small { color: var(--muted); font-size: 11px; }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .shop-card { display: flex; flex-direction: column; min-width: 0; border-radius: 16px; overflow: hidden; border: 1px solid rgba(227, 189, 109, 0.3); background: linear-gradient(180deg, rgba(10, 36, 46, 0.4), rgba(10, 36, 46, 0.85)); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3); }
+.shop-card.locked .card-pic { filter: grayscale(0.85) brightness(0.6); }
 .shop-card.owned { border-color: var(--gold); }
 .card-pic { position: relative; display: grid; grid-template: 100% / 100%; place-items: center; height: 92px; padding: 8px 10px; background: radial-gradient(ellipse at 50% 35%, rgba(95, 180, 175, 0.55), rgba(18, 58, 64, 0.9) 75%); border-bottom: 1px solid rgba(227, 189, 109, 0.25); }
 .card-pic { overflow: hidden; }
@@ -822,3 +823,11 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 @keyframes scape-coach-drag { 0%, 12% { translate: 0 0; scale: 1; } 22% { translate: 0 0; scale: 0.88; } 50% { translate: -46px 0; scale: 0.88; } 78% { translate: 46px 0; scale: 0.88; } 90%, 100% { translate: 0 0; scale: 1; } }
 @keyframes scape-coach-track { 0%, 18%, 92%, 100% { opacity: 0; } 30%, 80% { opacity: 1; } }
 .scape-empty { display: flex; flex-direction: column; gap: 6px; }
+
+/* 開缸（F1-a）：每類一排設備卡，底下總價和按鈕；關掉面板時主畫面中間留一顆「開缸」按鈕 */
+.setup-cat h3 { margin: 12px 0 6px; font-size: 15px; }
+.setup-cat .card-note { color: var(--gold); }
+.setup-total { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 14px 0 6px; }
+.setup-panel > .row { justify-content: flex-end; gap: 8px; position: sticky; bottom: 0; z-index: 2; margin: 0 -20px; padding: 26px 20px 10px; /* 卡片捲到按鈕列後面要被蓋住（#186）：上緣淡出、下面不透明 */ background: linear-gradient(180deg, rgba(8, 28, 38, 0) 0, rgb(9, 28, 38) 22px); }
+.setup-cta { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5; font-size: 18px; padding: 14px 22px; box-shadow: 0 0 24px rgba(227, 189, 109, 0.6); }
+.setup-cta[hidden] { display: none; }

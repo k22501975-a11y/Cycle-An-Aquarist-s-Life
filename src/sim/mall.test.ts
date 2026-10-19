@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addMallGrant, feed, createTank, cureRefusal, FILTERS, freeAmmonia, HEATERS, infect, LIGHTS, linkTanks, mallBag, MAX_TANKS, placeMallTankset, step, TANKS, tanksetRefusal, useCure } from '.';
+import { addFish, feed, createTank, cureRefusal, FILTERS, freeAmmonia, HEATERS, infect, LIGHTS, linkTanks, mallBag, MAX_TANKS, placeMallTankset, setMallBag, step, TANKS, tanksetRefusal, useCure } from '.';
 import type { TankState } from '.';
 
 const home = (): TankState[] => {
@@ -10,12 +10,11 @@ const home = (): TankState[] => {
 };
 
 describe('商城道具', () => {
-  it('同一個道具只放進背包一次', () => {
+  it('背包照伺服器的庫存覆寫：沒列的道具是 0，不認得的道具不放', () => {
     const tanks = home();
-    expect(addMallGrant(tanks, { id: 7, item: 'cure' })).toBe(true);
-    expect(addMallGrant(tanks, { id: 7, item: 'cure' })).toBe(false);
-    expect(addMallGrant(tanks, { id: 8, item: 'nope' })).toBe(false);
-    expect(mallBag(tanks).cure).toBe(1);
+    mallBag(tanks).tankset = 3;
+    setMallBag(tanks, { cure: 2, nope: 5 });
+    expect(mallBag(tanks)).toEqual({ cure: 2, tankset: 0 });
   });
 
   it('特效藥只治症狀：白點退回潛伏、水裡的蟲還在，不處理會再發', () => {
@@ -27,7 +26,7 @@ describe('商城道具', () => {
     fish.recentDamage = { ich: 0.5 };
     t.water.ichPathogen = 5;
     expect(cureRefusal(tanks, fish)).toBe('背包裡沒有特效藥');
-    addMallGrant(tanks, { id: 1, item: 'cure' });
+    setMallBag(tanks, { cure: 1 });
     expect(useCure(tanks, fish)).toBe(true);
     expect(fish.ich.stage).toBe('incubating');
     expect(fish.health).toBeCloseTo(0.8);

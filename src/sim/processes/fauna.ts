@@ -13,12 +13,57 @@ const TAN_PER_MG_FOOD = 0.03;
 const FECES_PER_MG_FOOD = 0.25;
 /**
  * 飢餓值的時間尺度（天）。每天吃到 dailyFoodMg 剛好打平（一天兩餐）。
- * 吃不飽時代謝會放慢（HUNGER_SLOWDOWN），所以少量餵會停在「有點餓」而不是一路餓到底：
- * 每天吃 3/4 份停在約 0.6，要吃不到四成才會餓壞；完全不餵約 6 天才餓到底。
+ * 吃不飽時代謝會放慢（HUNGER_SLOWDOWN），所以少量餵會停在某個飢餓值，而不是一路餓到底：
+ * 一天兩次「一小撮」（0.85 份）停在約 0.4（吃飽），一天一次約 0.62（有點餓）；完全不餵約 8 天到 0.8（見 ADULT_FAST）。
  */
 const DAYS_TO_STARVING = 6;
-/** 飢餓值超過 0.3 後，每多 0.1 代謝慢 8%。 */
-const HUNGER_SLOWDOWN = 0.8;
+/** 飢餓值超過 0.3 後，每多 0.1 代謝慢 20%，最慢到原本的 15%。 */
+const HUNGER_SLOWDOWN = 2;
+const MIN_METABOLISM = 0.15;
+/**
+ * 寫實的斷食（design/mvp.md §4.7）：飢餓值到 start 以後才開始消耗體力，體力撐 days 天，用完才開始餓死（體弱的先死）。
+ * 成魚停餵約 8 天才到 0.8，再撐兩週（第 21 天後才會餓死）；仔魚、幼魚代謝快、存糧少，三到五天就撐不住。
+ * 有水草、有藻的缸可以啄生物膜，多撐約三成。
+ */
+const ADULT_FAST = { start: 0.75, days: 12 };
+const YOUNG_FAST = { start: 0.6, days: 1 };
+/** 小於成魚體長一半算仔魚、幼魚：飢餓值漲兩倍快。 */
+const YOUNG_LENGTH = 0.5;
+const YOUNG_HUNGER_RATE = 2;
+const GRAZING_BONUS = 1.3;
+
+const isYoung = (fish: Fish) => fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * YOUNG_LENGTH;
+const fastSpec = (fish: Fish) => (isYoung(fish) ? YOUNG_FAST : ADULT_FAST);
+
+/** 這條魚現在是不是餓到在消耗體力（餵飽以後體力還在慢慢補回來的不算）。 */
+export function isStarving(fish: Fish): boolean {
+  return fish.hunger >= fastSpec(fish).start;
+}
+
+/** 體力消耗了幾成：0 沒事，1 開始餓死（超過 1 繼續累積）。7～21 天的消瘦、褪色、不繁殖都看這個。 */
+export function starvation(state: TankState, fish: Fish): number {
+  const grazing = state.plants.length > 0 || state.algae > 0.05 ? GRAZING_BONUS : 1;
+  return fish.starvingHours / (fastSpec(fish).days * 24 * grazing);
+}
+
+/**
+ * 從現在起都不餵的話，這條魚幾個遊戲小時後體力耗盡、開始餓死（照現在的水溫估，給離線前的提醒用）。
+ */
+export function hoursUntilStarving(state: TankState, fish: Fish): number {
+  const spec = fastSpec(fish);
+  const tf = temperatureFactor(state.water.tempC);
+  const youngRate = isYoung(fish) ? YOUNG_HUNGER_RATE : 1;
+  let hunger = fish.hunger;
+  let h = 0;
+  while (hunger < spec.start && h < 24 * 60) {
+    const slowdown = Math.max(MIN_METABOLISM, 1 - HUNGER_SLOWDOWN * Math.max(0, hunger - 0.3));
+    hunger += (1 / 24 / DAYS_TO_STARVING) * Math.sqrt(tf) * slowdown * youngRate;
+    h += 1;
+  }
+  const grazing = state.plants.length > 0 || state.algae > 0.05 ? GRAZING_BONUS : 1;
+  return h + Math.max(0, 1 - starvation(state, fish)) * spec.days * 24 * grazing;
+}
+
 /** 胃口：一次最多吃到「飢餓值 × 幾天份」就飽了（吃不完的飼料留在缸裡腐敗）。 */
 const STOMACH_DAYS = 3;
 
@@ -108,7 +153,8 @@ export function computeStressors(state: TankState, fish: Fish, census: TankCensu
     // 鬥魚會到水面吸空氣，缺氧影響小很多
     oxygen: (Math.max(0, 4 - water.o2) / 2) * (sp.airBreather ? 0.2 : 1),
     co2: Math.max(0, water.co2 - 30) / 15,
-    hunger: Math.max(0, fish.hunger - 0.5),
+    // 斷食第一週沒影響，體力開始消耗後壓力才慢慢上來
+    hunger: Math.min(0.6, starvation(state, fish) * 0.5),
     crowding: Math.max(0, census.crowding - 1) * 0.8,
     group: sp.minGroup > 0 && sameSpecies < sp.minGroup ? 0.1 + (0.3 * (sp.minGroup - sameSpecies)) / sp.minGroup : 0,
     suddenChange:
@@ -167,7 +213,7 @@ function computeDamage(state: TankState, fish: Fish, sp: FishSpecies): Damage[] 
   add(phBeyondSurvival(state, fish) * 0.01, 'ph');
   const tempOut = Math.max(0, sp.tempLethal.min - water.tempC, water.tempC - sp.tempLethal.max);
   add(tempOut * 0.01, 'temperature');
-  if (fish.hunger >= 1) add(0.004, 'starvation');
+  if (starvation(state, fish) >= 1) add(0.03 * sensitivity, 'starvation');
   // 超過壽命後身體一天天衰弱，大約兩三週內老死
   const life = lifeFraction(fish);
   if (life > 1) add(0.002 + (life - 1) * 0.02, 'old_age');
@@ -202,9 +248,11 @@ export function updateFauna(state: TankState, dt: number): void {
     driftAcclimation(state, fish, dt);
 
     // 代謝：飢餓、耗氧、排出 CO₂。
-    const slowdown = 1 - HUNGER_SLOWDOWN * Math.max(0, fish.hunger - 0.3);
-    fish.hunger = Math.min(1, fish.hunger + (dt / 24 / DAYS_TO_STARVING) * Math.sqrt(tf) * slowdown);
-    fish.starvingHours = fish.hunger >= 1 ? fish.starvingHours + dt : 0;
+    const slowdown = Math.max(MIN_METABOLISM, 1 - HUNGER_SLOWDOWN * Math.max(0, fish.hunger - 0.3));
+    const youngRate = isYoung(fish) ? YOUNG_HUNGER_RATE : 1;
+    fish.hunger = Math.min(1, fish.hunger + (dt / 24 / DAYS_TO_STARVING) * Math.sqrt(tf) * slowdown * youngRate);
+    // 吃不到東西就消耗體力；吃得到以後恢復得比消耗快一倍
+    fish.starvingHours = fish.hunger >= fastSpec(fish).start ? fish.starvingHours + dt : Math.max(0, fish.starvingHours - 2 * dt);
     water.o2 = Math.max(0, water.o2 - (sp.o2UseMgPerHour * metabolic * tf * dt) / volume);
     water.co2 += (sp.o2UseMgPerHour * metabolic * 1.375 * tf * dt) / volume;
 

@@ -18,12 +18,46 @@ export const test = base.extend<{ pageErrors: string[] }>({
 
 export { expect };
 
-/** 開新遊戲並等到主畫面（水缸畫布與工具列）出現。 */
+/** 開新遊戲並等到主畫面（水缸畫布與工具列）出現。新遊戲會先跳出開缸面板，用推薦組合開缸。 */
 export async function openGame(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page.locator('#stage canvas')).toBeVisible();
   await expect(page.locator('button.tool').first()).toBeVisible();
-  await skipSetupShow(page);
+  // 等遊戲決定要不要開缸：還沒開缸就等開缸面板打開（CI 機器慢時面板會晚幾秒才出現）
+  const setup = page.locator('.sheet.open .setup-panel');
+  const needsSetup = () =>
+    page.evaluate(() => {
+      const cycle = (window as unknown as { cycle?: { game: { tanks: unknown[] }; sim: { needsSetup(s: unknown): boolean } } }).cycle;
+      return cycle ? cycle.sim.needsSetup(cycle.game.tanks[0]) : null;
+    });
+  await expect.poll(needsSetup).not.toBeNull();
+  if (await needsSetup()) {
+    // 開缸要多點幾下，軟體繪圖下大約多 20 秒：這個測試多給 30 秒
+    test.info().setTimeout(test.info().timeout + 30_000);
+    await expect(setup).toBeVisible();
+    // 不預選：還沒挑完設備時「開缸」按不下去，按「推薦組合」一次選好
+    const confirm = setup.getByRole('button', { name: '開缸', exact: true });
+    await expect(confirm).toBeDisabled();
+    // 直接送 click 事件：軟體繪圖一幀要好幾秒，真的點擊每下都要等好幾秒（這裡不是在測點擊本身）
+    await setup.getByRole('button', { name: '推薦組合', exact: true }).dispatchEvent('click');
+    await expect(confirm).toBeEnabled();
+    await confirm.dispatchEvent('click');
+    await expect(setup).toBeHidden();
+    // 挑完設備會演開缸（約 9 秒）：直接跳完
+    await skipSetupShow(page);
+    // 開完缸「開缸」任務馬上完成，老闆會跳出對話框：關掉，免得擋住後面的點擊。
+    // 在頁面裡一次點完：軟體繪圖時每次跟頁面來回要一秒多，一顆一顆點會吃掉大半個測試的時間
+    await page.evaluate(async () => {
+      for (let i = 0, idle = 0; i < 12 && idle < 4; i++) {
+        const btn = Array.from(document.querySelectorAll<HTMLElement>('.owner .owner-actions button:not(.go-shop)')).find((b) => b.offsetParent && b.textContent !== '跳過教學');
+        if (btn) {
+          btn.click();
+          idle = 0;
+        } else idle++;
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    });
+  }
 }
 
 /**

@@ -2,6 +2,8 @@ import { isJuvenile, isLightOn, recordEvent, type Fish, type TankState } from '.
 import { FISH_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 import { phenotype, type GuppyPhenotype } from './genetics';
 import { updateOrders, type OrderBoard } from './orders';
+import type { GoalState } from './goals';
+import type { DailyState } from './daily';
 
 /**
  * 經濟（GAME_DESIGN 第 7 節、market-and-breeding.md §3.1）：
@@ -9,7 +11,8 @@ import { updateOrders, type OrderBoard } from './orders';
  * 單機版沒有玩家市場，店家是唯一出口：收購價約店價五成，孔雀魚依稀有度分級（design/mvp.md §4.3）。
  */
 
-export const STARTING_COINS = 2000;
+/** 起始資金：買完「推薦組合」（1,400）剩 2,000，跟以前送設備時一樣多，經濟節奏（mvp.md §4.3）不變。 */
+export const STARTING_COINS = 3400;
 /** 台灣住宅電費約每度 3 元。 */
 export const KWH_PRICE = 3;
 /** 電費多久結算一次（遊戲天數）。 */
@@ -52,6 +55,8 @@ export const PRICES: Record<string, number> = {
   'controller:basic': 650,
   'quarantine:box': 700,
   'care:bacteria': 30,
+  'care:holiday': 40,
+  'feeder:auto': 600,
   'substrate:sand': 200,
   'substrate:soil': 450,
   'substrate:coral': 300,
@@ -83,10 +88,24 @@ export interface Economy {
   starterPackHours?: number;
   /** 下一個新缸用的 id 區段（每缸的魚和水草 id 從不同區段開始，魚換缸也不會撞號）。 */
   nextTankBlock?: number;
+  /** 新手教學之後的目標與解鎖（M19）；舊存檔沒有，第一次檢查時建立。 */
+  goals?: GoalState;
+  /** 累計賣給店家幾條魚。 */
+  fishSold?: number;
+  /** 已經領過獎勵的新手任務（任務進度存在裝置上，換裝置、匯入存檔重跑教學也不能再領）。 */
+  questRewards?: string[];
+  /** 手上還沒用的假期飼料錠（目標送的）。 */
+  holidayTablets?: number;
   /** 店家訂單板（M21）；舊存檔沒有，第一次更新時掛上。 */
   orders?: OrderBoard;
-  /** 用儲值點數買的商城道具（背包）；舊存檔沒有。 */
+  /** 用儲值點數買的商城道具（背包）：只是伺服器庫存的副本（docs/ledger.md §4），打開商城、用道具後照伺服器的數字覆寫；舊存檔沒有。 */
   mall?: MallBag;
+  /** 新遊戲還沒開缸（還沒挑設備）；開完缸就刪掉。舊存檔沒有＝已經開過。 */
+  setupPending?: boolean;
+  /** 今天的每日小事（F3）；舊存檔沒有，開完缸第一次更新時出題。 */
+  daily?: DailyState;
+  /** 已經套用到伺服器帳本的第幾筆（市場的收支，docs/ledger.md）；舊存檔沒有＝0。 */
+  ledgerSeq?: number;
   /** 玩過幾次對水小遊戲（前幾次強制玩，F5）。 */
   dripsDone?: number;
 }
@@ -96,8 +115,6 @@ export interface MallBag {
   cure: number;
   /** 熟成套缸幾組（還沒擺出來）。 */
   tankset: number;
-  /** 已經放進背包的伺服器道具編號（同一個不會領兩次）。 */
-  claimed: number[];
 }
 
 /** 保底起步包：整缸死光又沒錢時，水族店老闆送 3 條孔雀魚（GAME_DESIGN 第 14 節）。 */
@@ -123,6 +140,18 @@ export function claimStarterPack(state: TankState, addGuppy: (state: TankState, 
 
 export function economy(state: TankState): Economy {
   return (state.economy ??= { coins: STARTING_COINS, kwh: 0, lastBillHours: state.hours, sold: { day: -1, count: 0 }, cuttings: {} });
+}
+
+/**
+ * 套用一筆伺服器帳本的收支（市場的扣款、入帳，docs/ledger.md §3.3）：照 delta 加減，不用伺服器回傳的餘額覆蓋，
+ * 不然這中間本機花掉的錢會被加回來。已經套用過的（ledgerSeq 不比現在大）不再加。回傳有沒有套用。
+ */
+export function applyLedger(state: TankState, entry: { delta: number; ledgerSeq: number }): boolean {
+  const e = economy(state);
+  if (entry.ledgerSeq <= (e.ledgerSeq ?? 0)) return false;
+  e.coins += entry.delta;
+  e.ledgerSeq = entry.ledgerSeq;
+  return true;
 }
 
 export function price(key: string): number {
@@ -235,12 +264,24 @@ function countSale(state: TankState): boolean {
 }
 
 /** 把一條魚賣給水族店，回傳拿到多少錢（不收就回傳 0）。 */
+/** 發新手任務獎勵：每個任務只發一次，記在存檔裡。回傳這次發了多少（領過就是 0）。 */
+export function claimQuestReward(state: TankState, questId: string, coins: number): number {
+  const e = economy(state);
+  const got = (e.questRewards ??= []);
+  if (got.includes(questId)) return 0;
+  got.push(questId);
+  e.coins += coins;
+  return coins;
+}
+
 export function sellFish(state: TankState, fishId: number): number {
   const fish = state.fish.find((f) => f.id === fishId);
   if (!fish || buybackRefusal(fish) || !countSale(state)) return 0;
   const coins = fishBuybackPrice(fish);
   state.fish = state.fish.filter((f) => f !== fish);
-  economy(state).coins += coins;
+  const e = economy(state);
+  e.coins += coins;
+  e.fishSold = (e.fishSold ?? 0) + 1;
   return coins;
 }
 

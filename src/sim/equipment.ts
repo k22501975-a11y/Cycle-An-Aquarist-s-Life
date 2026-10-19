@@ -141,7 +141,7 @@ export const SUBSTRATES = {
     id: 'soil',
     name: '水草泥',
     khAbsorb: { rate: 0.02, capacity: 1700 },
-    ammoniaLeach: { mgPerHour: 0.15, decayHours: 240 },
+    ammoniaLeach: { mgPerHour: 0.3, decayHours: 240 },
     plantNutrients: 0.4,
     bacteriaSurface: 0.002,
   },

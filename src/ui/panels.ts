@@ -1,4 +1,5 @@
 import type { SoundId } from '../audio/sounds';
+import { FEATURES } from '../features';
 import { substrateName, tankSubstrateLook } from '../render/substrate';
 import { kitColor, type KitParam } from '../render/ops-fx';
 import {
@@ -48,7 +49,14 @@ import {
   canClaimStarterPack,
   claimStarterPack,
   buyTank,
+  addHolidayTablet,
   buyTankRefusal,
+  HOLIDAY_TABLET_DAYS,
+  installFeeder,
+  LOCKED_SPECIES,
+  speciesUnlocked,
+  tankLock,
+  unlockHint,
   moveFish,
   newTankCost,
   removeTank,
@@ -108,7 +116,9 @@ import {
   QUARANTINE_DAYS,
   quarantineDays,
   releaseQuarantine,
+  PINCH_MEALS,
   orderBoard,
+  matchingFish,
   orderSupply,
   moveToQuarantine,
   AIR_PUMPS,
@@ -150,6 +160,9 @@ import {
   type Region,
   type TankState,
   type TestKitReading,
+  markDaily,
+  needsSetup,
+  type MallItemId,
 } from '../sim';
 import { applySeason, type Game } from '../game/game';
 import { h } from './dom';
@@ -180,10 +193,14 @@ export interface PanelContext {
   moment?: (id: MomentId, spec: CelebrateSpec) => boolean;
   /** 這條魚在缸裡的樣子（觀察面板頂端的大圖）；沒有就不放圖。 */
   fishPic?: (fish: Fish) => string | null;
+  /** 打開開缸（挑設備）面板。 */
+  openSetup?: () => void;
   /** 拿到錢的演出：金幣從 from 飛進錢包（F8）。 */
   reward?: (from: DOMRect | null, amount: number) => void;
   /** 剛放進缸的魚（對水小遊戲對得完美時，魚一進缸就聚光展開尾巴）。 */
   welcome?: (fishIds: number[], perfect: boolean) => void;
+  /** 用商城道具：先跟伺服器扣一個，成功才 apply；回傳 null 是成功，不然是原因。 */
+  useMall?: (item: MallItemId, apply: () => boolean) => Promise<string | null>;
 }
 
 /** 沒有復原機制時（例如測試）就直接做並顯示通知。 */
@@ -265,8 +282,8 @@ export function feedPanel(ctx: PanelContext): Node {
     h(
       'div.row',
       {},
-      // 一小撮是新缸期的維持量：一天兩次，魚不會餓壞，殘餌也少
-      button('一小撮', give(meal * 0.75, '一小撮')),
+      // 一小撮是新缸期的維持量：一天兩次吃得飽、一天一次有點餓但不會餓壞，殘餌也少
+      button('一小撮', give(meal * PINCH_MEALS, '一小撮')),
       button('一餐', give(meal, '一餐'), 'primary'),
       button('一大把', give(meal * 3, '一大把')),
     ),
@@ -438,7 +455,7 @@ export function ageLabel(days: number): string {
   return `約 ${years < 10 ? (Math.floor(years * 2) / 2).toString() : Math.floor(years)} 歲`;
 }
 
-export function fishPanel({ game, sheet, toasts, fishPic }: PanelContext, fishId: number): Node {
+export function fishPanel({ game, sheet, toasts, fishPic, useMall }: PanelContext, fishId: number): Node {
   const fish = game.state.fish.find((f) => f.id === fishId);
   if (!fish) return h('p', {}, '這條魚已經不在缸裡了。');
   if (!fish.alive) {
@@ -472,20 +489,22 @@ export function fishPanel({ game, sheet, toasts, fishPic }: PanelContext, fishId
     h('p', {}, conditionLine(fish)),
     h('p.hint', {}, '症狀只是線索：先用測試劑檢查水質，再判斷是環境問題還是生病。'),
     game.tanks.length > 1 ? moveFishRow(game, sheet, toasts, fish) : null,
-    cureButton(game, sheet, toasts, fish),
+    cureButton(game, sheet, toasts, fish, useMall),
   );
 }
 
 /** 背包裡有特效藥、這尾魚又用得上時才出現。 */
-function cureButton(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish): Node | null {
+function cureButton(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish, useMall: PanelContext['useMall']): Node | null {
   const left = mallBag(game.tanks).cure;
-  if (left <= 0 || cureRefusal(game.tanks, fish)) return null;
+  if (!useMall || left <= 0 || cureRefusal(game.tanks, fish)) return null;
   return h(
     'div.stack',
     {},
-    button(`用特效藥（背包剩 ${left} 瓶）`, () => {
-      if (!game.actAll((tanks) => useCure(tanks, fish))) return;
-      toasts.show('症狀退了一些。特效藥只治症狀，記得找出生病的原因（水質、病原），不然還會再發');
+    button(`用特效藥（背包剩 ${left} 瓶）`, async () => {
+      // 背包是伺服器庫存的副本：先跟伺服器扣一瓶，成功才治
+      const why = await useMall('cure', () => useCure(game.tanks, fish));
+      if (why) toasts.show(why, 'warn');
+      else toasts.show('症狀退了一些。特效藥只治症狀，記得找出生病的原因（水質、病原），不然還會再發');
       sheet.refresh();
     }),
     h('p.hint', {}, '特效藥只治症狀：水裡的病原和水質問題還在。水質造成的傷，效果只有一半。'),
@@ -722,6 +741,8 @@ const yuan = (n: number) => `${n.toLocaleString('zh-TW')} 元`;
 
 export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
   const { game, sheet, toasts } = ctx;
+  // 還沒開缸：設備在開缸時一次挑好，先在商店買會跟開缸重複扣錢（#154 審查）
+  if (needsSetup(game.state)) return h('div.stack', {}, h('p.hint', {}, '缸還沒開好。先挑好魚缸和設備，開完缸再來逛商店。'), ctx.openSetup ? button('去開缸', ctx.openSetup, 'primary') : '');
   const coins = economy(game.state).coins;
   const tabs = iconTabs<ShopTab>(
     [
@@ -890,7 +911,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         '新缸還沒養好水就放太多魚，會氨中毒。',
         '孔雀魚和櫻花蝦會自己繁殖，但成魚會吃仔魚和仔蝦，水草種密一點才躲得掉。斑馬魚會輕微咬孔雀魚公魚的長尾巴。',
         '鬥魚會到水面吸空氣，不怕缺氧；但兩尾公鬥魚不能同缸，公鬥魚也會去咬孔雀魚公魚的長尾巴，約三成的鬥魚會獵蝦。水晶蝦很嬌貴：要偏酸的軟水、水溫 24°C 以下，26°C 以上很危險，夏天要開冷氣。',
-        '鳳尾短鯛會自己帶小孩：要有石頭或沉木當洞穴、水溫 25°C 以上。護幼中的母魚會趕走靠近的魚，缸小的話其他魚會很緊張。',
+        FEATURES.apisto ? '鳳尾短鯛會自己帶小孩：要有石頭或沉木當洞穴、水溫 25°C 以上。護幼中的母魚會趕走靠近的魚，缸小的話其他魚會很緊張。' : null,
         `孔雀魚（pH ${FISH_SPECIES.guppy.phSurvive.min}–${FISH_SPECIES.guppy.phSurvive.max} 都能慢慢適應）照品系賣。同品系配對生出來的大多一樣；不同品系混養會生出各種組合，也可能冒出藏在基因裡的白子。`,
         '鰭型品系：燕尾、大耳是隱性，要兩邊都帶才長得出來；緞帶、大C 的公魚交接器太長不能配，要用母魚配一般公魚；劍尾只會傳給兒子。',
       ]),
@@ -905,7 +926,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       ),
       h('h3', {}, '其他魚蝦'),
       cardGrid(
-        ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).filter((id) => id !== 'guppy').map((id) => {
+        ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).filter((id) => id !== 'guppy' && (id !== 'apisto' || FEATURES.apisto)).map((id) => {
           const sp = FISH_SPECIES[id];
           const chips = [`${sp.temp.min}–${sp.temp.max}°C`, `pH ${sp.phSurvive.min}–${sp.phSurvive.max}`, sp.minGroup ? `群游 ${sp.minGroup}+` : ''].filter(Boolean);
           // 短鯛成對賣：一公一母才會產卵護幼；鬥魚公母分開賣
@@ -915,6 +936,9 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
               : id === 'betta'
                 ? [add(`公 ${FISH_PRICES.betta}`, buyOne(id, 'male', FISH_PRICES.betta)), add(`母 ${BETTA_FEMALE_PRICE}`, buyOne(id, 'female', BETTA_FEMALE_PRICE))]
                 : [add('+1', buyFish(id, 1)), add('+6', buyFish(id, 6))];
+          // 鬥魚、水晶蝦要先完成目標才開賣（goals.ts，M19）
+          const lock = LOCKED_SPECIES[id];
+          if (lock && !speciesUnlocked(game.tanks, id)) return shopCard({ art: speciesArt(id), name: sp.name, price: null, chips: ['🔒 ' + unlockHint(lock)], actions: [], cls: '.locked' });
           return shopCard({ art: speciesArt(id), name: sp.name, price: FISH_PRICES[id], unit: '/隻', chips, actions });
         }),
       ),
@@ -1056,6 +1080,32 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         item(CHILLERS.small.name, 'chiller:small', !!eq.chiller, () => purchase(ctx, price('chiller:small'), (st) => (st.equipment.chiller = { spec: CHILLERS.small, targetC: 26, on: true, cooling: false }), `裝上${CHILLERS.small.name}`), '水溫壓在設定值，很耗電', 'gear/chiller.webp'),
         item('控溫器', 'controller:basic', !!eq.controller, () => purchase(ctx, price('controller:basic'), (st) => (st.equipment.controller = { maxC: 30, tripped: false }), '裝上控溫器'), '超溫就切斷加熱棒'),
       ),
+      // 出遠門用品（mvp.md §4.7）：關掉遊戲時間照常走，沒人餵魚會餓
+      h('h3', {}, '出遠門'),
+      cardGrid(
+        shopCard({
+          art: 'gear/vacation-tablets.webp',
+          name: '假期飼料錠',
+          price: (economy(game.state).holidayTablets ?? 0) > 0 ? null : price('care:holiday'),
+          unit: '/顆',
+          chips: [`撐約 ${HOLIDAY_TABLET_DAYS} 天`, '有一點髒水'],
+          note: (economy(game.state).holidayTablets ?? 0) > 0 ? `手上有 ${economy(game.state).holidayTablets} 顆送的` : '沉在缸底慢慢溶解，出門前放一顆',
+          actions: [
+            button('放一顆', () => {
+              const e = economy(game.state);
+              if ((e.holidayTablets ?? 0) > 0) {
+                game.act((st) => {
+                  economy(st).holidayTablets = (economy(st).holidayTablets ?? 1) - 1;
+                  addHolidayTablet(st);
+                });
+                toasts.show(`放了一顆假期飼料錠，約 ${HOLIDAY_TABLET_DAYS} 天慢慢溶完`);
+                sheet.refresh();
+              } else purchase(ctx, price('care:holiday'), (st) => addHolidayTablet(st), `放了一顆假期飼料錠，約 ${HOLIDAY_TABLET_DAYS} 天慢慢溶完`);
+            }, 'small'),
+          ],
+        }),
+        item('自動餵食器', 'feeder:auto', !!eq.feeder, () => purchase(ctx, price('feeder:auto'), (st) => installFeeder(st, 1), '裝上自動餵食器，每天早上 9 點投一小撮'), '每天定時投一小撮，吃電池', 'gear/auto-feeder.webp'),
+      ),
     );
   } else {
     content = sellContent(ctx);
@@ -1082,8 +1132,10 @@ function sellContent(ctx: PanelContext): Node {
     return lo === hi ? `每隻 ${lo} 元` : `每隻 ${lo}～${hi} 元`;
   };
   const sellOne = (id: FishSpeciesId) => () => {
-    // 先賣公的，母的留著繁殖
-    const pick = [...s.fish.filter((f) => f.species === id && !buybackRefusal(f))].sort((a, b) => (a.sex === b.sex ? 0 : a.sex === 'male' ? -1 : 1))[0];
+    // 先賣公的，母的留著繁殖；訂單要的魚最後才賣（一般玩家一直按也不會把湊單的魚賣掉）
+    const held = new Set(orderBoard(s).orders.flatMap((o) => (o.kind === 'fish' ? matchingFish(s, o).slice(0, o.count).map((f) => f.id) : [])));
+    const rank = (f: Fish) => (held.has(f.id) ? 2 : 0) + (f.sex === 'male' ? 0 : 1);
+    const pick = [...s.fish.filter((f) => f.species === id && !buybackRefusal(f))].sort((a, b) => rank(a) - rank(b))[0];
     if (!pick) return;
     const got = game.act((st) => sellFish(st, pick.id));
     if (got > 0) {
@@ -1530,6 +1582,7 @@ export function tanksPanel(ctx: PanelContext): Node {
     const set = TANK_SETS[id];
     const cost = newTankCost(game.tanks, id);
     const refusal = buyTankRefusal(game.tanks, id);
+    const lock = tankLock(game.tanks, id);
     const buy = () => {
       if (refusal) {
         toasts.show(refusal === '錢不夠' ? `錢不夠：要 ${cost} 元，現在有 ${coins} 元` : refusal, 'warn');
@@ -1547,7 +1600,9 @@ export function tanksPanel(ctx: PanelContext): Node {
       name: set.tank.name,
       price: cost,
       chips: [`${set.tank.volumeL}L`, set.filter.name.replace(/（.*）/, ''), set.heater.name, slot > 0 ? '含缸架' : ''].filter(Boolean),
+      note: lock ? '🔒 ' + unlockHint(lock) : undefined,
       actions: [button('買', buy, refusal ? '' : 'primary')],
+      cls: lock ? '.locked' : '',
     });
   });
   return h(
@@ -1569,6 +1624,8 @@ const PEST_ORDER: PestKind[] = ['bladder', 'ramshorn', 'mts'];
 
 /** 螺的管理：看看缸裡有多少螺，各種清除方法各有代價（design/snails.md §3）。 */
 export function snailPanel(ctx: PanelContext): Node {
+  // 每日小事「找到缸裡的螺」：打開螺的面板就算看過（之後畫面支援點缸裡的螺再改成點螺）
+  markDaily(ctx.game.tanks, 'snail');
   const { game, sheet, toasts } = ctx;
   const st = game.state;
   const s = st.snails;

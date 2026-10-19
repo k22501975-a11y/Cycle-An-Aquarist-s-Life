@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, buyQuarantine, createTank, feed, FILTERS, HEATERS, TANKS, useTestKit, waterChange } from '../sim';
+import { addFish, addHardscape, addPlant, applySetup, buyQuarantine, economy, HARDSCAPE, createTank, feed, FILTERS, HEATERS, RECOMMENDED_SETUP, TANKS, useTestKit, waterChange } from '../sim';
 import { advanceQuest, currentQuest, cycleProgress, loadProgress, newProgress, overloadWarning, pairProgress, pendingTip, questShopTab, QUESTS, saveProgress } from './tutorial';
 
 function tank() {
@@ -9,8 +9,12 @@ function tank() {
 describe('新手引導任務', () => {
   it('照順序一步步完成，每次只前進一步', () => {
     const s = tank();
+    economy(s).setupPending = true;
     const p = newProgress();
-    expect(currentQuest(p)?.id).toBe('plant');
+    expect(currentQuest(p)?.id).toBe('setup');
+    expect(advanceQuest(p, s)).toBeNull();
+    expect(applySetup(s, RECOMMENDED_SETUP)).toBeNull();
+    expect(advanceQuest(p, s)?.id).toBe('setup');
     expect(advanceQuest(p, s)).toBeNull();
     addPlant(s, 'anubias');
     useTestKit(s);
@@ -24,6 +28,12 @@ describe('新手引導任務', () => {
     s.hours = 30;
     waterChange(s, 0.3);
     expect(advanceQuest(p, s)?.id).toBe('water');
+    // 等養水的空檔：擺造景、取名字
+    expect(currentQuest(p)?.id).toBe('scape');
+    addHardscape(s, HARDSCAPE.lava);
+    expect(advanceQuest(p, s)?.id).toBe('scape');
+    s.label = '第一缸';
+    expect(advanceQuest(p, s)?.id).toBe('name');
     expect(currentQuest(p)?.id).toBe('cycled');
   });
 
@@ -44,6 +54,10 @@ describe('新手引導任務', () => {
     expect(advanceQuest(p, s)?.id).toBe('cycled');
   });
 
+  it('新手獎勵加起來 800（第 21 天買第二缸靠它，mvp.md §4.3）', () => {
+    expect(QUESTS.reduce((a, q) => a + q.reward, 0)).toBe(800);
+  });
+
   it('跳過後就沒有任務', () => {
     const p = { ...newProgress(), skipped: true };
     expect(currentQuest(p)).toBeNull();
@@ -56,6 +70,27 @@ describe('新手引導任務', () => {
     expect(loadProgress(store)).toEqual({ step: 3, skipped: false, seenTips: ['ich'] });
     data.set('cycle.tutorial.v1', '{"step":99,"seenTips":[1,"x"]}');
     expect(loadProgress(store)).toEqual({ step: QUESTS.length, skipped: false, seenTips: ['x'] });
+  });
+
+  it('任務清單改了，舊進度照任務 id 對回來：做完教學的不會重跑、重領獎勵', () => {
+    const data = new Map<string, string>();
+    const store = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v), removeItem: () => {} };
+    const idx = (id: string) => QUESTS.findIndex((q) => q.id === id);
+    // 存的時候記任務 id
+    saveProgress(store, { step: idx('cycled'), skipped: false, seenTips: [] });
+    expect(JSON.parse(data.get('cycle.tutorial.v1')!).quest).toBe('cycled');
+    // id 比數字優先（例如前面又插了新任務，數字已經對不上）
+    data.set('cycle.tutorial.v1', '{"step":2,"quest":"babies","seenTips":[]}');
+    expect(loadProgress(store).step).toBe(idx('babies'));
+    data.set('cycle.tutorial.v1', '{"step":2,"quest":"done","seenTips":[]}');
+    expect(loadProgress(store).step).toBe(QUESTS.length);
+    // 只有數字的舊存檔照舊的 7 個任務換算：做完（7）還是做完；第 5 個（養水）對到現在的養水
+    data.set('cycle.tutorial.v1', '{"step":7,"seenTips":[]}');
+    expect(loadProgress(store).step).toBe(QUESTS.length);
+    data.set('cycle.tutorial.v1', '{"step":5,"seenTips":[]}');
+    expect(QUESTS[loadProgress(store).step].id).toBe('cycled');
+    data.set('cycle.tutorial.v1', '{"step":1,"seenTips":[]}');
+    expect(QUESTS[loadProgress(store).step].id).toBe('test');
   });
 });
 
@@ -147,7 +182,7 @@ describe('養水任務進度', () => {
 
   it('養水任務的老闆說明有講要等多久、怎麼加快', () => {
     const lines = QUESTS.find((q) => q.id === 'cycled')!.lines.join('');
-    expect(lines).toContain('3～7 天');
+    expect(lines).toContain('4～7 天');
     expect(lines).toContain('硝化菌液');
   });
 });
@@ -155,6 +190,7 @@ describe('養水任務進度', () => {
 describe('任務直接帶到商店對應的分頁', () => {
   it('種水草的任務開水草頁、放魚開魚頁、養水開設備頁', () => {
     const p = newProgress();
+    p.step = QUESTS.findIndex((q) => q.id === 'plant');
     expect(questShopTab(p)).toBe('plants');
     p.step = QUESTS.findIndex((q) => q.id === 'fish');
     expect(questShopTab(p)).toBe('fish');

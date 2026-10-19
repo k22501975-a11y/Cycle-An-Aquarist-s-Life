@@ -16,10 +16,17 @@ interface Tank {
   rng: { seed: number };
   fish: Fish[];
   water: { tan: number; no2: number; no3: number };
+  label?: string;
 }
 export interface CycleDebug {
   game: { state: Tank; tanks: Tank[]; clock: { timeScale: number }; advance(realMs: number): number; act(fn: (s: Tank) => void): void };
-  sim: { feed(s: Tank, mg: number): void; waterChange(s: Tank, fraction: number): void; FISH_SPECIES: Record<string, { dailyFoodMg: number }> };
+  sim: {
+    feed(s: Tank, mg: number): void;
+    waterChange(s: Tank, fraction: number): void;
+    FISH_SPECIES: Record<string, { dailyFoodMg: number }>;
+    addHardscape(s: Tank, spec: unknown): void;
+    HARDSCAPE: Record<string, unknown>;
+  };
 }
 export type CycleWindow = Window & { cycle: CycleDebug };
 

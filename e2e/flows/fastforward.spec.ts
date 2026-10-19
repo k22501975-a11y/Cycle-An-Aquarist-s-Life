@@ -12,7 +12,9 @@ test('一公兩母快轉 3 週以上：生小魚、長大，畫面不當機', as
   test.setTimeout(480_000);
   const consoleErrors = watchConsoleErrors(page);
   await startGame(page);
-  await page.locator('.owner button.btn.small', { hasText: '跳過教學' }).click();
+  // 開缸後老闆的引導可能已經被 openGame 關掉，還在才按
+  const skip = page.locator('.owner button.btn.small', { hasText: '跳過教學' });
+  if (await skip.isVisible()) await skip.dispatchEvent('click');
   await setSpeed(page, '暫停時間');
   await seedRng(page, 2);
   await tool(page, '商店');
