@@ -3,6 +3,10 @@ import { blankGameState, newGameState } from '../game/game';
 import {
   addFish,
   addHardscape,
+  DAILY_COST,
+  DAILY_COUNT,
+  placeHardscape,
+  placePlant,
   addPlant,
   canClaimDaily,
   claimDaily,
@@ -30,7 +34,7 @@ function doTask(tanks: TankState[], id: DailyTaskId): void {
   if (id === 'feed') feed(s, 5);
   if (id === 'water') waterChange(s, 0.3);
   if (id === 'trim') trimPlant(s, s.plants[0].id);
-  if (id === 'scape') addHardscape(s, HARDSCAPE.lava);
+  if (id === 'scape') placePlant(s, s.plants[0].id, { x: (s.plants[0].place?.x ?? 0.5) > 0.5 ? 0.2 : 0.8 });
   if (id === 'snail' || id === 'observe') markDaily(tanks, id);
 }
 
@@ -53,8 +57,8 @@ describe('每日 3 件小事（F3）', () => {
     updateDaily([s]);
     const ids = dailyTasks([s])!.tasks.map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
-    // 剛開缸沒魚、沒螺、沒長太長的草：只出得了測水和擺石頭
-    expect(ids.sort()).toEqual(['scape', 'test']);
+    // 剛開缸沒魚、沒螺、沒水草也沒石頭：只出得了測水
+    expect(ids).toEqual(['test']);
   });
 
   it('不出做不到的題目：沒魚不出餵食、沒螺不出找螺、草沒長長不出修剪', () => {
@@ -140,5 +144,30 @@ describe('每日 3 件小事（F3）', () => {
     updateDaily([a]);
     updateDaily([b]);
     expect(dailyTasks([a])!.tasks).toEqual(dailyTasks([b])!.tasks);
+  });
+
+  it('小事不要花錢（mvp.md §4.4.2，#188）：三件加起來的花費一定比獎勵少，不會要買新石頭', () => {
+    const costs = Object.values(DAILY_COST).sort((a, b) => b - a);
+    expect(costs.slice(0, DAILY_COUNT).reduce((a, b) => a + b, 0)).toBeLessThan(DAILY_REWARD);
+    // 錢花光了也照樣出「移動造景」
+    const s = richTank();
+    economy(s).coins = 0;
+    expect(eligibleDaily([s])).toContain('scape');
+  });
+
+  it('移動現有的石頭或沉木就算完成，出題前移的不算', () => {
+    const s = newGameState(4);
+    addHardscape(s, HARDSCAPE.lava);
+    s.hours = 24 * 3 + 8;
+    placeHardscape(s, 0, { x: 0.2 });
+    economy(s).daily = undefined;
+    updateDaily([s]);
+    const d = dailyTasks([s])!;
+    d.tasks = [{ id: 'scape', done: false }];
+    updateDaily([s]);
+    expect(d.tasks[0].done).toBe(false);
+    s.hours += 1;
+    placeHardscape(s, 0, { x: 0.7 });
+    expect(updateDaily([s])).toEqual(['scape']);
   });
 });
