@@ -1,5 +1,6 @@
 import type { SoundId } from '../audio/sounds';
 import { substrateName, tankSubstrateLook } from '../render/substrate';
+import { kitColor, type KitParam } from '../render/ops-fx';
 import {
   isShrimpSpecies,
   addBottledBacteria,
@@ -104,13 +105,8 @@ import {
   QUARANTINE_DAYS,
   quarantineDays,
   releaseQuarantine,
-  dismissOrder,
-  fulfillOrder,
   orderBoard,
-  orderRefusal,
   orderSupply,
-  orderTitle,
-  type ShopOrder,
   moveToQuarantine,
   AIR_PUMPS,
   CHILLERS,
@@ -153,6 +149,7 @@ import {
 } from '../sim';
 import { applySeason, type Game } from '../game/game';
 import { h } from './dom';
+import { ORDER_ICON, ordersPanel } from './orders-panel';
 import { BROOD_ISSUE_LABELS, DEATH_CAUSE_LABELS, fishName, SYMPTOM_LABELS } from './labels';
 import { artImg, ownerImg } from './art-icons';
 import { advice, cardGrid, guppyArt, iconTabs, plantArt, priceTag, shopCard, snailArt, speciesArt } from './shop-cards';
@@ -177,6 +174,8 @@ export interface PanelContext {
   moment?: (id: MomentId, spec: CelebrateSpec) => boolean;
   /** 這條魚在缸裡的樣子（觀察面板頂端的大圖）；沒有就不放圖。 */
   fishPic?: (fish: Fish) => string | null;
+  /** 拿到錢的演出：金幣從 from 飛進錢包（F8）。 */
+  reward?: (from: DOMRect | null, amount: number) => void;
 }
 
 /** 沒有復原機制時（例如測試）就直接做並顯示通知。 */
@@ -277,37 +276,67 @@ const GRADE_NOTES: Record<FoodGrade, string> = {
 export function waterChangePanel({ game, sheet, toasts, sound, undoable }: PanelContext): Node {
   let fraction = 0.3;
   let matchTemp = true;
-  const label = h('span', {}, '30%');
-  const slider = h('input', { type: 'range', min: '10', max: '80', step: '5', value: '30' }) as HTMLInputElement;
-  slider.addEventListener('input', () => {
-    fraction = Number(slider.value) / 100;
-    label.textContent = `${slider.value}%`;
+  // 一個小缸：上面要換掉的舊水標成黃濁色，下面留著的是缸裡的水，拉桿和選項都跟著動
+  const old = h('i.wc-old');
+  const pct = h('b.wc-pct');
+  const gauge = h('div.wc-tank', { 'aria-hidden': 'true' }, h('i.wc-keep'), old, pct);
+  const slider = h('input', { type: 'range', min: '10', max: '80', step: '5', value: '30', 'aria-label': '換水量' }) as HTMLInputElement;
+  const PRESETS = [
+    { pct: 20, name: '小換', note: '每週保養' },
+    { pct: 30, name: '一般', note: '推薦' },
+    { pct: 50, name: '大換', note: '水變差時' },
+  ];
+  const presetBtns = PRESETS.map((p) =>
+    h('button.wc-preset', { type: 'button', onclick: () => set(p.pct) }, h('span.wc-mini', { 'aria-hidden': 'true' }, h('i', { style: `height:${p.pct}%` })), h('b', {}, `${p.name} ${p.pct}%`), h('small', {}, p.note)),
+  );
+  const set = (value: number) => {
+    fraction = value / 100;
+    slider.value = String(value);
+    old.style.height = `${value}%`;
+    pct.textContent = `換 ${value}%`;
+    PRESETS.forEach((p, i) => presetBtns[i].classList.toggle('active', p.pct === value));
+  };
+  slider.addEventListener('input', () => set(Number(slider.value)));
+  set(30);
+  const temp = h('button.wc-temp.active', { type: 'button', 'aria-pressed': 'true' }, h('span.kit-thermo', { 'aria-hidden': 'true' }, h('i')), h('span', {}, h('b', {}, '新水對好溫度'), h('small', {}, '沒對溫，水溫驟變會讓魚緊迫')));
+  temp.addEventListener('click', () => {
+    matchTemp = !matchTemp;
+    temp.classList.toggle('active', matchTemp);
+    temp.setAttribute('aria-pressed', String(matchTemp));
   });
-  const check = h('input', { type: 'checkbox', checked: 'checked' }) as HTMLInputElement;
-  check.addEventListener('change', () => (matchTemp = check.checked));
   return h(
     'div.stack',
     {},
-    h('p.hint', {}, '換水能稀釋氨、亞硝酸鹽、硝酸鹽，並補回 KH。每週 20–30% 是好習慣。'),
-    h('label.field', {}, '換水量 ', label, slider),
-    h('label.check', {}, check, ' 新水對好溫度（沒對溫，水溫驟變會讓魚緊迫）'),
+    h('div.wc-top', {}, gauge, h('div.wc-presets', {}, ...presetBtns)),
+    h('label.field', {}, slider),
+    temp,
     button('開始換水', () => {
       doUndoable({ toasts, undoable }, () => game.act((st) => waterChange(st, fraction, matchTemp ? { tempC: st.water.tempC } : {})), `換了 ${Math.round(fraction * 100)}% 的水`);
       sound?.('water');
       sheet.close();
     }, 'primary'),
+    advice(['換水能稀釋氨、亞硝酸鹽、硝酸鹽，並補回 KH。每週 20–30% 是好習慣。']),
   );
 }
 
-const READING_ROWS: Array<{ key: keyof TestKitReading; label: string; unit: string }> = [
-  { key: 'ammonia', label: '氨 NH₃/NH₄⁺', unit: 'ppm' },
-  { key: 'nitrite', label: '亞硝酸鹽 NO₂', unit: 'ppm' },
-  { key: 'nitrate', label: '硝酸鹽 NO₃', unit: 'ppm' },
-  { key: 'ph', label: 'pH', unit: '' },
-  { key: 'kh', label: 'KH', unit: 'dKH' },
+const READING_ROWS: Array<{ key: keyof TestKitReading; label: string; short: string; unit: string; kit?: KitParam }> = [
+  { key: 'ammonia', label: '氨 NH₃/NH₄⁺', short: '氨', unit: 'ppm', kit: 'ammonia' },
+  { key: 'nitrite', label: '亞硝酸鹽 NO₂', short: '亞硝酸鹽', unit: 'ppm', kit: 'nitrite' },
+  { key: 'nitrate', label: '硝酸鹽 NO₃', short: '硝酸鹽', unit: 'ppm', kit: 'nitrate' },
+  { key: 'ph', label: 'pH', short: 'pH', unit: '', kit: 'ph' },
+  { key: 'kh', label: 'KH', short: 'KH', unit: 'dKH' },
 ];
 
-/** 顯示最近一次測水的結果（測試按鈕會先測一次）。 */
+const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
+
+/** 一支試管：裝著跟缸裡一樣的比色結果（KH 沒有比色，用淡藍）。 */
+function tube(color: string): HTMLElement {
+  const t = h('span.kit-tube', { 'aria-hidden': 'true' }, h('i'));
+  t.style.setProperty('--liquid', color);
+  return t;
+}
+
+/** 顯示最近一次測水的結果（測試按鈕會先測一次）：每一項是一支試管，顏色就是比色的結果。 */
 export function testKitPanel({ game }: PanelContext): Node {
   const test = game.state.lastTest;
   if (!test) return h('p', {}, '還沒測過水。');
@@ -315,16 +344,17 @@ export function testKitPanel({ game }: PanelContext): Node {
   return h(
     'div.stack',
     {},
-    h('p.hint', {}, '試劑只能比對色卡，讀到的是大約的級距。結果會顯示在上方的狀態列：超過一天會變淡（水可能已經變了），三天後就當作不知道。養水任務要看當天的讀數。'),
     h(
-      'table.readings',
+      'div.kit-grid',
       {},
       ...READING_ROWS.map((row) => {
         const tone = READING_TONES[row.key](r[row.key]);
-        return h('tr', {}, h('td', {}, row.label), h(`td.value.${tone}`, {}, `${r[row.key]} ${row.unit}`));
+        const color = row.kit ? hex(kitColor(row.kit, r[row.key])) : '#9fd3e6';
+        return h('div.kit-card', { title: row.label }, tube(color), h('span.kit-name', {}, row.short), h(`b.kit-value.${tone}`, {}, `${r[row.key]}`, row.unit ? h('small', {}, ` ${row.unit}`) : ''));
       }),
-      h('tr', {}, h('td', {}, '水溫（溫度計）'), h('td.value', {}, `${game.state.water.tempC.toFixed(1)} °C`)),
+      h('div.kit-card', { title: '溫度計' }, h('span.kit-thermo', { 'aria-hidden': 'true' }, h('i')), h('span.kit-name', {}, '水溫'), h('b.kit-value', {}, game.state.water.tempC.toFixed(1), h('small', {}, ' °C'))),
     ),
+    advice(['試劑只能比對色卡，讀到的是大約的級距。結果會顯示在上方的狀態列：超過一天會變淡（水可能已經變了），三天後就當作不知道。養水任務要看當天的讀數。']),
   );
 }
 
@@ -1007,6 +1037,7 @@ function sellContent(ctx: PanelContext): Node {
     const got = game.act((st) => sellFish(st, pick.id));
     if (got > 0) {
       ctx.sound?.('buy');
+      ctx.reward?.(null, got);
       const celebrated = ctx.moment?.('first_sale', {
         art: speciesArt(pick.species, pick.sex),
         title: `第一筆收入 ${got} 元！`,
@@ -1017,40 +1048,19 @@ function sellContent(ctx: PanelContext): Node {
     } else toasts.show('今天店家不收了，明天再來', 'warn');
     refresh();
   };
-  // 訂單板（M21）：一鍵交貨，魚從所有缸挑最普通的那幾條
+  // 訂單板（#143）有自己的入口和面板；這裡留一個連過去的按鈕
   const board = orderBoard(s);
-  const orderRow = (o: ShopOrder) => {
-    const have = orderSupply(game.tanks, o);
-    const ready = have >= o.count;
-    return h(
-      'div.item.order',
-      {},
-      h('div', {}, h('b', {}, orderTitle(o)), h('div.hint', {}, `每${o.kind === 'cutting' ? '株' : '尾'} ${o.unitPrice} 元・共 ${o.unitPrice * o.count} 元・${ready ? '湊齊了' : `還差 ${o.count - have}`}`)),
-      button(
-        '交貨',
-        () => {
-          const got = game.actAll((tanks) => fulfillOrder(tanks, o.id));
-          if (got > 0) {
-            ctx.sound?.('buy');
-            toasts.show(`交了「${orderTitle(o)}」，拿到 ${got} 元。明天會有新的單`);
-          } else toasts.show(orderRefusal(game.tanks, o.id) ?? '交不了', 'warn');
-          refresh();
-        },
-        ready ? 'primary' : '',
-      ),
-      button('換一張', () => {
-        game.act((st) => dismissOrder(st, o.id));
-        toasts.show('撕掉這張單了，明天會補一張新的');
-        refresh();
-      }),
-    );
-  };
+  const readyCount = board.orders.filter((o) => orderSupply(game.tanks, o) >= o.count).length;
   return h(
     'div.stack',
     {},
-    h('h3', {}, '客人的訂單'),
-    board.orders.length === 0 ? h('p.hint', {}, '目前沒有訂單，明天再來看看。') : null,
-    ...board.orders.map(orderRow),
+    h(
+      'button.btn.order-link',
+      { onclick: () => sheet.open('客人的訂單', () => ordersPanel(ctx)) },
+      h('img', { src: ORDER_ICON, alt: '' }),
+      h('span', {}, `客人的訂單 ${board.orders.length} 張${readyCount > 0 ? `，${readyCount} 張可以交貨` : ''}`),
+      '›',
+    ),
     h('h3', {}, '賣給店家'),
     h('p.hint', {}, `水族店收健康的魚和插枝：成魚約店價五成，稀有品系、好鰭型賣得更貴；還沒長大的中魚只收三成，太小、生病的不收。今天還能賣 ${left} 次。`),
     groups.length === 0 && cuttingIds.length === 0 ? h('p', {}, '目前沒有店家會收的魚或插枝。把仔魚養大、修剪水草就有東西可以賣。') : null,
@@ -1193,8 +1203,15 @@ export function quarantinePanel(ctx: PanelContext): Node {
 export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: PanelContext): Node {
   const s = game.state;
   const eq = s.equipment;
-  const toggle = (label: string, on: boolean, flip: (st: TankState) => void) =>
-    h('div.item', {}, h('b', {}, label), button(on ? '開' : '關', () => game.act(flip), on ? 'primary' : ''));
+  // 每一列前面放那樣設備的商品圖（跟商店、圖鑑同一張），一眼看得出是哪個
+  const pic = (art: string) => {
+    const img = h('img', { src: `${import.meta.env.BASE_URL}art/${art}`, alt: '', loading: 'lazy', draggable: 'false' });
+    img.addEventListener('error', () => img.remove());
+    return h('span.item-pic', { 'aria-hidden': 'true' }, img);
+  };
+  const row = (art: string | Node, ...children: Array<Node | null>) => h('div.item.has-pic', {}, typeof art === 'string' ? pic(art) : h('span.item-pic', { 'aria-hidden': 'true' }, art), ...children);
+  const toggle = (art: string, label: string, on: boolean, flip: (st: TankState) => void) =>
+    row(art, h('b.item-main', {}, label), button(on ? '開' : '關', () => game.act(flip), on ? 'primary' : ''));
   const env = s.environment;
   const month = monthOf(new Date());
   const volume = eq.tank.volumeL;
@@ -1208,12 +1225,13 @@ export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: P
     'div.stack',
     {},
     h('h3', {}, '螺'),
-    h('div.item', {}, h('div', {}, h('b', {}, s.snails ? `大螺 ${s.snails.snails.filter((x) => x.alive).length} 隻、小螺約 ${pestCount(s)} 隻` : '螺'), h('div.hint', {}, '卵塊、陷阱、手撈、除螺藥')), button('管理', () => sheet.open('螺', () => snailPanel({ game, sheet, toasts, undoable })))),
+    row('snail/snail-bladder.webp', h('div.item-main', {}, h('b', {}, s.snails ? `大螺 ${s.snails.snails.filter((x) => x.alive).length} 隻、小螺約 ${pestCount(s)} 隻` : '螺'), h('div.hint', {}, '卵塊、陷阱、手撈、除螺藥')), button('管理', () => sheet.open('螺', () => snailPanel({ game, sheet, toasts, undoable })))),
     h('h3', {}, '室溫與水位'),
     h(
-      'div.item',
+      'div.item.has-pic',
       {},
-      h('div', {}, h('b', {}, `${seasonName(month)}・室溫約 ${env.roomTempC.toFixed(1)}°C`), h('div.hint', {}, `日夜差 ±${(env.roomSwingC ?? 1.5).toFixed(1)}°C，季節跟著現實日曆走`)),
+      h('span.item-pic', { 'aria-hidden': 'true' }, h('span.kit-thermo', {}, h('i'))),
+      h('div.item-main', {}, h('b', {}, `${seasonName(month)}・室溫約 ${env.roomTempC.toFixed(1)}°C`), h('div.hint', {}, `日夜差 ±${(env.roomSwingC ?? 1.5).toFixed(1)}°C，季節跟著現實日曆走`)),
       h(
         'select.select',
         {
@@ -1223,12 +1241,12 @@ export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: P
         ...(Object.keys(REGION_LABELS) as Region[]).map((r) => h('option', { value: r, selected: (env.region ?? 'north') === r }, REGION_LABELS[r])),
       ),
     ),
-    toggle('放在冷氣房（夏天約 26.5°C）', !!env.airConditioned, () => setClimate((st) => (st.environment.airConditioned = !st.environment.airConditioned))),
-    h(
-      'div.item',
-      {},
+    toggle('gear/fan.webp', '放在冷氣房（夏天約 26.5°C）', !!env.airConditioned, () => setClimate((st) => (st.environment.airConditioned = !st.environment.airConditioned))),
+    row(
+      // 小缸：少掉的那截是空的
+      h('span.wc-mini.level', {}, h('i', { style: `height:${Math.round(Math.max(0, 1 - level) * 100)}%` })),
       h(
-        'div',
+        'div.item-main',
         {},
         h('b', {}, `水位 ${Math.round(level * 100)}%`),
         h(level < 0.9 ? 'div.warn-text' : 'div.hint', {}, level < 0.8 ? '水位太低，加熱棒可能露出水面空燒！' : level < 0.9 ? '蒸發掉的水要補回來，水質才不會越來越濃' : '水蒸發只帶走水，溶在水裡的東西會越來越濃'),
@@ -1239,11 +1257,10 @@ export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: P
         else doUndoable({ toasts, undoable }, () => game.act((st) => topUp(st)), `補了 ${missing.toFixed(1)} L 的水`);
       }, level < 0.9 ? 'primary' : ''),
     ),
-    h(
-      'div.item',
-      {},
+    row(
+      `gear/bag-${eq.substrate?.spec.id ?? 'sand'}.webp`,
       h(
-        'div',
+        'div.item-main',
         {},
         h('b', {}, `底材：${substrateName(eq.substrate)}`),
         eq.substrate?.spec.khAbsorb
@@ -1251,19 +1268,17 @@ export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: P
           : null,
       ),
     ),
-    h(
-      'div.item',
-      {},
-      h('div', {}, h('b', {}, '造景'), h('div.hint', {}, (eq.hardscape ?? []).length > 0 ? summarizeHardscape(eq.hardscape ?? []) : '還沒放石頭或沉木（商店的「設備」可以買）')),
+    row(
+      'scape/rock-seiryu-1.webp',
+      h('div.item-main', {}, h('b', {}, '造景'), h('div.hint', {}, (eq.hardscape ?? []).length > 0 ? summarizeHardscape(eq.hardscape ?? []) : '還沒放石頭或沉木（商店的「設備」可以買）')),
       openScape ? button('擺放', () => openScape()) : null,
     ),
     h('h3', {}, '設備'),
     eq.heater
-      ? h(
-          'div.item',
-          {},
+      ? row(
+          'gear/heater.webp',
           h(
-            'div',
+            'div.item-main',
             {},
             h('b', {}, `加熱棒 ${eq.heater.targetC}°C`),
             eq.heater.broken
@@ -1279,30 +1294,28 @@ export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: P
         )
       : null,
     eq.light
-      ? h(
-          'div.item',
-          {},
-          h('b', {}, `燈光 ${eq.light.startHour}:00 起 ${eq.light.photoperiodHours} 小時`),
+      ? row(
+          `gear/led-${eq.light.spec.id}.webp`,
+          h('b.item-main', {}, `燈光 ${eq.light.startHour}:00 起 ${eq.light.photoperiodHours} 小時`),
           h('div.row', {}, button('−', () => game.act((st) => (st.equipment.light!.photoperiodHours = Math.max(0, eq.light!.photoperiodHours - 1)))), button('+', () => game.act((st) => (st.equipment.light!.photoperiodHours = Math.min(16, eq.light!.photoperiodHours + 1))))),
         )
       : null,
-    eq.filter ? toggle('過濾器', eq.filter.on, (st) => {
+    eq.filter ? toggle(`gear/${eq.filter.spec.id.toLowerCase()}-filter.webp`, eq.filter.spec.name, eq.filter.on, (st) => {
       st.equipment.filter!.on = !st.equipment.filter!.on;
     }) : null,
-    eq.airPump ? toggle('打氣機', eq.airPump.on, (st) => {
+    eq.airPump ? toggle('gear/air-pump.webp', '打氣機', eq.airPump.on, (st) => {
       st.equipment.airPump!.on = !st.equipment.airPump!.on;
     }) : null,
-    eq.co2 ? toggle('CO₂（跟著燈光時程）', eq.co2.on, (st) => {
+    eq.co2 ? toggle('gear/co2-set.webp', 'CO₂（跟著燈光時程）', eq.co2.on, (st) => {
       st.equipment.co2!.on = !st.equipment.co2!.on;
     }) : null,
-    eq.fan ? toggle('降溫風扇', eq.fan.on, (st) => {
+    eq.fan ? toggle('gear/fan.webp', '降溫風扇', eq.fan.on, (st) => {
       st.equipment.fan!.on = !st.equipment.fan!.on;
     }) : null,
     eq.chiller
-      ? h(
-          'div.item',
-          {},
-          h('div', {}, h('b', {}, `冷水機 ${eq.chiller.targetC}°C`), h('div.hint', {}, eq.chiller.on ? (eq.chiller.cooling ? '製冷中' : '待機') : '關閉')),
+      ? row(
+          'gear/chiller.webp',
+          h('div.item-main', {}, h('b', {}, `冷水機 ${eq.chiller.targetC}°C`), h('div.hint', {}, eq.chiller.on ? (eq.chiller.cooling ? '製冷中' : '待機') : '關閉')),
           h(
             'div.row',
             {},
@@ -1313,10 +1326,9 @@ export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: P
         )
       : null,
     eq.controller
-      ? h(
-          'div.item',
-          {},
-          h('div', {}, h('b', {}, `控溫器上限 ${eq.controller.maxC}°C`), eq.controller.tripped ? h('div.warn-text', {}, '水溫過高，已切斷加熱棒電源') : h('div.hint', {}, '超過就切斷加熱棒')),
+      ? row(
+          'gear/heater.webp',
+          h('div.item-main', {}, h('b', {}, `控溫器上限 ${eq.controller.maxC}°C`), eq.controller.tripped ? h('div.warn-text', {}, '水溫過高，已切斷加熱棒電源') : h('div.hint', {}, '超過就切斷加熱棒')),
           h(
             'div.row',
             {},
@@ -1350,10 +1362,9 @@ export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: P
           'div.stack',
           {},
           h('h3', {}, '檢疫盒'),
-          h(
-            'div.item',
-            {},
-            h('div', {}, h('b', {}, `檢疫盒裡有 ${s.quarantine.fish.filter((f) => f.alive).length} 條`), h('div.hint', {}, '新魚先觀察，發病了就在盒子裡藥浴')),
+          row(
+            'gear/quarantine-box.webp',
+            h('div.item-main', {}, h('b', {}, `檢疫盒裡有 ${s.quarantine.fish.filter((f) => f.alive).length} 條`), h('div.hint', {}, '新魚先觀察，發病了就在盒子裡藥浴')),
             button('查看', () => sheet.open('檢疫盒', () => quarantinePanel({ game, sheet, toasts, undoable }))),
           ),
         )
