@@ -1,5 +1,5 @@
 import { chance, nextRandom } from '../random';
-import { hourOfDay, isLightOn, recordEvent, type TankState } from '../state';
+import { hourOfDay, isLightOn, NEWBIE_HEALTHY_DAYS, recordEvent, type TankState } from '../state';
 
 /** 加熱棒每小時故障機率（約一年壞一次）。 */
 const HEATER_FAILURE_PER_HOUR = 1 / (365 * 24);
@@ -82,7 +82,8 @@ export function updateTemperature(state: TankState, dt: number): void {
     // 恆溫器：低於目標 0.2°C 開，達到目標關。
     if (water.tempC < heater.targetC - 0.2) heater.heating = true;
     else if (water.tempC >= heater.targetC) heater.heating = false;
-    if (chance(state.rng, HEATER_FAILURE_PER_HOUR, dt)) breakHeater(state);
+    // 新手期照樣擲骰（亂數順序不變），只是不會壞
+    if (chance(state.rng, HEATER_FAILURE_PER_HOUR, dt) && state.hours >= NEWBIE_HEALTHY_DAYS * 24) breakHeater(state);
   }
   if (heater) {
     if (heater.broken) heater.heating = !!heater.stuckOn && powered;

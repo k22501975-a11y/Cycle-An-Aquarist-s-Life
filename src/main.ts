@@ -815,7 +815,7 @@ async function start(): Promise<void> {
   stage.append(tankLabel);
   const guide = new Guide(stage, store, (id) => audio.play(id), () => requestAnimationFrame(() => measure()));
   guide.openShop = (tab) => openShop(tab);
-  guide.reward = (coins) => game.actAll((tanks) => void (sim.economy(tanks[0]).coins += coins));
+  guide.reward = (id, coins) => game.actAll((tanks) => sim.claimQuestReward(tanks[0], id, coins));
   guide.goalsChanged = () => game.actAll(() => undefined);
   const measure = () => {
     const stageRect = stage.getBoundingClientRect();

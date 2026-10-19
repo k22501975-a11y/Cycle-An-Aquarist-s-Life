@@ -30,8 +30,8 @@ export class Guide {
   questDone: ((step: number, id: string) => void) | null = null;
   /** 打開商店的某一頁（main 接上）。 */
   openShop: ((tab: QuestShopTab) => void) | null = null;
-  /** 發新手任務獎勵（main 接上，加到共用錢包）。 */
-  reward: ((coins: number) => void) | null = null;
+  /** 發新手任務獎勵（main 接上，加到共用錢包）；回傳實際發了多少，領過的任務是 0。 */
+  reward: ((questId: string, coins: number) => number) | null = null;
   /** 目標完成、發了獎勵（main 接上：存檔、更新畫面）。 */
   goalsChanged: (() => void) | null = null;
   /** 上一次 update 看到的所有缸（小卡顯示目標用）。 */
@@ -70,10 +70,10 @@ export class Guide {
     if (done) {
       this.save();
       this.questDone?.(this.progress.step, done.id);
-      this.reward?.(done.reward);
+      const paid = this.reward?.(done.id, done.reward) ?? 0;
       this.sound('quest');
       const next = currentQuest(this.progress);
-      const text = `${done.done}（獎勵 ${done.reward} 魚幣）`;
+      const text = paid > 0 ? `${done.done}（獎勵 ${paid} 魚幣）` : done.done;
       this.say([{ text, label: next ? '下一個任務' : '謝謝老闆' }, ...(next ? this.questPages() : this.goalPages('接下來可以挑戰這些目標：'))]);
       return;
     }

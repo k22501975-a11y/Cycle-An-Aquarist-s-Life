@@ -88,6 +88,8 @@ export interface Economy {
   goals?: GoalState;
   /** 累計賣給店家幾條魚。 */
   fishSold?: number;
+  /** 已經領過獎勵的新手任務（任務進度存在裝置上，換裝置、匯入存檔重跑教學也不能再領）。 */
+  questRewards?: string[];
   /** 店家訂單板（M21）；舊存檔沒有，第一次更新時掛上。 */
   orders?: OrderBoard;
   /** 用儲值點數買的商城道具（背包）；舊存檔沒有。 */
@@ -238,6 +240,16 @@ function countSale(state: TankState): boolean {
 }
 
 /** 把一條魚賣給水族店，回傳拿到多少錢（不收就回傳 0）。 */
+/** 發新手任務獎勵：每個任務只發一次，記在存檔裡。回傳這次發了多少（領過就是 0）。 */
+export function claimQuestReward(state: TankState, questId: string, coins: number): number {
+  const e = economy(state);
+  const got = (e.questRewards ??= []);
+  if (got.includes(questId)) return 0;
+  got.push(questId);
+  e.coins += coins;
+  return coins;
+}
+
 export function sellFish(state: TankState, fishId: number): number {
   const fish = state.fish.find((f) => f.id === fishId);
   if (!fish || buybackRefusal(fish) || !countSale(state)) return 0;

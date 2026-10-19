@@ -11,7 +11,7 @@ import { FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } 
 import type { FilterSpec, HardscapeSpec, SubstrateSpec } from './equipment';
 import { onHardscapeAdded, onHardscapeRemoved } from './aquascape';
 import { testWater, type TestKitReading } from './readings';
-import { recordEvent, TEST_LOG_MAX, type DiseaseKind, type Fish, type Plant, type TankState } from './state';
+import { NEWBIE_HEALTHY_DAYS, recordEvent, TEST_LOG_MAX, type DiseaseKind, type Fish, type Plant, type TankState } from './state';
 
 /** 投餵飼料（mg）。沒指定就是標準的漂浮薄片；吃不完的會腐敗。 */
 export function feed(state: TankState, mg: number, kind: FoodKind = DEFAULT_FOOD.kind, grade: FoodGrade = DEFAULT_FOOD.grade): void {
@@ -140,8 +140,6 @@ const STORE_PREGNANT_CHANCE: Partial<Record<FishSpeciesId, number>> = { guppy: 0
 
 /** 店家魚帶白點蟲的機率。 */
 const STORE_ICH_CHANCE = 0.15;
-/** 新手期（教學走完約 12 個遊戲天，mvp.md §4.6）店裡的魚不帶柱狀病等細菌病：教學還沒教到，新手會不知道魚為什麼死（#118）。 */
-export const NEWBIE_HEALTHY_DAYS = 12;
 
 /** 放入新魚。剛運輸過來的魚處於緊迫狀態。 */
 export function addFish(state: TankState, species: FishSpeciesId, options: AddFishOptions = {}): Fish {
