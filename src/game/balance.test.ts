@@ -14,7 +14,9 @@ import {
   FILTERS,
   FISH_SPECIES,
   HEATERS,
+  HUNGRY,
   LIGHTS,
+  PINCH_MEALS,
   sellFish,
   simulate,
   TANKS,
@@ -46,7 +48,7 @@ function day(s: TankState, careful: boolean): void {
 }
 
 describe('新手前幾週（K1）', () => {
-  it('照教學一天兩次「一小撮」：兩週內魚都不會餓壞，也不會因為餓而緊迫', () => {
+  it('照教學一天兩次「一小撮」：兩週內魚都不會餓到跳出「魚餓了」待辦，也不會因為餓而緊迫', () => {
     for (const seed of [1, 2, 3]) {
       const s = newGameState(seed);
       for (let i = 0; i < 3; i++) addFish(s, 'guppy', { carriesIch: false, carries: [] });
@@ -54,20 +56,20 @@ describe('新手前幾週（K1）', () => {
       let maxHunger = 0;
       for (let d = 0; d < 14; d++) {
         for (const h of [12, 12]) {
-          // 跟遊戲裡的按鈕一樣：一小撮是「現在缸裡所有魚」一餐的 3/4，生了小魚就會跟著變多
-          feed(s, meal(s) * 0.75);
+          // 跟遊戲裡的按鈕一樣：一小撮是「現在缸裡所有魚」一餐的 PINCH_MEALS 倍，生了小魚就會跟著變多
+          feed(s, meal(s) * PINCH_MEALS);
           simulate(s, h);
           for (const f of alive(s)) maxHunger = Math.max(maxHunger, f.hunger);
         }
       }
-      expect(maxHunger).toBeLessThan(0.8);
+      expect(maxHunger).toBeLessThan(HUNGRY);
       // 買來的母魚常常已經懷孕，兩週內會生小魚；原本 3 條都要活著
       expect(alive(s).filter((f) => adults.includes(f.id))).toHaveLength(3);
       for (const f of alive(s)) expect(fishCondition(s, f).hunger).not.toBe('starving');
     }
   });
 
-  it('照教學玩（一公兩母、一天兩次一小撮、每天測水、有氨亞硝就換水）：養水任務 3～8 天內過得了', () => {
+  it('照教學玩（一公兩母、一天兩次一小撮、每天測水、有氨亞硝就換水）：養水任務 4～7 天內過得了（mvp.md §4.6）', () => {
     const cycled = QUESTS.find((q) => q.id === 'cycled')!;
     for (const seed of [1, 2, 3]) {
       const s = newGameState(seed);
@@ -76,15 +78,15 @@ describe('新手前幾週（K1）', () => {
       let doneDay = -1;
       for (let d = 1; d <= 10 && doneDay < 0; d++) {
         for (let k = 0; k < 2; k++) {
-          feed(s, meal(s) * 0.75);
+          feed(s, meal(s) * PINCH_MEALS);
           simulate(s, 12);
         }
         const r = useTestKit(s);
         if (cycled.check(s)) doneDay = d;
         else if (r.ammonia > 0 || r.nitrite > 0) waterChange(s, 0.3);
       }
-      expect(doneDay).toBeGreaterThanOrEqual(3);
-      expect(doneDay).toBeLessThanOrEqual(8);
+      expect(doneDay).toBeGreaterThanOrEqual(4);
+      expect(doneDay).toBeLessThanOrEqual(7);
     }
   });
 

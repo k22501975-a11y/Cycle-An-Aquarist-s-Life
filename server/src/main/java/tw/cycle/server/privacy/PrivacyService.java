@@ -48,6 +48,8 @@ public class PrivacyService {
         out.put("pointHistory", db.queryForList("SELECT delta, balance, reason, note, created_at FROM point_ledger WHERE account_id = ? ORDER BY id", id));
         out.put("payments", db.queryForList("SELECT pack, amount_twd, points, provider, status, created_at FROM payment_order WHERE account_id = ? ORDER BY id", id));
         out.put("mallItems", db.queryForList("SELECT item, points, status, created_at, claimed_at FROM point_grant WHERE account_id = ? ORDER BY id", id));
+        out.put("mallInventory", db.queryForList("SELECT item, count FROM mall_inventory WHERE account_id = ? ORDER BY item", id));
+        out.put("mallUses", db.queryForList("SELECT item, remaining, created_at FROM mall_use WHERE account_id = ? ORDER BY id", id));
         out.put("pushDevices", db.queryForList("SELECT categories, created_at, updated_at FROM push_device WHERE account_id = ? ORDER BY created_at", id));
         out.put("note", "匿名數據分析不會連到帳號，所以不在這份資料裡；在設定裡關掉就不再送。");
         return out;

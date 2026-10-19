@@ -31,7 +31,10 @@ export interface ServerAdvance extends CloudSave {
 }
 
 /** 上傳時伺服器的模擬檢查沒過（L2）：遊戲時間跑太快、魚的身分被改。 */
-export const SAVE_CHECK_CODES = ['time_ahead', 'identity_changed', 'gift_removed', 'shipped_fish'];
+/** 上傳的存檔跟伺服器帳本對不上（少了或多了市場收支，docs/ledger.md §3.4）：只能改用雲端那份。 */
+export const LEDGER_CODES = ['ledger_behind', 'ledger_ahead'];
+
+export const SAVE_CHECK_CODES = ['time_ahead', 'identity_changed', 'gift_removed', 'shipped_fish', ...LEDGER_CODES];
 
 export interface FriendInfo {
   username: string;
@@ -112,10 +115,18 @@ export interface MarketMine {
   canListAt: number;
 }
 
+/** 伺服器記帳後的錢包（docs/ledger.md §3.3）：遊戲端照 delta 加減，revision 是改過錢之後的雲端存檔版本。 */
+export interface LedgerWallet {
+  revision: number;
+  coins: number;
+  ledgerSeq: number;
+  delta: number;
+}
+
 export type MarketCollect =
   | { result: 'item'; item: Record<string, unknown>; stress: number; bagTemp: number; bagPh: number; kind: 'fish' | 'plant'; title: string; listingId: number }
-  | { result: 'refund'; reason: 'not_shipped' | 'doa'; amount: number; kind: 'fish' | 'plant'; title: string; listingId: number }
-  | { result: 'payout'; amount: number; kind: 'fish' | 'plant'; title: string; listingId: number }
+  | { result: 'refund'; reason?: 'not_shipped' | 'doa'; amount: number; wallet: LedgerWallet; kind: 'fish' | 'plant'; title: string; listingId: number }
+  | { result: 'payout'; amount: number; wallet: LedgerWallet; kind: 'fish' | 'plant'; title: string; listingId: number }
   | { result: 'doa' | 'cancelled'; kind: 'fish' | 'plant'; title: string; listingId: number };
 
 export interface PricePoint {
@@ -132,12 +143,8 @@ export interface PointsCatalog {
   toppedUpThisMonth: number;
   packs: { id: string; twd: number; points: number }[];
   items: { id: string; name: string; note: string; points: number; daily: number; boughtToday: number }[];
-}
-
-export interface PointsGrant {
-  id: number;
-  item: string;
-  createdAt: number;
+  /** 伺服器上的道具庫存（每種還有幾個）。 */
+  bag: Record<string, number>;
 }
 
 export interface PointsEntry {
@@ -259,8 +266,10 @@ export class CloudClient {
     return this.call('GET', `/api/market/listings?${q}`);
   }
 
-  marketList(listing: { kind: 'fish' | 'plant'; species: string; title: string; item: unknown; price: number }): Promise<CloudResult<{ id: number; fee: number }>> {
-    return this.call('POST', '/api/market/listings', JSON.stringify(listing));
+  // 上架、買、收貨會動到錢：伺服器直接改雲端存檔，要帶手上那份的版本（docs/ledger.md）
+
+  marketList(listing: { kind: 'fish' | 'plant'; species: string; title: string; item: unknown; price: number }): Promise<CloudResult<{ id: number; fee: number; wallet: LedgerWallet }>> {
+    return this.call('POST', '/api/market/listings', JSON.stringify({ ...listing, baseRevision: this.session?.revision ?? 0 }));
   }
 
   marketUpdate(id: number, item: unknown): Promise<CloudResult<void>> {
@@ -271,8 +280,8 @@ export class CloudClient {
     return this.call('DELETE', `/api/market/listings/${id}`);
   }
 
-  marketBuy(id: number, packaging: string): Promise<CloudResult<MarketOrder>> {
-    return this.call('POST', `/api/market/listings/${id}/buy`, JSON.stringify({ packaging }));
+  marketBuy(id: number, packaging: string): Promise<CloudResult<{ order: MarketOrder; wallet: LedgerWallet }>> {
+    return this.call('POST', `/api/market/listings/${id}/buy`, JSON.stringify({ packaging, baseRevision: this.session?.revision ?? 0 }));
   }
 
   marketMine(): Promise<CloudResult<MarketMine>> {
@@ -288,7 +297,7 @@ export class CloudClient {
   }
 
   marketCollect(orderId: number): Promise<CloudResult<MarketCollect>> {
-    return this.call('POST', `/api/market/orders/${orderId}/collect`);
+    return this.call('POST', `/api/market/orders/${orderId}/collect`, JSON.stringify({ baseRevision: this.session?.revision ?? 0 }));
   }
 
   marketPrices(species: string): Promise<CloudResult<PricePoint[]>> {
@@ -305,16 +314,13 @@ export class CloudClient {
     return this.call('POST', '/api/points/topup', JSON.stringify({ pack }));
   }
 
-  pointsBuy(item: string): Promise<CloudResult<{ grant: PointsGrant; balance: number }>> {
+  pointsBuy(item: string): Promise<CloudResult<{ balance: number; bag: Record<string, number> }>> {
     return this.call('POST', '/api/points/buy', JSON.stringify({ item }));
   }
 
-  pointsGrants(): Promise<CloudResult<PointsGrant[]>> {
-    return this.call('GET', '/api/points/grants');
-  }
-
-  pointsClaim(id: number): Promise<CloudResult<void>> {
-    return this.call('POST', `/api/points/grants/${id}/claim`);
+  /** 用掉一個道具；requestId 每次使用產生一個，斷線重送同一個不會扣兩個。 */
+  pointsUse(item: string, requestId: string): Promise<CloudResult<{ item: string; remaining: number }>> {
+    return this.call('POST', '/api/points/use', JSON.stringify({ item, requestId }));
   }
 
   pointsHistory(): Promise<CloudResult<PointsEntry[]>> {
@@ -349,6 +355,16 @@ export class CloudClient {
     const res = await this.call<void>('DELETE', '/api/account', JSON.stringify({ password }));
     if (res.ok) this.setSession(null);
     return res;
+  }
+
+  /**
+   * 伺服器改了雲端存檔（市場收支）之後，記下新的版本號。
+   * 只在剛好是下一版時前進：重送拿到的是雲端現在的版本，中間可能夾了別台裝置的上傳，
+   * 跳過去會讓下次上傳悄悄蓋掉那份；不前進的話下次上傳會撞到衝突，讓玩家選。
+   */
+  advanceRevision(revision: number): void {
+    if (!this.session || revision !== this.session.revision + 1) return;
+    this.setSession({ ...this.session, revision });
   }
 
   /** 採用了雲端那份（或確認兩邊一樣）之後，記下雲端的版本號。 */

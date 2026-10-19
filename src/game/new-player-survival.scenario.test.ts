@@ -40,8 +40,8 @@ let cache: Run[] | null = null;
 const runs = () => (cache ??= Array.from({ length: SEEDS }, (_, i) => followTutorial(i + 1)));
 
 describe('新玩家照教學照顧（QA）', () => {
-  // 已知問題 #122：約一成的新缸會因為店裡的魚帶柱狀病（或加熱棒卡住）在 5 天內整缸死光。修好後拿掉 .fails。
-  it.fails(`${SEEDS} 個新缸照教學照顧 ${DAYS} 天，最多 1 缸整缸死光`, { timeout: 60_000 }, () => {
+  // #122：新手期店裡的魚不帶細菌病、加熱棒不會隨機故障
+  it(`${SEEDS} 個新缸照教學照顧 ${DAYS} 天，最多 1 缸整缸死光`, { timeout: 60_000 }, () => {
     const wiped = runs().flatMap(({ tank, wipedDay }, i) => {
       if (wipedDay === null) return [];
       const causes = [...new Set(tank.events.filter((e) => e.type === 'fish_died').map((e) => e.cause))].join('、');

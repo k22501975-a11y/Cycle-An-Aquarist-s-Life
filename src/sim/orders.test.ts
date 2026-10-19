@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addFish,
+  buyQuarantine,
   createTank,
   dismissOrder,
   economy,
@@ -10,6 +11,8 @@ import {
   HEATERS,
   LIGHTS,
   makeOrder,
+  moveToQuarantine,
+  ORDER_EXPIRE_DAYS,
   ORDER_BOARD_SIZE,
   ORDER_GAP_HOURS,
   orderBoard,
@@ -126,5 +129,26 @@ describe('店家訂單板（M21）', () => {
     expect(fishMatchesOrder(shrimp, { ...o, species: 'cherry_shrimp' })).toBe(false);
     shrimp.generation = 1;
     expect(fishMatchesOrder(shrimp, { ...o, species: 'cherry_shrimp' })).toBe(true);
+  });
+
+  it(`掛了 ${ORDER_EXPIRE_DAYS} 天沒人交的單自動換掉（不用玩家自己撕）`, () => {
+    const s = tank();
+    simulate(s, 1);
+    const board = orderBoard(s);
+    const first = board.orders.map((o) => o.id);
+    simulate(s, ORDER_EXPIRE_DAYS * 24 + 1);
+    expect(board.orders.some((o) => first.includes(o.id))).toBe(false);
+    expect(board.orders.length).toBeGreaterThan(0);
+  });
+
+  it('產卵盒裡的中魚也能拿去交單', () => {
+    const s = tank();
+    economy(s).coins = 10_000;
+    buyQuarantine(s);
+    for (const f of juveniles(s, 3)) moveToQuarantine(s, f.id);
+    const o = juvenileOrder(s, 3);
+    expect(orderRefusal([s], o.id)).toBeNull();
+    expect(fulfillOrder([s], o.id)).toBe(135);
+    expect(s.quarantine!.fish).toHaveLength(0);
   });
 });

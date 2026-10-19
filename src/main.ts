@@ -14,7 +14,7 @@ import { CloudClient } from './net/cloud';
 import { autoUpload, checkCloudOnStart, cloudPanel, type CloudPanelDeps } from './ui/cloud-panel';
 import { friendsPanel, giftPanel, type FriendsDeps } from './ui/friends-panel';
 import { knownArrivals, marketPanel, syncMarket, type MarketDeps } from './ui/market-panel';
-import { mallPanel, syncMall, type MallDeps } from './ui/mall-panel';
+import { mallPanel, syncMall, useMallItem, type MallDeps } from './ui/mall-panel';
 import { CATEGORY_LABELS, nativePlatform, Notifier, planNotices, webPushPlatform, type PlannedNotice } from './net/push';
 import { Forecaster } from './game/forecaster';
 import { canPromptInstall, isInstalled, isIos, promptInstall, setupPwa } from './ui/pwa';
@@ -316,6 +316,7 @@ async function start(): Promise<void> {
   };
   const marketDeps: MarketDeps = { cloud, game, sheet, toasts, sound: ctx.sound, openCloud: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)), syncSave: () => autoUpload(cloudDeps) };
   const mallDeps: MallDeps = marketDeps;
+  ctx.useMall = (item, apply) => useMallItem(mallDeps, item, apply);
   const checkGifts = async () => {
     if (!cloud.session) return;
     const res = await cloud.gifts();
@@ -872,6 +873,8 @@ async function start(): Promise<void> {
   stage.append(tankLabel);
   const guide = new Guide(stage, store, (id) => audio.play(id), () => requestAnimationFrame(() => measure()));
   guide.openShop = (tab) => openShop(tab);
+  guide.reward = (id, coins) => game.actAll((tanks) => sim.claimQuestReward(tanks[0], id, coins));
+  guide.goalsChanged = () => game.actAll(() => undefined);
   const measure = () => {
     const stageRect = stage.getBoundingClientRect();
     const top = hud.getBoundingClientRect().bottom - stageRect.top;
@@ -1194,7 +1197,7 @@ async function start(): Promise<void> {
       renderCoins();
       renderOrders();
       renderTankChip();
-      guide.update(game.state);
+      guide.update(game.state, game.tanks);
       celebrateStrains();
       for (const entry of unlockCodex(codexSeen, game.state)) {
         saveCodexSeen(store, codexSeen);

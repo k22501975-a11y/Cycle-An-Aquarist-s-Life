@@ -78,8 +78,13 @@ export function observeSymptoms(state: TankState, fish: Fish): Symptom[] {
   return out;
 }
 
-/** 飢餓值超過這個就算「餓了」：會在水面巡游討食，壓力開始上升。 */
-export const HUNGRY = 0.55;
+/**
+ * 飢餓值超過這個就算「餓了」：會在水面巡游討食，待辦提醒餵食。畫面、待辦都讀這個值。
+ * 照教學一天一兩次「一小撮」都不會到（一次停在約 0.62，design/mvp.md §4.6）；不餵三、四天就會到。
+ */
+export const HUNGRY = 0.65;
+/** 「一小撮」是一餐的幾倍（新缸期的維持量）。 */
+export const PINCH_MEALS = 0.85;
 
 export type HungerLevel = 'full' | 'fed' | 'hungry' | 'starving';
 

@@ -49,6 +49,10 @@ import {
   claimStarterPack,
   buyTank,
   buyTankRefusal,
+  LOCKED_SPECIES,
+  speciesUnlocked,
+  tankLock,
+  unlockHint,
   moveFish,
   newTankCost,
   removeTank,
@@ -105,7 +109,9 @@ import {
   QUARANTINE_DAYS,
   quarantineDays,
   releaseQuarantine,
+  PINCH_MEALS,
   orderBoard,
+  matchingFish,
   orderSupply,
   moveToQuarantine,
   AIR_PUMPS,
@@ -146,6 +152,7 @@ import {
   type Region,
   type TankState,
   type TestKitReading,
+  type MallItemId,
 } from '../sim';
 import { applySeason, type Game } from '../game/game';
 import { h } from './dom';
@@ -176,6 +183,8 @@ export interface PanelContext {
   fishPic?: (fish: Fish) => string | null;
   /** 拿到錢的演出：金幣從 from 飛進錢包（F8）。 */
   reward?: (from: DOMRect | null, amount: number) => void;
+  /** 用商城道具：先跟伺服器扣一個，成功才 apply；回傳 null 是成功，不然是原因。 */
+  useMall?: (item: MallItemId, apply: () => boolean) => Promise<string | null>;
 }
 
 /** 沒有復原機制時（例如測試）就直接做並顯示通知。 */
@@ -257,8 +266,8 @@ export function feedPanel(ctx: PanelContext): Node {
     h(
       'div.row',
       {},
-      // 一小撮是新缸期的維持量：一天兩次，魚不會餓壞，殘餌也少
-      button('一小撮', give(meal * 0.75, '一小撮')),
+      // 一小撮是新缸期的維持量：一天兩次吃得飽、一天一次有點餓但不會餓壞，殘餌也少
+      button('一小撮', give(meal * PINCH_MEALS, '一小撮')),
       button('一餐', give(meal, '一餐'), 'primary'),
       button('一大把', give(meal * 3, '一大把')),
     ),
@@ -428,7 +437,7 @@ export function ageLabel(days: number): string {
   return `約 ${years < 10 ? (Math.floor(years * 2) / 2).toString() : Math.floor(years)} 歲`;
 }
 
-export function fishPanel({ game, sheet, toasts, fishPic }: PanelContext, fishId: number): Node {
+export function fishPanel({ game, sheet, toasts, fishPic, useMall }: PanelContext, fishId: number): Node {
   const fish = game.state.fish.find((f) => f.id === fishId);
   if (!fish) return h('p', {}, '這條魚已經不在缸裡了。');
   if (!fish.alive) {
@@ -461,20 +470,22 @@ export function fishPanel({ game, sheet, toasts, fishPic }: PanelContext, fishId
     h('p', {}, conditionLine(fish)),
     h('p.hint', {}, '症狀只是線索：先用測試劑檢查水質，再判斷是環境問題還是生病。'),
     game.tanks.length > 1 ? moveFishRow(game, sheet, toasts, fish) : null,
-    cureButton(game, sheet, toasts, fish),
+    cureButton(game, sheet, toasts, fish, useMall),
   );
 }
 
 /** 背包裡有特效藥、這尾魚又用得上時才出現。 */
-function cureButton(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish): Node | null {
+function cureButton(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish, useMall: PanelContext['useMall']): Node | null {
   const left = mallBag(game.tanks).cure;
-  if (left <= 0 || cureRefusal(game.tanks, fish)) return null;
+  if (!useMall || left <= 0 || cureRefusal(game.tanks, fish)) return null;
   return h(
     'div.stack',
     {},
-    button(`用特效藥（背包剩 ${left} 瓶）`, () => {
-      if (!game.actAll((tanks) => useCure(tanks, fish))) return;
-      toasts.show('症狀退了一些。特效藥只治症狀，記得找出生病的原因（水質、病原），不然還會再發');
+    button(`用特效藥（背包剩 ${left} 瓶）`, async () => {
+      // 背包是伺服器庫存的副本：先跟伺服器扣一瓶，成功才治
+      const why = await useMall('cure', () => useCure(game.tanks, fish));
+      if (why) toasts.show(why, 'warn');
+      else toasts.show('症狀退了一些。特效藥只治症狀，記得找出生病的原因（水質、病原），不然還會再發');
       sheet.refresh();
     }),
     h('p.hint', {}, '特效藥只治症狀：水裡的病原和水質問題還在。水質造成的傷，效果只有一半。'),
@@ -864,6 +875,9 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
               : id === 'betta'
                 ? [add(`公 ${FISH_PRICES.betta}`, buyOne(id, 'male', FISH_PRICES.betta)), add(`母 ${BETTA_FEMALE_PRICE}`, buyOne(id, 'female', BETTA_FEMALE_PRICE))]
                 : [add('+1', buyFish(id, 1)), add('+6', buyFish(id, 6))];
+          // 鬥魚、水晶蝦要先完成目標才開賣（goals.ts，M19）
+          const lock = LOCKED_SPECIES[id];
+          if (lock && !speciesUnlocked(game.tanks, id)) return shopCard({ art: speciesArt(id), name: sp.name, price: null, chips: ['🔒 ' + unlockHint(lock)], actions: [], cls: '.locked' });
           return shopCard({ art: speciesArt(id), name: sp.name, price: FISH_PRICES[id], unit: '/隻', chips, actions });
         }),
       ),
@@ -1031,8 +1045,10 @@ function sellContent(ctx: PanelContext): Node {
     return lo === hi ? `每隻 ${lo} 元` : `每隻 ${lo}～${hi} 元`;
   };
   const sellOne = (id: FishSpeciesId) => () => {
-    // 先賣公的，母的留著繁殖
-    const pick = [...s.fish.filter((f) => f.species === id && !buybackRefusal(f))].sort((a, b) => (a.sex === b.sex ? 0 : a.sex === 'male' ? -1 : 1))[0];
+    // 先賣公的，母的留著繁殖；訂單要的魚最後才賣（一般玩家一直按也不會把湊單的魚賣掉）
+    const held = new Set(orderBoard(s).orders.flatMap((o) => (o.kind === 'fish' ? matchingFish(s, o).slice(0, o.count).map((f) => f.id) : [])));
+    const rank = (f: Fish) => (held.has(f.id) ? 2 : 0) + (f.sex === 'male' ? 0 : 1);
+    const pick = [...s.fish.filter((f) => f.species === id && !buybackRefusal(f))].sort((a, b) => rank(a) - rank(b))[0];
     if (!pick) return;
     const got = game.act((st) => sellFish(st, pick.id));
     if (got > 0) {
@@ -1479,6 +1495,7 @@ export function tanksPanel(ctx: PanelContext): Node {
     const set = TANK_SETS[id];
     const cost = newTankCost(game.tanks, id);
     const refusal = buyTankRefusal(game.tanks, id);
+    const lock = tankLock(game.tanks, id);
     const buy = () => {
       if (refusal) {
         toasts.show(refusal === '錢不夠' ? `錢不夠：要 ${cost} 元，現在有 ${coins} 元` : refusal, 'warn');
@@ -1496,7 +1513,9 @@ export function tanksPanel(ctx: PanelContext): Node {
       name: set.tank.name,
       price: cost,
       chips: [`${set.tank.volumeL}L`, set.filter.name.replace(/（.*）/, ''), set.heater.name, slot > 0 ? '含缸架' : ''].filter(Boolean),
+      note: lock ? '🔒 ' + unlockHint(lock) : undefined,
       actions: [button('買', buy, refusal ? '' : 'primary')],
+      cls: lock ? '.locked' : '',
     });
   });
   return h(

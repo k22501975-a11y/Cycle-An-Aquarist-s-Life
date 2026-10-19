@@ -12,7 +12,7 @@ import { FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } 
 import type { FilterSpec, HardscapeSpec, SubstrateSpec } from './equipment';
 import { onHardscapeAdded, onHardscapeRemoved } from './aquascape';
 import { testWater, type TestKitReading } from './readings';
-import { recordEvent, TEST_LOG_MAX, type DiseaseKind, type Fish, type Plant, type TankState } from './state';
+import { NEWBIE_HEALTHY_DAYS, recordEvent, TEST_LOG_MAX, type DiseaseKind, type Fish, type Plant, type TankState } from './state';
 
 /** 投餵飼料（mg）。沒指定就是標準的漂浮薄片；吃不完的會腐敗。 */
 export function feed(state: TankState, mg: number, kind: FoodKind = DEFAULT_FOOD.kind, grade: FoodGrade = DEFAULT_FOOD.grade): void {
@@ -139,7 +139,8 @@ export interface AddFishOptions {
 }
 
 /** 店家的孔雀魚母魚幾乎都已經懷孕（和公魚混養）；櫻花蝦母蝦偶爾抱卵。 */
-const STORE_PREGNANT_CHANCE: Partial<Record<FishSpeciesId, number>> = { guppy: 0.6, cherry_shrimp: 0.2, crystal_shrimp: 0.15 };
+/** 店裡的母魚、母蝦已經懷孕的機率：孔雀魚母魚跟公魚養在一起，買回來的大多已經懷孕（design/mvp.md §4.6）。 */
+const STORE_PREGNANT_CHANCE: Partial<Record<FishSpeciesId, number>> = { guppy: 0.9, cherry_shrimp: 0.2, crystal_shrimp: 0.15 };
 
 /** 店家魚帶白點蟲的機率。 */
 const STORE_ICH_CHANCE = 0.15;
@@ -186,8 +187,9 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
     }
   }
   // 指定不帶白點（carriesIch: false）視為確認過健康的魚，也不帶其他病
-  const carried =
-    options.carries ?? (options.carriesIch === false ? [] : (Object.keys(STORE_DISEASE_CHANCE) as DiseaseKind[]).filter((k) => nextRandom(state.rng) < STORE_DISEASE_CHANCE[k]));
+  const rolled = options.carries ?? (options.carriesIch === false ? [] : (Object.keys(STORE_DISEASE_CHANCE) as DiseaseKind[]).filter((k) => nextRandom(state.rng) < STORE_DISEASE_CHANCE[k]));
+  // 新手期照樣擲骰（亂數順序不變），只是不帶病
+  const carried = options.carries === undefined && state.hours < NEWBIE_HEALTHY_DAYS * 24 ? [] : rolled;
   for (const kind of carried) infect(fish, kind);
   state.fish.push(fish);
   return fish;

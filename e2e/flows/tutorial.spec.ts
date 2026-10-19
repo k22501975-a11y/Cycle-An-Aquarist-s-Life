@@ -23,11 +23,11 @@ const DAY_SUMMARY = `JSON.stringify({
 })`;
 
 /**
- * 新手任務 1～7：從全新存檔照老闆的引導一路點按鈕玩完。
+ * 新手任務 1～9：從全新存檔照老闆的引導一路點按鈕玩完。
  * 回歸：任務 6 養水曾經因為看硝酸鹽而永遠過不了（#65 修正）。
  * 要玩十幾個遊戲天，比一般流程測試久（約 1～2 分鐘）。
  */
-test('新手任務 1～7：照老闆的引導從新存檔玩得完，魚不會死光', async ({ page }) => {
+test('新手任務 1～9：照老闆的引導從新存檔玩得完，魚不會死光', async ({ page }) => {
   test.setTimeout(600_000);
   const consoleErrors = watchConsoleErrors(page);
   await startGame(page);
@@ -69,10 +69,30 @@ test('新手任務 1～7：照老闆的引導從新存檔玩得完，魚不會�
   await fastForward(page, 1);
   await expect.poll(() => questNow(page)).toBe(5);
 
-  // 6 養水：照老闆說的一天兩餐、每天測水，測到氨或亞硝就換水；14 個遊戲天內要養好
+  // 6 擺石頭、7 幫缸取名（等養水的空檔；造景拖放和改名的畫面另有測試，這裡直接改狀態）
+  await page.evaluate(() => {
+    const { game, sim } = (window as unknown as CycleWindow).cycle;
+    game.act((s) => {
+      sim.addHardscape(s, sim.HARDSCAPE.lava);
+      s.label = '我的第一缸';
+    });
+  });
+  // 老闆的對話框開著時任務不會往下走：關掉「完成」和下一個任務的說明。
+  // 兩個任務各有好幾頁對話，慢的 CI 上一幀要好幾秒，給久一點
+  await expect
+    .poll(
+      async () => {
+        await dismissGuide(page);
+        return questStep(page);
+      },
+      { timeout: 90_000 },
+    )
+    .toBe(7);
+
+  // 8 養水：照老闆說的一天兩餐、每天測水，測到氨或亞硝就換水；14 個遊戲天內要養好
   const log: string[] = [];
   let day = 0;
-  while ((await questStep(page)) < 6) {
+  while ((await questStep(page)) < 8) {
     day++;
     await fastForward(page, 12);
     await tool(page, '餵食');
@@ -89,15 +109,15 @@ test('新手任務 1～7：照老闆的引導從新存檔玩得完，魚不會�
     await tool(page, '餵食');
     await sheetButton(page, '一餐');
     const step = await questStep(page);
-    log.push(`第 ${day} 天：任務 ${step}/7，${await gameState<string>(page, DAY_SUMMARY)}`);
+    log.push(`第 ${day} 天：任務 ${step}/9，${await gameState<string>(page, DAY_SUMMARY)}`);
     expect(await aliveCount(page), `照教學照顧，魚不該死光（第 ${day} 天）\n${log.join('\n')}`).toBeGreaterThan(0);
     expect(day, `養水 14 個遊戲天內要完成\n${log.join('\n')}`).toBeLessThan(14);
   }
   await test.info().attach('每天的水質紀錄', { body: log.join('\n') });
 
-  // 7 等母魚懷孕：繼續照顧（每天直接餵，不再開面板，省時間）。
+  // 9 等母魚懷孕：繼續照顧（每天直接餵，不再開面板，省時間）。
   // 店裡的母魚常常在養水期間就生了，下一胎看得出懷孕要再等一陣子，最多給 30 天
-  for (let wait = 1; (await questStep(page)) < 7; wait++) {
+  for (let wait = 1; (await questStep(page)) < 9; wait++) {
     expect(wait, '養好水後 30 個遊戲天內要看到母魚懷孕').toBeLessThanOrEqual(30);
     await fastForward(page, 24);
     await page.evaluate(() => {
@@ -109,7 +129,7 @@ test('新手任務 1～7：照老闆的引導從新存檔玩得完，魚不會�
     });
   }
   await dismissGuide(page);
-  expect(await questStep(page), log.join('\n')).toBe(7);
+  expect(await questStep(page), log.join('\n')).toBe(9);
   expect(await aliveCount(page)).toBeGreaterThanOrEqual(3);
   expect(consoleErrors).toEqual([]);
 });

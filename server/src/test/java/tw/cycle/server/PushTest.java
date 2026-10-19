@@ -223,8 +223,12 @@ class PushTest {
         register(phone, seller, "crisis", "market").andExpect(status().isNoContent());
         register(tablet, seller, "crisis").andExpect(status().isNoContent());
         clock.advance(Duration.ofDays(3));
-        long listing = read(send(post("/api/market/listings"), seller, "{\"kind\":\"fish\",\"species\":\"guppy\",\"title\":\"藍草孔雀魚 公\",\"price\":200,\"item\":{\"health\":1}}")).get("id").asLong();
-        send(post("/api/market/listings/" + listing + "/buy"), buyer, "{\"packaging\":\"bag\"}").andExpect(status().isOk());
+        // 市場的錢直接改雲端存檔（docs/ledger.md），兩邊都先有一份
+        String save = "{\"baseRevision\":0,\"force\":false,\"save\":{\"version\":3,\"savedAt\":0,\"state\":{\"economy\":{\"coins\":1000}}}}";
+        send(put("/api/save"), seller, save).andExpect(status().isOk());
+        send(put("/api/save"), buyer, save).andExpect(status().isOk());
+        long listing = read(send(post("/api/market/listings"), seller, "{\"kind\":\"fish\",\"species\":\"guppy\",\"title\":\"藍草孔雀魚 公\",\"price\":200,\"item\":{\"health\":1},\"baseRevision\":1}")).get("id").asLong();
+        send(post("/api/market/listings/" + listing + "/buy"), buyer, "{\"packaging\":\"bag\",\"baseRevision\":1}").andExpect(status().isOk());
         push.sendDue();
         assertThat(transport.sent).hasSize(1);
         assertThat(transport.sent.get(0).endpoint().toString()).isEqualTo(phone.endpoint());
