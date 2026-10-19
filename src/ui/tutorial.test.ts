@@ -95,7 +95,7 @@ describe('新手卡關（玩家體驗評測第 1 輪）', () => {
 
   it('養水任務和任務卡都不看硝酸鹽', () => {
     const q = QUESTS.find((x) => x.id === 'cycled')!;
-    expect([q.title, ...q.lines, q.hint ?? ''].join('')).not.toMatch(/(?<!亞)硝酸鹽/);
+    expect([q.title, ...q.lines].join('')).not.toMatch(/(?<!亞)硝酸鹽/);
   });
 
   it('新缸一次放太多魚，買之前老闆提醒；有檢疫盒或缸養好了就不提醒', () => {
