@@ -5,6 +5,7 @@ import {
   dismissOrder,
   economy,
   FILTERS,
+  fishMatchesOrder,
   fulfillOrder,
   HEATERS,
   LIGHTS,
@@ -112,5 +113,18 @@ describe('店家訂單板（M21）', () => {
     simulate(b, 48);
     expect(a.rng.seed).toBe(b.rng.seed);
     expect(a.fish.map((f) => f.lengthCm)).toEqual(b.fish.map((f) => f.lengthCm));
+  });
+
+  it('店裡買來的魚、蝦不能直接交單（不然買來就能高價轉賣）', () => {
+    const s = tank();
+    const bought = addFish(s, 'guppy', { carriesIch: false, carries: [] });
+    bought.lengthCm = 2.4;
+    const o = juvenileOrder(s, 1);
+    expect(fishMatchesOrder(bought, o)).toBe(false);
+    expect(orderRefusal([s], o.id)).not.toBeNull();
+    const shrimp = addFish(s, 'cherry_shrimp', { carriesIch: false, carries: [] });
+    expect(fishMatchesOrder(shrimp, { ...o, species: 'cherry_shrimp' })).toBe(false);
+    shrimp.generation = 1;
+    expect(fishMatchesOrder(shrimp, { ...o, species: 'cherry_shrimp' })).toBe(true);
   });
 });

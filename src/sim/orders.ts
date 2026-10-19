@@ -83,6 +83,8 @@ export function orderTitle(o: ShopOrder): string {
 /** 這條魚符不符合訂單（健康、店家收得下；成魚單不收還沒長大的）。 */
 export function fishMatchesOrder(fish: Fish, o: ShopOrder): boolean {
   if (o.kind !== 'fish' || fish.species !== o.species || buybackRefusal(fish)) return false;
+  // 只收自己繁殖的（第 1 代以後）：店裡買來直接交單會變成穩賺的套利（mvp.md：收購不高於店售價，只有自選育的不受限）
+  if ((fish.generation ?? 0) < 1) return false;
   if (o.size === 'adult' && isJuvenile(fish)) return false;
   if (o.sex && fish.sex !== o.sex) return false;
   if (!o.strain && !o.fin && !o.minTail) return true;
