@@ -136,7 +136,7 @@ export class Guide {
     this.onLayout();
   }
 
-  /** 任務卡上的進度（硝酸鹽 0／5 之類），變了才改 DOM。 */
+  /** 任務卡上的進度（硝化菌 40% 之類），變了才改 DOM。 */
   private renderProgress(state: TankState): void {
     const text = currentQuest(this.progress)?.progress?.(state) ?? '';
     if (text === this.shownProgress) return;

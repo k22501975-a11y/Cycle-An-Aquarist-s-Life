@@ -18,7 +18,7 @@ export * from './forecast';
 export { hardscapeBacteriaCapacity, substrateNutrientBoost } from './processes/hardscape';
 export { canCatch, DISEASE_SPECS, hasVisible, infect, STORE_DISEASE_CHANCE } from './processes/disease';
 export { computeStressors, crowdingRatio, ELDERLY_FRACTION, freeAmmonia, lifeFraction } from './processes/fauna';
-export { bacteriaCapacity } from './processes/nitrogen';
+export { bacteriaCapacity, cycleMaturity, CYCLED_BACTERIA, isCycled } from './processes/nitrogen';
 export { currentPar } from './processes/plants';
 export { hidingFactor, MAX_FAUNA, sizeRatio } from './processes/population';
 export { breakHeater, HEATER_EXPOSED_LEVEL, lightHeatC, waterLevelL } from './processes/thermal';

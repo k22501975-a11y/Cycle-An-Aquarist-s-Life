@@ -1,5 +1,5 @@
 import type { KeyValueStore } from '../game/save';
-import { observeSymptoms, type TankState } from '../sim';
+import { cycleMaturity, isCycled, observeSymptoms, type TankState } from '../sim';
 
 /**
  * 新手引導任務（GAME_DESIGN 定案）：水族館老闆一步步帶玩家開缸、放魚、餵食、換水、養水。
@@ -17,7 +17,7 @@ export interface Quest {
   /** 完成時老闆說的話。 */
   done: string;
   check: (state: TankState) => boolean;
-  /** 任務卡上的進度（例如「硝酸鹽 0／5」），看得出還差多少。 */
+  /** 任務卡上的進度（例如「硝化菌 40%」），看得出還差多少。 */
   progress?: (state: TankState) => string | null;
   /** 任務卡上的一行提示（要等很久的任務才有）。 */
   hint?: string;
@@ -63,17 +63,17 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'cycled',
-    title: '養水完成：氨 0、亞硝 0、測得到硝酸鹽',
+    title: '養水完成：硝化菌長好、氨 0、亞硝 0',
     lines: [
       '接下來每天測水，看到氨或亞硝酸鹽就換水。',
-      '等到氨和亞硝酸鹽都是 0、而且測得到硝酸鹽，就代表硝化菌把廢物一路轉成了比較無害的硝酸鹽，缸子養好了。',
-      '氨、亞硝都是 0 但測不到硝酸鹽，代表菌還沒長起來，不是養好了；這時不要一直換水。養水通常要 3～7 天，等的時候可以用時鐘旁的快轉。',
+      '硝化菌長起來的途中，亞硝酸鹽會先冒出來一陣子，接著才降回 0。等硝化菌長好、氨和亞硝酸鹽都測到 0，缸子就養好了。',
+      '剛放魚的頭一兩天也常測到 0，那是魚的排泄物還少，不是養好了；看任務卡上的硝化菌進度。養水通常要 3～7 天，等的時候可以用時鐘旁的快轉。',
       '想快一點可以到商店買硝化菌液（1～3 天），或從自己養好的舊缸分一份濾材過來。',
     ],
     done: '恭喜，你的缸子「養好了」！現在可以慢慢多加一些魚。',
     check: (s) => {
       const r = s.lastTest?.reading;
-      return !!r && living(s).length > 0 && r.ammonia === 0 && r.nitrite === 0 && r.nitrate >= 5 && s.hours - s.lastTest!.hours < 24;
+      return !!r && living(s).length > 0 && r.ammonia === 0 && r.nitrite === 0 && s.hours - s.lastTest!.hours < 24 && isCycled(s);
     },
     progress: cycleProgress,
     hint: '通常 3～7 天，加硝化菌液 1～3 天',
@@ -92,7 +92,7 @@ export function cycleProgress(s: TankState): string {
   const test = s.lastTest;
   if (!test) return '還沒測過水';
   const r = test.reading;
-  const parts = [`硝酸鹽 ${fmt(r.nitrate)}／5`];
+  const parts = [`硝化菌 ${Math.floor(cycleMaturity(s) * 100)}%`];
   if (r.ammonia > 0) parts.unshift(`氨 ${fmt(r.ammonia)}`);
   if (r.nitrite > 0) parts.unshift(`亞硝 ${fmt(r.nitrite)}`);
   const stale = s.hours - test.hours >= 24;

@@ -6,7 +6,7 @@ import { hardscapeBacteriaCapacity } from './hardscape';
 const HALF_SATURATION = 0.2;
 /** 最大比生長率（每小時）。少量魚、正常餵食時新缸約 3～7 天養好（YenWel 2026-10-19 定案）；一次放太多魚還是會氨爆。 */
 const AOB_GROWTH = 0.12;
-const NOB_GROWTH = 0.1;
+const NOB_GROWTH = 0.14;
 /** 自然死亡率（每小時）。沒有食物時族群會慢慢縮小。 */
 const DECAY = 0.003;
 /** 缸壁、底砂也能長一點細菌（每公升水的容量）。 */
@@ -25,6 +25,19 @@ export function filterBacteriaShare(state: TankState): number {
   if (!filter) return 0;
   const surface = state.equipment.tank.volumeL * SURFACE_CAPACITY_PER_LITER + hardscapeBacteriaCapacity(state);
   return filter.spec.bacteriaCapacityMgPerHour / (filter.spec.bacteriaCapacityMgPerHour + surface);
+}
+
+/** 兩種硝化菌都長到這個量，才算「養好了」（少量魚、正常餵食約 5～8 天）。 */
+export const CYCLED_BACTERIA = 0.3;
+
+/** 硝化菌長起來的程度（0～1）：取比較慢的那種。 */
+export function cycleMaturity(state: TankState): number {
+  return Math.min(1, Math.min(state.bacteria.aob, state.bacteria.nob) / CYCLED_BACTERIA);
+}
+
+/** 缸子養好了：硝化菌夠多，而且氨和亞硝酸鹽真的被處理掉了。 */
+export function isCycled(state: TankState): boolean {
+  return cycleMaturity(state) >= 1 && state.water.tan < 0.1 && state.water.no2 < 0.1;
 }
 
 export function updateNitrogen(state: TankState, dt: number): void {
