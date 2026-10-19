@@ -100,10 +100,10 @@ export class ScapeView {
   }
 
   /** 依狀態重建石頭、沉木（位置或版面變了才重畫）。 */
-  sync(state: TankState, env: { bounds: TankBounds; hs: number; look: SubstrateLook; sceneKey: string }): void {
+  sync(state: TankState, env: { bounds: TankBounds; hs: number; look: SubstrateLook; sceneKey: string; pixelRatio?: number }): void {
     const list = state.equipment.hardscape ?? [];
     const places = hardscapePlacements(state);
-    const key = `${env.sceneKey}|${list.map((x, i) => `${x.id}@${JSON.stringify(places[i])}`).join(',')}`;
+    const key = `${env.sceneKey}@${env.pixelRatio ?? 1}|${list.map((x, i) => `${x.id}@${JSON.stringify(places[i])}`).join(',')}`;
     if (key !== this.key) {
       this.key = key;
       for (const v of this.items) {
@@ -113,7 +113,7 @@ export class ScapeView {
       this.items = list.map((spec, index) => {
         const place = places[index];
         const look = LAYER_LOOK[place.layer];
-        const painting = paintHardscapeItem(spec.id, place.seed, env.hs, (place.scale ?? 1) * look.scale, look.haze, !!place.flip);
+        const painting = paintHardscapeItem(spec.id, place.seed, env.hs, (place.scale ?? 1) * look.scale, look.haze, !!place.flip, env.pixelRatio);
         const sprite = new Sprite(painting.texture);
         sprite.anchor.set(painting.anchorX, painting.anchorY);
         this.rocks[place.layer].addChild(sprite);
