@@ -91,8 +91,17 @@ jobs:
     env:
       VITE_API_URL: ${{ vars.VITE_API_URL }}
       VERSION_CODE: ${{ github.run_number }}
+    outputs:
+      version: ${{ steps.version.outputs.name }}
     steps:
       - uses: actions/checkout@v4
+      # 版本號規則見 docs/release.md：main 是 0.1.0-beta.<執行編號>，其他分支是 0.1.0-dev.<執行編號>
+      - id: version
+        run: |
+          base=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then name="$base-beta.$GITHUB_RUN_NUMBER"; else name="$base-dev.$GITHUB_RUN_NUMBER"; fi
+          echo "VERSION_NAME=$name" >> "$GITHUB_ENV"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -106,10 +115,11 @@ jobs:
       - run: npm run android
       - run: ./gradlew assembleDebug --no-daemon
         working-directory: android
+      - run: mv android/app/build/outputs/apk/debug/app-debug.apk "cycle-$VERSION_NAME.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: cycle-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: cycle-*.apk
           retention-days: 14
       - name: 上架版 AAB（有簽章金鑰才做）
         if: github.ref == 'refs/heads/main'
@@ -147,3 +157,61 @@ jobs:
           echo "有關卡沒過，不能合併"
           exit 1
       - run: echo "全部通過"
+
+  # 測試版發布：main 上品質閘門（gate）通過才發，見 docs/quality-gate.md。
+  # 每版一個 GitHub pre-release（v0.1.0-beta.N，留最近 10 版），
+  # 另外 beta 這個固定標籤永遠指向最新一版，下載網址不會變。
+  beta-release:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [gate, android] # android 是為了拿版本號和 APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: beta-release
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION_NAME: ${{ needs.android.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: cycle-debug-apk
+      - name: 更新說明
+        run: |
+          prev=$(git tag --list 'v*-beta.*' --sort=-creatordate | head -n1)
+          {
+            echo "測試版 $VERSION_NAME（$(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')）"
+            echo
+            echo "## 這版更新"
+            if [ -n "$prev" ]; then
+              git log --no-merges --format='- %s' "$prev..HEAD"
+            else
+              git log --no-merges --format='- %s' -n 20
+            fi
+            echo
+            echo "## 安裝"
+            echo "手機下載下面的 \`cycle-$VERSION_NAME.apk\` 直接安裝，會蓋過舊版、存檔保留。第一次安裝要允許「安裝不明來源的應用程式」。"
+            echo "這是開發中的測試版，還沒上架。"
+          } > notes.md
+          cat notes.md
+      - name: 發布這一版
+        run: |
+          cp "cycle-$VERSION_NAME.apk" cycle-beta.apk
+          gh release create "v$VERSION_NAME" "cycle-$VERSION_NAME.apk" \
+            --prerelease --latest=false --target "$GITHUB_SHA" \
+            --title "測試版 $VERSION_NAME" --notes-file notes.md
+      - name: 更新固定的 beta 下載連結
+        run: |
+          gh release delete beta --cleanup-tag --yes || true
+          gh release create beta cycle-beta.apk \
+            --prerelease --latest=false --target "$GITHUB_SHA" \
+            --title "最新測試版（$VERSION_NAME）" --notes-file notes.md
+      - name: 只留最近 10 個測試版
+        run: |
+          gh release list --limit 100 --json tagName --jq '.[].tagName' \
+            | grep -E '^v[0-9.]+-beta\.[0-9]+$' | sort -t. -k4 -n -r | tail -n +11 \
+            | while read -r tag; do gh release delete "$tag" --cleanup-tag --yes; done
