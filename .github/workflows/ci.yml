@@ -46,25 +46,14 @@ jobs:
           tar xzf gitleaks.tgz gitleaks
           ./gitleaks git --no-banner --redact --exit-code 1 .
       # dependency-review 需要 repo 開啟 Dependency graph（Settings → Advanced Security）。
-      # 還沒開時只出警告、不擋（否則所有 PR 都過不了）；開了之後有 high 以上漏洞就擋。
-      - name: 確認 Dependency graph 已開啟
-        id: depgraph
-        if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-        run: |
-          if gh api "repos/$GITHUB_REPOSITORY/dependency-graph/compare/$BASE...$HEAD" > /dev/null 2> err.txt; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          elif grep -qi "HTTP 403\|dependency graph\|not supported" err.txt; then
-            echo "::warning title=新增套件檢查略過::這個 repo 還沒開 Dependency graph，請到 Settings → Advanced Security 開啟（docs/quality-gate.md）"
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-          else
-            cat err.txt; exit 1
-          fi
+      # 開了沒，API 只回一個不含原因的 403，無法和權限不足、rate limit 分辨，所以不靠錯誤訊息猜：
+      # 由 repo 的 Actions 變數 DEPENDENCY_REVIEW 明確決定。設成 enabled 後就一定跑，任何錯誤都會擋；
+      # 還沒設時跳過並出警告（docs/quality-gate.md「套件與秘密」）。
+      - name: 新增套件檢查（還沒啟用）
+        if: github.event_name == 'pull_request' && vars.DEPENDENCY_REVIEW != 'enabled'
+        run: echo "::warning title=新增套件檢查略過::Dependency graph 開好後，把 Actions 變數 DEPENDENCY_REVIEW 設成 enabled（docs/quality-gate.md）"
       - name: 新增套件檢查
-        if: github.event_name == 'pull_request' && steps.depgraph.outputs.enabled == 'true'
+        if: github.event_name == 'pull_request' && vars.DEPENDENCY_REVIEW == 'enabled'
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
