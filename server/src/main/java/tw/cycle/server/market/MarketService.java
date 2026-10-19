@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tw.cycle.server.config.ApiException;
 import tw.cycle.server.config.CycleProperties;
+import tw.cycle.server.ledger.CoinLedger;
 import tw.cycle.server.push.PushService;
 import tw.cycle.server.sim.SimClient;
 
@@ -36,6 +37,9 @@ import tw.cycle.server.sim.SimClient;
  * 之後更新近況、出貨時，魚的身分（品種、性別、基因）都要跟上架時一樣。
  *
  * <p>一條魚同時只能有一筆上架或成交（market_fish_claim，#75）：下架或訂單沒出貨就取消時放回來，出貨後就永遠是賣掉的。
+ *
+ * <p>錢（買東西、上架費、成交款、退款）都由伺服器記帳並直接改雲端存檔（{@link CoinLedger}，docs/ledger.md），
+ * 跟掛單、訂單在同一個交易裡：錢不夠就不成交，成交失敗就不扣錢。
  */
 @Service
 public class MarketService {
@@ -50,8 +54,9 @@ public class MarketService {
     private final RandomGenerator random;
     private final PushService push;
     private final SimClient sim;
+    private final CoinLedger ledger;
 
-    public MarketService(JdbcTemplate db, ObjectMapper json, Clock clock, CycleProperties props, RandomGenerator random, PushService push, SimClient sim) {
+    public MarketService(JdbcTemplate db, ObjectMapper json, Clock clock, CycleProperties props, RandomGenerator random, PushService push, SimClient sim, CoinLedger ledger) {
         this.db = db;
         this.json = json;
         this.clock = clock;
@@ -59,6 +64,7 @@ public class MarketService {
         this.random = random;
         this.push = push;
         this.sim = sim;
+        this.ledger = ledger;
     }
 
     public record Seller(String username, int deals, double doaRate, boolean warning) {}
@@ -72,6 +78,9 @@ public class MarketService {
 
     public record PricePoint(String day, int median, int count) {}
 
+    /** 買到的訂單和扣款後的錢包。 */
+    public record Bought(Order order, CoinLedger.Wallet wallet) {}
+
     private OffsetDateTime now() {
         return OffsetDateTime.now(clock);
     }
@@ -79,7 +88,7 @@ public class MarketService {
     // ---- 上架 ----
 
     @Transactional
-    public Map<String, Object> list(long me, String kind, String species, String title, JsonNode item, int price) throws Exception {
+    public Map<String, Object> list(long me, String kind, String species, String title, JsonNode item, int price, Long baseRevision) throws Exception {
         if (!"fish".equals(kind) && !"plant".equals(kind)) throw bad("bad_kind", "不能賣這種東西");
         if (!SPECIES.matcher(species).matches()) throw bad("bad_species", "不認得這個品種");
         if (title.isBlank() || title.length() > 80) throw bad("bad_title", "名稱太長了");
@@ -107,7 +116,8 @@ public class MarketService {
                 throw new ApiException(HttpStatus.CONFLICT, "already_listed", "這條魚已經在架上或賣出了");
             }
         }
-        return Map.of("id", id, "fee", fee);
+        CoinLedger.Wallet wallet = ledger.apply(me, baseRevision, -fee, "listing_fee", id);
+        return Map.of("id", id, "fee", fee, "wallet", wallet);
     }
 
     /** 伺服器那份存檔裡的這條魚（上架用）。 */
@@ -217,7 +227,7 @@ public class MarketService {
     }
 
     @Transactional
-    public Order buy(long me, long listingId, String packaging) {
+    public Bought buy(long me, long listingId, String packaging, Long baseRevision) throws Exception {
         MarketRules.Packaging pack = MarketRules.PACKAGING.get(packaging);
         if (pack == null) throw bad("bad_packaging", "沒有這種包裝");
         Map<String, Object> l = db.query("select * from market_listing where id = ?", rs -> rs.next() ? row(rs) : null, listingId);
@@ -230,8 +240,10 @@ public class MarketService {
         db.update("insert into market_order(listing_id, buyer_id, seller_id, kind, species, title, item, price, packaging, status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, 'paid', ?)",
                 listingId, me, seller, l.get("kind"), l.get("species"), l.get("title"), l.get("item"), l.get("price"), packaging, now());
         long id = db.queryForObject("select max(id) from market_order where buyer_id = ?", Long.class, me);
+        int cost = ((Number) l.get("price")).intValue() + pack.cost();
+        CoinLedger.Wallet wallet = ledger.apply(me, baseRevision, -cost, "market_buy", id);
         push.notifyAccount(seller, "market", "有人買了你的「" + l.get("title") + "」，打開遊戲就會自動出貨（24 小時內沒出貨會退款給買家）", "sale-" + id, null);
-        return order(me, id);
+        return new Bought(order(me, id), wallet);
     }
 
     // ---- 我的上架與訂單 ----
@@ -298,7 +310,7 @@ public class MarketService {
      * 買家：到貨了拿到魚（或退款）；賣家：到貨了拿到貨款（扣成交稅），買家沒收到就沒有錢。
      */
     @Transactional
-    public Map<String, Object> collect(long me, long id) throws Exception {
+    public Map<String, Object> collect(long me, long id, Long baseRevision) throws Exception {
         expireUnshipped();
         Map<String, Object> o = db.query("select * from market_order where id = ?", rs -> rs.next() ? row(rs) : null, id);
         if (o == null) throw new ApiException(HttpStatus.NOT_FOUND, "no_order", "沒有這筆訂單");
@@ -309,8 +321,12 @@ public class MarketService {
         boolean arrived = "shipped".equals(status) && !now().isBefore(time(o.get("arrive_at")));
         if (!arrived && !"cancelled".equals(status)) throw new ApiException(HttpStatus.CONFLICT, "not_yet", "還在路上");
         String column = buyer ? "buyer_done" : "seller_done";
-        if (db.update("update market_order set " + column + " = ? where id = ? and " + column + " is null", now(), id) == 0)
+        if (db.update("update market_order set " + column + " = ? where id = ? and " + column + " is null", now(), id) == 0) {
+            // 入帳了但回應沒送到（斷線重送）：回上次的結果，遊戲端照 ledgerSeq 判斷不會加兩次
+            Map<String, Object> again = collected(me, id, buyer ? "refund" : "payout");
+            if (again != null) return again;
             throw new ApiException(HttpStatus.CONFLICT, "done", "已經處理過了");
+        }
         int price = ((Number) o.get("price")).intValue();
         int refund = price + MarketRules.PACKAGING.get((String) o.get("packaging")).cost();
         boolean doa = Boolean.TRUE.equals(o.get("doa"));
@@ -339,6 +355,24 @@ public class MarketService {
                 out.put("amount", MarketRules.payout(price));
             }
         }
+        if (out.get("amount") instanceof Integer amount)
+            out.put("wallet", ledger.apply(me, baseRevision, amount, "refund".equals(out.get("result")) ? "refund" : "payout", id));
+        out.put("kind", o.get("kind"));
+        out.put("title", o.get("title"));
+        out.put("listingId", o.get("listing_id") == null ? 0 : ((Number) o.get("listing_id")).longValue());
+        return out;
+    }
+
+    /** 已經入帳過的退款或成交款（重送時回同一個結果）；沒有就是 null。 */
+    private Map<String, Object> collected(long me, long id, String reason) throws Exception {
+        Integer amount = db.query("select delta from coin_ledger where account_id = ? and reason = ? and ref_id = ?",
+                rs -> rs.next() ? rs.getInt("delta") : null, me, reason, id);
+        if (amount == null) return null;
+        Map<String, Object> o = db.query("select kind, title, listing_id from market_order where id = ?", rs -> rs.next() ? row(rs) : null, id);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("result", reason);
+        out.put("amount", amount);
+        out.put("wallet", ledger.apply(me, 0L, amount, reason, id));
         out.put("kind", o.get("kind"));
         out.put("title", o.get("title"));
         out.put("listingId", o.get("listing_id") == null ? 0 : ((Number) o.get("listing_id")).longValue());

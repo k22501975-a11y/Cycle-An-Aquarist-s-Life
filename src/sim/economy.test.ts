@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addCuttings,
+  applyLedger,
   addFish,
   BILL_DAYS,
   createTank,
@@ -144,5 +145,22 @@ describe('賣給水族店', () => {
     const got = sellCuttings(s, 'rotala');
     expect(got).toBe(5 * 10);
     expect(economy(s).cuttings.rotala).toBe(0);
+  });
+});
+
+describe('伺服器帳本（docs/ledger.md）', () => {
+  it('照 delta 加減，本機之後花的錢不會被加回來；同一筆不套用兩次', () => {
+    const s = createTank({ ...STARTER, seed: 1 });
+    economy(s).coins = 1000;
+    // 送出買東西的請求後，回應回來之前又在本機花了 50 元
+    economy(s).coins -= 50;
+    expect(applyLedger(s, { delta: -330, ledgerSeq: 1 })).toBe(true);
+    expect(economy(s).coins).toBe(620);
+    expect(economy(s).ledgerSeq).toBe(1);
+    // 重送拿到同一筆
+    expect(applyLedger(s, { delta: -330, ledgerSeq: 1 })).toBe(false);
+    expect(economy(s).coins).toBe(620);
+    expect(applyLedger(s, { delta: 276, ledgerSeq: 2 })).toBe(true);
+    expect(economy(s).coins).toBe(896);
   });
 });
