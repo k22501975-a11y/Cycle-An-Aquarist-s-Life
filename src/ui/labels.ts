@@ -138,6 +138,10 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
       return { text: `缸裡有 ${e.count ?? 2} 尾公鬥魚在打架！打輸的撐不了幾天，快把牠們分到不同缸`, tone: 'bad' };
     case 'betta_ate_shrimp':
       return { text: `${fish ? fishName(fish) : '鬥魚'} 吃掉了一隻蝦。這尾鬥魚會獵蝦，多種水草讓蝦躲，或分開養`, tone: 'warn' };
+    case 'nursery_gift':
+      return { text: `阿德老闆送你一個育幼盒！${fish ? fishName(fish) : '有尾母魚'}快生了，把牠放進去，生下的小魚就不會被大魚吃掉`, tone: 'info' };
+    case 'nursery_released':
+      return { text: `育幼盒裡 ${e.count ?? 0} 尾小魚長到 1.6 cm，大魚吞不下了，已經放回主缸`, tone: 'info' };
     case 'trap_rotted':
       return { text: '螺陷阱裡的菜放太久爛掉了，弄髒了水', tone: 'warn' };
   }

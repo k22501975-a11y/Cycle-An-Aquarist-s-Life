@@ -101,6 +101,16 @@ import {
   splitTank,
   rescueFryToBox,
   BOX_CAPACITY,
+  buyNurseryBox,
+  dueMothers,
+  moveDueToNursery,
+  moveToNursery,
+  NURSERY_FRY_CAPACITY,
+  NURSERY_RELEASE_CM,
+  nurseryFish,
+  nurseryRefusal,
+  releaseNursery,
+  rescueFryToNursery,
   type SplitPlan,
   daysUntilSexVisible,
   growthFactors,
@@ -623,6 +633,26 @@ export function splitPanel(ctx: PanelContext, suggested: SplitPlan): Node {
       }, 'primary'),
       (state.quarantine?.fish.length ?? 0) + n > BOX_CAPACITY ? h('p.hint', {}, `盒子放超過 ${BOX_CAPACITY} 條會擠，小魚長得慢一點`) : null,
     );
+  // 育幼盒（#187、#166）：掛在缸邊、不佔缸位；沒有就一鍵買了直接放
+  const nurseryOption = (group: Fish[]) => {
+    const n = group.filter((f) => isJuvenile(f)).length;
+    if (n === 0) return null;
+    const room = NURSERY_FRY_CAPACITY - nurseryFish(state).length;
+    const put = () => {
+      const moved = game.act((st) => rescueFryToNursery(st, splitGroup(st, 'by_size').filter((f) => isJuvenile(f))));
+      if (!moved) return;
+      ctx.sound?.('net');
+      toasts.show(`${moved} 條仔魚撈進育幼盒了，長到 ${NURSERY_RELEASE_CM} cm 會自己回主缸`);
+      sheet.close();
+    };
+    if (!state.nurseryBox)
+      return button(`去買育幼盒 ${price('nursery:box')} 元，把小魚放進去`, () => {
+        if (purchase(ctx, price('nursery:box'), buyNurseryBox, '買了育幼盒，掛在缸邊')) put();
+      }, 'primary');
+    const blocked = nurseryRefusal(state, group.find((f) => isJuvenile(f))!);
+    if (blocked) return h('p.hint', {}, `育幼盒：${blocked}`);
+    return button(`放進育幼盒（${Math.min(n, room)} 條${n > room ? `，盒子只放得下 ${room} 條` : ''}）`, put, 'primary');
+  };
   const render = () => {
     const group = splitGroup(state, plan);
     body.replaceChildren(
@@ -631,9 +661,10 @@ export function splitPanel(ctx: PanelContext, suggested: SplitPlan): Node {
       h('div.row.wrap', {}, ...plans.map((p) => h(`button.btn.small${p === plan ? '.primary' : ''}`, { onclick: () => ((plan = p), render()) }, SPLIT_PLAN_LABELS[p]))),
       h('p', {}, `要移的魚：${group.length} 條（${[...new Set(group.map((f) => fishName(f).replace(/ #\d+$/, '')))].join('、')}）`),
       h('h3', {}, '移到哪一缸'),
+      ...(plan === 'by_size' && group.length > 0 ? [nurseryOption(group)].filter((x): x is NonNullable<typeof x> => x !== null) : []),
       ...(plan === 'by_size' && state.quarantine && group.length > 0 ? [boxOption(group.length)] : []),
       others.length === 0
-        ? h('div.stack', {}, h('p.hint', {}, state.quarantine ? '沒有別的缸。仔魚可以先放檢疫盒；要長期養，再加一缸或把一部分賣掉、送朋友。' : '沒有別的缸。先加一缸（大缸比較穩，但設備要夠），或把一部分賣掉、送朋友。'), button('去加一缸', () => sheet.open('我的水缸', () => tanksPanel(ctx))))
+        ? h('div.stack', {}, h('p.hint', {}, plan === 'by_size' ? '沒有別的缸。仔魚先放育幼盒或檢疫盒，長大了自己回主缸；魚太多再加一缸，或把一部分賣掉。' : '沒有別的缸。先加一缸（大缸比較穩，但設備要夠），或把一部分賣掉、送朋友。'), button('去加一缸', () => sheet.open('我的水缸', () => tanksPanel(ctx))))
         : h(
             'div.row.wrap',
             {},
@@ -995,6 +1026,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         ),
         item(AIR_PUMPS.small.name, 'air:small', !!eq.airPump, () => purchase(ctx, price('air:small'), (st) => (st.equipment.airPump = { spec: AIR_PUMPS.small, on: true }), `裝上${AIR_PUMPS.small.name}`), '', 'gear/air-pump.webp'),
         item(CO2_KITS.diy.name, 'co2:diy', !!eq.co2, () => purchase(ctx, price('co2:diy'), (st) => (st.equipment.co2 = { spec: CO2_KITS.diy, on: true }), `裝上${CO2_KITS.diy.name}`), '', 'gear/co2-set.webp'),
+        item('育幼盒', 'nursery:box', !!game.state.nurseryBox, () => purchase(ctx, price('nursery:box'), buyNurseryBox, '買了育幼盒，掛在缸邊'), '快生的母魚、小魚放進去，大魚吃不到', 'gear/nursery-box.webp'),
         item('檢疫盒', 'quarantine:box', !!game.state.quarantine, () => purchase(ctx, price('quarantine:box'), buyQuarantine, '買了檢疫盒'), '新魚先隔離觀察', 'gear/quarantine-box.webp'),
       ),
       h('h3', {}, '底材'),
@@ -1165,6 +1197,91 @@ const HARDSCAPE_NOTES: Record<string, string> = {
 };
 
 /** 檢疫盒裡看得到的症狀（盒子的水質不追蹤，只看病）。 */
+/** 把最快生的母魚放進育幼盒（待辦、早上報告、老闆引導共用）。回傳有沒有放進去。 */
+export function putDueInNursery(ctx: PanelContext): boolean {
+  const mom = ctx.game.act((st) => moveDueToNursery(st));
+  if (!mom) {
+    ctx.toasts.show('育幼盒現在放不進去，打開育幼盒看看', 'warn');
+    return false;
+  }
+  ctx.sound?.('net');
+  ctx.toasts.show(`把 ${fishName(mom)} 放進育幼盒待產，生完會自己回主缸`);
+  return true;
+}
+
+/** 待辦「去買育幼盒」：買了直接把快生的母魚放進去。 */
+export function buyNurseryForDue(ctx: PanelContext): void {
+  if (purchase(ctx, price('nursery:box'), buyNurseryBox, '買了育幼盒，掛在缸邊')) putDueInNursery(ctx);
+}
+
+/**
+ * 育幼盒（mvp.md §4.4.2，#187）：掛在主缸裡的小網盒。看盒裡有誰、把快生的母魚或會被吃的小魚放進去。
+ * 母魚生完、小魚長到 1.6 cm 都會自己回主缸，玩家不用記。
+ */
+export function nurseryPanel(ctx: PanelContext): Node {
+  const { game, sheet, toasts } = ctx;
+  const s = game.state;
+  if (!s.nurseryBox)
+    return h(
+      'div.stack',
+      {},
+      h('p', {}, '育幼盒掛在主缸邊，用的是同一缸的水，不佔缸位。快生的母魚放進去，生下的小魚掉進隔間，大魚吃不到。'),
+      button(`買一個（${price('nursery:box')} 元）`, () => purchase(ctx, price('nursery:box'), buyNurseryBox, '買了育幼盒，掛在缸邊') && sheet.refresh(), 'primary'),
+    );
+  const inside = nurseryFish(s);
+  const mom = inside.find((f) => !isJuvenile(f));
+  const kids = inside.filter((f) => isJuvenile(f));
+  const biggest = Math.max(0, ...kids.map((f) => f.lengthCm));
+  const due = dueMothers(s);
+  const prey = splitGroup(s, 'by_size').filter((f) => isJuvenile(f) && splitAdvice(s).some((a) => a.reason === 'fry_with_adults'));
+  return h(
+    'div.stack',
+    {},
+    h('h3', {}, '盒裡'),
+    inside.length === 0 ? h('p.hint', {}, '空的。母魚肚子很鼓、下面出現黑點，就是快生了。') : null,
+    mom ? h('div.item', {}, h('div', {}, h('b', {}, fishName(mom)), h('div.hint', {}, mom.pregnancy > 0 ? '待產中，生完會自己回主缸' : '沒懷孕'))) : null,
+    kids.length > 0 ? h('div.item', {}, h('div', {}, h('b', {}, `${kids.length} 尾小魚`), h('div.hint', {}, `最大的 ${biggest.toFixed(1)} cm，長到 ${NURSERY_RELEASE_CM} cm 會自己回主缸`))) : null,
+    ...due.map((f) => {
+      const no = nurseryRefusal(s, f);
+      return h(
+        'div.item',
+        {},
+        h('div', {}, h('b', {}, fishName(f)), h('div.hint', {}, no ?? '快生了')),
+        no
+          ? null
+          : button('放進去', () => {
+              game.act((st) => moveToNursery(st, f.id));
+              ctx.sound?.('net');
+              toasts.show(`把 ${fishName(f)} 放進育幼盒待產`);
+              sheet.refresh();
+            }, 'primary'),
+      );
+    }),
+    prey.length > 0
+      ? h(
+          'div.item',
+          {},
+          h('div', {}, h('b', {}, `主缸還有 ${prey.length} 尾小魚`), h('div.hint', {}, nurseryRefusal(s, prey[0]) ?? '會被大魚吃掉')),
+          nurseryRefusal(s, prey[0])
+            ? null
+            : button('撈進盒子', () => {
+                const moved = game.act((st) => rescueFryToNursery(st, splitGroup(st, 'by_size').filter((f) => isJuvenile(f))));
+                ctx.sound?.('net');
+                toasts.show(`${moved} 條小魚撈進育幼盒了`);
+                sheet.refresh();
+              }, 'primary'),
+        )
+      : null,
+    inside.length > 0
+      ? button('全部放回主缸', () => {
+          game.act((st) => releaseNursery(st));
+          toasts.show('盒裡的魚都放回主缸了');
+          sheet.refresh();
+        })
+      : null,
+  );
+}
+
 export function quarantineSymptoms(fish: Fish): Symptom[] {
   const out: Symptom[] = [];
   if (fish.ich.stage === 'visible') out.push('white_spots');
@@ -1428,6 +1545,18 @@ export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: P
             'gear/quarantine-box.webp',
             h('div.item-main', {}, h('b', {}, `檢疫盒裡有 ${s.quarantine.fish.filter((f) => f.alive).length} 條`), h('div.hint', {}, '新魚先觀察，發病了就在盒子裡藥浴')),
             button('查看', () => sheet.open('檢疫盒', () => quarantinePanel({ game, sheet, toasts, undoable }))),
+          ),
+        )
+      : null,
+    s.nurseryBox
+      ? h(
+          'div.stack',
+          {},
+          h('h3', {}, '育幼盒'),
+          row(
+            'gear/nursery-box.webp',
+            h('div.item-main', {}, h('b', {}, `育幼盒裡有 ${nurseryFish(s).length} 條`), h('div.hint', {}, '快生的母魚、會被吃的小魚放這裡')),
+            button('查看', () => sheet.open('育幼盒', () => nurseryPanel({ game, sheet, toasts, undoable }))),
           ),
         )
       : null,

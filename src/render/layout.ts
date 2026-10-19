@@ -15,6 +15,38 @@ export function floorAt(b: TankBounds, x: number): number {
   return b.floor ? b.floor(x) : b.bottom;
 }
 
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** 育幼盒掛在缸的右上角、上緣露出水面一點（#187）。盒裡的魚只在框裡游。 */
+export function nurseryRect(b: TankBounds): Rect {
+  const w = Math.min(b.width * 0.2, 220);
+  const h = Math.min((b.bottom - b.surface) * 0.32, 150);
+  return { x: b.width * 0.96 - w, y: b.surface - h * 0.12, w, h };
+}
+
+/** 把盒裡的魚關在框裡（留 pad 的邊），撞到邊就掉頭。回傳有沒有撞到。 */
+export function keepInRect(s: { x: number; y: number; vx: number; vy: number }, r: Rect, surface: number, pad: number): boolean {
+  const x0 = r.x + pad, x1 = r.x + r.w - pad;
+  const y0 = Math.max(r.y, surface) + pad, y1 = r.y + r.h - pad;
+  let hit = false;
+  if (s.x < x0 || s.x > x1) {
+    s.x = Math.min(x1, Math.max(x0, s.x));
+    s.vx = -s.vx * 0.5;
+    hit = true;
+  }
+  if (s.y < y0 || s.y > y1) {
+    s.y = Math.min(y1, Math.max(y0, s.y));
+    s.vy = -s.vy * 0.5;
+    hit = true;
+  }
+  return hit;
+}
+
 /** 狀態列、下方按鈕列蓋住畫面的高度（它們是半透明的，水缸畫在它們後面）。 */
 export interface Insets {
   top: number;

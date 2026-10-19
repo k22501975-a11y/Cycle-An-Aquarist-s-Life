@@ -23,6 +23,7 @@ const KIND_ICON: Record<ReportKind, ArtIcon> = {
   plant_died: 'trim',
   hungry: 'feed',
   orders: 'orders',
+  nursery: 'net',
   quiet: 'owner',
 };
 
@@ -39,6 +40,7 @@ const ACTION_ICON: Record<NonNullable<ReportItem['action']>, ArtIcon> = {
   snails: 'net',
   trim: 'trim',
   fry_box: 'net',
+  nursery: 'net',
 };
 
 /** 點下去會做什麼（按鈕上的小字）。 */
@@ -54,6 +56,7 @@ const ACTION_LABEL: Record<NonNullable<ReportItem['action']>, string> = {
   snails: '處理',
   trim: '修剪',
   fry_box: '救小魚',
+  nursery: '放進盒子',
 };
 
 export interface MorningCardDeps {

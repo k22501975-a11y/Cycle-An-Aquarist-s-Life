@@ -52,6 +52,8 @@ export interface TankState {
   snails?: SnailState;
   /** 檢疫盒：買了才有。 */
   quarantine?: Quarantine | null;
+  /** 掛了育幼盒（nursery.ts）：盒裡的魚在 fish 裡、帶 nursery 標記。 */
+  nurseryBox?: boolean;
   /** 缸裡正在溶解的假期飼料錠，每顆還剩幾 mg（feeders.ts）。 */
   holidayTablets?: number[];
 }
@@ -255,6 +257,8 @@ export interface Fish {
   broodsRaised?: number;
   /** 護幼色 0–1：帶小孩時轉成鮮黃加黑紋。 */
   broodColor?: number;
+  /** 在育幼盒裡（掛在主缸裡的小網盒，nursery.ts）：成魚吃不到、不會配對。 */
+  nursery?: boolean;
 }
 
 export interface Plant {
@@ -293,7 +297,11 @@ export type SimEventType =
   | 'brood_eaten'
   | 'brood_left'
   /** 仔魚、仔蝦被大魚吃掉（count 是這一段時間被吃了幾尾，cause 是物種）。 */
-  | 'fry_eaten';
+  | 'fry_eaten'
+  /** 阿德老闆送了育幼盒（subjectId 是快生的那尾母魚）。 */
+  | 'nursery_gift'
+  /** 育幼盒裡的小魚長夠大，放回主缸了（count 尾）。 */
+  | 'nursery_released';
 
 export interface SimEvent {
   hours: number;

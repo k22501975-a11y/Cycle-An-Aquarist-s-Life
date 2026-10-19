@@ -4,7 +4,7 @@ import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedArtVersion, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { SETUP_SECONDS, setupLook, setupStepAt, type SetupStep } from './setup-show';
 import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, hungerLook, sickLook, spawnSwimmer, stepTurn, swimTilt, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
-import { floorAt, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
+import { floorAt, keepInRect, nurseryRect, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { dirtSpots, floorY, frontLip, sandSurface, tankSubstrateLook, SUBSTRATE_PALETTES, type SubstrateLook } from './substrate';
 import { celebrateFrame, CELEBRATE_SECONDS, sparkleAlpha, sparkleBurst, type Sparkle } from './celebrate';
 import { applyFoodLook, BITE_SECONDS, biteKick, biteMotion, frenzyLevel, visiblePellets, mouthOpenness, pickEaten, pickFoodKind, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type FoodLook, type Mouth, type Pellet } from './feeding';
@@ -1526,7 +1526,11 @@ export class TankView {
 
     const all = [...this.fish.values()].map((v) => v.swimmer);
     const alive = new Set(state.fish.filter((f) => f.alive).map((f) => f.id));
-    const living = all.filter((s) => alive.has(s.id));
+    // 育幼盒裡的魚（#187）只跟盒裡的一起游，關在右上角的框裡
+    const boxed = new Set(state.nurseryBox ? state.fish.filter((f) => f.alive && f.nursery).map((f) => f.id) : []);
+    const living = all.filter((s) => alive.has(s.id) && !boxed.has(s.id));
+    const inBox = all.filter((s) => boxed.has(s.id));
+    const box = nurseryRect(this.waterBounds);
     const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food, frenzy: this.food.length ? frenzyLevel(this.dropT) : 0 };
     for (const fish of state.fish) {
       const view = this.fish.get(fish.id)!;
@@ -1537,10 +1541,15 @@ export class TankView {
       // 身體大小（上一格的景深）：讓整條魚留在缸裡
       const halfLen = this.lengthPx(fish) * (0.72 + 0.33 * view.z) * 0.5;
       const body = { halfLen, halfH: halfLen * ('heightPx' in rig ? rig.heightPx / Math.max(1, rig.lengthPx) : 0.35) };
-      updateSwimmer(swimmer, living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX, body, begging: hungerLook(fish.hunger).begging }, ctx, dt, () => this.rand());
+      const caged = boxed.has(fish.id);
+      updateSwimmer(swimmer, caged ? inBox : living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX, body, begging: hungerLook(fish.hunger).begging }, ctx, dt, () => this.rand());
 
+      if (caged) {
+        if (keepInRect(swimmer, box, this.waterBounds.surface, Math.min(box.w * 0.3, halfLen + 4 * this.motionScale))) swimmer.wander += Math.PI;
+        view.zTarget = view.z = 1;
+      }
       // 景深：魚慢慢在前後之間游動；遠的小一點、模糊偏藍，畫在造景後面。
-      if (!isShrimpSpecies(fish.species) && fish.alive) {
+      if (!isShrimpSpecies(fish.species) && fish.alive && !caged) {
         if (this.rand() < dt * 0.04) view.zTarget = this.rand();
         view.z += (view.zTarget - view.z) * Math.min(1, dt * 0.25);
       }
@@ -1764,6 +1773,19 @@ export class TankView {
       g.circle(b.x - r * 0.35, b.y - r * 0.35, r * 0.28).fill({ color: 0xffffff, alpha: 0.85 });
     }
     this.drawNests(state, g, dt);
+    if (state.nurseryBox) this.drawNurseryBox(g);
+  }
+
+  /** 育幼盒（#187）：右上角一個透明的網盒，掛在缸緣。美術圖做好前先用線畫。 */
+  private drawNurseryBox(g: Graphics): void {
+    const r = nurseryRect(this.waterBounds);
+    const hs = this.hs;
+    g.roundRect(r.x, r.y, r.w, r.h, 6 * hs).fill({ color: 0xe8fbff, alpha: 0.08 }).stroke({ color: 0xe8fbff, width: 2 * hs, alpha: 0.55 });
+    // 網子：細細的直線
+    for (let x = r.x + 8 * hs; x < r.x + r.w - 4 * hs; x += 8 * hs) g.moveTo(x, r.y + 4 * hs).lineTo(x, r.y + r.h - 4 * hs);
+    g.stroke({ color: 0xe8fbff, width: 0.6 * hs, alpha: 0.18 });
+    // 掛勾
+    g.roundRect(r.x + r.w * 0.2, r.y - 10 * hs, r.w * 0.6, 10 * hs, 3 * hs).fill({ color: 0xcfe9f2, alpha: 0.5 });
   }
 
   private drawOverlay(state: TankState): void {

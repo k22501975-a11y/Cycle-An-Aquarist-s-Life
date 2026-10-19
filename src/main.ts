@@ -40,6 +40,9 @@ import {
   snailPanel,
   maintenancePanel,
   quarantinePanel,
+  nurseryPanel,
+  putDueInNursery,
+  buyNurseryForDue,
   plantPanel,
   shopPanel,
   tanksPanel,
@@ -53,7 +56,7 @@ import { Guide } from './ui/guide';
 import { Celebration, type CelebrateSpec } from './ui/celebrate';
 import { firstTime, type DeathAdviceCause, type MomentId } from './ui/moments';
 import { causeAdvice, HUNGER_LABEL, illnessOf, needsAdvice } from './ui/owner-advice';
-import { ownerSay } from './ui/owner-ask';
+import { ownerGuide, ownerSay } from './ui/owner-ask';
 import { fryArt, guppyArt } from './ui/shop-cards';
 import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
 import { recordsPanel } from './ui/records';
@@ -531,7 +534,14 @@ async function start(): Promise<void> {
   const caps = h('button.caps', { 'aria-label': '水質趨勢', title: '點一下看水質趨勢', onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) });
   // 分缸提示可以點：打開一鍵分缸
   const todoRow = (t: Todo) =>
-    t.split
+    t.nursery
+      ? h(
+          `div.todo-item.${t.tone}.nursery`,
+          {},
+          h('span', {}, t.text.replace(/[，：].*$/, '')),
+          h('button.btn.small.primary', { onclick: () => (t.nursery === 'put' ? putDueInNursery(ctx) : buyNurseryForDue(ctx)) }, t.nursery === 'put' ? '放進育幼盒' : `去買育幼盒 ${sim.price('nursery:box')} 元`),
+        )
+      : t.split
       ? h(`button.todo-item.${t.tone}.split`, { onclick: () => sheet.open('分缸', () => splitPanel(ctx, t.split!)) }, h('img.todo-icon', { src: `${import.meta.env.BASE_URL}art/ui/icon-split.webp`, alt: '' }), t.text)
       : t.snails
         ? h(`button.todo-item.${t.tone}.split`, { onclick: () => sheet.open('螺', () => snailPanel(ctx)) }, h('img.todo-icon', { src: `${import.meta.env.BASE_URL}art/snail/snail-bladder.webp`, alt: '' }), t.text)
@@ -949,9 +959,30 @@ async function start(): Promise<void> {
 
   // 其他缸的事件也要通知，前面加上缸名
   const tankPrefix = (tank: number) => (game.tanks.length > 1 && tank !== game.active ? `${sim.tankLabel(game.tanks, tank)}：` : '');
+  /** 過一晚時老闆送了育幼盒：報告卡關掉後再帶玩家放母魚（記是哪一缸）。 */
+  let nurseryGiftTank: number | null = null;
+  /** 第一次有母魚快生了，老闆送育幼盒，一個步驟帶玩家把她放進去（mvp.md §4.4.2 第 2 點）。 */
+  const nurseryGuide = async (tank: number) => {
+    const t = game.tanks[tank] ?? game.state;
+    const mom = sim.dueMothers(t)[0];
+    const name = mom ? fishName(mom) : '那尾母魚';
+    audio.play('quest');
+    const yes = await ownerGuide(`${name}肚子很鼓，快生了！我送你一個育幼盒，已經掛在缸邊。把她放進去，生下的小魚掉進隔間，大魚就吃不到。之後要更多再到商店買。`, '放進去');
+    if (!yes) {
+      toasts.show('育幼盒在「設備與維護」裡，待辦也有按鈕可以放');
+      return;
+    }
+    game.switchTo(tank);
+    putDueInNursery(ctx);
+  };
   /** 每缸上次提醒「小魚被吃」是第幾個遊戲天。 */
   const fryEatenToast = new Map<number, number>();
   game.onEvent((e, tank) => {
+    // 阿德老闆送育幼盒（#187）：過一晚時等報告卡關掉再帶
+    if (e.type === 'nursery_gift') {
+      if (game.sleeping || sleepingNow) nurseryGiftTank = tank;
+      else void nurseryGuide(tank);
+    }
     // 過一晚的時候不跳提示，早上報告會一條一條列出來
     if (game.sleeping) return;
     if (e.type === 'fish_died') {
@@ -1073,7 +1104,13 @@ async function start(): Promise<void> {
         sheet.open('修剪水草', () => trimListPanel(ctx));
         break;
       case 'fry_box':
-        sheet.open('檢疫盒', () => quarantinePanel(ctx));
+        // 有育幼盒（或兩個都沒有，可以在那裡買）就開育幼盒；只有檢疫盒才開檢疫盒
+        if (game.state.quarantine && !game.state.nurseryBox) sheet.open('檢疫盒', () => quarantinePanel(ctx));
+        else sheet.open('育幼盒', () => nurseryPanel(ctx));
+        break;
+      case 'nursery':
+        if (game.state.nurseryBox) putDueInNursery(ctx);
+        else sheet.open('育幼盒', () => nurseryPanel(ctx));
         break;
       case 'fish':
       case 'treat':
@@ -1122,6 +1159,11 @@ async function start(): Promise<void> {
         window.setTimeout(() => shade.remove(), 450);
         sleepingNow = false;
         celebration.release();
+        if (nurseryGiftTank !== null) {
+          const tank = nurseryGiftTank;
+          nurseryGiftTank = null;
+          void nurseryGuide(tank);
+        }
       });
       shade.setAttribute('aria-hidden', 'false');
       shade.append(card);

@@ -132,7 +132,7 @@ export const QUESTS: Quest[] = [
     reward: 150,
     title: '迎接第一窩小魚',
     short: '第一窩小魚',
-    lines: ['店裡的母魚大多已經懷孕了，肚子鼓起來、下面出現黑點就是快生了。', '成魚會吃小魚：多種莫絲、矮珍珠讓小魚躲，或把快生的母魚放進檢疫盒當產卵盒。'],
+    lines: ['店裡的母魚大多已經懷孕了，肚子鼓起來、下面出現黑點就是快生了。', '成魚會吃小魚：多種莫絲、矮珍珠讓小魚躲，或把快生的母魚放進育幼盒。'],
     done: '母魚要當媽媽了！新手引導就到這裡，接下來看任務卡上的目標，一步步把缸養起來。有狀況我還會來提醒你。',
     // 懷孕看得出來，或已經生過了（任務出現前就生了也算）
     check: (s) => living(s).some((f) => observeSymptoms(s, f).includes('pregnant')) || s.events.some((e) => e.type === 'fry_born') || s.fish.some((f) => (f.generation ?? 0) > 0),
@@ -255,7 +255,7 @@ export const TIPS: Tip[] = [
   },
   {
     id: 'fry_eaten',
-    text: '小魚都被大魚吃掉了……孔雀魚會吃自己的小孩。下次母魚肚子鼓起來時，把牠放進檢疫盒當產卵盒；多種莫絲、矮珍珠這種密草，小魚也比較好躲。',
+    text: '小魚都被大魚吃掉了……孔雀魚會吃自己的小孩。下次母魚肚子鼓起來時，把牠放進育幼盒（商店 150 元）；多種莫絲、矮珍珠這種密草，小魚也比較好躲。',
     check: (s) => {
       const born = s.events.filter((e) => e.type === 'fry_born');
       const last = born[born.length - 1];

@@ -1,4 +1,4 @@
-import { HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
+import { dueMothers, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -85,6 +85,8 @@ export interface Todo {
   split?: SplitPlan;
   /** 點了打開螺的管理。 */
   snails?: true;
+  /** 母魚快生了（#187）：put 是有盒子、按了放進育幼盒；buy 是還沒有，按了買一個再放進去。 */
+  nursery?: 'put' | 'buy';
 }
 
 /** 待辦卡：今天該做的事，嚴重的排前面。只用玩家看得到的資訊（症狀、死魚、設備狀態、自己做過的事）。 */
@@ -164,8 +166,12 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
     if (hunger > HUNGRY) out.push({ text: '魚餓了，該餵食', tone: 'warn' });
   }
 
-  const pregnant = symptoms.filter((x) => x.s.includes('pregnant'));
-  const guppies = pregnant.filter((x) => !isShrimpSpecies(x.fish.species)).length;
+  const pregnant = symptoms.filter((x) => x.s.includes('pregnant') && !x.fish.nursery);
+  // 快生了：直接附「放進育幼盒」或「去買育幼盒」（mvp.md §4.4.2 第 3 點）；盒子正在用就照舊提醒
+  const due = dueMothers(state);
+  const dueTodo = due.length === 0 ? null : !state.nurseryBox ? 'buy' : due.some((f) => !nurseryRefusal(state, f)) ? 'put' : null;
+  if (dueTodo) out.push({ text: dueTodo === 'put' ? '母魚快生了，放進育幼盒' : `母魚快生了：去買育幼盒 ${price('nursery:box')} 元`, tone: 'warn', nursery: dueTodo });
+  const guppies = dueTodo ? 0 : pregnant.filter((x) => !isShrimpSpecies(x.fish.species)).length;
   const shrimp = state.fish.filter((f) => f.alive && isShrimpSpecies(f.species) && f.pregnancy > 0).length;
   if (guppies > 0) out.push({ text: `${guppies} 條母魚肚子鼓鼓的，快生了`, tone: 'ok' });
   if (shrimp > 0) out.push({ text: `${shrimp} 隻母蝦正在抱卵`, tone: 'ok' });

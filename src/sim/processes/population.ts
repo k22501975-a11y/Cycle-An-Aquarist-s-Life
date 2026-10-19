@@ -8,6 +8,7 @@ import { growFish } from '../growth';
 import { tankHabit } from '../acclimation';
 import { guardedPredationFactor, isParentalSpawner } from '../parental';
 import { bettaAggression } from '../betta';
+import { nurseryBirth } from '../nursery';
 import { childInbreeding, cross, matingSuccess, type GuppyGenome } from '../genetics';
 
 /**
@@ -85,7 +86,9 @@ export function updatePopulation(state: TankState, dt: number): void {
   }
 
   const hiding = hidingFactor(state);
-  const eaten = predation(state, living, hiding, dt);
+  // 育幼盒裡的魚隔著網子：大魚吃不到、不會咬鰭，盒裡的母魚也吃不到外面的小魚（nursery.ts）
+  const open = living.filter((f) => !f.nursery);
+  const eaten = predation(state, open, hiding, dt);
   // 被吃掉的幼體直接從缸裡消失；記一筆事件（同一種一筆），早上報告和通知才知道（#176）
   if (eaten.size > 0) {
     state.fish = state.fish.filter((f) => !eaten.has(f));
@@ -93,7 +96,7 @@ export function updatePopulation(state: TankState, dt: number): void {
     for (const f of eaten) bySpecies.set(f.species, (bySpecies.get(f.species) ?? 0) + 1);
     for (const [species, count] of bySpecies) recordEvent(state, { type: 'fry_eaten', cause: species, count });
   }
-  const survivors = living.filter((f) => !eaten.has(f));
+  const survivors = open.filter((f) => !eaten.has(f));
   finNipping(state, survivors, hiding, dt);
   const hunted = bettaAggression(state, survivors, hiding, dt);
   if (hunted.size > 0) state.fish = state.fish.filter((f) => !hunted.has(f));
@@ -182,16 +185,18 @@ function breed(state: TankState, tf: number, dt: number): void {
       mother.pregnancy += (dt / 24 / sp.breeding.gestationDays) * Math.sqrt(tf);
       if (mother.pregnancy >= 1) {
         mother.pregnancy = 0;
-        giveBirth(state, mother, living.length);
+        const fry = giveBirth(state, mother, living.length);
+        if (mother.nursery) nurseryBirth(state, mother, fry);
       }
       continue;
     }
+    if (mother.nursery) continue;
 
     // 水溫低於適溫下限時停止繁殖（temperature.md §3）
     const warmEnough = state.water.tempC >= sp.temp.min;
     // 太老的母魚不再懷孕
     const relaxed = warmEnough && lifeFraction(mother) < 0.9 && mother.health > 0.7 && mother.stress < 0.4 && mother.hunger < 0.7 && mother.starvingHours < 24;
-    const males = relaxed ? living.filter((f) => f.species === mother.species && f.sex === 'male' && !isJuvenile(f)) : [];
+    const males = relaxed ? living.filter((f) => f.species === mother.species && f.sex === 'male' && !isJuvenile(f) && !f.nursery) : [];
     // 緞帶、大C 的公魚交接器太長配不了，燕尾的也很難配（strains.md §1.3）
     const fertility = males.map((m) => (m.genome ? matingSuccess(m.genome) : 1));
     const best = Math.max(0, ...fertility);

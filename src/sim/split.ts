@@ -32,7 +32,9 @@ const young = (f: Fish) => {
 };
 
 /** 會被缸裡成魚吃掉的小魚（嘴巴塞得下）。 */
-function preyAtRisk(living: Fish[]): Fish[] {
+function preyAtRisk(all: Fish[]): Fish[] {
+  // 育幼盒裡的魚隔著網子，不算
+  const living = all.filter((f) => !f.nursery);
   const mouths = living.filter((f) => !isJuvenile(f) && FISH_SPECIES[f.species].mouthRatio > 0).map((f) => f.lengthCm * FISH_SPECIES[f.species].mouthRatio);
   const biggest = Math.max(0, ...mouths);
   // 媽媽還帶著的仔魚有人保護，先不用撈（離巢後再分）
@@ -53,7 +55,7 @@ export function splitAdvice(state: TankState): SplitAdvice[] {
   if (crowd > 1) out.push({ reason: 'crowded', tone: 'bad', text: `缸裡太擠了（${living.length} 條），缺氧、氨升高，最弱的會先死：分缸、賣掉一些或換大缸`, plan: hasYoung ? 'by_size' : 'half' });
   else if (crowd > 0.8) out.push({ reason: 'crowded', tone: 'warn', text: `魚快養滿了（${living.length} 條），該分缸或賣掉一些了`, plan: hasYoung ? 'by_size' : 'half' });
   const prey = preyAtRisk(living);
-  if (prey.length > 0) out.push({ reason: 'fry_with_adults', tone: prey.length >= 5 ? 'bad' : 'warn', text: `成魚會吃小魚：把 ${prey.length} 條仔魚撈到${state.quarantine ? '檢疫盒（當育幼盒）或別缸' : '別缸'}`, plan: 'by_size' });
+  if (prey.length > 0) out.push({ reason: 'fry_with_adults', tone: prey.length >= 5 ? 'bad' : 'warn', text: `成魚會吃小魚：把 ${prey.length} 條仔魚撈到${state.nurseryBox ? '育幼盒' : state.quarantine ? '檢疫盒' : '育幼盒（商店 150 元）'}或別缸`, plan: 'by_size' });
   const pairs = youngPairs(living);
   if (pairs.males.length > 0 && pairs.females.length > 0 && pairs.males.some((m) => (m.generation ?? 0) > 0))
     out.push({ reason: 'sexes_mixed', tone: 'warn', text: `小魚分得出公母了（${pairs.males.length} 條小公魚）：公母分開，免得太早亂配`, plan: 'by_sex' });
@@ -62,7 +64,7 @@ export function splitAdvice(state: TankState): SplitAdvice[] {
 
 /** 照這個分法要移走哪些魚。 */
 export function splitGroup(state: TankState, plan: SplitPlan): Fish[] {
-  const living = state.fish.filter((f) => f.alive && f.listing === undefined);
+  const living = state.fish.filter((f) => f.alive && f.listing === undefined && !f.nursery);
   if (plan === 'by_size') {
     // 先移會被吃的那些；沒有掠食者時就移所有還沒長大的
     const prey = preyAtRisk(living);

@@ -35,3 +35,33 @@ test('只有一缸：仔魚可以撈進檢疫盒', async ({ page }) => {
   await page.locator('.sheet.open button', { hasText: '放進檢疫盒' }).dispatchEvent('click');
   await expect.poll(() => page.evaluate(() => (window as unknown as Cycle).cycle.game.state.quarantine?.fish.length ?? 0)).toBe(3);
 });
+
+type NurseryCycle = {
+  cycle: {
+    sim: { addFish: (s: unknown, species: string, o: object) => { pregnancy: number; nursery?: boolean }; economy: (s: unknown) => { coins: number; nurseryGifted?: boolean } };
+    game: { clock: { timeScale: number }; act: (f: (s: unknown) => void) => void; state: { nurseryBox?: boolean; fish: Array<{ nursery?: boolean }> } };
+  };
+};
+
+/** #187：待辦「母魚快生了」直接附「去買育幼盒 150 元」，按了買盒子並把母魚放進去。 */
+test('母魚快生了：待辦一鍵買育幼盒並放進去', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openGame(page);
+  await page.addStyleTag({ content: '.owner { display: none !important; }' });
+  await page.evaluate(() => {
+    const { sim, game } = (window as unknown as NurseryCycle).cycle;
+    game.clock.timeScale = 0;
+    game.act((s) => {
+      // 老闆已經送過了（這裡測自己買的路）
+      sim.economy(s).nurseryGifted = true;
+      sim.economy(s).coins = Math.max(sim.economy(s).coins, 500);
+      sim.addFish(s, 'guppy', { carriesIch: false, sex: 'male', pregnant: false });
+      const mom = sim.addFish(s, 'guppy', { carriesIch: false, sex: 'female', pregnant: false });
+      mom.pregnancy = 0.9;
+    });
+  });
+  await page.locator('button.todo-btn').dispatchEvent('click');
+  await page.locator('.sheet.open .todo-item.nursery button', { hasText: '去買育幼盒' }).dispatchEvent('click');
+  await expect.poll(() => page.evaluate(() => (window as unknown as NurseryCycle).cycle.game.state.nurseryBox ?? false)).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as unknown as NurseryCycle).cycle.game.state.fish.filter((f) => f.nursery).length)).toBe(1);
+});
