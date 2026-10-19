@@ -45,15 +45,38 @@ export function liveFinGradients(): number {
   return liveGradients;
 }
 
+/**
+ * 漸層貼圖照顏色共用。鰭的漸層都是同心放射（中心＝外圈中心、內半徑 0），貼圖內容只跟顏色有關，
+ * 位置和大小在 transform 裡。共用就不用 destroy：PixiJS 會把畫過的貼圖組合永久快取起來，
+ * destroy 畫過的貼圖會一直跳「destroyed while still bound to a shader」警告。貼圖數量只跟色系有關，不會一直長。
+ */
+const sharedGradientTextures = new Map<string, Texture>();
+
+export function sharedGradientCount(): number {
+  return sharedGradientTextures.size;
+}
+
 function gradient(list: FillGradient[], options: GradientOptions): FillGradient {
   const f = new FillGradient(options);
+  f.buildGradient();
+  const key = `${f.type}:${JSON.stringify(f.colorStops)}`;
+  const shared = sharedGradientTextures.get(key);
+  // 還沒畫過，換掉自己的貼圖不會留下快取
+  if (shared) {
+    f.texture.destroy(true);
+    f.texture = shared;
+  } else sharedGradientTextures.set(key, f.texture);
   liveGradients++;
   list.push(f);
   return f;
 }
 
 function freeGradients(list: FillGradient[]): void {
-  for (const f of list) f.destroy();
+  for (const f of list) {
+    // 貼圖是共用的，只放掉漸層本身
+    (f as { texture: Texture | null }).texture = null;
+    f.destroy();
+  }
   liveGradients -= list.length;
   list.length = 0;
 }

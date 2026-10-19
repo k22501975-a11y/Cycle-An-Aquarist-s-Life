@@ -78,6 +78,19 @@ describe('雲端存檔', () => {
     expect(got.ok && got.value?.savedAt).toBe(50);
   });
 
+  it('市場改了雲端存檔後只前進一版；中間夾了別台的上傳就不跳過，下次上傳會衝突', async () => {
+    const { fetcher } = fakeServer();
+    const phone = new CloudClient('https://api.test', memoryStore(), fetcher);
+    await phone.register('aquarist', 'guppy-1234');
+    await phone.upload(file(100));
+    phone.advanceRevision(2);
+    expect(phone.session!.revision).toBe(2);
+    phone.advanceRevision(2);
+    expect(phone.session!.revision).toBe(2);
+    phone.advanceRevision(4);
+    expect(phone.session!.revision).toBe(2);
+  });
+
   it('登入過期會自動登出，錯誤訊息用伺服器的中文', async () => {
     const server = fakeServer();
     const c = new CloudClient('https://api.test', memoryStore(), server.fetcher);
