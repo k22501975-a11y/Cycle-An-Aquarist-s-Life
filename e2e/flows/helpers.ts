@@ -104,6 +104,18 @@ export async function sheetButton(page: Page, text: string): Promise<void> {
   await page.locator('.sheet.open button', { hasText: text }).first().click(NO_WAIT);
 }
 
+/** 買魚後的對水小遊戲（F5，前幾次一定要玩）：按住滴管滴到差距收到綠線，放開、按「放魚」。沒跳出來就不做事。 */
+export async function finishDrip(page: Page): Promise<void> {
+  const game = page.locator('.drip-game');
+  if (!(await game.waitFor({ timeout: 5_000 }).then(() => true, () => false))) return;
+  const hold = game.locator('button.drip-hold');
+  await hold.dispatchEvent('pointerdown');
+  await page.locator('.drip-gap.ok').waitFor({ timeout: 90_000 });
+  await hold.dispatchEvent('pointerup');
+  await game.locator('button.drip-release').dispatchEvent('click');
+  await expect(page.locator('.drip-shade')).toHaveCount(0, { timeout: 10_000 });
+}
+
 /** 用時鐘旁的速度按鈕換速度（name 是選單上的字，例如「暫停時間」「正常速度」）。 */
 export async function setSpeed(page: Page, name: string): Promise<void> {
   // 老闆的對話框會蓋住速度選單下半部，先點掉

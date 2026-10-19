@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { aliveCount, closeSheet, dismissGuide, fastForward, gameState, questStep, seedRng, setSpeed, sheetButton, startGame, tool, watchConsoleErrors, type CycleWindow } from './helpers';
+import { aliveCount, closeSheet, dismissGuide, finishDrip, fastForward, gameState, questStep, seedRng, setSpeed, sheetButton, startGame, tool, watchConsoleErrors, type CycleWindow } from './helpers';
 
 // 要快轉很多天：用 1 倍密度省 CPU（無頭瀏覽器用軟體繪圖）
 test.use({ deviceScaleFactor: 1, actionTimeout: 20_000 });
@@ -43,6 +43,7 @@ test('新手任務 1～7：照老闆的引導從新存檔玩得完，魚不會�
   await tool(page, '商店');
   await page.locator('.sheet.open button.icon-tab', { hasText: '魚' }).click();
   await sheetButton(page, '一公兩母');
+  await finishDrip(page);
   await closeSheet(page);
   await fastForward(page, 2);
   await expect.poll(() => questStep(page)).toBe(3);

@@ -523,6 +523,10 @@ async function start(): Promise<void> {
   const coinsBtn = h('button.coins', { 'aria-label': '錢包', title: '錢包：點一下打開商店', onclick: () => openShop() }, h('i.coin'), coinsValue);
   // 拿到錢時金幣飛進錢包（F8）
   ctx.reward = (from, amount) => flyCoins(from, coinsBtn, amount);
+  // 對水對得完美：新魚一進缸就聚光展開尾巴（F5）
+  ctx.welcome = (ids, perfect) => {
+    if (perfect && ids[0] !== undefined) view.celebrate(ids[0]);
+  };
   const renderCoins = () => {
     const coins = sim.economy(game.state).coins;
     const text = coins.toLocaleString('zh-TW');
