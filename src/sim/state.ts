@@ -291,7 +291,9 @@ export type SimEventType =
   | 'trap_rotted'
   | 'brood_laid'
   | 'brood_eaten'
-  | 'brood_left';
+  | 'brood_left'
+  /** 仔魚、仔蝦被大魚吃掉（count 是這一段時間被吃了幾尾，cause 是物種）。 */
+  | 'fry_eaten';
 
 export interface SimEvent {
   hours: number;

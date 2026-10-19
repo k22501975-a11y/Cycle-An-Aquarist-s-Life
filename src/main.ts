@@ -39,6 +39,7 @@ import {
   splitPanel,
   snailPanel,
   maintenancePanel,
+  quarantinePanel,
   plantPanel,
   shopPanel,
   tanksPanel,
@@ -948,6 +949,8 @@ async function start(): Promise<void> {
 
   // 其他缸的事件也要通知，前面加上缸名
   const tankPrefix = (tank: number) => (game.tanks.length > 1 && tank !== game.active ? `${sim.tankLabel(game.tanks, tank)}：` : '');
+  /** 每缸上次提醒「小魚被吃」是第幾個遊戲天。 */
+  const fryEatenToast = new Map<number, number>();
   game.onEvent((e, tank) => {
     // 過一晚的時候不跳提示，早上報告會一條一條列出來
     if (game.sleeping) return;
@@ -958,6 +961,12 @@ async function start(): Promise<void> {
       // 第一次餓死、病死：阿德老闆直接說原因和下次怎麼做（#169）
       const cause = e.cause as DeathAdviceCause | undefined;
       if (cause && cause in DEATH_ADVICE && firstTime(store, `died_${cause}`)) void ownerSay(DEATH_ADVICE[cause]);
+    }
+    if (e.type === 'fry_eaten') {
+      // 仔魚一隻一隻被吃，一天每缸只提醒一次（數字寫的是第一筆，早上報告會算總數）
+      const day = Math.floor((game.tanks[tank] ?? game.state).hours / 24);
+      if (fryEatenToast.get(tank) === day) return;
+      fryEatenToast.set(tank, day);
     }
     audio.play(eventSound(e.type));
     if (e.type === 'fry_born' && (e.count ?? 0) > 0) {
@@ -1062,6 +1071,9 @@ async function start(): Promise<void> {
         break;
       case 'trim':
         sheet.open('修剪水草', () => trimListPanel(ctx));
+        break;
+      case 'fry_box':
+        sheet.open('檢疫盒', () => quarantinePanel(ctx));
         break;
       case 'fish':
       case 'treat':

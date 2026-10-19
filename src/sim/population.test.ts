@@ -4,6 +4,9 @@ import {
   addPlant,
   buyQuarantine,
   moveToQuarantine,
+  readyForTank,
+  swallowCm,
+  tooSmallForTank,
   createTank,
   feed,
   FILTERS,
@@ -164,6 +167,32 @@ describe('混養：吃仔魚、吃仔蝦', () => {
     runDays(s, 7);
     expect(s.fish.length).toBeLessThan(34);
     expect(s.fish.every((f) => f.alive)).toBe(true);
+    // 被吃的有記事件，數量對得上（#176）
+    const eaten = s.events.filter((e) => e.type === 'fry_eaten');
+    expect(eaten.length).toBeGreaterThan(0);
+    expect(eaten.every((e) => e.cause === 'guppy')).toBe(true);
+    expect(eaten.reduce((n, e) => n + (e.count ?? 0), 0)).toBe(34 - s.fish.length);
+  });
+
+  it('檢疫盒的仔魚看大小：成魚吞得下的還不能放回主缸，長夠大了才行，不用等觀察天數（#174）', () => {
+    const s = createTank({ ...MATURE, seed: 114 });
+    addAdults(s, 'guppy', 3);
+    buyQuarantine(s);
+    const [small, big] = addYoung(s, 'guppy', 2);
+    small.lengthCm = 1.1;
+    big.lengthCm = swallowCm(s) + 0.1;
+    for (const f of [small, big]) {
+      f.generation = 1;
+      moveToQuarantine(s, f.id);
+    }
+    expect(swallowCm(s)).toBeGreaterThan(1.1);
+    expect(tooSmallForTank(s, small)).toBe(true);
+    expect(readyForTank(s, small)).toBe(false);
+    expect(readyForTank(s, big)).toBe(true);
+    // 店裡買來的新魚照樣要觀察滿 3 天
+    const bought = addFish(s, 'guppy', { carriesIch: false });
+    moveToQuarantine(s, bought.id);
+    expect(readyForTank(s, bought)).toBe(false);
   });
 });
 
