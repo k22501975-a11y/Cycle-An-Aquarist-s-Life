@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, createTank, FILTERS, FISH_SPECIES, HEATERS, LIGHTS, splitAdvice, splitGroup, splitTank, TANKS, type CreateTankOptions, type TankState } from './index';
+import { addFish, buyQuarantine, createTank, rescueFryToBox, simulate, FILTERS, FISH_SPECIES, HEATERS, LIGHTS, splitAdvice, splitGroup, splitTank, TANKS, type CreateTankOptions, type TankState } from './index';
 import { createFish } from './processes/population';
 
 const MATURE: CreateTankOptions = { tank: TANKS.std40, filter: FILTERS.hangOn, heater: { spec: HEATERS.h100, targetC: 25 }, light: { spec: LIGHTS.basic }, matureMedia: true };
@@ -50,5 +50,19 @@ describe('分缸提示（design/growth.md §4.1）', () => {
     expect(a.fish).toHaveLength(1);
     expect(b.fish.every((f) => f.stress >= 0.3)).toBe(true);
     expect(splitAdvice(a).some((x) => x.reason === 'fry_with_adults')).toBe(false);
+  });
+
+  it('只有一缸、有檢疫盒：仔魚可以撈進盒子（當育幼盒），成魚吃不到（#144）', () => {
+    const s = createTank({ ...MATURE, seed: 404 });
+    for (let i = 0; i < 3; i++) addFish(s, 'guppy', { carriesIch: false, sex: i === 0 ? 'male' : 'female' });
+    brood(s, 30, FISH_SPECIES.guppy.birthLengthCm);
+    expect(rescueFryToBox(s)).toBe(0); // 沒有檢疫盒
+    buyQuarantine(s);
+    expect(splitAdvice(s).find((x) => x.reason === 'fry_with_adults')!.text).toContain('檢疫盒');
+    expect(rescueFryToBox(s)).toBe(30);
+    expect(s.quarantine!.fish).toHaveLength(30);
+    expect(s.fish.filter((f) => f.alive)).toHaveLength(3);
+    simulate(s, 24 * 3);
+    expect(s.quarantine!.fish.filter((f) => f.alive).length).toBeGreaterThanOrEqual(28);
   });
 });

@@ -38,9 +38,9 @@ public class AuthController {
     }
 
     @PostMapping("/auth/login")
-    public AuthService.Login login(@RequestBody Credentials c) {
+    public AuthService.Login login(@RequestBody Credentials c, jakarta.servlet.http.HttpServletRequest request) {
         if (c.username() == null || c.password() == null) throw new ApiException(HttpStatus.BAD_REQUEST, "invalid", "請輸入名字和密碼");
-        return auth.login(c.username().trim(), c.password());
+        return auth.login(c.username().trim(), c.password(), request.getRemoteAddr());
     }
 
     @PostMapping("/auth/logout")

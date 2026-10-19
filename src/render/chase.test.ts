@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HUNGRY } from '../sim';
-import { hungerLook, spawnSwimmer, stepTurn, updateSwimmer, type TurnState } from './fish-motion';
+import { biteMotion } from './feeding';
+import { hungerLook, spawnSwimmer, stepTurn, swimTilt, updateSwimmer, type TurnState } from './fish-motion';
 
 /** 一條餓的孔雀魚追一顆停在水中的飼料：數牠 10 秒內翻面幾次。 */
 function chase(): number {
@@ -122,5 +123,43 @@ describe('餓的魚看得出來', () => {
       return top / (60 * 20);
     };
     expect(run(1)).toBeGreaterThan(run(0) + 0.3);
+  });
+});
+
+describe('吃東西只動嘴（YenWel 回報：吃飼料時整條魚左右晃）', () => {
+  const bounds = { width: 900, height: 500, surface: 40, bottom: 440 };
+  it('游到飼料旁邊會停住吃：標記 eating、速度降下來、身體幾乎不歪', () => {
+    const rand = rng(11);
+    const s = spawnSwimmer(1, 'guppy', bounds, rand);
+    s.x = 300;
+    s.y = 200;
+    const ctx = { bounds, scale: 1, food: [{ x: 320, y: 196 }] };
+    let eatingFrames = 0, maxSpeed = 0, maxTilt = 0;
+    for (let i = 0; i < 180; i++) {
+      updateSwimmer(s, [s], { alive: true, hungry: true, symptoms: [], body: { halfLen: 20, halfH: 6 } }, ctx, 1 / 60, rand);
+      if (i > 60 && s.eating) {
+        eatingFrames++;
+        maxSpeed = Math.max(maxSpeed, Math.hypot(s.vx, s.vy));
+        maxTilt = Math.max(maxTilt, Math.abs(swimTilt(s)));
+      }
+    }
+    expect(eatingFrames).toBeGreaterThan(100);
+    expect(maxSpeed).toBeLessThan(15);
+    expect(maxTilt).toBeLessThan(0.06);
+  });
+
+  it('停著吃的時候不轉身，橫向漂一下也不翻面', () => {
+    const turn: TurnState = { f: 1, v: 0 };
+    for (let i = 0; i < 120; i++) stepTurn(turn, 30, 1 / 60, true);
+    expect(turn.f).toBeGreaterThan(0.9);
+    for (let i = 0; i < 120; i++) stepTurn(turn, 30, 1 / 60);
+    expect(turn.f).toBeLessThan(0);
+  });
+
+  it('咬一口身體只往前吸一點，不點頭', () => {
+    const m = biteMotion(1);
+    expect(m.rot).toBe(0);
+    expect(m.dx).toBeLessThanOrEqual(0.04);
+    expect(m.sx).toBeGreaterThan(0.95);
   });
 });
