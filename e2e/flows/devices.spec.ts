@@ -44,10 +44,11 @@ for (const d of DEVICES) {
 
       await tool(page, '商店');
       const sheet = page.locator('.sheet.open');
+      // 面板是從畫面外滑進來的，慢的機器上要等動畫跑完才量
+      await expect.poll(() => blockedButtons(page, '.sheet.open .sheet-close, .sheet.open .icon-tab'), { message: '商店分頁和關閉鈕', timeout: 30_000 }).toEqual([]);
       const box = (await sheet.boundingBox())!;
       expect(box.width, '商店面板寬度').toBeLessThanOrEqual(d.width + 0.5);
       expect(box.x).toBeGreaterThanOrEqual(-0.5);
-      expect(await blockedButtons(page, '.sheet.open .sheet-close, .sheet.open .icon-tab'), '商店分頁和關閉鈕').toEqual([]);
       await closeSheet(page);
       await expect(page.locator('.sheet.open')).toHaveCount(0);
       expect(consoleErrors).toEqual([]);
