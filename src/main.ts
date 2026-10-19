@@ -1,7 +1,7 @@
 import { Application } from 'pixi.js';
 import { AudioEngine } from './audio/engine';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
-import { eventSound } from './audio/sounds';
+import { eventSound, type SoundId } from './audio/sounds';
 import { applySeason, blankGameState, Game } from './game/game';
 import { crisisText } from './game/crisis';
 import { setupPanel } from './ui/setup-panel';
@@ -25,7 +25,7 @@ import { FrameMonitor, lowerQuality } from './game/frame-monitor';
 import { FpsMeter, formatFps } from './game/fps-meter';
 import { defaultQuality, isQuality, type Quality, QUALITY_LABELS, qualitySpec } from './render/quality';
 import { TankView } from './render/tank-view';
-import { SETUP_CAPTIONS } from './render/setup-show';
+import { SETUP_CAPTIONS, SETUP_ORDER, SETUP_PROMPTS, type SetupStep } from './render/setup-show';
 import { ScapeBar } from './ui/scape-bar';
 import * as sim from './sim';
 import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, useTestKit } from './sim';
@@ -427,37 +427,70 @@ async function start(): Promise<void> {
       stage.append(tag);
       window.setTimeout(() => tag.remove(), 2400);
     },
-    // 開缸演出（F1-b）：每一步一個音效和一行說明，最後是「你的第一個缸」
-    onSetupStep: (step) => {
-      if (step === 'done') {
-        setupSkip.remove();
-        document.body.classList.remove('setting-up');
-        moment('first_tank', { art: 'gear/tank-empty.webp', title: '你的第一個缸', sub: '水注滿、設備也裝好了', owner: '先別急著放魚。倒一瓶硝化菌液，讓水先養個幾天。' });
-        // 「你的第一個缸」卡片關掉後老闆才開口，不然對話框會從卡片後面露出來（#171）
-        celebration.whenClear(() => {
-          guideHeld = false;
-          toasts.release();
-          guide.start();
-        });
-        return;
-      }
-      audio.play(step === 'sand' ? 'feed' : step === 'water' ? 'water' : step === 'gear' ? 'buy' : 'restore');
-      // 燈有定時：還沒到開燈時間就說幾點會亮，不說「開燈！」卻是暗的
-      const light = game.state.equipment.light;
-      toasts.showNow(step === 'light' && light && !sim.isLightOn(game.state) ? `燈設好定時了，${light.startHour}:00 會亮` : SETUP_CAPTIONS[step]);
+    // 開缸（F1-b，mvp.md §4.4.4）：玩家每做完一步，提示換下一步；開機做完是「你的第一個缸」
+    onSetupStep: (_finished, next) => {
+      if (next !== 'done') return renderSetupPrompt();
+      setupPrompt.remove();
+      document.body.classList.remove('setting-up');
+      moment('first_tank', { art: 'gear/tank-empty.webp', title: '你的第一個缸', sub: '水注滿、設備也開機了', owner: '先別急著放魚。倒一瓶硝化菌液，讓水先養個幾天。' });
+      // 「你的第一個缸」卡片關掉後老闆才開口，不然對話框會從卡片後面露出來（#171）
+      celebration.whenClear(() => {
+        guideHeld = false;
+        toasts.release();
+        guide.start(game.state);
+      });
     },
   });
   debugHandle.view = view;
-  // 開缸演出看過的人可以跳過
-  const setupSkip = h('button.setup-skip', { type: 'button', onclick: () => view.skipSetup() }, '跳過 ›');
+  // 開缸 4 步的提示列：進度點＋一顆大按鈕。點缸裡任何地方也算（注水要按住，放開就停）；演出中再點一下跳到這步結尾
+  const setupDots = h('div.setup-dots');
+  const setupLabel = h('span.setup-label');
+  const setupBtn4 = h('button.btn.primary.setup-go', { type: 'button' }, setupLabel);
+  const setupPrompt = h('div.setup-prompt', {}, setupDots, setupBtn4);
+  const SETUP_SOUND: Record<SetupStep, SoundId> = { sand: 'feed', gear: 'buy', water: 'water', power: 'restore' };
+  const renderSetupPrompt = () => {
+    const step = view.setupStep;
+    if (!step || step === 'done') return;
+    const at = SETUP_ORDER.indexOf(step);
+    setupDots.replaceChildren(...SETUP_ORDER.map((_, i) => h(`i${i < at ? '.on' : i === at ? '.now' : ''}`)));
+    const waiting = view.setupWaiting;
+    setupLabel.textContent = waiting ? SETUP_PROMPTS[waiting] : step === 'water' ? '注水中…放開就停' : `${SETUP_CAPTIONS[step]}…（點一下加速）`;
+    setupPrompt.classList.toggle('waiting', !!waiting);
+    setupPrompt.dataset.step = step;
+  };
+  const setupPress = () => {
+    const step = view.setupStep;
+    if (!step || step === 'done') return;
+    if (view.setupPress()) {
+      audio.play(SETUP_SOUND[step]);
+      // 燈有定時：還沒到開燈時間就說幾點會亮，不說「開機！」卻是暗的
+      const light = game.state.equipment.light;
+      toasts.showNow(step === 'power' && light && !sim.isLightOn(game.state) ? `開機了！燈設好定時，${light.startHour}:00 會亮` : SETUP_CAPTIONS[step]);
+    }
+    renderSetupPrompt();
+  };
+  const setupRelease = () => {
+    view.setupRelease();
+    renderSetupPrompt();
+  };
+  for (const el of [setupBtn4, stage]) {
+    el.addEventListener('pointerdown', (e) => {
+      if (!view.settingUp) return;
+      e.preventDefault();
+      setupPress();
+    });
+  }
+  window.addEventListener('pointerup', () => view.settingUp && setupRelease());
+  window.addEventListener('pointercancel', () => view.settingUp && setupRelease());
   const playSetup = () => {
     guideHeld = true;
-    // 演出時其他通知（今天的小事、畫質自動調整…）先排隊，演完再跳（#199）
-    toasts.hold();
+    // 開缸時其他通知（今天的小事、畫質自動調整…）先排隊，「你的第一個缸」關掉再跳（#199）；開缸 4 步等玩家動手，保險時間放長
+    toasts.hold(180_000);
     view.playSetup();
     // 演出時只留缸：上方列、任務卡、工具列先藏起來（#171）
     document.body.classList.add('setting-up');
-    stage.append(setupSkip);
+    document.body.append(setupPrompt);
+    renderSetupPrompt();
   };
   // 開缸演出（F1-b）在挑完設備、按下「開缸」後才演（見 openSetup）
   // 造景模式（aquascape-editor.md）：底部工具列換成造景操作列，在缸裡拖曳石頭、沉木、水草
@@ -961,7 +994,26 @@ async function start(): Promise<void> {
   guide.openShop = (tab) => openShop(tab);
   guide.openScape = () => enterScape();
   // 開缸（F1-a）：新遊戲先挑設備，開完缸時間才開始走；關掉面板時主畫面留一個「開缸」按鈕
-  const openSetup = () =>
+  // 開局 0～5 秒：阿德老闆的歡迎疊在挑設備的畫面上，點一下或 5 秒後自己收起來（mvp.md §4.4.4）；設備說明只寫在卡片上
+  let welcomed = false;
+  const showWelcome = () => {
+    if (welcomed) return;
+    welcomed = true;
+    const close = () => {
+      welcome.classList.add('out');
+      window.setTimeout(() => welcome.remove(), 300);
+    };
+    const welcome = h(
+      'div.setup-welcome.glass',
+      { role: 'status', onclick: close },
+      ownerImg('setup-welcome-avatar'),
+      h('p', {}, h('b', {}, '阿德老闆　'), '歡迎！我是隔壁水族館的阿德，這個空缸送你。先挑設備，開你的第一個缸吧！'),
+    );
+    document.body.append(welcome);
+    window.setTimeout(close, 5000);
+  };
+  const openSetup = () => {
+    showWelcome();
     sheet.open('開缸', () =>
       setupPanel(ctx, () => {
         save();
@@ -970,6 +1022,7 @@ async function start(): Promise<void> {
         playSetup();
       }),
     );
+  };
   // 每日 3 件小事（F3）：換天出新題、做完一件跳通知（寫明還差哪件）。左上角常駐小卡列出三件，做完打勾，三件都做完按寶箱（#185）
   let dailyDay = sim.dailyTasks(game.tanks)?.day;
   const dailyHolder = h('div.daily-holder');
@@ -1004,6 +1057,8 @@ async function start(): Promise<void> {
     requestAnimationFrame(() => measure());
   };
   const checkDaily = () => {
+    // 開缸前、開缸 4 步還沒做完：不出小事（mvp.md §4.4.4 第 5 點）
+    if (sim.needsSetup(game.tanks[0]) || view.settingUp) return;
     const fresh = sim.updateDaily(game.tanks);
     const d = sim.dailyTasks(game.tanks);
     if (!d) return renderDaily();
@@ -1352,7 +1407,7 @@ async function start(): Promise<void> {
   renderCoins();
   // 還沒開缸：先挑設備，開缸演出播完才開始教學；演出還在播也一樣等它播完（不然老闆的對話框會擋住整段演出）
   if (sim.needsSetup(game.tanks[0])) openSetup();
-  else if (!view.settingUp) guide.start();
+  else if (!view.settingUp) guide.start(game.state);
   let refreshTimer = 0;
   // 一段時間沒操作就降到 30 fps，省電；一碰螢幕馬上恢復
   let lastInput = performance.now();

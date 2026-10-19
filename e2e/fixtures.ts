@@ -43,7 +43,7 @@ export async function openGame(page: Page): Promise<void> {
     await expect(confirm).toBeEnabled();
     await confirm.dispatchEvent('click');
     await expect(setup).toBeHidden();
-    // 挑完設備會演開缸（約 9 秒）：直接跳完
+    // 挑完設備要自己動手開缸 4 步（倒沙、裝設備、注水、開機）：直接跳完
     await skipSetupShow(page);
     // 開完缸「開缸」任務馬上完成，老闆會跳出對話框：關掉，免得擋住後面的點擊。
     // 在頁面裡一次點完：軟體繪圖時每次跟頁面來回要一秒多，一顆一顆點會吃掉大半個測試的時間
@@ -61,7 +61,7 @@ export async function openGame(page: Page): Promise<void> {
 }
 
 /**
- * 新遊戲的開缸演出（倒沙、注水、開燈，約 9 秒）直接跳完，再把演完跳出的「你的第一個缸」慶祝卡關掉。讀檔進來的不會演。
+ * 新遊戲的開缸 4 步（倒沙、裝設備、注水、開機，要玩家動手）直接跳完，再把演完跳出的「你的第一個缸」慶祝卡關掉。讀檔進來的不會演。
  * 全部在頁面裡的一個 waitForFunction 做完：CI 的軟體繪圖一幀要好幾秒，每來回一次 Playwright 就要等好幾秒，
  * 原本分五次來回，光開遊戲就吃掉 smoke 測試大半的 60 秒（#163 之後 main 的閘門因此逾時）。
  * 卡片在頁面裡直接點掉：用 locator 的話，數到卡片後它剛好自己退場（約 0.4 秒動畫）就會一直等到逾時。

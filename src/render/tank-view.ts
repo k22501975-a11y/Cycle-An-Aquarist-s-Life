@@ -2,7 +2,7 @@ import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointer
 import { isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, personalitySpec, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedArtVersion, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
-import { SETUP_SECONDS, setupLook, setupStepAt, type SetupStep } from './setup-show';
+import { SetupShow, type SetupStep } from './setup-show';
 import { DEATH_SECONDS, POKE_SECONDS, STARTLE_SECONDS, deathPose, hungerLook, sickLook, spawnSwimmer, stepTurn, swimTilt, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { floorAt, keepInRect, nurseryRect, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { dirtSpots, floorY, frontLip, sandSurface, tankSubstrateLook, SUBSTRATE_PALETTES, type SubstrateLook } from './substrate';
@@ -126,8 +126,8 @@ export interface TankViewEvents {
   /** 造景模式：點選、放開拖曳的物件（x 是 0–1 的橫向位置）。 */
   onScapeSelect?: (target: ScapeTarget | null) => void;
   onScapeDrop?: (target: ScapeTarget, x: number) => void;
-  /** 開缸演出進到下一步（放音效、說明字）。 */
-  onSetupStep?: (step: SetupStep) => void;
+  /** 開缸演出做完一步（next 是下一步，全部做完是 'done'）。 */
+  onSetupStep?: (finished: SetupStep, next: SetupStep | 'done') => void;
   /** 玩家撒的這一把飼料，第一口被這尾魚吃到（F6：看得出誰貪吃）。 */
   onFirstBite?: (fishId: number) => void;
 }
@@ -193,7 +193,7 @@ export class TankView {
   private readonly setupBack = new Graphics();
   private readonly setupFx = new Graphics();
   private readonly sandMask = new Graphics();
-  private setupT = -1;
+  private setup: SetupShow | null = null;
 
   private insets: Insets = { top: 0, bottom: 0 };
   private bounds: TankBounds;
@@ -530,18 +530,42 @@ export class TankView {
     this.scape.drawEdit(state, this.bounds, (x) => this.bounds.floor?.(x) ?? this.bounds.bottom, this.selectedScapeRect());
   }
 
-  /** 播開缸演出：倒沙、注水、裝設備、開燈（約 9 秒）。 */
+  /** 開始開缸：空缸等玩家動手倒沙、裝設備、注水、開機（mvp.md §4.4.4）。 */
   playSetup(): void {
-    this.setupT = 0;
+    this.setup = new SetupShow();
   }
 
-  /** 跳過開缸演出：下一格直接演完（設備、燈都到位，照樣通知 'done'）。 */
+  /** 跳過開缸演出：下一格直接全部做完（設備、燈都到位，照樣通知最後一步做完）。 */
   skipSetup(): void {
-    if (this.setupT >= 0) this.setupT = Math.max(this.setupT, SETUP_SECONDS - 1e-4);
+    if (!this.setup) return;
+    const last = this.setup.step;
+    this.setup.finish();
+    if (last !== 'done') this.events.onSetupStep?.(last, 'done');
   }
 
   get settingUp(): boolean {
-    return this.setupT >= 0;
+    return !!this.setup;
+  }
+
+  /** 開缸等玩家動手的那一步（演出中、按著注水時是 null）。 */
+  get setupWaiting(): SetupStep | null {
+    const s = this.setup;
+    return s && s.waiting && s.step !== 'done' ? s.step : null;
+  }
+
+  /** 開缸目前這步（給提示列畫進度點）。 */
+  get setupStep(): SetupStep | 'done' | null {
+    return this.setup?.step ?? null;
+  }
+
+  /** 玩家按下（點缸或按提示鈕）：開始這一步，演出中則跳到這步結尾。回傳是不是開始了新的一步。 */
+  setupPress(): boolean {
+    return this.setup?.press() ?? false;
+  }
+
+  /** 玩家放開：注水停下來。 */
+  setupRelease(): void {
+    this.setup?.release();
   }
 
   private drawSetup(dt: number): void {
@@ -549,24 +573,24 @@ export class TankView {
     const back = this.setupBack;
     g.clear();
     back.clear();
-    if (this.setupT < 0) return;
-    const prev = this.setupT;
-    this.setupT += dt;
-    const step = setupStepAt(prev, this.setupT);
-    if (step) this.events.onSetupStep?.(step);
+    const show = this.setup;
+    if (!show) return;
+    const before = show.step;
+    const finished = show.update(dt);
+    if (finished) this.events.onSetupStep?.(finished, show.step);
     const fade = [this.gearArtLayer, this.gear, this.gearGlow, this.bubbleLayer, this.rayLayer, this.causticsLayer, this.moteLayer, this.frontFish, this.backFish];
-    if (this.setupT >= SETUP_SECONDS) {
-      this.setupT = -1;
+    if (show.step === 'done' && before === 'done') {
+      this.setup = null;
       for (const c of fade) c.alpha = c === this.backFish ? 0.75 : 1;
       this.gearArtLayer.y = this.gear.y = this.gearGlow.y = 0;
       this.front.mask = null;
       this.sandMask.clear();
       return;
     }
-    const L = setupLook(this.setupT);
+    const L = show.look();
     const b = this.bounds;
     const hs = this.hs;
-    const t = this.setupT;
+    const t = show.t;
     const W = b.width;
     // 底沙：沙從上面倒下來，落點堆成小丘，倒完攤平成前低後高的斜坡
     const sandTop = b.surface + (b.bottom - b.surface) * 0.7;
@@ -615,7 +639,7 @@ export class TankView {
       }
     }
     // 注水：水管從右上角灌水，水面一條會晃的亮線，水裡一串串氣泡，一開始霧濁、慢慢沉澱變清
-    if (L.water > 0 && L.water < 1) {
+    if (L.filling) {
       const hoseX = W * 0.74;
       g.roundRect(hoseX - 9 * hs, -4 * hs, 18 * hs, 34 * hs, 6 * hs).fill({ color: 0x2f4a3e, alpha: 0.95 });
       g.rect(hoseX - 5 * hs, 30 * hs, 10 * hs, waterY - 30 * hs).fill({ color: 0xcdeef8, alpha: 0.55 });
@@ -630,7 +654,7 @@ export class TankView {
       for (let i = 0; i <= 40; i++) surf.lineTo((W * i) / 40, waterY + Math.sin(i * 0.9 + t * 5) * 2.2 * hs * (1 - L.light));
       surf.stroke({ color: 0xffffff, alpha: 0.6 * (L.water < 1 ? 1 : 1 - L.light), width: 2.5 * hs });
       // 氣泡：注水時從水管下方湧出、往上浮
-      const fizz = Math.max(0, Math.min(1, (1 - L.water) * 3)) + L.milk * 0.6;
+      const fizz = (L.filling ? 1 : 0) + L.milk * 0.6;
       for (let i = 0; i < 36 && fizz > 0.02; i++) {
         const k = (i * 0.173 + t * 0.55) % 1;
         const x = W * (0.55 + 0.35 * ((i * 0.618) % 1)) + Math.sin(t * 3 + i) * 6 * hs;
@@ -649,7 +673,8 @@ export class TankView {
       c.alpha = L.gear;
       c.y = -(1 - L.gear) * 40 * hs;
     }
-    this.bubbleLayer.alpha = L.gear;
+    // 氣泡等開機（打氣、過濾出水）才冒
+    this.bubbleLayer.alpha = L.light;
     // 開燈：之前整缸偏暗，燈亮後光束、焦散才出現
     if (L.light < 1) g.rect(0, 0, b.width, b.height).fill({ color: 0x06141c, alpha: (1 - L.light) * 0.38 });
     this.rayLayer.alpha = this.causticsLayer.alpha = L.light;
