@@ -215,8 +215,13 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
       ax = 0;
       s.vx *= Math.pow(0.05, dt);
     } else {
-      ax += ((best.x - s.x) / d) * 2.5;
+      const dx = best.x - s.x;
+      // 快到飼料正上方時放慢橫向、不再硬拉：不然會衝過頭又折回，看起來左右狂晃
+      const near = 40 * scale;
+      const pull = p.crawler ? 1 : Math.min(1, Math.abs(dx) / near);
+      ax += (dx / d) * 2.5 * pull;
       if (!p.crawler) ay += ((best.y - s.y) / d) * 2.5;
+      if (pull < 1) s.vx *= Math.pow(0.05, dt * (1 - pull));
       speed *= 1.6;
     }
   }
@@ -311,16 +316,38 @@ export function deathPose(t: number, crawler = false): DeathPose {
 export interface TurnState {
   f: number;
   v: number;
+  /** 決定要面向哪邊（1 朝左、-1 朝右）；f 用彈簧追過去。 */
+  dir?: number;
+  /** 想轉向的方向已經維持多久（秒）：要維持一下才真的轉，追飼料時才不會左右狂翻。 */
+  hold?: number;
+  /** 剛轉完身的冷卻（秒）：冷卻中只有游很快（逃跑、衝刺）才會再轉。 */
+  cool?: number;
 }
 
-/** 速度小於這個就不換面向，避免停著的魚左右抖。 */
-const TURN_DEADZONE = 0.6;
+/** 速度小於這個（px/秒）就不換面向，避免停著、在飼料旁邊慢慢晃的魚左右抖。 */
+const TURN_DEADZONE = 5;
+/** 新方向要維持多久才轉身。 */
+const TURN_COMMIT = 0.18;
+/** 轉完身後多久內不會再轉回來（除非游得很快）。 */
+const TURN_COOLDOWN = 0.9;
+const TURN_URGENT_SPEED = 40;
 
 /** 用彈簧把面向帶到游的方向：稍微衝過頭再彈回，所以轉完會有一下回彈。 */
 export function stepTurn(s: TurnState, vx: number, dt: number): void {
-  const target = vx < -TURN_DEADZONE ? 1 : vx > TURN_DEADZONE ? -1 : Math.sign(s.f) || 1;
+  const dir = s.dir ?? (Math.sign(s.f) || 1);
+  const want = vx < -TURN_DEADZONE ? 1 : vx > TURN_DEADZONE ? -1 : dir;
+  s.cool = Math.max(0, (s.cool ?? 0) - dt);
+  s.dir = dir;
+  if (want !== dir) {
+    s.hold = (s.hold ?? 0) + dt;
+    if (s.hold >= TURN_COMMIT && (s.cool <= 0 || Math.abs(vx) > TURN_URGENT_SPEED)) {
+      s.dir = want;
+      s.hold = 0;
+      s.cool = TURN_COOLDOWN;
+    }
+  } else s.hold = 0;
   const k = 90, damping = 2 * Math.sqrt(k) * 0.7;
-  s.v += (k * (target - s.f) - damping * s.v) * dt;
+  s.v += (k * (s.dir - s.f) - damping * s.v) * dt;
   s.f = Math.max(-1.2, Math.min(1.2, s.f + s.v * dt));
 }
 

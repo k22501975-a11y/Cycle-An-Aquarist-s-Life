@@ -89,6 +89,12 @@ export function biteKick(t: number): number {
   return Math.sin((Math.PI * t) / BITE_SECONDS);
 }
 
+/** 張嘴程度：咬的動作過了一點才開始張，最用力時全開，平滑淡入淡出。 */
+export function mouthOpenness(kick: number): number {
+  const t = Math.max(0, Math.min(1, (kick - 0.1) / 0.6));
+  return t * t * (3 - 2 * t);
+}
+
 export const RIPPLE_SECONDS = 1.2;
 
 /** 水面的漣漪：半徑隨時間擴大，越大越淡。 */

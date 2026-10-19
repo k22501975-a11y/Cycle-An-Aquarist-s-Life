@@ -5,7 +5,7 @@ import { PaintedRig, paintedKey, paintedTexture, resolvePaintedKey } from './pai
 import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { floorAt, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { dirtSpots, floorY, frontLip, sandSurface, substrateLook, SUBSTRATE_PALETTES, type SubstrateLook } from './substrate';
-import { applyFoodLook, BITE_SECONDS, biteKick, pickEaten, pickFoodKind, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type FoodLook, type Mouth, type Pellet } from './feeding';
+import { applyFoodLook, BITE_SECONDS, biteKick, mouthOpenness, pickEaten, pickFoodKind, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type FoodLook, type Mouth, type Pellet } from './feeding';
 import { canvasTexture, flakeTextures, makeCanvas, mix, pelletTextures, softDotTexture, tabletTexture, wormTextures } from './paint';
 import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame, TEST_SECONDS, WATER_CHANGE_SECONDS, type KitParam } from './ops-fx';
 import { PlantMesh } from './plant-sway';
@@ -1304,7 +1304,7 @@ export class TankView {
         rig.scale.x *= 1 - 0.1 * kick;
         rig.scale.y *= 1 + 0.05 * kick;
       }
-      if (rig instanceof PaintedRig) rig.setMouthOpen(kick > 0.15 && !isShrimpSpecies(fish.species));
+      if (rig instanceof PaintedRig) rig.setMouthOpen(isShrimpSpecies(fish.species) ? 0 : mouthOpenness(kick));
       if (isShrimpSpecies(fish.species)) this.drawShrimpLimbs(view, fish, dt);
       // 長期餵好飼料：顏色更飽和、更亮（只是表現，停餵會退）
       // 轉色期顏色從淡慢慢變濃，老魚顏色變淡（design/growth.md §1、§5）
