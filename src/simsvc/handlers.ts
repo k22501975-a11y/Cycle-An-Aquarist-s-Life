@@ -4,12 +4,13 @@ import { DEFAULT_TIME_SCALE, marketItem, type Fish, type TankState } from '../si
 /**
  * 伺服器權威模擬（L2）：Spring Boot 把存檔丟過來，這裡用跟遊戲同一份模擬程式計算。
  * - advance：離線補算到伺服器的現在時間（玩家改裝置時鐘也沒用）
- * - verify：上傳的存檔跟伺服器上一份比，遊戲時間不能跑得比現實快，已經存在的魚身分（基因、品種、性別）不能被改
+ * - verify：上傳的存檔跟伺服器上一份比，遊戲時間不能跑得比現實快，已經存在的魚身分（基因、品種、性別）不能被改，
+ *   已經在市場出貨的魚不能又出現
  * - inspect：找出存檔裡的某一條魚（市場上架用伺服器這份的資料，不信任遊戲端送來的）
  */
 
 export interface Problem {
-  code: 'time_ahead' | 'identity_changed' | 'gift_removed';
+  code: 'time_ahead' | 'identity_changed' | 'gift_removed' | 'shipped_fish';
   message: string;
 }
 
@@ -60,10 +61,11 @@ export function advance(raw: unknown, now: number): AdvanceResult {
 }
 
 /**
- * 檢查上傳的存檔：previous 是伺服器上一份，elapsedMs 是伺服器收到上一份到現在的現實時間。
+ * 檢查上傳的存檔：previous 是伺服器上一份，elapsedMs 是伺服器收到上一份到現在的現實時間，
+ * shipped 是這個玩家已經在市場出貨的魚（市場用的魚資料；拿出貨前的舊存檔上傳，魚會又回來，#75）。
  * 回傳發現的問題（空的代表沒問題）。
  */
-export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number): Problem[] {
+export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number, shipped: readonly ShippedFish[] = []): Problem[] {
   const prev = load(previousRaw);
   const next = load(nextRaw);
   const problems: Problem[] = [];
@@ -83,11 +85,40 @@ export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number
   for (const f of allFish(next)) {
     const old = before.get(f.id);
     if (!old) continue;
-    const same = old.species === f.species && old.sex === f.sex && (old.generation ?? 0) === (f.generation ?? 0) && JSON.stringify(old.genome ?? null) === JSON.stringify(f.genome ?? null);
-    if (!same) problems.push({ code: 'identity_changed', message: `#${f.id} 這條魚的身分（品種、性別或基因）跟伺服器上的不一樣` });
+    if (!sameIdentity(old, f)) problems.push({ code: 'identity_changed', message: `#${f.id} 這條魚的身分（品種、性別或基因）跟伺服器上的不一樣` });
     if (old.gift && !f.gift) problems.push({ code: 'gift_removed', message: `#${f.id} 是老闆送的魚，不能改成可以賣` });
   }
+
+  // 編號和身分都一樣才是同一條：新遊戲或換裝置從頭玩，編號會重來，同編號的是另一條魚
+  for (const f of allFish(next)) {
+    if (shipped.some((s) => s.id === f.id && sameIdentity(s, f))) problems.push({ code: 'shipped_fish', message: `#${f.id} 這條魚已經在市場賣出了，存檔裡不該還有` });
+  }
   return problems;
+}
+
+/** 已經出貨的魚：編號＋身分（市場用的魚資料，多的欄位不看）。 */
+export interface ShippedFish {
+  id?: unknown;
+  species?: unknown;
+  sex?: unknown;
+  generation?: unknown;
+  genome?: unknown;
+}
+
+type Identity = Pick<ShippedFish, 'species' | 'sex' | 'generation' | 'genome'>;
+
+/** 魚的身分：品種、性別、第幾代、基因（基因不看欄位順序）。 */
+function sameIdentity(a: Identity, b: Identity): boolean {
+  return a.species === b.species && a.sex === b.sex && (a.generation ?? 0) === (b.generation ?? 0) && canonical(a.genome ?? null) === canonical(b.genome ?? null);
+}
+
+function canonical(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`;
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    return `{${Object.keys(o).filter((k) => o[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${canonical(o[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v ?? null);
 }
 
 export interface InspectResult {

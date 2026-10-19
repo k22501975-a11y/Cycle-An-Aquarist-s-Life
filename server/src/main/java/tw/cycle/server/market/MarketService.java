@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.random.RandomGenerator;
 import java.util.regex.Pattern;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,8 @@ import tw.cycle.server.sim.SimClient;
  *
  * <p>伺服器權威模擬（L2，有設定模擬服務時）：上架的魚要在賣家的雲端存檔裡，商品資料用伺服器那份（遊戲端送來的不算）；
  * 之後更新近況、出貨時，魚的身分（品種、性別、基因）都要跟上架時一樣。
+ *
+ * <p>一條魚同時只能有一筆上架或成交（market_fish_claim，#75）：下架或訂單沒出貨就取消時放回來，出貨後就永遠是賣掉的。
  */
 @Service
 public class MarketService {
@@ -94,6 +97,15 @@ public class MarketService {
         db.update("insert into market_listing(seller_id, kind, species, title, item, health, price, fee, status, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)",
                 me, kind, species, title.strip(), data, health(item), price, fee, now(), now());
         long id = db.queryForObject("select max(id) from market_listing where seller_id = ?", Long.class, me);
+        JsonNode fishId = item.get("id");
+        if ("fish".equals(kind) && fishId != null && fishId.canConvertToLong()) {
+            releaseIfOtherFish(me, fishId.asLong(), item);
+            try {
+                db.update("insert into market_fish_claim(seller_id, fish_id, listing_id) values (?, ?, ?)", me, fishId.asLong(), id);
+            } catch (DuplicateKeyException e) {
+                throw new ApiException(HttpStatus.CONFLICT, "already_listed", "這條魚已經在架上或賣出了");
+            }
+        }
         return Map.of("id", id, "fee", fee);
     }
 
@@ -144,6 +156,7 @@ public class MarketService {
     public void cancel(long me, long id) {
         int n = db.update("update market_listing set status = 'cancelled', updated_at = ? where id = ? and seller_id = ? and status = 'open'", now(), id, me);
         if (n == 0) throw new ApiException(HttpStatus.NOT_FOUND, "no_listing", "這件商品已經賣出或下架了");
+        db.update("delete from market_fish_claim where listing_id = ?", id);
     }
 
     // ---- 逛市場、購買 ----
@@ -224,6 +237,7 @@ public class MarketService {
     public void sellerCancel(long me, long id) {
         int n = db.update("update market_order set status = 'cancelled', seller_done = ? where id = ? and seller_id = ? and status = 'paid'", now(), id, me);
         if (n == 0) throw new ApiException(HttpStatus.CONFLICT, "not_paid", "這筆訂單已經出貨或取消了");
+        releaseCancelled();
     }
 
     /**
@@ -304,7 +318,55 @@ public class MarketService {
 
     /** 賣家超過期限沒出貨：取消，款項退給買家。 */
     private void expireUnshipped() {
-        db.update("update market_order set status = 'cancelled' where status = 'paid' and created_at < ?", now().minusHours(MarketRules.SHIP_DEADLINE_HOURS));
+        if (db.update("update market_order set status = 'cancelled' where status = 'paid' and created_at < ?", now().minusHours(MarketRules.SHIP_DEADLINE_HOURS)) > 0)
+            releaseCancelled();
+    }
+
+    /**
+     * 這個編號以前賣出的是另一條魚（新遊戲或換裝置從頭玩，編號會重來）：放掉舊的佔用。
+     * 舊的那條魚已經出貨，紀錄留在訂單裡，存檔檢查照樣擋得到（{@link #shippedFish}）。
+     */
+    private void releaseIfOtherFish(long me, long fishId, JsonNode item) throws Exception {
+        List<Map<String, Object>> old = db.queryForList(
+                "select l.item, o.status from market_fish_claim c join market_listing l on l.id = c.listing_id left join market_order o on o.listing_id = c.listing_id where c.seller_id = ? and c.fish_id = ?",
+                me, fishId);
+        if (old.isEmpty() || !"shipped".equals(old.get(0).get("status"))) return;
+        if (!sameBorn(json.readTree((String) old.get(0).get("item")), item)) db.update("delete from market_fish_claim where seller_id = ? and fish_id = ?", me, fishId);
+    }
+
+    /** 魚的身分（存檔檢查也用這幾個）：品種、性別、第幾代、基因。 */
+    private static final List<String> BORN = List.of("species", "sex", "generation", "genome");
+
+    private static boolean sameBorn(JsonNode a, JsonNode b) {
+        for (String key : BORN)
+            if (!java.util.Objects.equals(born(a, key), born(b, key))) return false;
+        return true;
+    }
+
+    private static JsonNode born(JsonNode fish, String key) {
+        JsonNode v = fish.get(key);
+        if ("generation".equals(key) && (v == null || v.isNull())) return com.fasterxml.jackson.databind.node.IntNode.valueOf(0);
+        return v == null || v.isNull() ? null : v;
+    }
+
+    /** 訂單沒出貨就取消了：魚還在賣家缸裡，可以再上架。 */
+    private void releaseCancelled() {
+        db.update("delete from market_fish_claim where listing_id in (select listing_id from market_order where status = 'cancelled')");
+    }
+
+    /**
+     * 這個帳號已經在市場出貨的魚：編號＋身分（品種、性別、第幾代、基因），存檔裡不該再出現（#75）。
+     * 只看編號不夠：新遊戲或換裝置從頭玩，同編號的是另一條魚。
+     */
+    public List<JsonNode> shippedFish(long me) throws Exception {
+        List<JsonNode> out = new ArrayList<>();
+        for (String data : db.queryForList("select item from market_order where seller_id = ? and kind = 'fish' and status = 'shipped' order by id", String.class, me)) {
+            JsonNode item = json.readTree(data);
+            ObjectNode fish = json.createObjectNode();
+            for (String key : List.of("id", "species", "sex", "generation", "genome")) if (item.has(key)) fish.set(key, item.get(key));
+            if (fish.path("id").canConvertToLong()) out.add(fish);
+        }
+        return out;
     }
 
     private int openListings(long me) {

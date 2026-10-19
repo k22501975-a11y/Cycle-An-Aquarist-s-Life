@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 import tw.cycle.server.auth.AuthInterceptor;
 import tw.cycle.server.config.ApiException;
 import tw.cycle.server.config.CycleProperties;
+import tw.cycle.server.market.MarketService;
 import tw.cycle.server.sim.HttpSimClient;
 import tw.cycle.server.sim.SimClient;
 
@@ -38,6 +39,7 @@ import tw.cycle.server.sim.SimClient;
  * 已經存在的魚身分不能被改），不對就回 422；玩家可以改用 {@code POST /api/save/advance}
  * 拿伺服器補算到現在的那份。強制覆蓋（兩台裝置選一份）時對不上也收，但幾天內不能在市場上架魚。
  * 模擬服務檢查不了（連不上回 503、存檔讀不出或太大回 422）時不收，強制覆蓋則照對不上處理（#74）。
+ * 已經在市場出貨的魚又出現（拿出貨前的舊存檔上傳）強制覆蓋也不收，不然魚就被複製了（#75）。
  */
 @RestController
 @RequestMapping("/api/save")
@@ -47,14 +49,18 @@ public class SaveController {
     private final ObjectMapper json;
     private final Clock clock;
     private final SimClient sim;
+    private final MarketService market;
+    /** 已經在市場出貨的魚又出現在存檔裡。 */
+    private static final String SHIPPED = "shipped_fish";
     private static final Logger log = LoggerFactory.getLogger(SaveController.class);
 
-    public SaveController(CloudSaveRepository saves, CycleProperties props, ObjectMapper json, Clock clock, SimClient sim) {
+    public SaveController(CloudSaveRepository saves, CycleProperties props, ObjectMapper json, Clock clock, SimClient sim, MarketService market) {
         this.saves = saves;
         this.props = props;
         this.json = json;
         this.clock = clock;
         this.sim = sim;
+        this.market = market;
     }
 
     public record Upload(
@@ -85,10 +91,10 @@ public class SaveController {
         }
         OffsetDateTime now = OffsetDateTime.now(clock);
         Map<String, Object> out = new LinkedHashMap<>();
-        List<SimClient.Problem> problems = check(save, file, now, upload.force());
+        List<SimClient.Problem> problems = check(accountId, save, file, now, upload.force());
         if (!problems.isEmpty()) {
-            SimClient.Problem first = problems.get(0);
-            if (!upload.force()) throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, first.code(), first.message());
+            SimClient.Problem first = problems.stream().filter(p -> SHIPPED.equals(p.code())).findFirst().orElse(problems.get(0));
+            if (!upload.force() || SHIPPED.equals(first.code())) throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, first.code(), first.message());
             // 強制覆蓋：可能是另一台裝置上完全不同的進度，收下，但這幾天的魚不能拿去市場賣
             save.lockMarketUntil(now.plusDays(Math.max(1, props.marketMinAccountDays())));
             out.put("notice", "這份存檔跟雲端上的對不上（" + first.message() + "），覆蓋後 " + Math.max(1, props.marketMinAccountDays()) + " 天內不能在市場上架魚");
@@ -104,10 +110,10 @@ public class SaveController {
      * 跟伺服器上一份比對。檢查不了就不收（fail-closed，#74）：一般上傳把錯誤丟回去讓遊戲稍後再傳；
      * 強制覆蓋當成對不上，收下但鎖市場，跟身分對不上的處理一樣。
      */
-    private List<SimClient.Problem> check(CloudSave previous, JsonNode next, OffsetDateTime now, boolean force) throws Exception {
+    private List<SimClient.Problem> check(long accountId, CloudSave previous, JsonNode next, OffsetDateTime now, boolean force) throws Exception {
         if (!sim.enabled() || previous.getData() == null) return List.of();
         try {
-            return sim.verify(json.readTree(previous.getData()), next, Duration.between(previous.getUpdatedAt(), now).toMillis());
+            return sim.verify(json.readTree(previous.getData()), next, Duration.between(previous.getUpdatedAt(), now).toMillis(), market.shippedFish(accountId));
         } catch (SimClient.Unavailable | HttpSimClient.BadSave e) {
             log.warn("模擬服務檢查不了這次上傳（{}）：{}", force ? "強制覆蓋，鎖市場" : "不收", e.getMessage());
             if (!force) throw e;
