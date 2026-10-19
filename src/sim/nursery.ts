@@ -101,9 +101,12 @@ export function nurseryBirth(state: TankState, mother: Fish, fry: Fish[]): void 
 
 /**
  * 每個 tick：長夠大的小魚放回主缸；第一次有母魚快生了，阿德老闆送一個育幼盒（記一筆 nursery_gift，畫面帶玩家放進去）。
- * 盒子還在但缸裡已經沒有掠食者時，小魚也直接放回去。
  */
 export function updateNursery(state: TankState): void {
+  // 沒有盒子的缸不會有盒裡的魚（舊資料、別的路徑漏清的標記在這裡收掉，魚不會卡住）
+  if (!state.nurseryBox) {
+    for (const f of state.fish) if (f.nursery) f.nursery = undefined;
+  }
   if (state.nurseryBox) {
     const inside = nurseryFish(state);
     if (inside.length > 0) {

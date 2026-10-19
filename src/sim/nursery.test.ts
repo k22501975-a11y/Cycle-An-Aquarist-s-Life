@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   addFish,
   buyNurseryBox,
+  buyQuarantine,
+  moveFish,
+  moveToQuarantine,
+  releaseQuarantine,
   createTank,
   economy,
   feed,
@@ -140,5 +144,31 @@ describe('育幼盒（mvp.md §4.4.2，#187）', () => {
     mom.pregnancy = 0;
     days(s, 10);
     expect(mom.pregnancy).toBe(0);
+  });
+
+  it('換缸、放進檢疫盒都會離開育幼盒，母魚不會卡在盒裡（#191 審查）', () => {
+    const a = tank(6);
+    const b = tank(7);
+    buyNurseryBox(a);
+    const [mom, mom2] = adults(a, 2, 'female');
+    mom.pregnancy = mom2.pregnancy = 0.9;
+    expect(moveToNursery(a, mom.id)).toBe(true);
+    // 換到沒有盒子的缸
+    expect(moveFish(a, b, mom.id)).toBe(true);
+    expect(mom.nursery).toBeFalsy();
+    // 盒子空出來了，第二尾放得進去
+    expect(nurseryRefusal(a, mom2)).toBeNull();
+    expect(moveToNursery(a, mom2.id)).toBe(true);
+    // 放進檢疫盒再放回來
+    buyQuarantine(a);
+    expect(moveToQuarantine(a, mom2.id)).toBe(true);
+    expect(mom2.nursery).toBeFalsy();
+    releaseQuarantine(a, [mom2.id]);
+    expect(mom2.nursery).toBeFalsy();
+    expect(nurseryFish(a)).toHaveLength(0);
+    // 漏清的標記：沒有盒子的缸跑一下就清掉
+    mom.nursery = true;
+    simulate(b, 1);
+    expect(mom.nursery).toBeFalsy();
   });
 });

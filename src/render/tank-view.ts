@@ -162,6 +162,9 @@ export class TankView {
   /** 有插圖的設備（加熱棒、海綿過濾器）；沒載入就退回程式畫。 */
   private readonly gearArt = { heater: new Sprite(), sponge: new Sprite(), intake: new Sprite() };
   private readonly gearArtLayer = new Container();
+  /** 育幼盒的背板和正面（美術圖；沒載到就退回線畫）。 */
+  private readonly nurseryBack = new Sprite();
+  private readonly nurseryFront = new Sprite();
   private readonly gearGlow = new Container();
   private readonly foodLayer = new Container();
   /** 水面漣漪與碎屑，每格重畫。 */
@@ -291,7 +294,9 @@ export class TankView {
       this.gearGlow,
       this.foodLayer,
       this.feedFx,
+      this.nurseryBack,
       this.frontFish,
+      this.nurseryFront,
       this.bubbleLayer,
       this.moteLayer,
       this.rayLayer,
@@ -1773,12 +1778,30 @@ export class TankView {
       g.circle(b.x - r * 0.35, b.y - r * 0.35, r * 0.28).fill({ color: 0xffffff, alpha: 0.85 });
     }
     this.drawNests(state, g, dt);
-    if (state.nurseryBox) this.drawNurseryBox(g);
+    this.drawNurseryBox(state, g);
   }
 
-  /** 育幼盒（#187）：右上角一個透明的網盒，掛在缸緣。美術圖做好前先用線畫。 */
-  private drawNurseryBox(g: Graphics): void {
+  /**
+   * 育幼盒（#187）：右上角一個透明的網盒，掛在缸緣。背板在魚後面、正面在魚前面，兩張圖用同一組座標
+   * （美術對位：圖 512×400，盒身 496×328 從 (8, 64) 開始）。圖還沒載好就先用線畫。
+   */
+  private drawNurseryBox(state: TankState, g: Graphics): void {
+    const back = paintedTexture('gear-nursery-back');
+    const front = paintedTexture('gear-nursery-front');
+    const art = !!state.nurseryBox && !!back && !!front;
+    this.nurseryBack.visible = this.nurseryFront.visible = art;
+    if (!state.nurseryBox) return;
     const r = nurseryRect(this.waterBounds);
+    if (art) {
+      const sx = r.w / 496, sy = r.h / 328;
+      for (const [sprite, tex] of [[this.nurseryBack, back], [this.nurseryFront, front]] as const) {
+        if (sprite.texture !== tex) sprite.texture = tex!;
+        sprite.position.set(r.x - 8 * sx, r.y - 64 * sy);
+        sprite.width = 512 * sx;
+        sprite.height = 400 * sy;
+      }
+      return;
+    }
     const hs = this.hs;
     g.roundRect(r.x, r.y, r.w, r.h, 6 * hs).fill({ color: 0xe8fbff, alpha: 0.08 }).stroke({ color: 0xe8fbff, width: 2 * hs, alpha: 0.55 });
     // 網子：細細的直線

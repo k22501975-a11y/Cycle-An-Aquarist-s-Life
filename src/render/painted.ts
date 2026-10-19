@@ -172,6 +172,9 @@ const PROPS: Record<string, string> = {
   'gear-heater-scene': 'gear/heater-scene.webp',
   'gear-intake': 'gear/intake-scene.webp',
   'gear-sponge': 'gear/sponge-filter.webp',
+  // 育幼盒（#187）：背板畫在魚後面、正面畫在魚前面，盒裡的魚夾在中間
+  'gear-nursery-back': 'gear/nursery-box-back.webp',
+  'gear-nursery-front': 'gear/nursery-box-front.webp',
   // 螺（design/snails.md）
   ...Object.fromEntries(
     ['snail-apple-gold', 'snail-apple-blue', 'snail-apple-purple', 'snail-apple-ivory', 'snail-apple-babies', 'snail-apple-eggs', 'snail-nerite-zebra', 'snail-assassin', 'snail-ramshorn-red', 'snail-bladder', 'snail-mts'].map((k) => [k, `snail/${k}.webp`]),

@@ -22,11 +22,11 @@ export interface Rect {
   h: number;
 }
 
-/** 育幼盒掛在缸的右上角、上緣露出水面一點（#187）。盒裡的魚只在框裡游。 */
+/** 育幼盒掛在缸的右上方、過濾器入水口的左邊，上緣露出水面一點（#187）。盒裡的魚只在框裡游。 */
 export function nurseryRect(b: TankBounds): Rect {
   const w = Math.min(b.width * 0.2, 220);
   const h = Math.min((b.bottom - b.surface) * 0.32, 150);
-  return { x: b.width * 0.96 - w, y: b.surface - h * 0.12, w, h };
+  return { x: b.width * 0.78 - w, y: b.surface - h * 0.12, w, h };
 }
 
 /** 把盒裡的魚關在框裡（留 pad 的邊），撞到邊就掉頭。回傳有沒有撞到。 */

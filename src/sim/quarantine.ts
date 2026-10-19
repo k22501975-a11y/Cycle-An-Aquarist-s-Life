@@ -66,6 +66,7 @@ export function releaseQuarantine(state: TankState, ids?: number[]): number {
   for (const f of moving) {
     // 換缸也是一次緊迫（對水溫、水質）
     f.stress = Math.max(f.stress, 0.3);
+    f.nursery = undefined;
     state.fish.push(f);
     delete q.since[f.id];
   }
@@ -83,6 +84,7 @@ export function moveToQuarantine(state: TankState, fishId: number): boolean {
   const fish = state.fish.find((f) => f.id === fishId && f.alive);
   if (!q || !fish) return false;
   state.fish = state.fish.filter((f) => f !== fish);
+  fish.nursery = undefined;
   q.fish.push(fish);
   q.since[fish.id] = state.hours;
   return true;
