@@ -92,8 +92,8 @@ export function paintBackdrop(b: TankBounds, hs: number, pixelRatio = 1): Textur
     const dy = Math.min(0, bottom + 40 * hs - dh * 0.96);
     ctx.save();
     // 濾鏡的模糊是畫布像素：乘上 k，不管螢幕解析度多少，看起來都是約 0.7 個 CSS 像素
-    // 統一調色（畫面評測 V15）：實景背景提亮、飽和一點，往參考圖的亮青藍靠
-    ctx.filter = `blur(${(0.7 * k).toFixed(2)}px) brightness(1.18) saturate(1.25)`;
+    // 統一調色（畫面評測 V15）：背景稍微提亮、飽和，往參考圖的亮青藍靠（第 12 批的後景本身已經偏亮，只輕調）
+    ctx.filter = `blur(${(0.7 * k).toFixed(2)}px) brightness(1.06) saturate(1.15)`;
     ctx.drawImage(art, (w - dw) / 2, dy, dw, dh);
     ctx.restore();
     if (dy > -dh * 0.02) {
@@ -107,10 +107,10 @@ export function paintBackdrop(b: TankBounds, hs: number, pixelRatio = 1): Textur
     // 蓋一層青色（濾色）：整體偏青、亮，不是灰綠
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
-    ctx.fillStyle = 'rgba(30,150,185,0.22)';
+    ctx.fillStyle = 'rgba(30,150,185,0.1)';
     ctx.fillRect(0, 0, w, h);
     const sky = ctx.createRadialGradient(w * 0.5, -h * 0.15, 0, w * 0.5, -h * 0.15, h * 1.1);
-    sky.addColorStop(0, 'rgba(170,240,255,0.4)');
+    sky.addColorStop(0, 'rgba(170,240,255,0.25)');
     sky.addColorStop(1, 'rgba(170,240,255,0)');
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, h);
