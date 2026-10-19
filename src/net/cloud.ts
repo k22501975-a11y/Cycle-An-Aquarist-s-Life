@@ -31,7 +31,10 @@ export interface ServerAdvance extends CloudSave {
 }
 
 /** 上傳時伺服器的模擬檢查沒過（L2）：遊戲時間跑太快、魚的身分被改。 */
-export const SAVE_CHECK_CODES = ['time_ahead', 'identity_changed', 'gift_removed', 'shipped_fish'];
+/** 上傳的存檔跟伺服器帳本對不上（少了或多了市場收支，docs/ledger.md §3.4）：只能改用雲端那份。 */
+export const LEDGER_CODES = ['ledger_behind', 'ledger_ahead'];
+
+export const SAVE_CHECK_CODES = ['time_ahead', 'identity_changed', 'gift_removed', 'shipped_fish', ...LEDGER_CODES];
 
 export interface FriendInfo {
   username: string;
@@ -354,9 +357,13 @@ export class CloudClient {
     return res;
   }
 
-  /** 伺服器改了雲端存檔（市場收支）之後，記下新的版本號；重送拿到舊結果時不退回。 */
+  /**
+   * 伺服器改了雲端存檔（市場收支）之後，記下新的版本號。
+   * 只在剛好是下一版時前進：重送拿到的是雲端現在的版本，中間可能夾了別台裝置的上傳，
+   * 跳過去會讓下次上傳悄悄蓋掉那份；不前進的話下次上傳會撞到衝突，讓玩家選。
+   */
   advanceRevision(revision: number): void {
-    if (!this.session || revision <= this.session.revision) return;
+    if (!this.session || revision !== this.session.revision + 1) return;
     this.setSession({ ...this.session, revision });
   }
 
