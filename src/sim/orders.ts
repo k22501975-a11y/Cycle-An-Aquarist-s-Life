@@ -1,4 +1,4 @@
-import { buybackRefusal, economy, FISH_PRICES, guppyBuybackTier, PLANT_PRICES } from './economy';
+import { buybackRefusal, economy, FISH_PRICES, guppyBuybackTier, noteRaisedGone, PLANT_PRICES } from './economy';
 import { phenotype, type FinTrait, type GuppyPhenotype } from './genetics';
 import { nextRandom, type RngState } from './random';
 import { PESTS, type PestKind } from './snails';
@@ -184,6 +184,7 @@ export function fulfillOrder(tanks: TankState[], orderId: number, keep: readonly
     for (const t of tanks) {
       const give = new Set(matchingFish(t, o, keep).slice(0, left));
       left -= give.size;
+      for (const f of give) noteRaisedGone(state, f);
       t.fish = t.fish.filter((f) => !give.has(f));
       if (t.quarantine) t.quarantine.fish = t.quarantine.fish.filter((f) => !give.has(f));
     }

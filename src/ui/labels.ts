@@ -174,6 +174,8 @@ export function fryEatenText(state: TankState, count: number, shrimp: boolean): 
     tip = pick(['又有母魚肚子很鼓了，生之前先放進育幼盒，生下的就一尾都不會少', '下一胎快生了，趁現在把母魚放進育幼盒'], day);
   } else if (due && !box) {
     tip = pick(['又有母魚快生了。商店的育幼盒掛在缸上，母魚在裡面生，小魚就不會被吃', '下一胎快生了，想多留幾尾，可以先買個育幼盒'], day);
+  } else if (fry > 0 && momInBox) {
+    tip = pick([`母魚還在育幼盒裡待產，主缸的 ${fry} 尾小魚先靠水草躲，等她生完再撈進去`, '育幼盒現在給待產的母魚用，等她生完、回到主缸，再把小魚撈進去'], day);
   } else if (fry > 0 && boxRoom) {
     tip = pick([`主缸還有 ${fry} 尾小魚，撈進育幼盒，長到 1.6 cm 會自己放回來`, `剩下的 ${fry} 尾小魚趕快撈進育幼盒，大魚就吃不到了`], day);
   } else if (fry > 0 && box) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addHardscape, addPlant, applySetup, buyQuarantine, economy, HARDSCAPE, createTank, feed, FILTERS, HEATERS, RECOMMENDED_SETUP, TANKS, useTestKit, waterChange } from '../sim';
+import { addFish, addHardscape, addPlant, applySetup, buyQuarantine, moveToQuarantine, recordEvent, economy, HARDSCAPE, createTank, feed, FILTERS, HEATERS, RECOMMENDED_SETUP, TANKS, useTestKit, waterChange } from '../sim';
 import { advanceQuest, currentQuest, cycleProgress, loadProgress, newProgress, overloadWarning, pairProgress, pendingTip, questShopTab, QUESTS, saveProgress } from './tutorial';
 
 function tank() {
@@ -113,6 +113,22 @@ describe('情境提示', () => {
     const s2 = tank();
     s2.equipment.heater!.stuckOn = true;
     expect(pendingTip(newProgress(), s2)?.id).toBe('heater');
+  });
+
+  it('小魚撈進檢疫盒救下來了，老闆不會說小魚都被吃掉（#184）', () => {
+    const s = tank();
+    economy(s).coins = 10_000;
+    addFish(s, 'guppy', { carriesIch: false, carries: [] });
+    recordEvent(s, { type: 'fry_born', count: 3 });
+    const fry = addFish(s, 'guppy', { carriesIch: false, carries: [] });
+    fry.generation = 1;
+    fry.lengthCm = 0.8;
+    buyQuarantine(s);
+    expect(moveToQuarantine(s, fry.id)).toBe(true);
+    s.hours += 49;
+    expect(pendingTip(newProgress(), s)?.id).not.toBe('fry_eaten');
+    s.quarantine!.fish = [];
+    expect(pendingTip(newProgress(), s)?.id).toBe('fry_eaten');
   });
 });
 

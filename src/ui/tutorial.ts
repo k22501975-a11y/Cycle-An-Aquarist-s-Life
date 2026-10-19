@@ -262,7 +262,8 @@ export const TIPS: Tip[] = [
     check: (s) => {
       const born = s.events.filter((e) => e.type === 'fry_born');
       const last = born[born.length - 1];
-      return !!last && s.hours - last.hours > 48 && !s.fish.some((f) => f.alive && (f.generation ?? 0) > 0);
+      // 撈進檢疫盒救下來的也算還活著（#184）；育幼盒裡的本來就在 s.fish
+      return !!last && s.hours - last.hours > 48 && ![...s.fish, ...(s.quarantine?.fish ?? [])].some((f) => f.alive && (f.generation ?? 0) > 0);
     },
   },
   {
