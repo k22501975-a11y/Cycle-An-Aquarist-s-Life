@@ -976,7 +976,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       h('h3', {}, '出遠門'),
       cardGrid(
         shopCard({
-          icon: 'feed',
+          art: 'gear/vacation-tablets.webp',
           name: '假期飼料錠',
           price: (economy(game.state).holidayTablets ?? 0) > 0 ? null : price('care:holiday'),
           unit: '/顆',
@@ -996,7 +996,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
             }, 'small'),
           ],
         }),
-        item('自動餵食器', 'feeder:auto', !!eq.feeder, () => purchase(ctx, price('feeder:auto'), (st) => installFeeder(st, 1), '裝上自動餵食器，每天早上 9 點投一小撮'), '每天定時投一小撮，吃電池'),
+        item('自動餵食器', 'feeder:auto', !!eq.feeder, () => purchase(ctx, price('feeder:auto'), (st) => installFeeder(st, 1), '裝上自動餵食器，每天早上 9 點投一小撮'), '每天定時投一小撮，吃電池', 'gear/auto-feeder.webp'),
       ),
     );
   } else {
