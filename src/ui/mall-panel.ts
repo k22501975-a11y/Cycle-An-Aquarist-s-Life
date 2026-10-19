@@ -1,4 +1,4 @@
-import { addMallGrant, mallBag, placeMallTankset, tanksetRefusal } from '../sim';
+import { mallBag, placeMallTankset, setMallBag, tanksetRefusal, type MallItemId } from '../sim';
 import type { Game } from '../game/game';
 import type { CloudClient, PointsCatalog } from '../net/cloud';
 import type { SoundId } from '../audio/sounds';
@@ -7,7 +7,7 @@ import type { Sheet, Toasts } from './sheet';
 
 /**
  * 商城（design/monetization.md）：台幣儲值成點數，點數買道具。點數和遊戲幣分開，不能換成遊戲幣。
- * 買到的道具由伺服器保管，遊戲領進背包後由玩家決定什麼時候用。
+ * 買到的道具由伺服器保管（docs/ledger.md §4），遊戲的背包只是副本；用的時候先跟伺服器扣一個，成功才套用效果。
  */
 
 export interface MallDeps {
@@ -21,26 +21,34 @@ export interface MallDeps {
 
 const points = (n: number) => `${n.toLocaleString('zh-TW')} 點`;
 
-let syncing = false;
-
-/** 把伺服器上買好、還沒領的道具放進背包（登入時、買完東西後）。回傳領了幾個。 */
-export async function syncMall(deps: Pick<MallDeps, 'cloud' | 'game'>): Promise<number> {
+/** 背包照伺服器的庫存更新（登入時）。 */
+export async function syncMall(deps: Pick<MallDeps, 'cloud' | 'game'>): Promise<void> {
   const { cloud, game } = deps;
-  if (!cloud.session || syncing) return 0;
-  syncing = true;
-  try {
-    const res = await cloud.pointsGrants();
-    if (!res.ok) return 0;
-    let added = 0;
-    for (const g of res.value) {
-      // 先放進背包（記下編號），再跟伺服器說領了；中途斷線下次也不會領兩次
-      if (game.actAll((tanks) => addMallGrant(tanks, g))) added++;
-      await cloud.pointsClaim(g.id);
-    }
-    return added;
-  } finally {
-    syncing = false;
+  if (!cloud.session) return;
+  const res = await cloud.points();
+  if (res.ok) game.actAll((tanks) => setMallBag(tanks, res.value.bag));
+}
+
+/**
+ * 跟伺服器用掉一個道具；成功才呼叫 apply 套用效果，背包照伺服器剩下的數量覆寫。
+ * 斷線時用同一個 requestId 再送一次，伺服器不會扣兩個。回傳 null 表示成功，不然是給玩家看的原因。
+ */
+export async function useMallItem(deps: Pick<MallDeps, 'cloud' | 'game'>, item: MallItemId, apply: () => boolean): Promise<string | null> {
+  const { cloud, game } = deps;
+  if (!cloud.session) return '商城道具存在帳號裡，要先登入雲端存檔才能用';
+  const requestId = crypto.randomUUID();
+  let res = await cloud.pointsUse(item, requestId);
+  if (!res.ok && res.code === 'offline') res = await cloud.pointsUse(item, requestId);
+  if (!res.ok) {
+    if (res.code === 'no_item') game.actAll((tanks) => (mallBag(tanks)[item] = 0));
+    return res.message;
   }
+  const remaining = res.value.remaining;
+  game.actAll((tanks) => {
+    apply();
+    mallBag(tanks)[item] = remaining;
+  });
+  return null;
 }
 
 export function mallPanel(deps: MallDeps): Node {
@@ -55,10 +63,10 @@ export function mallPanel(deps: MallDeps): Node {
   }
   const body = h('div.stack', {}, h('p.hint', {}, '讀取中…'));
   void (async () => {
-    await syncMall(deps);
     const res = await cloud.points();
-    if (!res.ok) body.replaceChildren(h('p', {}, res.message));
-    else body.replaceChildren(...mallView(deps, res.value));
+    if (!res.ok) return body.replaceChildren(h('p', {}, res.message));
+    deps.game.actAll((tanks) => setMallBag(tanks, res.value.bag));
+    body.replaceChildren(...mallView(deps, res.value));
   })();
   return body;
 }
@@ -74,7 +82,7 @@ function mallView(deps: MallDeps, cat: PointsCatalog): Node[] {
     if (!confirm(`用 ${points(cost)}買「${name}」？`)) return;
     const res = await cloud.pointsBuy(id);
     if (!res.ok) return toasts.show(res.message, 'warn');
-    await syncMall(deps);
+    game.actAll((tanks) => setMallBag(tanks, res.value.bag));
     deps.sound?.('buy');
     toasts.show(`買好了，「${name}」放進背包`);
     reopen(deps);
@@ -104,8 +112,10 @@ function mallView(deps: MallDeps, cat: PointsCatalog): Node[] {
               {
                 disabled: !!tanksetBlock,
                 title: tanksetBlock ?? '',
-                onclick: () => {
-                  const tank = game.actAll((tanks) => placeMallTankset(tanks));
+                onclick: async () => {
+                  let tank: ReturnType<typeof placeMallTankset> = null;
+                  const why = await useMallItem(deps, 'tankset', () => !!(tank = placeMallTankset(game.tanks)));
+                  if (why) return toasts.show(why, 'warn');
                   if (!tank) return;
                   game.switchTo(game.tanks.indexOf(tank));
                   toasts.show('熟成套缸擺好了，孔雀魚已經放進去');

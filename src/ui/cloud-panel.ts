@@ -1,4 +1,4 @@
-import { SAVE_CHECK_CODES, type CloudClient } from '../net/cloud';
+import { LEDGER_CODES, SAVE_CHECK_CODES, type CloudClient } from '../net/cloud';
 import { h } from './dom';
 import { saveTextFile } from './native';
 import type { Sheet, Toasts } from './sheet';
@@ -183,15 +183,32 @@ export async function firstSync(deps: CloudPanelDeps): Promise<void> {
   const res = await deps.cloud.download();
   if (!res.ok) return;
   if (!res.value) {
-    await deps.cloud.upload(deps.saveJson(), true);
+    await forceUpload(deps);
     return;
   }
   const cloudSave = res.value;
   if (confirm(`雲端已經有這個帳號的存檔（${when(cloudSave.savedAt)}）。要載入雲端的嗎？\n按「取消」會用這台的覆蓋雲端。`)) {
     if (!deps.applyCloud(cloudSave.save, cloudSave.revision)) deps.toasts.show('雲端的存檔讀不出來，可能是比較新的版本，請先更新遊戲', 'warn');
   } else {
-    await deps.cloud.upload(deps.saveJson(), true);
+    await forceUpload(deps);
   }
+}
+
+/** 強制用這台的覆蓋；帳本對不上（伺服器不收）就改用雲端那份。 */
+async function forceUpload(deps: CloudPanelDeps): Promise<void> {
+  const res = await deps.cloud.upload(deps.saveJson(), true);
+  if (!res.ok && LEDGER_CODES.includes(res.code)) await adoptCloud(deps, res.message);
+}
+
+/** 改用雲端那份（帳本對不上時，這台的存檔不能上傳）。回傳有沒有換成功。 */
+async function adoptCloud(deps: CloudPanelDeps, message: string): Promise<boolean> {
+  const res = await deps.cloud.download();
+  if (res.ok && res.value && deps.applyCloud(res.value.save, res.value.revision)) {
+    deps.toasts.show(`${message}，已改用雲端的存檔`, 'warn');
+    return true;
+  }
+  deps.toasts.show(`${message}，請到雲端存檔載入雲端的那份`, 'warn');
+  return false;
 }
 
 /**
@@ -229,6 +246,7 @@ export async function autoUpload(deps: CloudPanelDeps): Promise<boolean> {
  */
 async function resolveSaveCheck(deps: CloudPanelDeps, code: string, message: string): Promise<boolean> {
   const { cloud, toasts, sheet } = deps;
+  if (LEDGER_CODES.includes(code)) return adoptCloud(deps, message);
   if (code === 'time_ahead') {
     const server = await cloud.advance();
     if (server.ok && deps.applyCloud(server.value.save, server.value.revision, true)) {
