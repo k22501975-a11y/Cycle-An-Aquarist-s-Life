@@ -1151,6 +1151,9 @@ export class TankView {
     const key = `${fish.species}:${form}:${gravid}:${painted ?? ''}:${finKey}`;
     if (key === view.rigKey) return;
     view.rigKey = key;
+    // 卵和白點圖層每次換外觀都沿用：先從舊圖層拿出來，不然會跟著被銷毀，之後再畫到就當掉
+    view.eggs.removeFromParent();
+    view.spots.removeFromParent();
     view.rig?.destroy({ children: true });
     const look = appearance(fish.species, form, lookVariant(fish), gravid);
     const tex = paintedTexture(painted);
@@ -1159,7 +1162,7 @@ export class TankView {
     view.rig.addChildAt(view.eggs, 0);
     view.rig.addChild(view.spots);
     if (fins) drawFinOverlay(view.rig, fins, this.app.renderer);
-    view.limbs?.destroy();
+    // 腳的圖層是舊外觀的子圖層，上面已經一起銷毀了
     view.limbs = null;
     if (isShrimpSpecies(fish.species) && view.rig instanceof PaintedRig) {
       view.limbs = new Graphics();
