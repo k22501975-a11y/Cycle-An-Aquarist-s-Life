@@ -1,6 +1,6 @@
 import type { DeathAdviceCause } from './moments';
 import { guppyLook } from '../render/strains';
-import { isShrimpSpecies, FISH_SPECIES, growthStage, SNAILS, phenotype, PLANT_SPECIES, sexVisible, strainName, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
+import { BOX_CAPACITY, hidingFactor, isJuvenile, isShrimpSpecies, FISH_SPECIES, growthStage, SNAILS, phenotype, PLANT_SPECIES, sexVisible, strainName, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
 
 export const SYMPTOM_LABELS: Record<Symptom, string> = {
   hiding: '躲在角落',
@@ -130,7 +130,7 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
       return { text: `${fish ? fishName(fish) : '短鯛母魚'} 帶大的 ${e.count ?? 0} 尾小魚離巢了，可以分缸了`, tone: 'info' };
     case 'fry_eaten': {
       const shrimp = isShrimpSpecies((e.cause ?? 'guppy') as Fish['species']);
-      return { text: `${e.count ?? 1} ${shrimp ? '隻小蝦' : '尾小魚'}被大魚吃掉了。種密一點的水草（莫絲、矮珍珠）讓牠們躲，或撈進檢疫盒`, tone: 'warn' };
+      return { text: fryEatenText(state, e.count ?? 1, shrimp), tone: 'warn' };
     }
     case 'betta_chase_female':
       return { text: `公鬥魚在顧泡巢，一直追咬 ${fish ? fishName(fish) : '母魚'}。快把母魚撈到別缸`, tone: 'bad' };
@@ -145,6 +145,46 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
     case 'trap_rotted':
       return { text: '螺陷阱裡的菜放太久爛掉了，弄髒了水', tone: 'warn' };
   }
+}
+
+const pick = (options: string[], day: number) => options[day % options.length];
+
+/**
+ * 小魚、小蝦被吃的說法（UX r12）：看缸裡現在的情況給不同的建議，同一種情況也每天換一句，連續幾天被吃才不會一直看到同一句。
+ * 開頭像「3 尾小魚被大魚吃掉了」，早上報告前面再加「昨晚有」。
+ */
+export function fryEatenText(state: TankState, count: number, shrimp: boolean): string {
+  const day = Math.floor(state.hours / 24);
+  const who = shrimp ? '隻小蝦' : '尾小魚';
+  const head = `${count} ${who}${pick(shrimp ? ['被魚吃掉了', '沒躲好，被魚叼走了'] : ['被大魚吃掉了', '沒躲好，被成魚吞下去了', '被大魚當點心吃了'], day)}`;
+  const hiding = hidingFactor(state);
+  const box = state.quarantine;
+  const boxFish = box?.fish.filter((f) => f.alive) ?? [];
+  const boxRoom = !!box && boxFish.length < BOX_CAPACITY;
+  const momInBox = boxFish.some((f) => f.sex === 'female' && !isJuvenile(f));
+  const fry = state.fish.filter((f) => f.alive && isJuvenile(f) && f.lengthCm < 1.6 && !isShrimpSpecies(f.species)).length;
+  const due = state.fish.some((f) => f.alive && f.sex === 'female' && f.pregnancy > 0.85);
+  let tip: string;
+  if (shrimp) {
+    tip = hiding < 0.35
+      ? pick(['小蝦最愛躲在莫絲裡，多綁幾團就好', '缸裡能躲的地方太少，莫絲和矮珍珠是小蝦的家'], day)
+      : pick(['水草已經不少，被吃掉一些是正常的，蝦群會慢慢補回來', '小蝦長到看得清楚的大小，魚就不太吃了，再撐幾天'], day);
+  } else if (due && boxRoom && !momInBox) {
+    tip = pick(['又有母魚肚子很鼓了，生之前先放進檢疫盒，生下的就一尾都不會少', '下一胎快生了，趁現在把母魚放進檢疫盒'], day);
+  } else if (due && !box) {
+    tip = pick(['又有母魚快生了。商店的檢疫盒掛在缸上就能當產卵盒，生下的小魚不會被吃', '下一胎快生了，想多留幾尾，可以先買個檢疫盒當產卵盒'], day);
+  } else if (fry > 0 && boxRoom) {
+    tip = pick([`主缸還有 ${fry} 尾小魚，撈進檢疫盒，長到 1.6 cm 再放回來`, `剩下的 ${fry} 尾小魚趕快撈進檢疫盒，大魚就吃不到了`], day);
+  } else if (fry > 0 && box) {
+    tip = pick(['檢疫盒滿了，盒裡大一點的先放回主缸，騰出位子給更小的', '盒子塞不下了，把盒裡快 1.6 cm 的先放出去'], day);
+  } else if (hiding < 0.35) {
+    tip = pick(['水草太少，大魚一眼就看到小魚。莫絲、矮珍珠這種又密又低的草最好躲', '多種一點莫絲或矮珍珠，小魚鑽進去大魚就抓不到', '缸裡空蕩蕩的，小魚沒地方躲；密一點的水草能救下不少'], day);
+  } else if (!box) {
+    tip = pick(['水草已經夠密了，還是會被吃掉幾尾，這是正常的。想全部留下，商店的檢疫盒能當產卵盒', '草夠密了，剩下的就靠運氣；下次母魚肚子鼓起來，可以放進檢疫盒生'], day);
+  } else {
+    tip = pick(['水草夠密了，被吃掉幾尾是正常的。下次母魚快生時放進檢疫盒，就能全部留下', '躲得過的會長大，長到 1.6 cm 大魚就吞不下了'], day);
+  }
+  return `${head}。${tip}`;
 }
 
 export function plantName(species: keyof typeof PLANT_SPECIES): string {

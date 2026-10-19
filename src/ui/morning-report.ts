@@ -14,7 +14,7 @@ import {
   type SimEvent,
   type TankState,
 } from '../sim';
-import { DEATH_CAUSE_LABELS, describeEvent } from './labels';
+import { DEATH_CAUSE_LABELS, describeEvent, fryEatenText } from './labels';
 
 /**
  * 「過一晚」的早上報告（first-10-minutes.md F2）：睡前拍一張快照，醒來跟現在比，
@@ -162,11 +162,10 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     const eaten = events.filter((x) => x.type === 'fry_eaten').reduce((n, e) => n + (e.count ?? 0), 0);
     if (eaten > 0) {
       const shrimp = events.filter((x) => x.type === 'fry_eaten').every((e) => isShrimpSpecies((e.cause ?? 'guppy') as FishSpeciesId));
-      const box = !!t.quarantine;
       push({
         kind: 'eaten',
         tone: 'warn',
-        text: `昨晚有 ${eaten} ${shrimp ? '隻小蝦' : '尾小魚'}被大魚吃掉了。種密一點的水草讓牠們躲${box ? '，或撈進檢疫盒' : '；商店的檢疫盒也能當產卵盒'}`,
+        text: `昨晚有 ${fryEatenText(t, eaten, shrimp)}`,
         action: 'fry_box',
         count: eaten,
       });

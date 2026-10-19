@@ -94,7 +94,7 @@ describe('「過一晚」（first-10-minutes.md F2）', () => {
     });
     const report = morningReport(before, game.tanks, 12, null);
     const item = report.items.find((x) => x.kind === 'eaten');
-    expect(item?.text).toContain('5 尾小魚被大魚吃掉');
+    expect(item?.text).toContain('昨晚有 5 尾小魚');
     expect(item?.action).toBe('fry_box');
     expect(report.items.some((x) => x.kind === 'quiet')).toBe(false);
   });
