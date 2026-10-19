@@ -1,10 +1,11 @@
 import { isShrimpSpecies } from '../sim';
-import { Assets, BlurFilter, ColorMatrixFilter, Container, Mesh, MeshPlane, Texture } from 'pixi.js';
+import { Assets, BlurFilter, ColorMatrixFilter, Container, type DestroyOptions, Mesh, MeshPlane, Texture } from 'pixi.js';
 import type { FishSpeciesId, GrowthStage, TankState } from '../sim';
 import type { FishForm } from './fish-art';
 import { canvasTexture, makeCanvas } from './paint';
 import { parseRecipeKey, patternBase, recolorImage } from './phenotype-art';
 import { guppyLook } from './strains';
+import { RefLru } from './lru';
 import { tankSubstrateLook } from './substrate';
 import { rimLight, toneImage, toneKey } from './tone';
 
@@ -170,7 +171,7 @@ const PROPS: Record<string, string> = {
   'gear-sponge': 'gear/sponge-filter.webp',
   // 螺（design/snails.md）
   ...Object.fromEntries(
-    ['snail-apple-gold', 'snail-apple-blue', 'snail-apple-babies', 'snail-apple-eggs', 'snail-nerite-zebra', 'snail-assassin', 'snail-ramshorn-red', 'snail-bladder', 'snail-mts'].map((k) => [k, `snail/${k}.webp`]),
+    ['snail-apple-gold', 'snail-apple-blue', 'snail-apple-purple', 'snail-apple-ivory', 'snail-apple-babies', 'snail-apple-eggs', 'snail-nerite-zebra', 'snail-assassin', 'snail-ramshorn-red', 'snail-bladder', 'snail-mts'].map((k) => [k, `snail/${k}.webp`]),
   ),
 };
 
@@ -180,7 +181,9 @@ export const FIN_PARTS: Record<string, { file: string; anchor: [number, number] 
 
 const textures = new Map<string, Texture>();
 const scenery = new Map<string, Texture>();
-const toned = new Map<string, Texture>();
+/** 調色快取最多留幾張；超過時把最久沒用、也沒有魚在用的圖釋放掉（GPU 記憶體）。 */
+export const TONED_MAX = 64;
+const toned = new RefLru<string, Texture>(TONED_MAX, (t) => t.destroy(true));
 
 /** 每個素材的鍵、檔案和放進哪個快取（精繪魚蝦、小道具、單片鰭、造景）。 */
 export const ART_FILES: { key: string; file: string; scenery: boolean }[] = [
@@ -302,9 +305,7 @@ export function tonedTexture(key: string, sat: number, bright: number, eating = 
   // 背上的邊緣光，厚度約圖高的 2%
   rimLight(data.data, canvas.width, canvas.height, Math.max(2, Math.round(canvas.height * 0.02)), RIM_STRENGTH);
   ctx.putImageData(data, 0, 0);
-  const tex = canvasTexture(canvas);
-  toned.set(cacheKey, tex);
-  return tex;
+  return toned.add(cacheKey, canvasTexture(canvas));
 }
 
 /** 快取裡有幾張貼圖（開發者數值、測試用）。 */
@@ -337,6 +338,9 @@ export class PaintedRig extends Container {
   private readonly key: string;
   private restTexture: Texture;
   private eatingTexture: Texture | null;
+  /** 正在用的調色圖（快取用引用計數判斷能不能釋放）。 */
+  private tonedRest: Texture | null = null;
+  private tonedEating: Texture | null = null;
   /** 張嘴的圖疊在上面淡入淡出（不是直接換圖，換圖看起來像兩張圖在閃）。 */
   private mouthMesh: Mesh | null = null;
   private mouthOpen = 0;
@@ -402,9 +406,27 @@ export class PaintedRig extends Container {
     const tone = `${sat}:${bright}`;
     if (tone === this.tone) return;
     this.tone = tone;
-    this.restTexture = tonedTexture(this.key, sat, bright) ?? this.restTexture;
-    this.eatingTexture = textures.has(`${this.key}#eating`) ? tonedTexture(this.key, sat, bright, true) : null;
+    // 拿到就先 retain，再拿下一張：不然建吃東西那張時，剛拿到的 rest 可能被清掉
+    const rest = tonedTexture(this.key, sat, bright);
+    toned.retain(rest);
+    const eating = textures.has(`${this.key}#eating`) ? tonedTexture(this.key, sat, bright, true) : null;
+    toned.retain(eating);
+    toned.release(this.tonedRest);
+    toned.release(this.tonedEating);
+    this.tonedRest = rest;
+    this.tonedEating = eating;
+    this.restTexture = rest ?? this.restTexture;
+    this.eatingTexture = eating;
+    if (this.mesh.texture !== this.restTexture) this.mesh.texture = this.restTexture;
     this.setMouthOpen(this.mouthOpen);
+  }
+
+  override destroy(options?: DestroyOptions): void {
+    toned.release(this.tonedRest);
+    toned.release(this.tonedEating);
+    this.tonedRest = null;
+    this.tonedEating = null;
+    super.destroy(options);
   }
 
   get heightPx(): number {

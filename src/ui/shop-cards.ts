@@ -49,7 +49,7 @@ export function fryArt(id: FishSpeciesId): string {
 }
 
 export function snailArt(kind: SnailKind, color?: AppleColor): string {
-  if (kind === 'apple') return `snail/snail-apple-${color === 'blue' ? 'blue' : 'gold'}.webp`;
+  if (kind === 'apple') return `snail/snail-apple-${color ?? 'gold'}.webp`;
   return kind === 'nerite' ? 'snail/snail-nerite-zebra.webp' : 'snail/snail-assassin.webp';
 }
 

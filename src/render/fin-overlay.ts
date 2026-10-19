@@ -107,14 +107,14 @@ export function finShapes(t: FinTraits, body: Body, length: number): FinShape[] 
     });
   }
   if (t.swallow) {
-    // 燕尾：鰭條末端長出鬚，尾鰭後緣拖著一排細絲，背鰭也有
+    // 燕尾：鰭條末端長出鬚，尾鰭後緣拖著一排細絲
     const tail = length * (0.08 + k * 0.1);
     for (let i = 0; i < 7; i++) {
       const u = i / 6 - 0.5;
       const y0 = cy + u * ry * 2.6;
       out.push({ kind: 'line', front: false, points: [tailEnd - length * 0.12, y0, tailEnd + tail * 0.3, y0 + u * ry * 1.4, tailEnd + tail, y0 + u * ry * 2.2 + ry * 0.2] });
     }
-    out.push({ kind: 'line', front: false, points: [cx, cy - ry * 0.9, cx + rx * 0.7, cy - ry * 2.2, cx + rx * (1.1 + k * 0.6), cy - ry * 2.6] });
+    // 背鰭的鬚不畫：魚圖的背鰭位置跟身體橢圓對不準，補上去的線會浮在背上方（畫面評測 V16）
   }
   if (t.sword) {
     // 劍尾：尾鰭上緣或下緣的鰭條延伸成一支尖劍，根部寬、尖端細

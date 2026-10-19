@@ -385,11 +385,12 @@ export class TankView {
     for (const [c, scale] of [[this.causticsA, 1.2], [this.causticsB, 0.8]] as const) {
       c.width = b.width;
       c.height = b.height;
-      c.tileScale.set(scale * Math.max(0.6, this.hs) * 1.6);
+      // 網眼約一個拳頭大（畫面評測 V17：之前放太大，變成幾條粗白曲線）
+      c.tileScale.set(scale * Math.max(0.6, this.hs) * 0.75);
     }
     // 遮罩用柔和的漸層（從水中段淡入，到底沙最亮）
     if (this.causticsMask.texture === Texture.EMPTY) this.causticsMask.texture = fadeTexture();
-    const y0 = b.surface + (b.bottom - b.surface) * 0.3;
+    const y0 = b.surface + (b.bottom - b.surface) * 0.5;
     this.causticsMask.position.set(0, y0);
     this.causticsMask.width = b.width;
     // 焦散只照在水和底沙上，不畫到下方工具列後面
@@ -597,8 +598,8 @@ export class TankView {
       this.causticsA.tilePosition.y += dt * 4;
       this.causticsB.tilePosition.x -= dt * 6;
       this.causticsB.tilePosition.y += dt * 7;
-      this.causticsA.alpha = 0.22 + 0.06 * Math.sin(t * 0.8);
-      this.causticsB.alpha = 0.18 + 0.06 * Math.sin(t * 0.6 + 1);
+      this.causticsA.alpha = 0.16 + 0.05 * Math.sin(t * 0.8);
+      this.causticsB.alpha = 0.12 + 0.05 * Math.sin(t * 0.6 + 1);
     }
     for (const m of this.motes) {
       m.x += (m.vx + Math.sin(t * 0.5 + m.phase) * 4) * dt;

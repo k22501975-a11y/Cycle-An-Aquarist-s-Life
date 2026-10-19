@@ -184,6 +184,11 @@ export class AudioEngine {
         this.pluck(t + 0.12, 78, 0.6, this.sfxBus);
         this.pluck(t + 0.24, 86, 0.45, this.sfxBus);
         break;
+      case 'fanfare':
+        // 慶祝：G 大調琶音往上撥，最後一個泛音收尾（跟背景的指彈吉他同一把琴）
+        [67, 71, 74, 79, 83].forEach((m, i) => this.pluck(t + i * 0.09, m, 0.7 - i * 0.05, this.sfxBus));
+        this.tone(t + 0.5, 1568, 0.9, 0.08, 'sine');
+        break;
       case 'restore':
         this.tone(t, 523, 0.2, 0.1, 'sine');
         this.tone(t + 0.15, 784, 0.35, 0.1, 'sine');

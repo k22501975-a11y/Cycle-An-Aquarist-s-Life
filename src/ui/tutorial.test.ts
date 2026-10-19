@@ -95,7 +95,7 @@ describe('新手卡關（玩家體驗評測第 1 輪）', () => {
 
   it('養水任務和任務卡都不看硝酸鹽', () => {
     const q = QUESTS.find((x) => x.id === 'cycled')!;
-    expect([q.title, ...q.lines, q.hint ?? ''].join('')).not.toMatch(/(?<!亞)硝酸鹽/);
+    expect([q.title, ...q.lines].join('')).not.toMatch(/(?<!亞)硝酸鹽/);
   });
 
   it('新缸一次放太多魚，買之前老闆提醒；有檢疫盒或缸養好了就不提醒', () => {
@@ -145,9 +145,10 @@ describe('養水任務進度', () => {
     expect(cycleProgress(s)).toContain('再測一次');
   });
 
-  it('養水任務有等待提示，其他任務沒有', () => {
-    expect(QUESTS.find((q) => q.id === 'cycled')?.hint).toContain('3～7 天');
-    expect(QUESTS.find((q) => q.id === 'plant')?.hint).toBeUndefined();
+  it('養水任務的老闆說明有講要等多久、怎麼加快', () => {
+    const lines = QUESTS.find((q) => q.id === 'cycled')!.lines.join('');
+    expect(lines).toContain('3～7 天');
+    expect(lines).toContain('硝化菌液');
   });
 });
 

@@ -1,4 +1,4 @@
-import type { FishSpeciesId, Symptom } from '../sim';
+import { HUNGRY, type FishSpeciesId, type Symptom } from '../sim';
 import { floorAt, type TankBounds } from './layout';
 
 /** 每個魚種的游動個性。 */
@@ -390,6 +390,7 @@ export function turnScale(f: number): { sx: number; sy: number } {
  * hunger 0（飽）～1（很餓）；一般餓（< 0.5）看不出來，免得每天都像在挨餓。
  */
 export function hungerLook(hunger: number): { thin: number; begging: number } {
-  const k = Math.max(0, Math.min(1, (hunger - 0.5) / 0.4));
+  // 跟模擬的「餓了」同一個門檻（點魚資訊卡、老闆說明也用它）；餓到 0.95 就是最扁、最常討食
+  const k = Math.max(0, Math.min(1, (hunger - HUNGRY) / (0.95 - HUNGRY)));
   return { thin: 1 - 0.12 * k, begging: k };
 }

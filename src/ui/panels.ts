@@ -149,8 +149,11 @@ import { BROOD_ISSUE_LABELS, DEATH_CAUSE_LABELS, fishName, SYMPTOM_LABELS } from
 import { artImg } from './art-icons';
 import { advice, cardGrid, guppyArt, iconTabs, plantArt, priceTag, shopCard, snailArt, speciesArt } from './shop-cards';
 import type { Sheet, Toasts } from './sheet';
+import type { CelebrateSpec } from './celebrate';
+import type { MomentId } from './moments';
 import { READING_TONES, todos } from './status';
 import { overloadWarning } from './tutorial';
+import { ownerAsk } from './owner-ask';
 
 export interface PanelContext {
   game: Game;
@@ -162,6 +165,8 @@ export interface PanelContext {
   undoable?: (run: () => void, text: string, tone?: 'warn' | 'info') => void;
   /** 進入造景模式（拖曳擺放石頭、沉木、水草）。 */
   openScape?: () => void;
+  /** 「第一次」的慶祝演出（只演一次）；有演出時回傳 true。 */
+  moment?: (id: MomentId, spec: CelebrateSpec) => boolean;
 }
 
 /** 沒有復原機制時（例如測試）就直接做並顯示通知。 */
@@ -651,15 +656,15 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
   const wallet = h('div.wallet-bar', {}, h('span', {}, '錢包'), priceTag(coins));
 
   // 新缸一次放太多魚：老闆提醒一次（每次開遊戲最多一次），玩家還是可以照買
-  const overloadOk = (count: number) => {
+  const overloadOk = async (count: number): Promise<boolean> => {
     const warning = overloadWarned ? null : overloadWarning(game.state, count);
     if (!warning) return true;
     overloadWarned = true;
-    return confirm(warning);
+    return ownerAsk({ text: warning, yes: '照買', no: '先不要' });
   };
   // sexes 有給就照順序決定每隻的公母（孔雀魚品系：公、母、一公兩母），沒給就隨機
-  const buyFish = (species: FishSpeciesId, count: number, strain?: number, finStrain?: (typeof GUPPY_FIN_STRAINS)[number], sexes?: ('male' | 'female')[]) => () => {
-    if (!overloadOk(count)) return;
+  const buyFish = (species: FishSpeciesId, count: number, strain?: number, finStrain?: (typeof GUPPY_FIN_STRAINS)[number], sexes?: ('male' | 'female')[]) => async () => {
+    if (!(await overloadOk(count))) return;
     const quarantined = !!game.state.quarantine;
     const name = finStrain ? `${finStrain.name}孔雀魚` : strain !== undefined ? `${GUPPY_STRAINS[strain]}孔雀魚` : FISH_SPECIES[species].name;
     const each = finStrain ? finStrain.price : strain !== undefined ? GUPPY_STRAIN_PRICES[strain] : FISH_PRICES[species];
@@ -681,17 +686,20 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     );
   };
   // 鬥魚公母分開賣：公魚是長鰭的漂亮魚，母魚短鰭便宜很多
-  const buyOne = (species: FishSpeciesId, sex: 'male' | 'female', price: number) => () => {
+  const buyOne = (species: FishSpeciesId, sex: 'male' | 'female', price: number) => async () => {
     const quarantined = !!game.state.quarantine;
     const name = `${FISH_SPECIES[species].name}${sex === 'male' ? '公魚' : '母魚'}`;
     const males = game.state.fish.filter((f) => f.alive && f.species === species && f.sex === 'male' && !isJuvenile(f)).length;
-    if (!overloadOk(1)) return;
-    if (species === 'betta' && sex === 'male' && males > 0 && !quarantined && !confirm('缸裡已經有公鬥魚了，兩尾公鬥魚放在一起會打到一尾死掉。還是要買嗎？')) return;
+    if (!(await overloadOk(1))) return;
+    if (species === 'betta' && sex === 'male' && males > 0 && !quarantined) {
+      const ok = await ownerAsk({ text: '缸裡已經有公鬥魚了。兩尾公鬥魚放一起，會打到一尾死掉。', yes: '照買', no: '先不要' });
+      if (!ok) return;
+    }
     purchase(ctx, price, (st) => (quarantined ? addFishToQuarantine : addFish)(st, species, { sex, drip: shopDrip }), `買了一隻${name}${quarantined ? `，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天` : ''}`);
   };
   // 水草可能夾帶害蟲小螺的卵（看不到）；有檢疫盒的人會先泡過，機率低很多（design/snails.md §2）
-  const buyPair = (species: FishSpeciesId) => () => {
-    if (!overloadOk(2)) return;
+  const buyPair = (species: FishSpeciesId) => async () => {
+    if (!(await overloadOk(2))) return;
     const quarantined = !!game.state.quarantine;
     purchase(
       ctx,
@@ -856,7 +864,8 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         '換底材要拆缸重鋪：底砂裡的細菌和髒污會翻出來，魚也會很緊迫。',
         '有些石頭會慢慢讓水變硬、pH 變高。不確定的話先滴白醋：冒泡就是含碳酸鈣。拿出來的石頭會放回倉庫，不退錢。',
       ]),
-      h('h3', {}, '水質用品'),
+      // 硝化菌液排第一張（養水任務帶到這頁），跟設備放同一排，不會一張卡佔一整列（畫面評測 V20）
+      h('h3', {}, '養水與設備'),
       cardGrid(
         shopCard({
           icon: 'bacteria',
@@ -867,9 +876,6 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
           note: '幫新缸加一小批硝化菌，要有魚或氨才長得起來',
           actions: [button('倒一瓶', () => purchase(ctx, price('care:bacteria'), (st) => void addBottledBacteria(st), '倒了一瓶硝化菌液，過一兩天測測看'), 'small')],
         }),
-      ),
-      h('h3', {}, '過濾、加熱、燈'),
-      cardGrid(
         ...Object.values(FILTERS).map((f) =>
           item(f.name, `filter:${f.id}`, eq.filter?.spec.id === f.id, () => {
             purchase(ctx, price(`filter:${f.id}`), (st) => replaceFilter(st, f), `換上${f.name}，濾材要重新養菌`, 'warn', true);
@@ -960,7 +966,13 @@ function sellContent(ctx: PanelContext): Node {
     const got = game.act((st) => sellFish(st, pick.id));
     if (got > 0) {
       ctx.sound?.('buy');
-      toasts.show(`把 ${fishName(pick)} 賣給水族店，拿到 ${got} 元`);
+      const celebrated = ctx.moment?.('first_sale', {
+        art: speciesArt(pick.species, pick.sex),
+        title: `第一筆收入 ${got} 元！`,
+        sub: `${fishName(pick)} 賣給水族店了`,
+        owner: '好魚賣得到好價錢。挑尾巴大、顏色亮的留著配對，選育出來的魚能賣好幾倍。',
+      });
+      if (!celebrated) toasts.show(`把 ${fishName(pick)} 賣給水族店，拿到 ${got} 元`);
     } else toasts.show('今天店家不收了，明天再來', 'warn');
     refresh();
   };

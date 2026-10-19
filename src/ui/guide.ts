@@ -26,7 +26,7 @@ export class Guide {
   private pages: Page[] = [];
   private onDone: (() => void) | null = null;
   /** 完成任務時通知（匿名數據分析用來看新手卡在哪一步）。 */
-  questDone: ((step: number) => void) | null = null;
+  questDone: ((step: number, id: string) => void) | null = null;
   /** 打開商店的某一頁（main 接上）。 */
   openShop: ((tab: QuestShopTab) => void) | null = null;
 
@@ -55,7 +55,7 @@ export class Guide {
     const done = advanceQuest(this.progress, state);
     if (done) {
       this.save();
-      this.questDone?.(this.progress.step);
+      this.questDone?.(this.progress.step, done.id);
       this.sound('quest');
       const next = currentQuest(this.progress);
       this.say([{ text: done.done, label: next ? '下一個任務' : '謝謝老闆' }, ...(next ? this.questPages() : [])]);
@@ -106,6 +106,13 @@ export class Guide {
     this.renderBubble();
   }
 
+  /** 收起對話框，打開商店的對應分頁。 */
+  private goShop(tab: QuestShopTab): void {
+    this.pages = [];
+    this.renderBubble();
+    this.openShop?.(tab);
+  }
+
   private renderBubble(): void {
     const page = this.pages[0];
     if (!page) {
@@ -117,19 +124,23 @@ export class Guide {
     // 阿德老闆的插畫頭像；圖載不到就退回線條小人
     const avatar = h('div.owner-avatar.has-art', {}, ownerPortrait());
     const q = currentQuest(this.progress);
-    const next = h('button.btn.small.primary', { onclick: () => (this.pages.shift(), this.renderBubble()) }, page.label ?? '好');
+    const turnPage = () => {
+      this.pages.shift();
+      this.renderBubble();
+    };
+    const next = h('button.btn.small.primary', { onclick: turnPage }, page.label ?? '好');
     const skip =
       q && this.progress.step === 0
         ? h('button.btn.small', { onclick: () => this.skip() }, '跳過教學')
         : null;
+    // 「帶我去商店」不是主要按鈕、也不放在最右邊：連點「下一步」的人不會不小心打開商店（畫面評測第 2 輪）
     const shop =
       page.shop && this.openShop
-        ? h('button.btn.small.primary.go-shop', { onclick: () => (this.pages = [], this.renderBubble(), this.openShop!(page.shop!)) }, artImg('shop', 'btn-art'), '帶我去商店')
+        ? h('button.btn.small.go-shop', { onclick: () => this.goShop(page.shop!) }, artImg('shop', 'btn-art'), '帶我去商店')
         : null;
-    if (shop) next.classList.remove('primary');
     this.bubble.replaceChildren(
       avatar,
-      h('div.owner-body', {}, h('div.owner-name', {}, OWNER_NAME), h('p.owner-text', {}, page.text), h('div.owner-actions', {}, skip, next, shop)),
+      h('div.owner-body', {}, h('div.owner-name', {}, OWNER_NAME), h('p.owner-text', {}, page.text), h('div.owner-actions', {}, skip, shop, next)),
     );
     this.bubble.classList.add('open');
   }

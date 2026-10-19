@@ -4,7 +4,7 @@ import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audi
 import { eventSound } from './audio/sounds';
 import { applySeason, Game, newGameState } from './game/game';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
-import { menuTile } from './ui/art-icons';
+import { menuTile, ownerImg } from './ui/art-icons';
 import { SpeedControl } from './ui/speed-control';
 import { installCrashGuard } from './ui/crash';
 import { Analytics } from './net/analytics';
@@ -45,7 +45,10 @@ import {
   type ShopTab,
 } from './ui/panels';
 import { Guide } from './ui/guide';
-import { Celebration } from './ui/celebrate';
+import { Celebration, type CelebrateSpec } from './ui/celebrate';
+import { firstTime, type MomentId } from './ui/moments';
+import { causeAdvice, HUNGER_LABEL, needsAdvice } from './ui/owner-advice';
+import { ownerSay } from './ui/owner-ask';
 import { fryArt } from './ui/shop-cards';
 import { recordsPanel } from './ui/records';
 import { loadCodexSeen, saveCodexSeen, unlockCodex } from './ui/codex';
@@ -104,6 +107,13 @@ async function start(): Promise<void> {
   const sheet = new Sheet(document.body);
   const toasts = new Toasts(document.body);
   const celebration = new Celebration(document.body);
+  /** 「第一次」的演出：慶祝卡＋撥弦琶音，每件事只演一次。 */
+  const moment = (id: MomentId, spec: CelebrateSpec): boolean => {
+    if (!firstTime(store, id)) return false;
+    audio.play('fanfare');
+    celebration.show(spec);
+    return true;
+  };
   // 聲音：瀏覽器要等第一次點擊才能出聲
   let audioSettings = loadAudioSettings(store);
   const audio = new AudioEngine(audioSettings);
@@ -156,7 +166,7 @@ async function start(): Promise<void> {
       },
     });
   };
-  const ctx: PanelContext = { game, sheet, toasts, sound: (id) => audio.play(id), undoable };
+  const ctx: PanelContext = { game, sheet, toasts, sound: (id) => audio.play(id), undoable, moment };
   // 存檔匯出成檔案（換手機、怕瀏覽器清掉資料時用）
   const exportSave = () =>
     void saveTextFile(`cycle-save-day${Math.floor(game.state.hours / 24) + 1}.json`, serializeSave(game.tanks[0], game.clock.timeScale, Date.now(), undefined, extraTanks())).catch(() =>
@@ -330,7 +340,8 @@ async function start(): Promise<void> {
   const selChanged = memo();
   const renderSelCard = () => {
     const fish = game.state.fish.find((f) => f.id === selected);
-    if (!selChanged(fish ? `${fish.id}:${fish.alive}:${Math.round(fish.health * 50)}:${Math.round(fish.stress * 50)}:${fishName(fish)}` : '-')) return;
+    const cond = fish?.alive ? sim.fishCondition(game.state, fish) : null;
+    if (!selChanged(fish ? `${fish.id}:${fish.alive}:${Math.round(fish.health * 50)}:${Math.round(fish.stress * 50)}:${fishName(fish)}:${cond?.hunger}:${cond?.causes[0]?.key}` : '-')) return;
     selCard.classList.toggle('empty', !fish);
     if (!fish) {
       selCard.replaceChildren(h('div.card-title', {}, '觀察'), h('p.hint', {}, '點缸裡的魚，看看牠的狀況。'));
@@ -347,13 +358,20 @@ async function start(): Promise<void> {
       selCard.replaceChildren(close, h('div.card-title', {}, title), h('div.card-sub', {}, sub), h('p.dead', {}, '已經死了'), h('button.btn.small.primary', { onclick: () => sheet.open('死掉的魚', () => fishPanel(ctx, fish.id), { live: true }) }, '看原因'));
       return;
     }
+    if (!cond) return;
+    const hungry = cond.hunger === 'hungry' || cond.hunger === 'starving';
+    // 魚不太舒服、又找得到原因：多一顆有老闆頭像的「為什麼？」，老闆用一句話說原因和怎麼做
+    const ask = needsAdvice(cond)
+      ? h('button.btn.small.primary.ask-owner', { onclick: () => void ownerSay(causeAdvice(fishName(fish), cond.causes)) }, ownerImg('ask-avatar'), '為什麼？')
+      : null;
     selCard.replaceChildren(
       close,
-      h('div.card-title', {}, title),
+      h('div.card-title', {}, title, h(`span.hunger-chip.${cond.hunger}`, {}, HUNGER_LABEL[cond.hunger])),
       h('div.card-sub', {}, sub),
       bar('健康', fish.health, fish.health > 0.6 ? 'ok' : fish.health > 0.3 ? 'warn' : 'bad'),
       bar('壓力', fish.stress, fish.stress < 0.4 ? 'warn' : 'bad'),
-      h('button.btn.small', { onclick: () => sheet.open('觀察這條魚', () => fishPanel(ctx, fish.id), { live: true }) }, '詳細'),
+      bar('飽足', 1 - cond.hungerValue, hungry ? (cond.hunger === 'starving' ? 'bad' : 'warn') : 'ok'),
+      h('div.row', {}, ask, h('button.btn.small', { onclick: () => sheet.open('觀察這條魚', () => fishPanel(ctx, fish.id), { live: true }) }, '詳細')),
     );
   };
   const select = (id: number | null) => {
@@ -837,10 +855,13 @@ async function start(): Promise<void> {
       const mom = t.fish.find((f) => f.id === e.subjectId);
       const shrimp = !!mom && sim.isShrimpSpecies(mom.species);
       if (tank === game.active && e.subjectId !== undefined) view.celebrate(e.subjectId);
+      const first = firstTime(store, 'first_fry');
+      if (first) audio.play('fanfare');
       celebration.show({
         art: fryArt(mom?.species ?? 'guppy'),
         title: `${tankPrefix(tank)}${shrimp ? '孵出' : '生了'} ${e.count} ${shrimp ? '隻小蝦' : '尾小魚'}！`,
         sub: `${mom ? fishName(mom) : '母魚'}當媽媽了。成魚會吃小魚，水草越密越好躲`,
+        owner: !first ? undefined : shrimp ? '第一窩小蝦！多放莫絲或水草，小蝦躲得住才長得大。' : '第一胎！小魚長到轉色期才看得出公母，到時候挑尾巴大、顏色亮的留下來配對。',
       });
       return;
     }
@@ -882,7 +903,15 @@ async function start(): Promise<void> {
   window.addEventListener('pagehide', () => void planPush());
   setInterval(() => void autoUpload(cloudDeps), 10 * 60_000);
   analytics.track('session_start', sessionProps());
-  guide.questDone = (step) => analytics.track('quest_done', { step });
+  guide.questDone = (step, id) => {
+    analytics.track('quest_done', { step });
+    if (id === 'cycled')
+      moment('cycled', {
+        art: 'ui/icon-bacteria.webp',
+        title: '養水完成！',
+        sub: '硝化菌長好了，氨和亞硝酸鹽都是 0。現在可以慢慢多加魚',
+      });
+  };
   setInterval(() => void analytics.flush(), 60_000);
   if (analytics.available && analytics.consent === null) setTimeout(() => stage.append(consentCard), 3 * 60_000);
   // 切到背景時畫面停止更新；回來時以 ×7 補算這段時間，和關掉網頁一樣。

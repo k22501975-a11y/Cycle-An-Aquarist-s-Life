@@ -23,8 +23,6 @@ export interface Quest {
   check: (state: TankState) => boolean;
   /** 任務卡上的進度（例如「硝化菌 40%」），看得出還差多少。 */
   progress?: (state: TankState) => string | null;
-  /** 任務卡上的一行提示（要等很久的任務才有）。 */
-  hint?: string;
   /** 任務要去商店買東西時，商店直接開在這一頁（不然打開是「魚」，找不到水草）。 */
   shopTab?: QuestShopTab;
 }
@@ -88,7 +86,6 @@ export const QUESTS: Quest[] = [
     },
     progress: cycleProgress,
     meter: (s) => Math.max(0, Math.min(1, cycleMaturity(s))),
-    hint: '通常 3～7 天，加硝化菌液 1～3 天',
     shopTab: 'gear',
   },
   {

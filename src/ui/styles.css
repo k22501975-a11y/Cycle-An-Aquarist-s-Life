@@ -514,6 +514,9 @@ body:has(.sheet.open) .owner.open { bottom: auto; top: calc(env(safe-area-inset-
 .celebrate-art { position: relative; max-width: 100%; max-height: 100%; object-fit: contain; filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.5)); animation: celebrate-bob 2.4s ease-in-out infinite; }
 .celebrate-title { font-size: 24px; font-weight: 800; letter-spacing: 0.06em; color: #ffe29a; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
 .celebrate-sub { font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+.celebrate-owner { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding: 8px 12px 8px 8px; border-radius: 14px; background: rgba(4, 22, 30, 0.55); text-align: left; font-size: 13.5px; line-height: 1.45; }
+.celebrate-avatar { width: 40px; height: 40px; flex: none; border-radius: 50%; border: 2px solid var(--gold); object-fit: cover; object-position: 50% 20%; }
+.celebrate.docked .celebrate-owner { display: none; }
 .confetti { position: absolute; inset: 0; pointer-events: none; }
 .confetti i { position: absolute; top: -14px; left: var(--x); width: 7px; height: 12px; border-radius: 2px; background: var(--c); opacity: 0.9; transform: rotate(var(--r)); animation: confetti-fall 2.2s var(--d) cubic-bezier(0.3, 0.6, 0.5, 1) both; }
 @keyframes confetti-fall { from { transform: translateY(0) rotate(var(--r)); opacity: 1; } to { transform: translateY(260px) rotate(calc(var(--r) + 540deg)); opacity: 0; } }
@@ -549,6 +552,16 @@ body:has(.sheet.open) .owner.open { bottom: auto; top: calc(env(safe-area-inset-
 /* 商店：老闆的長建議排到商品後面，先看到商品 */
 .shop-stack > .stack > details.advice { order: 99; }
 body > .owner { position: fixed; }
+/* 老闆問一句（取代 confirm）：疊在引導對話框上面 */
+.owner.owner-ask { z-index: 23; }
+/* 資訊卡：飢餓小標、問老闆「為什麼？」 */
+.hunger-chip { margin-left: 8px; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; vertical-align: 2px; background: rgba(79, 179, 106, 0.2); color: var(--ok); }
+.hunger-chip.hungry { background: rgba(217, 164, 58, 0.2); color: var(--warn); }
+.hunger-chip.starving { background: rgba(201, 74, 62, 0.22); color: var(--bad); }
+.selcard .row { display: flex; gap: 6px; }
+.selcard .row .btn { flex: 1; min-width: 0; white-space: nowrap; padding: 0 8px; }
+.ask-owner { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.ask-avatar { flex: none; width: 20px; height: 20px; border-radius: 50%; object-fit: cover; object-position: 50% 20%; border: 1px solid var(--gold); }
 /* 開發用幀率顯示（設定 → 開發者 → 顯示幀率，或網址加 ?fps） */
 .fps-meter {
   position: fixed;
