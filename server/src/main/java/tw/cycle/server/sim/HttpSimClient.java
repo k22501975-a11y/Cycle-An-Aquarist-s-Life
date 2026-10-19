@@ -61,9 +61,11 @@ public class HttpSimClient implements SimClient {
                     .POST(HttpRequest.BodyPublishers.ofByteArray(json.writeValueAsBytes(body)));
             if (config.token() != null && !config.token().isBlank()) req.header("x-sim-token", config.token());
             HttpResponse<byte[]> res = http.send(req.build(), HttpResponse.BodyHandlers.ofByteArray());
+            // 413：存檔大到模擬服務收不下，檢查不了就當成存檔有問題（#74），不能當成服務掛了而放行
+            if (res.statusCode() == 413) throw new BadSave("存檔太大，伺服器檢查不了");
+            if (res.statusCode() != 200 && res.statusCode() != 422) throw new Unavailable("模擬服務回應 " + res.statusCode(), null);
             JsonNode out = json.readTree(res.body());
             if (res.statusCode() == 422) throw new BadSave(out.path("message").asText("讀不出這份存檔"));
-            if (res.statusCode() != 200) throw new Unavailable("模擬服務回應 " + res.statusCode(), null);
             return out;
         } catch (IOException e) {
             throw new Unavailable("連不上模擬服務", e);

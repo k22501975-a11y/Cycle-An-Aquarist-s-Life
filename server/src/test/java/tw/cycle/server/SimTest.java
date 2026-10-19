@@ -26,6 +26,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import tw.cycle.server.sim.HttpSimClient;
 import tw.cycle.server.sim.SimClient;
 
 /** 伺服器權威模擬（L2）：Spring Boot 這邊怎麼用模擬服務（模擬本身的測試在 src/simsvc/handlers.test.ts）。 */
@@ -37,6 +38,7 @@ class SimTest {
         final ObjectMapper json = new ObjectMapper();
         List<Problem> problems = List.of();
         boolean down;
+        boolean unreadable;
         final List<Long> verifiedElapsed = new ArrayList<>();
         Inspect inspect = new Inspect(false, false, null);
 
@@ -56,6 +58,7 @@ class SimTest {
         @Override
         public List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs) {
             if (down) throw new Unavailable("down", null);
+            if (unreadable) throw new HttpSimClient.BadSave("讀不出這份存檔");
             verifiedElapsed.add(elapsedMs);
             return problems;
         }
@@ -91,6 +94,7 @@ class SimTest {
     void reset() {
         sim.problems = List.of();
         sim.down = false;
+        sim.unreadable = false;
         sim.verifiedElapsed.clear();
         sim.inspect = new SimClient.Inspect(false, false, null);
     }
@@ -133,11 +137,41 @@ class SimTest {
     }
 
     @Test
-    void 模擬服務連不上時照樣收存檔() throws Exception {
+    void 模擬服務檢查不了時不收存檔_要稍後再傳() throws Exception {
+        // #74：以前模擬服務連不上（或存檔大到模擬服務回 413）就跳過檢查照收，等於沒檢查
         String me = player();
         send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
         sim.down = true;
+        send(put("/api/save"), me, saveBody(1, false))
+                .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.code").value("sim_down"));
+        assertThat(read(send(get("/api/save"), me, null)).get("revision").asLong()).isEqualTo(1);
+
+        sim.down = false;
         send(put("/api/save"), me, saveBody(1, false)).andExpect(status().isOk()).andExpect(jsonPath("$.revision").value(2));
+    }
+
+    @Test
+    void 模擬服務讀不出存檔時不收() throws Exception {
+        String me = player();
+        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        sim.unreadable = true;
+        send(put("/api/save"), me, saveBody(1, false))
+                .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("bad_save"));
+        assertThat(read(send(get("/api/save"), me, null)).get("revision").asLong()).isEqualTo(1);
+    }
+
+    @Test
+    void 強制覆蓋時模擬服務檢查不了_收下但暫時不能上架魚() throws Exception {
+        String me = player();
+        clock.advance(Duration.ofDays(3));
+        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        sim.down = true;
+        JsonNode r = read(send(put("/api/save"), me, saveBody(0, true)).andExpect(status().isOk()));
+        assertThat(r.get("notice").asText()).contains("不能在市場上架魚");
+
+        sim.down = false;
+        sim.inspect = new SimClient.Inspect(true, true, json.readTree("{\"id\":7,\"species\":\"guppy\",\"sex\":\"male\"}"));
+        send(post("/api/market/listings"), me, FISH).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("save_replaced"));
     }
 
     @Test
