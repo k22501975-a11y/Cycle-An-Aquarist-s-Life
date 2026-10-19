@@ -1,5 +1,5 @@
 import type { KeyValueStore } from '../game/save';
-import { cycleMaturity, isCycled, observeSymptoms, sexVisible, type TankState } from '../sim';
+import { cycleMaturity, freeAmmonia, hasVisible, isCycled, observeSymptoms, sexVisible, type TankState } from '../sim';
 
 /**
  * 新手引導任務（GAME_DESIGN 定案）：水族館老闆一步步帶玩家開缸、放魚、餵食、換水、養水。
@@ -139,6 +139,11 @@ export function overloadWarning(s: TankState, adding: number): string | null {
   return `${OWNER_NAME}：新缸的硝化菌還沒長好，一次放到 ${after} 條，廢物會多到處理不了，魚很容易生病，甚至整缸死光。建議先放 2～3 條，養好水再慢慢加。還是要買嗎？`;
 }
 
+/** 水質真的讓魚喘（缺氧、氨、CO₂），不是鰓吸蟲。門檻跟 observeSymptoms 的喘氣一致。 */
+function waterChoking(s: TankState): boolean {
+  return s.water.o2 < 3.5 || freeAmmonia(s) > 0.05 || s.water.co2 > 35;
+}
+
 export interface Tip {
   id: string;
   text: string;
@@ -162,10 +167,21 @@ export const TIPS: Tip[] = [
     text: '硝酸鹽偏高了。雖然比氨溫和，但太高魚還是會不舒服，也會長藻。換水、多種水草都能降低它。',
     check: (s) => (s.lastTest?.reading.nitrate ?? 0) >= 40 && s.hours - (s.lastTest?.hours ?? -999) < 2,
   },
+  // 老闆依實際病因說（#118）：鰓吸蟲、柱狀病先講，水質真的有問題才說缺氧
+  {
+    id: 'flukes',
+    text: '這條魚鰓蓋張開、一直喘，可是水質沒問題：是鰓吸蟲，一種寄生蟲，很容易被當成缺氧。到「設備」下驅蟲藥，對蝦和硝化菌都安全；拖久了魚會慢慢衰弱、傳給別條。之後新買的魚先放檢疫盒觀察 3 天。',
+    check: (s) => living(s).some((f) => hasVisible(f, 'flukes')),
+  },
+  {
+    id: 'columnaris',
+    text: '魚嘴巴和身上長出白色棉絮，是柱狀病，細菌感染，傳染很快，一兩天就能死好幾條。馬上到「設備」下抗生素（也會殺掉一些硝化菌，之後幾天多測水）；有檢疫盒就把病魚撈進去藥浴。水溫別調高，熱了它更兇。',
+    check: (s) => living(s).some((f) => hasVisible(f, 'columnaris')),
+  },
   {
     id: 'gasping',
     text: '魚在水面喘氣，水裡可能缺氧，或是氨、亞硝酸鹽太高。加一台打氣機、先換水，再測一次水。',
-    check: (s) => living(s).some((f) => observeSymptoms(s, f).includes('gasping')),
+    check: (s) => waterChoking(s) && living(s).some((f) => observeSymptoms(s, f).includes('gasping')),
   },
   {
     id: 'ich',
