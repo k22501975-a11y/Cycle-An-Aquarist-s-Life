@@ -1,4 +1,5 @@
 import type { SoundId } from '../audio/sounds';
+import { FEATURES } from '../features';
 import { substrateName, tankSubstrateLook } from '../render/substrate';
 import {
   isShrimpSpecies,
@@ -783,7 +784,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         '新缸還沒養好水就放太多魚，會氨中毒。',
         '孔雀魚和櫻花蝦會自己繁殖，但成魚會吃仔魚和仔蝦，水草種密一點才躲得掉。斑馬魚會輕微咬孔雀魚公魚的長尾巴。',
         '鬥魚會到水面吸空氣，不怕缺氧；但兩尾公鬥魚不能同缸，公鬥魚也會去咬孔雀魚公魚的長尾巴，約三成的鬥魚會獵蝦。水晶蝦很嬌貴：要偏酸的軟水、水溫 24°C 以下，26°C 以上很危險，夏天要開冷氣。',
-        '鳳尾短鯛會自己帶小孩：要有石頭或沉木當洞穴、水溫 25°C 以上。護幼中的母魚會趕走靠近的魚，缸小的話其他魚會很緊張。',
+        FEATURES.apisto ? '鳳尾短鯛會自己帶小孩：要有石頭或沉木當洞穴、水溫 25°C 以上。護幼中的母魚會趕走靠近的魚，缸小的話其他魚會很緊張。' : null,
         `孔雀魚（pH ${FISH_SPECIES.guppy.phSurvive.min}–${FISH_SPECIES.guppy.phSurvive.max} 都能慢慢適應）照品系賣。同品系配對生出來的大多一樣；不同品系混養會生出各種組合，也可能冒出藏在基因裡的白子。`,
         '鰭型品系：燕尾、大耳是隱性，要兩邊都帶才長得出來；緞帶、大C 的公魚交接器太長不能配，要用母魚配一般公魚；劍尾只會傳給兒子。',
       ]),
@@ -798,7 +799,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       ),
       h('h3', {}, '其他魚蝦'),
       cardGrid(
-        ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).filter((id) => id !== 'guppy').map((id) => {
+        ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).filter((id) => id !== 'guppy' && (id !== 'apisto' || FEATURES.apisto)).map((id) => {
           const sp = FISH_SPECIES[id];
           const chips = [`${sp.temp.min}–${sp.temp.max}°C`, `pH ${sp.phSurvive.min}–${sp.phSurvive.max}`, sp.minGroup ? `群游 ${sp.minGroup}+` : ''].filter(Boolean);
           // 短鯛成對賣：一公一母才會產卵護幼；鬥魚公母分開賣
