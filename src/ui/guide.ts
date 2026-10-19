@@ -2,6 +2,7 @@ import type { SoundId } from '../audio/sounds';
 import type { KeyValueStore } from '../game/save';
 import type { TankState } from '../sim';
 import { h } from './dom';
+import { artUrl } from './art-icons';
 import { advanceQuest, currentQuest, loadProgress, newProgress, OWNER_NAME, pendingTip, QUESTS, saveProgress, type TutorialProgress } from './tutorial';
 
 /** 阿德老闆的頭像：和按鈕圖示同一套奶油色細線條。 */
@@ -102,8 +103,8 @@ export class Guide {
       this.renderPill();
       return;
     }
-    const avatar = h('div.owner-avatar');
-    avatar.innerHTML = AVATAR;
+    // 阿德老闆的插畫頭像；圖載不到就退回線條小人
+    const avatar = h('div.owner-avatar.has-art', {}, ownerPortrait());
     const q = currentQuest(this.progress);
     const next = h('button.btn.small.primary', { onclick: () => (this.pages.shift(), this.renderBubble()) }, page.label ?? '好');
     const skip =
@@ -130,6 +131,7 @@ export class Guide {
     if (q) {
       this.shownProgress = '';
       this.pill.replaceChildren(
+        ownerPortrait('quest-avatar'),
         h('span.quest-step', {}, `任務 ${this.progress.step + 1}/${QUESTS.length}`),
         h('span.quest-title', {}, q.title),
         this.progressEl,
@@ -153,4 +155,15 @@ export class Guide {
     saveProgress(this.store, this.progress);
     this.renderPill();
   }
+}
+
+/** 阿德老闆頭像（插畫）；載入失敗換成線條小人。 */
+function ownerPortrait(cls = 'owner-art'): HTMLElement {
+  const img = h(`img.${cls}`, { src: artUrl('owner'), alt: OWNER_NAME, draggable: 'false' });
+  img.addEventListener('error', () => {
+    const fallback = h(`span.${cls}`);
+    fallback.innerHTML = AVATAR;
+    img.replaceWith(fallback);
+  });
+  return img;
 }

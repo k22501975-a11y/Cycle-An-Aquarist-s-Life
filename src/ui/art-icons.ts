@@ -21,7 +21,8 @@ export type ArtIcon =
   | 'records'
   | 'guide'
   | 'settings'
-  | 'newgame';
+  | 'newgame'
+  | 'owner';
 
 export function artUrl(name: ArtIcon): string {
   return `${import.meta.env.BASE_URL}art/ui/icon-${name}.webp`;

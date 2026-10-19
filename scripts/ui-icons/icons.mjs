@@ -132,6 +132,40 @@ export const ICONS = {
       </g>`,
   },
 
+  // 阿德老闆：水族館老闆的頭像（戴鴨舌帽、圍裙，手上拿一袋魚）
+  'icon-owner': {
+    defs: `
+      <radialGradient id="skin" cx="45%" cy="40%" r="65%"><stop offset="0" stop-color="#ffd9b8"/><stop offset="1" stop-color="#d99a72"/></radialGradient>
+      <linearGradient id="cap" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3f9a8f"/><stop offset="1" stop-color="#1f5d57"/></linearGradient>
+      <linearGradient id="shirt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4ead6"/><stop offset="1" stop-color="#c9b996"/></linearGradient>
+      <linearGradient id="apron" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5a8fb0"/><stop offset="1" stop-color="#2f5f80"/></linearGradient>
+      <linearGradient id="bag" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9fbff" stop-opacity="0.75"/><stop offset="1" stop-color="#7fd0e0" stop-opacity="0.85"/></linearGradient>`,
+    body: `
+      <path d="M96,474 Q100,352 256,336 Q412,352 416,474 Z" fill="url(#shirt)"/>
+      <path d="M176,474 L184,372 Q256,392 328,372 L336,474 Z" fill="url(#apron)"/>
+      <path d="M184,372 L160,346 M328,372 L352,346" stroke="#2f5f80" stroke-width="10" stroke-linecap="round"/>
+      <rect x="226" y="410" width="60" height="36" rx="6" fill="#244c66" opacity="0.7"/>
+      <path d="M226,300 L226,346 Q256,362 286,346 L286,300 Z" fill="#d99a72"/>
+      <ellipse cx="256" cy="228" rx="92" ry="104" fill="url(#skin)"/>
+      <ellipse cx="166" cy="236" rx="16" ry="24" fill="#e2a37c"/><ellipse cx="346" cy="236" rx="16" ry="24" fill="#e2a37c"/>
+      <path d="M168,196 Q164,108 256,104 Q348,108 344,196 Q300,170 256,172 Q212,170 168,196 Z" fill="url(#cap)"/>
+      <path d="M150,198 Q256,160 372,196 Q380,214 360,214 Q256,186 160,216 Q140,214 150,198 Z" fill="#17463f"/>
+      <circle cx="256" cy="110" r="10" fill="#e3bd6d"/>
+      <path d="M200,132 Q230,118 262,122" stroke="#fff" stroke-width="8" stroke-linecap="round" fill="none" opacity="0.35"/>
+      <path d="M200,226 Q216,214 232,224 M280,224 Q296,214 312,226" stroke="#5a3a24" stroke-width="7" stroke-linecap="round" fill="none"/>
+      <ellipse cx="217" cy="248" rx="9" ry="11" fill="#2b1a12"/><ellipse cx="295" cy="248" rx="9" ry="11" fill="#2b1a12"/>
+      <circle cx="220" cy="244" r="3.5" fill="#fff"/><circle cx="298" cy="244" r="3.5" fill="#fff"/>
+      <ellipse cx="196" cy="276" rx="16" ry="9" fill="#f08a7a" opacity="0.45"/><ellipse cx="316" cy="276" rx="16" ry="9" fill="#f08a7a" opacity="0.45"/>
+      <path d="M244,262 Q256,276 268,262" stroke="#b9724e" stroke-width="5" stroke-linecap="round" fill="none"/>
+      <path d="M210,290 Q256,312 302,290 Q290,328 256,330 Q222,328 210,290 Z" fill="#6b4630"/>
+      <path d="M226,298 Q256,316 286,298" stroke="#fff" stroke-width="7" stroke-linecap="round" fill="none"/>
+      <g transform="translate(386 360) rotate(10)">
+        <path d="M-30,-40 Q-34,10 -26,30 Q0,44 26,30 Q34,10 30,-40 Z" fill="url(#bag)" stroke="#e9fbff" stroke-width="3"/>
+        <path d="M-12,-40 L-6,-58 L6,-58 L12,-40" fill="#e9fbff" opacity="0.8"/>
+        <path d="M-16,8 Q-4,-4 10,4 Q14,8 10,12 Q-4,20 -16,8 Z" fill="#ff7a4a"/><path d="M10,8 L22,0 Q19,8 22,16 Z" fill="#e2452f"/>
+      </g>`,
+  },
+
   // 新遊戲：剛冒芽的小苗（重新開始）
   'icon-newgame': {
     defs: `

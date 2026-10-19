@@ -83,7 +83,6 @@ import {
   habitGap,
   habitOf,
   phBeyondSurvival,
-  waterGh,
   SPLIT_PLAN_LABELS,
   splitAdvice,
   splitGroup,
@@ -141,7 +140,8 @@ import {
 } from '../sim';
 import { applySeason, type Game } from '../game/game';
 import { h } from './dom';
-import { BROOD_ISSUE_LABELS, DEATH_CAUSE_LABELS, fishName, plantName, SYMPTOM_LABELS } from './labels';
+import { BROOD_ISSUE_LABELS, DEATH_CAUSE_LABELS, fishName, SYMPTOM_LABELS } from './labels';
+import { advice, cardGrid, guppyArt, iconTabs, plantArt, priceTag, shopCard, snailArt, speciesArt } from './shop-cards';
 import type { Sheet, Toasts } from './sheet';
 import { READING_TONES, todos } from './status';
 
@@ -627,14 +627,18 @@ const yuan = (n: number) => `${n.toLocaleString('zh-TW')} 元`;
 export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
   const { game, sheet, toasts } = ctx;
   const coins = economy(game.state).coins;
-  const tabs = h(
-    'div.tabs',
-    {},
-    ...(['fish', 'snails', 'plants', 'gear', 'sell'] as const).map((t) =>
-      h(`button.tab${t === tab ? '.active' : ''}`, { onclick: () => sheet.open('商店', () => shopPanel(ctx, t)) }, { fish: '魚', snails: '螺', plants: '水草', gear: '設備', sell: '賣給店家' }[t]),
-    ),
+  const tabs = iconTabs<ShopTab>(
+    [
+      { id: 'fish', label: '魚', art: 'fish/guppy-male-bluegrass.webp' },
+      { id: 'snails', label: '螺', art: 'snail/snail-apple-gold.webp' },
+      { id: 'plants', label: '水草', art: 'scape/plant-anubias.webp' },
+      { id: 'gear', label: '設備', icon: 'gear' },
+      { id: 'sell', label: '賣給店家', icon: 'market' },
+    ],
+    tab,
+    (t) => sheet.open('商店', () => shopPanel(ctx, t)),
   );
-  const wallet = h('p.wallet', {}, `錢包：${yuan(coins)}`);
+  const wallet = h('div.wallet-bar', {}, h('span', {}, '錢包'), priceTag(coins));
 
   const buyFish = (species: FishSpeciesId, count: number, strain?: number, finStrain?: (typeof GUPPY_FIN_STRAINS)[number]) => () => {
     const quarantined = !!game.state.quarantine;
@@ -691,21 +695,24 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
   let content: Node;
   if (tab === 'fish') {
     const farm = farmHabit('guppy');
+    // 放魚方式：滴水對水或直接倒（魚怕的是水質突然改變，不是 pH 數字本身）
+    const phGap = Math.abs(farm.ph - game.state.water.ph);
     const dripRow = h(
-      'div.stack',
+      'div.drip-row',
       {},
-      h('p.hint', {}, `店裡的魚習慣魚場的水（孔雀魚 pH ${farm.ph}、GH ${farm.gh}），你的缸現在 pH ${game.state.water.ph.toFixed(1)}、GH ${Math.round(waterGh(game.state))}。魚怕的是水質突然改變，不是 pH 數字本身。`),
+      h('div.drip-water', {}, h('span', {}, `魚場 pH ${farm.ph}`), h('i.arrow', {}, '→'), h(`span${phGap > 0.6 ? '.warn' : ''}`, {}, `你的缸 pH ${game.state.water.ph.toFixed(1)}`)),
       h(
-        'div.row.wrap',
+        'div.seg',
         {},
-        h(`button.btn.small${shopDrip ? '.primary' : ''}`, { onclick: () => ((shopDrip = true), sheet.refresh?.()) }, `慢慢滴水對水（約 ${dripMinutes(game.state, farm)} 分鐘）`),
-        h(`button.btn.small${shopDrip ? '' : '.primary'}`, { onclick: () => ((shopDrip = false), sheet.refresh?.()) }, '直接倒進缸裡'),
+        h(`button.seg-opt${shopDrip ? '.active' : ''}`, { onclick: () => ((shopDrip = true), sheet.refresh?.()) }, h('b', {}, '滴水對水'), h('small', {}, `約 ${dripMinutes(game.state, farm)} 分鐘`)),
+        h(`button.seg-opt${shopDrip ? '' : '.active'}`, { onclick: () => ((shopDrip = false), sheet.refresh?.()) }, h('b', {}, '直接倒進缸'), h('small', {}, phGap > 0.6 ? '水質差很多，魚會嚇壞' : '水質差不多')),
       ),
     );
+    const add = (label: string, run: () => void, kind = '') => button(label, run, kind ? `small.${kind}` : 'small');
+    const guppyChips = [`${FISH_SPECIES.guppy.temp.min}–${FISH_SPECIES.guppy.temp.max}°C`, '會繁殖'];
     content = h(
       'div.stack',
       {},
-      dripRow,
       canClaimStarterPack(game.state, game.others)
         ? h(
             'div.item.gift',
@@ -719,147 +726,167 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
             }, 'primary'),
           )
         : null,
-      game.state.quarantine
-        ? h('p.hint', {}, `新買的魚會先放進檢疫盒，觀察 ${QUARANTINE_DAYS} 天沒問題再移到主缸。`)
-        : h('p.hint', {}, '店裡的魚可能帶著白點蟲或其他病，直接放進主缸可能傳染整缸。商店的「設備」可以買檢疫盒。'),
-      h('p.hint', {}, '新缸還沒養好水就放太多魚，會氨中毒。'),
-      h('p.hint', {}, '孔雀魚和櫻花蝦會自己繁殖，但成魚會吃仔魚和仔蝦，水草種密一點才躲得掉。斑馬魚會輕微咬孔雀魚公魚的長尾巴。'),
-      h('p.hint', {}, '鬥魚會到水面吸空氣，不怕缺氧；但兩尾公鬥魚不能同缸，公鬥魚也會去咬孔雀魚公魚的長尾巴，約三成的鬥魚會獵蝦。水晶蝦很嬌貴：要偏酸的軟水、水溫 24°C 以下，26°C 以上很危險，夏天要開冷氣。'),
-      h('p.hint', {}, '鳳尾短鯛會自己帶小孩：要有石頭或沉木當洞穴、水溫 25°C 以上。護幼中的母魚會趕走靠近的魚，缸小的話其他魚會很緊張。'),
-      h('p.hint', {}, `孔雀魚（${FISH_SPECIES.guppy.temp.min}–${FISH_SPECIES.guppy.temp.max}°C；pH ${FISH_SPECIES.guppy.phSurvive.min}–${FISH_SPECIES.guppy.phSurvive.max} 都能慢慢適應）照品系賣。同品系配對生出來的大多一樣；不同品系混養會生出各種組合，也可能冒出藏在基因裡的白子。`),
-      ...GUPPY_STRAINS.map((strain, i) =>
-        h(
-          'div.item',
-          {},
-          h('div', {}, h('b', {}, `孔雀魚・${strain}`), h('div.hint', {}, `每隻 ${GUPPY_STRAIN_PRICES[i]} 元`)),
-          h('div.row', {}, button('+1', buyFish('guppy', 1, i)), button('+3', buyFish('guppy', 3, i))),
+      dripRow,
+      advice([
+        game.state.quarantine ? `新買的魚會先放進檢疫盒，觀察 ${QUARANTINE_DAYS} 天沒問題再移到主缸。` : '店裡的魚可能帶著白點蟲或其他病，直接放進主缸可能傳染整缸。商店的「設備」可以買檢疫盒。',
+        '新缸還沒養好水就放太多魚，會氨中毒。',
+        '孔雀魚和櫻花蝦會自己繁殖，但成魚會吃仔魚和仔蝦，水草種密一點才躲得掉。斑馬魚會輕微咬孔雀魚公魚的長尾巴。',
+        '鬥魚會到水面吸空氣，不怕缺氧；但兩尾公鬥魚不能同缸，公鬥魚也會去咬孔雀魚公魚的長尾巴，約三成的鬥魚會獵蝦。水晶蝦很嬌貴：要偏酸的軟水、水溫 24°C 以下，26°C 以上很危險，夏天要開冷氣。',
+        '鳳尾短鯛會自己帶小孩：要有石頭或沉木當洞穴、水溫 25°C 以上。護幼中的母魚會趕走靠近的魚，缸小的話其他魚會很緊張。',
+        `孔雀魚（pH ${FISH_SPECIES.guppy.phSurvive.min}–${FISH_SPECIES.guppy.phSurvive.max} 都能慢慢適應）照品系賣。同品系配對生出來的大多一樣；不同品系混養會生出各種組合，也可能冒出藏在基因裡的白子。`,
+        '鰭型品系：燕尾、大耳是隱性，要兩邊都帶才長得出來；緞帶、大C 的公魚交接器太長不能配，要用母魚配一般公魚；劍尾只會傳給兒子。',
+      ]),
+      h('h3', {}, '孔雀魚品系'),
+      cardGrid(
+        ...GUPPY_STRAINS.map((strain, i) =>
+          shopCard({ art: guppyArt(i), name: strain, price: GUPPY_STRAIN_PRICES[i], unit: '/隻', chips: guppyChips, actions: [add('+1', buyFish('guppy', 1, i)), add('+3', buyFish('guppy', 3, i))] }),
+        ),
+        ...GUPPY_FIN_STRAINS.map((fs) =>
+          shopCard({ art: guppyArt(fs.strain, fs.fin), name: fs.name, price: fs.price, unit: '/隻', chips: ['鰭型品系'], actions: [add('+1', buyFish('guppy', 1, undefined, fs)), add('+3', buyFish('guppy', 3, undefined, fs))] }),
         ),
       ),
-      h('p.hint', {}, '鰭型品系：燕尾、大耳是隱性，要兩邊都帶才長得出來；緞帶、大C 的公魚交接器太長不能配，要用母魚配一般公魚；劍尾只會傳給兒子。'),
-      ...GUPPY_FIN_STRAINS.map((fs) =>
-        h(
-          'div.item',
-          {},
-          h('div', {}, h('b', {}, `孔雀魚・${fs.name}`), h('div.hint', {}, `每隻 ${fs.price} 元`)),
-          h('div.row', {}, button('+1', buyFish('guppy', 1, undefined, fs)), button('+3', buyFish('guppy', 3, undefined, fs))),
-        ),
+      h('h3', {}, '其他魚蝦'),
+      cardGrid(
+        ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).filter((id) => id !== 'guppy').map((id) => {
+          const sp = FISH_SPECIES[id];
+          const chips = [`${sp.temp.min}–${sp.temp.max}°C`, `pH ${sp.phSurvive.min}–${sp.phSurvive.max}`, sp.minGroup ? `群游 ${sp.minGroup}+` : ''].filter(Boolean);
+          // 短鯛成對賣：一公一母才會產卵護幼；鬥魚公母分開賣
+          const actions =
+            id === 'apisto'
+              ? [add('+1', buyFish(id, 1)), add('一對', buyPair(id))]
+              : id === 'betta'
+                ? [add(`公 ${FISH_PRICES.betta}`, buyOne(id, 'male', FISH_PRICES.betta)), add(`母 ${BETTA_FEMALE_PRICE}`, buyOne(id, 'female', BETTA_FEMALE_PRICE))]
+                : [add('+1', buyFish(id, 1)), add('+6', buyFish(id, 6))];
+          return shopCard({ art: speciesArt(id), name: sp.name, price: FISH_PRICES[id], unit: '/隻', chips, actions });
+        }),
       ),
-      ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).filter((id) => id !== 'guppy').map((id) => {
-        const sp = FISH_SPECIES[id];
-        const note = [id === 'betta' ? `公魚 ${FISH_PRICES.betta} 元、母魚 ${BETTA_FEMALE_PRICE} 元` : `每隻 ${FISH_PRICES[id]} 元`, `${sp.temp.min}–${sp.temp.max}°C`, `pH ${sp.phSurvive.min}–${sp.phSurvive.max} 能適應`, sp.minGroup ? `群游，至少 ${sp.minGroup} 隻` : ''].filter(Boolean).join(' · ');
-        // 短鯛成對賣：一公一母才會產卵護幼
-        const buttons =
-          id === 'apisto'
-            ? [button('+1', buyFish(id, 1)), button('一對', buyPair(id))]
-            : id === 'betta'
-              ? [button(`公 ${FISH_PRICES.betta}`, buyOne(id, 'male', FISH_PRICES.betta)), button(`母 ${BETTA_FEMALE_PRICE}`, buyOne(id, 'female', BETTA_FEMALE_PRICE))]
-              : [button('+1', buyFish(id, 1)), button('+6', buyFish(id, 6))];
-        return h('div.item', {}, h('div', {}, h('b', {}, sp.name), h('div.hint', {}, note)), h('div.row', {}, ...buttons));
-      }),
     );
   } else if (tab === 'snails') {
-    const item = (name: string, note: string, buy: () => void) => h('div.item', {}, h('div', {}, h('b', {}, name), h('div.hint', {}, note)), button('+1', buy));
+    const card = (kind: SnailKind, name: string, chips: string[], color?: AppleColor) =>
+      shopCard({ art: snailArt(kind, color), name, price: SNAILS[kind].price, unit: '/隻', chips, actions: [button('+1', buySnail(kind, color), 'small')] });
     content = h(
       'div.stack',
       {},
-      h('p.hint', {}, '螺是清潔隊也是麻煩：吃殘餌、刮藻，但餵太多就會爆量。小螺多寡直接反映你有沒有餵太多。'),
-      ...(['gold', 'blue'] as AppleColor[]).map((c) =>
-        item(`蘋果螺・${APPLE_COLOR_LABELS[c]}`, `每隻 ${SNAILS.apple.price} 元 · 吃殘餌和藻，公母都有會在水面上方產粉紅卵塊；餓了會啃水草，死了沒撈很髒`, buySnail('apple', c)),
+      advice([
+        '螺是清潔隊也是麻煩：吃殘餌、刮藻，但餵太多就會爆量。小螺多寡直接反映你有沒有餵太多。',
+        '蘋果螺公母都有，會在水面上方產粉紅卵塊；餓了會啃水草，死了沒撈很髒。',
+        '斑馬螺除藻最強，不會爆量；但會在造景上產白色卵點，刮不乾淨。',
+        '刺客螺專吃其他小螺，用來長期控制爆螺；螺吃光了自己會餓，也會吃小蘋果螺。',
+      ]),
+      cardGrid(
+        ...(['gold', 'blue'] as AppleColor[]).map((c) => card('apple', `蘋果螺・${APPLE_COLOR_LABELS[c]}`, ['吃殘餌', '會產卵'], c)),
+        card('nerite', SNAILS.nerite.name, ['除藻最強', '不爆量']),
+        card('assassin', SNAILS.assassin.name, ['吃小螺', '控螺']),
       ),
-      item(SNAILS.nerite.name, `每隻 ${SNAILS.nerite.price} 元 · 除藻最強，不會爆量；但會在造景上產白色卵點，刮不乾淨`, buySnail('nerite')),
-      item(SNAILS.assassin.name, `每隻 ${SNAILS.assassin.price} 元 · 專吃其他小螺，用來長期控制爆螺；螺吃光了自己會餓，也會吃小蘋果螺`, buySnail('assassin')),
     );
   } else if (tab === 'plants') {
     const cuttings = economy(game.state).cuttings;
     content = h(
       'div.stack',
       {},
-      h('p.hint', {}, '陰性草弱光就能長；陽性草需要強光加 CO₂。'),
-      h('p.hint', {}, game.state.quarantine ? '新水草會先在檢疫盒泡過，比較不會夾帶小螺的卵。' : '新水草有時夾帶看不到的小螺卵，過幾週才發現缸裡多了螺。有檢疫盒的話會先泡過。'),
-      ...(Object.keys(PLANT_SPECIES) as PlantSpeciesId[]).map((id) =>
-        h('div.item', {}, h('div', {}, h('b', {}, plantName(id)), h('div.hint', {}, `一盆 ${PLANT_PRICES[id]} 元`)), button('種一株', buyPlant(id))),
-      ),
-      ...(Object.keys(cuttings) as PlantSpeciesId[])
-        .filter((id) => (cuttings[id] ?? 0) > 0)
-        .map((id) =>
-          h(
-            'div.item',
-            {},
-            h('div', {}, h('b', {}, `手上的${PLANT_SPECIES[id].name}插枝`), h('div.hint', {}, `${cuttings[id]} 株，種回去不用錢`)),
-            button('種一株', () => {
-              game.act((st) => {
-                if (takeCutting(st, id)) addPlant(st, id, PLANT_SPECIES[id].cuttingMassG);
-              });
-              toasts.show(`種了一株${PLANT_SPECIES[id].name}插枝`);
+      advice([
+        '陰性草弱光就能長；陽性草需要強光加 CO₂。',
+        game.state.quarantine ? '新水草會先在檢疫盒泡過，比較不會夾帶小螺的卵。' : '新水草有時夾帶看不到的小螺卵，過幾週才發現缸裡多了螺。有檢疫盒的話會先泡過。',
+      ]),
+      cardGrid(
+        ...(Object.keys(PLANT_SPECIES) as PlantSpeciesId[]).map((id) =>
+          shopCard({ art: plantArt(id), name: PLANT_SPECIES[id].name, price: PLANT_PRICES[id], unit: '/盆', chips: [PLANT_SPECIES[id].lightType === 'high' ? '陽性・要強光' : '陰性・弱光可'], actions: [button('種一株', buyPlant(id), 'small')] }),
+        ),
+        ...(Object.keys(cuttings) as PlantSpeciesId[])
+          .filter((id) => (cuttings[id] ?? 0) > 0)
+          .map((id) =>
+            shopCard({
+              art: plantArt(id),
+              name: `${PLANT_SPECIES[id].name}插枝`,
+              price: null,
+              badge: `手上 ${cuttings[id]}`,
+              chips: ['免費種回去'],
+              actions: [
+                button('種一株', () => {
+                  game.act((st) => {
+                    if (takeCutting(st, id)) addPlant(st, id, PLANT_SPECIES[id].cuttingMassG);
+                  });
+                  toasts.show(`種了一株${PLANT_SPECIES[id].name}插枝`);
+                }, 'small'),
+              ],
             }),
           ),
-        ),
+      ),
     );
   } else if (tab === 'gear') {
     const eq = game.state.equipment;
-    const item = (label: string, key: string, owned: boolean, buy: () => void, note = '') =>
-      h(
-        'div.item',
-        {},
-        h('div', {}, h('b', {}, label), h('div.hint', {}, [yuan(price(key)), note].filter(Boolean).join(' · '))),
-        owned ? h('span.owned', {}, '使用中') : button('買', buy),
-      );
+    // 設備商品圖還在生（art/gear/），先用設備圖示；底材、石頭、沉木用現有的精繪圖
+    const item = (label: string, key: string, owned: boolean, buy: () => void, note = '', art?: string) =>
+      shopCard({ art, icon: art ? undefined : 'gear', name: label, price: price(key), badge: owned ? '使用中' : undefined, note, actions: owned ? [] : [button('買', buy, 'small')], cls: owned ? '.owned' : '' });
+    const HARDSCAPE_ART: Record<string, string> = { seiryu: 'scape/rock-seiryu-1.webp', lava: 'scape/rock-seiryu-3.webp', slate: 'scape/rock-seiryu-5.webp', driftwood: 'scape/wood-spider-1.webp' };
     content = h(
       'div.stack',
       {},
-      h('p.warn-text', {}, '換過濾器會失去舊濾材上的硝化菌！'),
-      ...Object.values(FILTERS).map((f) =>
-        item(f.name, `filter:${f.id}`, eq.filter?.spec.id === f.id, () => {
-          purchase(ctx, price(`filter:${f.id}`), (st) => replaceFilter(st, f), `換上${f.name}，濾材要重新養菌`, 'warn', true);
-        }, `濾材容量 ${f.bacteriaCapacityMgPerHour}`),
+      advice([
+        '換過濾器會失去舊濾材上的硝化菌！',
+        '換底材要拆缸重鋪：底砂裡的細菌和髒污會翻出來，魚也會很緊迫。',
+        '有些石頭會慢慢讓水變硬、pH 變高。不確定的話先滴白醋：冒泡就是含碳酸鈣。拿出來的石頭會放回倉庫，不退錢。',
+      ]),
+      h('h3', {}, '過濾、加熱、燈'),
+      cardGrid(
+        ...Object.values(FILTERS).map((f) =>
+          item(f.name, `filter:${f.id}`, eq.filter?.spec.id === f.id, () => {
+            purchase(ctx, price(`filter:${f.id}`), (st) => replaceFilter(st, f), `換上${f.name}，濾材要重新養菌`, 'warn', true);
+          }, `濾材容量 ${f.bacteriaCapacityMgPerHour}`),
+        ),
+        ...Object.values(HEATERS).map((x) =>
+          item(x.name, `heater:${x.id}`, eq.heater?.spec.id === x.id && !eq.heater.broken, () => {
+            purchase(ctx, price(`heater:${x.id}`), (st) => {
+              st.equipment.heater = { spec: x, targetC: st.equipment.heater?.targetC ?? 25, broken: false, heating: false };
+            }, `換上${x.name}`);
+          }, eq.heater?.spec.id === x.id && eq.heater.broken ? '目前這支壞了' : ''),
+        ),
+        ...Object.values(LIGHTS).map((l) =>
+          item(l.name, `light:${l.id}`, eq.light?.spec.id === l.id, () => {
+            purchase(ctx, price(`light:${l.id}`), (st) => {
+              st.equipment.light = { spec: l, startHour: st.equipment.light?.startHour ?? 10, photoperiodHours: st.equipment.light?.photoperiodHours ?? 8 };
+            }, `換上${l.name}`);
+          }, `光照 ${l.par} PAR`),
+        ),
+        item(AIR_PUMPS.small.name, 'air:small', !!eq.airPump, () => purchase(ctx, price('air:small'), (st) => (st.equipment.airPump = { spec: AIR_PUMPS.small, on: true }), `裝上${AIR_PUMPS.small.name}`)),
+        item(CO2_KITS.diy.name, 'co2:diy', !!eq.co2, () => purchase(ctx, price('co2:diy'), (st) => (st.equipment.co2 = { spec: CO2_KITS.diy, on: true }), `裝上${CO2_KITS.diy.name}`)),
+        item('檢疫盒', 'quarantine:box', !!game.state.quarantine, () => purchase(ctx, price('quarantine:box'), buyQuarantine, '買了檢疫盒'), '新魚先隔離觀察'),
       ),
-      ...Object.values(HEATERS).map((x) =>
-        item(x.name, `heater:${x.id}`, eq.heater?.spec.id === x.id && !eq.heater.broken, () => {
-          purchase(ctx, price(`heater:${x.id}`), (st) => {
-            st.equipment.heater = { spec: x, targetC: st.equipment.heater?.targetC ?? 25, broken: false, heating: false };
-          }, `換上${x.name}`);
-        }, eq.heater?.spec.id === x.id && eq.heater.broken ? '目前這支壞了' : ''),
-      ),
-      ...Object.values(LIGHTS).map((l) =>
-        item(l.name, `light:${l.id}`, eq.light?.spec.id === l.id, () => {
-          purchase(ctx, price(`light:${l.id}`), (st) => {
-            st.equipment.light = { spec: l, startHour: st.equipment.light?.startHour ?? 10, photoperiodHours: st.equipment.light?.photoperiodHours ?? 8 };
-          }, `換上${l.name}`);
-        }, `光照強度 ${l.par} PAR`),
-      ),
-      item(AIR_PUMPS.small.name, 'air:small', !!eq.airPump, () => purchase(ctx, price('air:small'), (st) => (st.equipment.airPump = { spec: AIR_PUMPS.small, on: true }), `裝上${AIR_PUMPS.small.name}`)),
-      item(CO2_KITS.diy.name, 'co2:diy', !!eq.co2, () => purchase(ctx, price('co2:diy'), (st) => (st.equipment.co2 = { spec: CO2_KITS.diy, on: true }), `裝上${CO2_KITS.diy.name}`)),
-      item('檢疫盒', 'quarantine:box', !!game.state.quarantine, () => purchase(ctx, price('quarantine:box'), buyQuarantine, '買了檢疫盒'), '獨立的小缸：新魚先在這裡觀察，發病也不會傳染主缸'),
       h('h3', {}, '底材'),
-      h('p.hint', {}, '換底材要拆缸重鋪：底砂裡的細菌和髒污會翻出來，魚也會很緊迫。'),
-      ...Object.values(SUBSTRATES).map((sub) =>
-        item(sub.name, `substrate:${sub.id}`, (eq.substrate?.spec.id ?? 'sand') === sub.id, () => {
-          purchase(ctx, price(`substrate:${sub.id}`), (st) => replaceSubstrate(st, sub), `重新鋪了${sub.name}`, 'warn', true);
-        }, SUBSTRATE_NOTES[sub.id]),
+      cardGrid(
+        ...Object.values(SUBSTRATES).map((sub) =>
+          item(sub.name, `substrate:${sub.id}`, (eq.substrate?.spec.id ?? 'sand') === sub.id, () => {
+            purchase(ctx, price(`substrate:${sub.id}`), (st) => replaceSubstrate(st, sub), `重新鋪了${sub.name}`, 'warn', true);
+          }, SUBSTRATE_NOTES[sub.id], `substrate/substrate-${sub.id}-tile.webp`),
+        ),
       ),
       h('h3', {}, '造景石與沉木'),
-      h('p.hint', {}, '有些石頭會慢慢讓水變硬、pH 變高。不確定的話先滴白醋：冒泡就是含碳酸鈣。拿出來的石頭會放回倉庫，不退錢。'),
-      ctx.openScape && ((eq.hardscape ?? []).length > 0 || game.state.plants.length > 0) ? button('進入造景模式：拖曳擺放', () => ctx.openScape!()) : null,
-      ...Object.values(HARDSCAPE).map((x) => {
-        const count = (eq.hardscape ?? []).filter((y) => y.id === x.id).length;
-        const key = `hardscape:${x.id}`;
-        return h(
-          'div.item',
-          {},
-          h('div', {}, h('b', {}, x.name), count > 0 ? h('div.owned', {}, `缸裡有 ${count} 組`) : null, h('div.hint', {}, `一組 ${yuan(price(key))} · ${HARDSCAPE_NOTES[x.id]}`)),
-          h(
-            'div.row',
-            {},
-            x.kind === 'rock' ? button('白醋', () => toasts.show(x.fizzes ? `${x.name}冒出小氣泡：含碳酸鈣，會讓水變硬` : `${x.name}沒有反應：不會影響水質`, x.fizzes ? 'warn' : 'info')) : null,
-            count > 0 ? button('拿出', () => game.act((st) => removeHardscape(st, x.id))) : null,
-            button('買一組', () => purchase(ctx, price(key), (st) => addHardscape(st, x), `放了一組${x.name}`)),
-          ),
-        );
-      }),
+      ctx.openScape && ((eq.hardscape ?? []).length > 0 || game.state.plants.length > 0) ? button('進入造景模式：拖曳擺放', () => ctx.openScape!(), 'primary') : null,
+      cardGrid(
+        ...Object.values(HARDSCAPE).map((x) => {
+          const count = (eq.hardscape ?? []).filter((y) => y.id === x.id).length;
+          const key = `hardscape:${x.id}`;
+          return shopCard({
+            art: HARDSCAPE_ART[x.id],
+            name: x.name,
+            price: price(key),
+            unit: '/組',
+            badge: count > 0 ? `缸裡 ${count} 組` : undefined,
+            note: HARDSCAPE_NOTES[x.id],
+            actions: [
+              x.kind === 'rock' ? button('白醋', () => toasts.show(x.fizzes ? `${x.name}冒出小氣泡：含碳酸鈣，會讓水變硬` : `${x.name}沒有反應：不會影響水質`, x.fizzes ? 'warn' : 'info'), 'small') : null,
+              count > 0 ? button('拿出', () => game.act((st) => removeHardscape(st, x.id)), 'small') : null,
+              button('買一組', () => purchase(ctx, price(key), (st) => addHardscape(st, x), `放了一組${x.name}`), 'small'),
+            ].filter((b): b is HTMLButtonElement => !!b),
+          });
+        }),
+      ),
       h('h3', {}, '控溫'),
-      item(FANS.clip.name, 'fan:clip', !!eq.fan, () => purchase(ctx, price('fan:clip'), (st) => (st.equipment.fan = { spec: FANS.clip, on: true }), `裝上${FANS.clip.name}`), `水溫比室溫低約 ${FANS.clip.coolingC}°C，但水蒸發得快很多`),
-      item(CHILLERS.small.name, 'chiller:small', !!eq.chiller, () => purchase(ctx, price('chiller:small'), (st) => (st.equipment.chiller = { spec: CHILLERS.small, targetC: 26, on: true, cooling: false }), `裝上${CHILLERS.small.name}`), '把水溫壓在設定溫度，很耗電'),
-      item('控溫器', 'controller:basic', !!eq.controller, () => purchase(ctx, price('controller:basic'), (st) => (st.equipment.controller = { maxC: 30, tripped: false }), '裝上控溫器'), '水溫超過上限就切斷加熱棒，防止卡住的加熱棒把魚煮熟'),
+      cardGrid(
+        item(FANS.clip.name, 'fan:clip', !!eq.fan, () => purchase(ctx, price('fan:clip'), (st) => (st.equipment.fan = { spec: FANS.clip, on: true }), `裝上${FANS.clip.name}`), `降溫約 ${FANS.clip.coolingC}°C，水蒸發快`),
+        item(CHILLERS.small.name, 'chiller:small', !!eq.chiller, () => purchase(ctx, price('chiller:small'), (st) => (st.equipment.chiller = { spec: CHILLERS.small, targetC: 26, on: true, cooling: false }), `裝上${CHILLERS.small.name}`), '水溫壓在設定值，很耗電'),
+        item('控溫器', 'controller:basic', !!eq.controller, () => purchase(ctx, price('controller:basic'), (st) => (st.equipment.controller = { maxC: 30, tripped: false }), '裝上控溫器'), '超溫就切斷加熱棒'),
+      ),
     );
   } else {
     content = sellContent(ctx);
