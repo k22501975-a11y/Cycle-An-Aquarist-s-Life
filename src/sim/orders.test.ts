@@ -258,6 +258,16 @@ describe('店家訂單板（M21）', () => {
       expect(board.orders.some((o) => o.kind !== 'fish')).toBe(true);
     });
 
+    it('開局板上全是中魚單：缸裡抓得到螺了，隔天換一張交得出來的（遊戲性 g9）', () => {
+      const s = tank(8);
+      simulate(s, 1);
+      const board = orderBoard(s);
+      board.orders = [0, 1, 2].map((i) => ({ id: 950 + i, kind: 'fish', species: 'guppy', size: 'juvenile', count: 3, unitPrice: 45, postedHours: s.hours }) as ShopOrder);
+      snailState(s).pests.bladder = 6;
+      simulate(s, ORDER_GAP_HOURS + 1);
+      expect(board.orders.some((o) => deliverableNow(s, o))).toBe(true);
+    });
+
     it('小孔雀單的數量：主缸裡的只算活得下來的一成五（草密多一點），盒子裡的算三成', () => {
       const s = tank(6);
       const fry = brood(s, 20);

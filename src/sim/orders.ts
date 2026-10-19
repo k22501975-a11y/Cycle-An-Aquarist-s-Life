@@ -424,16 +424,20 @@ function addOrder(state: TankState, board: OrderBoard, ctx: OrderContext): void 
 }
 
 /**
- * 第一窩生出來以後，板上一定要有一張小額單（小孔雀、插枝、螺；mvp.md §4.4.2 第 4 點）：
- * 板子被還養不大的中魚單佔滿時，把最舊、現在交不出來的魚單換成小額單。換了回 true。
+ * 板子被交不出來的魚單佔滿時，把最舊、交不出來的那張換掉（換了回 true）：
+ * - 開局（還沒有自家的魚）：缸裡剪得出插枝、抓得到螺了，就換一張現在交得出來的（遊戲性 g9：第 1～7 天全是中魚單）。
+ * - 第一窩生出來以後：板上一定要有一張小額單（小孔雀、插枝、螺；mvp.md §4.4.2 第 4 點）。
  */
 function swapInSmallOrder(state: TankState, board: OrderBoard, ctx: OrderContext): boolean {
-  if (ctx.stage !== 'brood' || ctx.fry < FRY_ORDER_MIN_BROOD || board.orders.some(isSmallOrder)) return false;
+  const canSmall = Object.values(ctx.cuttings).some((n) => (n ?? 0) >= 2) || Object.values(ctx.snails).some((n) => (n ?? 0) >= 3);
+  const start = ctx.stage === 'start' && canSmall && !board.orders.some((o) => deliverableNow(state, o, ctx));
+  const brood = ctx.stage === 'brood' && ctx.fry >= FRY_ORDER_MIN_BROOD && !board.orders.some(isSmallOrder);
+  if (!start && !brood) return false;
   const stale = board.orders.filter((o) => o.kind === 'fish' && !deliverableNow(state, o, ctx)).sort((a, b) => a.postedHours - b.postedHours)[0];
   if (!stale) return false;
   for (let tries = 0; tries < 12; tries++) {
     const o = makeOrder(board, state.hours, ctx);
-    if (!isSmallOrder(o)) continue;
+    if (!isSmallOrder(o) || (start && !deliverableNow(state, o, ctx))) continue;
     board.orders = board.orders.map((x) => (x === stale ? o : x));
     return true;
   }
