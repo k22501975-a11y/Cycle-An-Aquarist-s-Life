@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { blankGameState, Game, newGameState } from '../game/game';
-import { applySetup, economy, missingSetup, needsSetup, RECOMMENDED_SETUP, setupCards, setupCost, setupRefusal, STARTING_COINS, withTank, type SetupChoice, type SetupDraft } from '.';
+import { applySetup, awaitingPowerOn, economy, missingSetup, needsSetup, powerOn, tankStarted, updateDaily, dailyTasks, RECOMMENDED_SETUP, setupCards, setupCost, setupRefusal, STARTING_COINS, withTank, type SetupChoice, type SetupDraft } from '.';
 
 describe('開缸（F1-a）', () => {
   it('新遊戲是空缸＋起始資金，還沒有設備', () => {
@@ -89,19 +89,49 @@ describe('開缸（F1-a）', () => {
     expect(option('tank', 'std90').locked).toBeTruthy();
   });
 
-  it('還沒開缸時間不走，開完才開始跑（也不會一口氣補算等待的時間）', () => {
+  it('還沒開機時間不走，開機才開始跑（也不會一口氣補算等待的時間）', () => {
     const game = new Game(blankGameState(1), 3600);
     const h = game.state.hours;
     expect(game.advance(60_000)).toBe(0);
     expect(game.state.hours).toBe(h);
     game.act((s) => applySetup(s, RECOMMENDED_SETUP));
+    // 設備裝好了、開缸演出還在演：時間照樣不走（#204）
+    expect(game.advance(60_000)).toBe(0);
+    expect(game.state.hours).toBe(h);
+    expect(game.act((s) => powerOn(s))).toBe(true);
     expect(game.advance(1000)).toBeGreaterThan(0);
     expect(game.state.hours - h).toBeLessThan(2);
   });
 
-  it('測試用的 newGameState 就是用推薦組合開好的缸', () => {
+  it('開機前不出今天的小事，開機後才出（#204）', () => {
+    const s = blankGameState(1);
+    expect(updateDaily([s])).toEqual([]);
+    expect(dailyTasks([s])).toBeNull();
+    applySetup(s, RECOMMENDED_SETUP);
+    expect(awaitingPowerOn(s)).toBe(true);
+    expect(tankStarted(s)).toBe(false);
+    updateDaily([s]);
+    expect(dailyTasks([s])).toBeNull();
+    expect(powerOn(s)).toBe(true);
+    expect(powerOn(s)).toBe(false);
+    expect(tankStarted(s)).toBe(true);
+    updateDaily([s]);
+    expect(dailyTasks([s])?.tasks.length).toBeGreaterThan(0);
+  });
+
+  it('設備還沒裝不能開機；舊存檔（沒有開機標記）當作已經開機', () => {
+    const s = blankGameState(1);
+    expect(powerOn(s)).toBe(false);
+    expect(tankStarted(s)).toBe(false);
+    const old = newGameState(1);
+    delete economy(old).powerPending;
+    expect(tankStarted(old)).toBe(true);
+  });
+
+  it('測試用的 newGameState 就是用推薦組合開好、開了機的缸', () => {
     const s = newGameState(1);
     expect(needsSetup(s)).toBe(false);
+    expect(tankStarted(s)).toBe(true);
     expect(economy(s).coins).toBe(2000);
   });
 });

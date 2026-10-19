@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addHardscape, addPlant, applySetup, buyQuarantine, moveToQuarantine, recordEvent, economy, HARDSCAPE, createTank, feed, FILTERS, HEATERS, RECOMMENDED_SETUP, TANKS, useTestKit, waterChange } from '../sim';
+import { addFish, addHardscape, addPlant, applySetup, buyQuarantine, powerOn, moveToQuarantine, recordEvent, economy, HARDSCAPE, createTank, feed, FILTERS, HEATERS, RECOMMENDED_SETUP, TANKS, useTestKit, waterChange } from '../sim';
 import { advanceQuest, currentQuest, cycleProgress, loadProgress, newProgress, overloadWarning, pairProgress, pendingTip, questShopTab, QUESTS, saveProgress } from './tutorial';
 
 function tank() {
@@ -14,6 +14,9 @@ describe('新手引導任務', () => {
     expect(currentQuest(p)?.id).toBe('setup');
     expect(advanceQuest(p, s)).toBeNull();
     expect(applySetup(s, RECOMMENDED_SETUP)).toBeNull();
+    // 付錢裝好設備還不算，按下開機才算開好缸（#204）
+    expect(advanceQuest(p, s)).toBeNull();
+    expect(powerOn(s)).toBe(true);
     expect(advanceQuest(p, s)?.id).toBe('setup');
     expect(advanceQuest(p, s)).toBeNull();
     addPlant(s, 'anubias');

@@ -181,6 +181,26 @@ export function needsSetup(state: TankState): boolean {
   return !!state.economy?.setupPending;
 }
 
+/** 設備裝好了、還在等玩家按「開機」（開缸 4 步的最後一步，mvp.md §4.4.4）。 */
+export function awaitingPowerOn(state: TankState): boolean {
+  return !!state.economy?.powerPending;
+}
+
+/**
+ * 缸已經開機：時間開始走，第一天的小事、待辦、訂單提示和「開缸」任務都從這時才算（#204）。
+ * 開機前（挑設備、開缸演出中）一律不出。
+ */
+export function tankStarted(state: TankState): boolean {
+  return !needsSetup(state) && !awaitingPowerOn(state);
+}
+
+/** 開機（開缸最後一步）。已經開過或設備還沒裝就回傳 false。 */
+export function powerOn(state: TankState): boolean {
+  if (needsSetup(state) || !awaitingPowerOn(state)) return false;
+  delete economy(state).powerPending;
+  return true;
+}
+
 /** 為什麼不能用這套開缸；可以就回傳 null。 */
 export function setupRefusal(state: TankState, choice: SetupDraft): string | null {
   if (!needsSetup(state)) return '已經開過缸了';
@@ -195,7 +215,7 @@ export function setupRefusal(state: TankState, choice: SetupDraft): string | nul
   return null;
 }
 
-/** 開缸：付錢、裝上設備、鋪好底沙。不行就回傳原因（什麼都不改）。 */
+/** 開缸：付錢、裝上設備、鋪好底沙，接著等玩家開機（powerOn）。不行就回傳原因（什麼都不改）。 */
 export function applySetup(state: TankState, draft: SetupDraft): string | null {
   const refusal = setupRefusal(state, draft);
   if (refusal) return refusal;
@@ -203,6 +223,7 @@ export function applySetup(state: TankState, draft: SetupDraft): string | null {
   const e = economy(state);
   e.coins -= setupCost(choice);
   delete e.setupPending;
+  e.powerPending = true;
   const eq = state.equipment;
   eq.tank = TANKS[choice.tank];
   eq.filter = { spec: FILTERS[choice.filter], on: true };

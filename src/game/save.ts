@@ -1,4 +1,4 @@
-import { DEFAULT_TIME_SCALE, linkTanks, needsSetup, normalizeState, simulate, step, TICK_HOURS, type SimEvent, type TankState } from '../sim';
+import { DEFAULT_TIME_SCALE, linkTanks, normalizeState, simulate, step, tankStarted, TICK_HOURS, type SimEvent, type TankState } from '../sim';
 
 export const SAVE_KEY = 'cycle.save.v1';
 
@@ -179,8 +179,8 @@ export interface OfflineResult {
  */
 export function catchUp(file: SaveFile, now = Date.now()): OfflineResult {
   const elapsedMs = Math.max(0, now - file.savedAt);
-  // 還沒開缸（還在挑設備）的空缸不算時間，跟 Game.advance 一樣
-  const scale = file.timeScale > 0 && !needsSetup(file.state) ? DEFAULT_TIME_SCALE : 0;
+  // 還沒開機（還在挑設備或開缸演出中）的缸不算時間，跟 Game.advance 一樣
+  const scale = file.timeScale > 0 && tankStarted(file.state) ? DEFAULT_TIME_SCALE : 0;
   const wanted = (elapsedMs / 1000 / 3600) * scale;
   const hours = Math.min(wanted, MAX_OFFLINE_HOURS);
   const all = [file.state, ...(file.tanks ?? [])];

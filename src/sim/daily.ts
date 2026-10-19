@@ -1,6 +1,6 @@
 import { economy, FOOD_PER_MEAL, price } from './economy';
 import { PLANT_SPECIES } from './species';
-import { needsSetup } from './setup';
+import { tankStarted } from './setup';
 import type { TankState } from './state';
 
 /**
@@ -120,12 +120,12 @@ function isDone(id: DailyTaskId, d: DailyState, tanks: TankState[]): boolean {
 }
 
 /**
- * 每半秒或每次操作後呼叫：換天就出新題目，並更新完成狀態。還沒開缸不出題。
+ * 每半秒或每次操作後呼叫：換天就出新題目，並更新完成狀態。開機前不出題（#204）。
  * 回傳這次「剛完成」的題目（畫面可以打勾、播音效）。
  */
 export function updateDaily(tanks: TankState[]): DailyTaskId[] {
   const home = tanks[0];
-  if (!home || needsSetup(home)) return [];
+  if (!home || !tankStarted(home)) return [];
   const e = economy(home);
   const day = Math.floor(home.hours / 24);
   if (!e.daily || e.daily.day !== day) {
