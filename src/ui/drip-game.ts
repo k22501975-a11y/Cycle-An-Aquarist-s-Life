@@ -25,6 +25,9 @@ export interface DripGameOptions {
 /** 滴管按住時每秒開大多少、放開時每秒關小多少。 */
 const OPEN_PER_S = 0.7;
 const CLOSE_PER_S = 1.4;
+/** 一格最多算幾秒、每一小步幾秒。 */
+const MAX_FRAME_S = 2;
+const STEP_S = 0.05;
 
 const GRADE_TEXT: Record<DripGrade, string> = {
   perfect: '對得剛剛好，牠一點都不緊張！',
@@ -121,11 +124,16 @@ export function openDripGame(opts: DripGameOptions): Promise<DripOutcome | null>
     });
 
     const frame = (now: number) => {
-      // 用現實時間算（慢的手機一格比較久也照樣滴得完）；切到背景回來的一大段不算
-      const dt = Math.min(0.25, (now - last) / 1000);
+      // 用現實時間算，切成 0.05 秒一小步（慢的手機一格要好幾秒也照樣滴得完、滴管照樣慢慢開大）；
+      // 切到背景回來的一大段最多算 2 秒
+      let dt = Math.min(MAX_FRAME_S, (now - last) / 1000);
       last = now;
-      rate = holding ? Math.min(1, rate + OPEN_PER_S * dt) : Math.max(0, rate - CLOSE_PER_S * dt);
-      stepDrip(session, rate, dt);
+      while (dt > 0) {
+        const step = Math.min(STEP_S, dt);
+        dt -= step;
+        rate = holding ? Math.min(1, rate + OPEN_PER_S * step) : Math.max(0, rate - CLOSE_PER_S * step);
+        stepDrip(session, rate, step);
+      }
       render();
       raf = requestAnimationFrame(frame);
     };
