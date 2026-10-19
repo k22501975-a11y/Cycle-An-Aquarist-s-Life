@@ -1,4 +1,4 @@
-import { HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, quarantineDays, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
+import { HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -136,8 +136,11 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
     const qLiving = q.fish.filter((f) => f.alive);
     if (q.fish.length > qLiving.length) out.push({ text: '檢疫盒裡有魚死了', tone: 'warn' });
     if (qLiving.some((f) => f.ich.stage === 'visible' || hasVisible(f))) out.push({ text: '檢疫盒裡有魚發病了，先藥浴', tone: 'warn' });
-    else if (qLiving.length > 0 && qLiving.every((f) => quarantineDays(state, f) >= QUARANTINE_DAYS))
-      out.push({ text: `檢疫盒的魚觀察滿 ${QUARANTINE_DAYS} 天，可以移到主缸`, tone: 'ok' });
+    else {
+      // 仔魚看大小、新魚看觀察天數（#174）：太小的放回主缸會被吃，不提醒
+      const ready = qLiving.filter((f) => readyForTank(state, f));
+      if (ready.length > 0) out.push({ text: ready.every((f) => isJuvenile(f)) ? `檢疫盒裡有 ${ready.length} 尾小魚長夠大了，可以移到主缸` : `檢疫盒的魚觀察滿 ${QUARANTINE_DAYS} 天，可以移到主缸`, tone: 'ok' });
+    }
   }
 
   // 水溫超出缸裡魚種的適溫範圍（以最怕熱、最怕冷的那種為準）
