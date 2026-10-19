@@ -5,6 +5,7 @@ import type { FishForm } from './fish-art';
 import { canvasTexture, makeCanvas } from './paint';
 import { parseRecipeKey, patternBase, recolorImage } from './phenotype-art';
 import { guppyLook } from './strains';
+import { trimLru } from './lru';
 import { rimLight, toneImage, toneKey } from './tone';
 
 /** 邊緣光的強度（畫面評測 V15）。 */
@@ -196,13 +197,7 @@ function releaseToned(t: Texture | null): void {
 }
 
 function trimToned(): void {
-  // Map 依加入順序排：前面的就是最久沒用的
-  for (const [k, t] of toned) {
-    if (toned.size <= TONED_MAX) return;
-    if (tonedRefs.has(t)) continue;
-    toned.delete(k);
-    t.destroy(true);
-  }
+  trimLru(toned, TONED_MAX, (t) => tonedRefs.has(t), (t) => t.destroy(true));
 }
 
 /** 開遊戲前載入素材。個別檔案失敗只會讓那張圖退回程式繪製，不會擋住遊戲。 */
