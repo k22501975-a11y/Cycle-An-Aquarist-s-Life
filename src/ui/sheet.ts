@@ -79,9 +79,12 @@ export class Toasts {
     else this.showNow(...args);
   }
 
-  /** 先把通知排隊（例如演出時）。 */
+  /** 先把通知排隊（例如演出時）。保險：演出萬一被中斷沒 release，45 秒後自己放出來。 */
   hold(): void {
-    this.held ??= [];
+    if (this.held) return;
+    this.held = [];
+    const mine = this.held;
+    setTimeout(() => this.held === mine && this.release(), 45_000);
   }
 
   /** 放出排隊的通知：同一則只跳一次，太多只留最後 3 則。 */
