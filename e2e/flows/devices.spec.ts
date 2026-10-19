@@ -33,7 +33,7 @@ async function blockedButtons(page: Page, selector: string): Promise<string[]> {
 for (const d of DEVICES) {
   test.describe(d.name, () => {
     // 版面只看 CSS 尺寸；大螢幕用真實密度時畫布太大，軟體繪圖一幀超過一秒會讓點擊逾時，所以大螢幕用 1 倍
-    test.use({ actionTimeout: 20_000, viewport: { width: d.width, height: d.height }, deviceScaleFactor: d.hiDpi ? d.dpr : 1, isMobile: d.mobile, hasTouch: d.mobile });
+    test.use({ actionTimeout: 60_000, viewport: { width: d.width, height: d.height }, deviceScaleFactor: d.hiDpi ? d.dpr : 1, isMobile: d.mobile, hasTouch: d.mobile });
 
     test(`${d.width}×${d.height}：主畫面和商店排得下`, async ({ page }) => {
       test.setTimeout(240_000);

@@ -76,7 +76,9 @@ export async function dismissGuide(page: Page): Promise<void> {
   for (let i = 0; i < 10; i++) {
     const btn = page.locator('.owner .owner-actions button:visible:not(.go-shop)', { hasNotText: '跳過教學' }).first();
     if (!(await btn.count())) return;
-    await btn.click(NO_WAIT);
+    // 直接送 click 事件，不走滑鼠輸入：大畫面在慢的 CI 上一幀要好幾秒，真的點擊會等輸入回應等到逾時。
+    // 這裡只是把對話框關掉，不是在測點擊本身。
+    await btn.dispatchEvent('click');
     await page.waitForTimeout(150);
   }
 }
@@ -84,7 +86,7 @@ export async function dismissGuide(page: Page): Promise<void> {
 /** 關掉開著的面板。關掉的面板 DOM 還在（移到畫面外），只看開著的那個；有些操作做完面板會自己關。 */
 export async function closeSheet(page: Page): Promise<void> {
   const close = page.locator('.sheet.open .sheet-close');
-  if (await close.count()) await close.first().click(NO_WAIT);
+  if (await close.count()) await close.first().dispatchEvent('click');
   await expect(page.locator('.sheet.open')).toHaveCount(0);
 }
 
