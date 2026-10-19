@@ -250,6 +250,23 @@ class MarketTest {
     }
 
     @Test
+    void 更新近況和出貨時不能改魚的血統() throws Exception {
+        // #75：以前只比對編號、品種、性別、基因，世代、近親係數、體質都能改了再賣
+        Player amy = seasoned("amy");
+        Player ben = player("ben");
+        long id = list(amy, 300);
+        send(put("/api/market/listings/" + id), amy, "{\"item\":{" + SAME_FISH + ",\"generation\":9,\"health\":1}}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("not_same_fish"));
+        send(put("/api/market/listings/" + id), amy, "{\"item\":{" + SAME_FISH + ",\"inbreeding\":0.5,\"health\":1}}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("not_same_fish"));
+        long order = buy(ben, id, "bag");
+        send(post("/api/market/orders/" + order + "/ship"), amy, "{\"item\":{" + SAME_FISH + ",\"constitution\":1.3,\"health\":1},\"bagTemp\":25,\"bagPh\":7}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("not_same_fish"));
+        // 近況（健康、長大）照樣可以變
+        ship(amy, order, 0.8);
+    }
+
+    @Test
     void 同一條魚不能重複上架_下架或訂單取消後可以再上架_出貨後就不行() throws Exception {
         // #75：以前同一條魚可以上架好幾次、賣好幾次（魚被複製）
         Player amy = seasoned("amy");

@@ -127,11 +127,39 @@ public class MarketService {
         return found.item();
     }
 
-    /** 同一條魚：品種、性別、基因都一樣（植物不檢查）。 */
+    /**
+     * 魚一出生就定下來、之後不會變的欄位：身分與血統（世代、近親係數、體質、老闆送的）。
+     * 健康、長大、懷孕這些近況會變，不比（#75：以前只比前 4 個，其他可以改了再賣）。
+     * 母魚的父系基因（sire）交配後會變，改由 {@link #serverSire} 用伺服器那份。
+     */
+    private static final List<String> IDENTITY = List.of("id", "species", "sex", "genome", "lineage", "generation", "inbreeding", "constitution", "gift");
+
+    /** 同一條魚：身分與血統都一樣（植物不檢查）。沒有這個欄位和 null 當成一樣。 */
     private static boolean sameFish(JsonNode a, JsonNode b) {
-        for (String key : List.of("id", "species", "sex", "genome"))
-            if (!java.util.Objects.equals(a.get(key), b.get(key))) return false;
+        for (String key : IDENTITY)
+            if (!java.util.Objects.equals(present(a.get(key)), present(b.get(key)))) return false;
         return true;
+    }
+
+    private static JsonNode present(JsonNode v) {
+        return v == null || v.isNull() ? null : v;
+    }
+
+    /**
+     * 母魚肚子裡的父系基因（sire）決定買家拿到的小魚，遊戲端送來的不算（#75）：
+     * 有伺服器模擬時用賣家雲端存檔裡那條魚的；存檔裡找不到（已經撈出來同步過）就用上架時的。
+     */
+    private JsonNode serverSire(long me, String listed, JsonNode item) throws Exception {
+        if (!sim.enabled() || !(item instanceof ObjectNode obj)) return item;
+        JsonNode sire = json.readTree(listed).get("sire");
+        String save = db.query("select data from cloud_save where account_id = ?", rs -> rs.next() ? rs.getString("data") : null, me);
+        if (save != null) {
+            SimClient.Inspect found = sim.inspect(json.readTree(save), item.path("id").asLong());
+            if (found.found() && found.item() != null) sire = found.item().get("sire");
+        }
+        if (present(sire) == null) obj.remove("sire");
+        else obj.set("sire", sire);
+        return obj;
     }
 
     private void requireSameFish(String kind, String listed, JsonNode item) throws Exception {
@@ -148,6 +176,10 @@ public class MarketService {
                 rs -> rs.next() ? Map.of("kind", rs.getString("kind"), "item", rs.getString("item")) : null, id, me);
         if (l == null) throw new ApiException(HttpStatus.NOT_FOUND, "no_listing", "這件商品已經不在架上");
         requireSameFish((String) l.get("kind"), (String) l.get("item"), item);
+        if ("fish".equals(l.get("kind"))) {
+            item = serverSire(me, (String) l.get("item"), item);
+            data = json.writeValueAsString(item);
+        }
         int n = db.update("update market_listing set item = ?, health = ?, updated_at = ? where id = ? and seller_id = ? and status = 'open'", data, health(item), now(), id, me);
         if (n == 0) throw new ApiException(HttpStatus.NOT_FOUND, "no_listing", "這件商品已經不在架上");
     }
@@ -220,7 +252,12 @@ public class MarketService {
         if (data.length() > MarketRules.MAX_ITEM_CHARS) throw bad("too_big", "商品資料太大");
         String kind = (String) o.get("kind");
         // 出貨的要是上架的那條魚（品種、性別、基因一樣）
-        requireSameFish(kind, db.queryForObject("select item from market_listing where id = ?", String.class, o.get("listing_id")), item);
+        String listed = db.queryForObject("select item from market_listing where id = ?", String.class, o.get("listing_id"));
+        requireSameFish(kind, listed, item);
+        if ("fish".equals(kind)) {
+            item = serverSire(me, listed, item);
+            data = json.writeValueAsString(item);
+        }
         MarketRules.Packaging pack = MarketRules.PACKAGING.get((String) o.get("packaging"));
         int transit = MarketRules.MIN_TRANSIT_HOURS + random.nextInt(MarketRules.MAX_TRANSIT_HOURS - MarketRules.MIN_TRANSIT_HOURS + 1);
         boolean doa = random.nextDouble() < MarketRules.doaChance(kind, (String) o.get("species"), health(item), pack, transit);
