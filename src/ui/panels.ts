@@ -1,4 +1,5 @@
 import type { SoundId } from '../audio/sounds';
+import { substrateName, tankSubstrateLook } from '../render/substrate';
 import {
   isShrimpSpecies,
   addBottledBacteria,
@@ -895,7 +896,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       h('h3', {}, '底材'),
       cardGrid(
         ...Object.values(SUBSTRATES).map((sub) =>
-          item(sub.name, `substrate:${sub.id}`, (eq.substrate?.spec.id ?? 'sand') === sub.id, () => {
+          item(sub.name, `substrate:${sub.id}`, tankSubstrateLook(eq.substrate) === sub.id, () => {
             purchase(ctx, price(`substrate:${sub.id}`), (st) => replaceSubstrate(st, sub), `重新鋪了${sub.name}`, 'warn', true);
           }, SUBSTRATE_NOTES[sub.id], `gear/bag-${sub.id}.webp`),
         ),
@@ -1141,7 +1142,7 @@ export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: P
       h(
         'div',
         {},
-        h('b', {}, `底材：${eq.substrate?.spec.name ?? '石英砂'}`),
+        h('b', {}, `底材：${substrateName(eq.substrate)}`),
         eq.substrate?.spec.khAbsorb
           ? h(eq.substrate.buffer < 0.15 ? 'div.warn-text' : 'div.hint', {}, `緩衝力剩約 ${Math.round(eq.substrate.buffer * 100)}%${eq.substrate.buffer < 0.15 ? '，KH 會慢慢回升，該換新土了' : ''}`)
           : null,

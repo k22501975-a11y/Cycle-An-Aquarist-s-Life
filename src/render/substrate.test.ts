@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
 import { replaceSubstrate, SUBSTRATES } from '../sim';
-import { dirtSpots, floorY, frontLip, sandSurface, substrateLook, tankSubstrateLook } from './substrate';
+import { dirtSpots, floorY, frontLip, sandSurface, substrateLook, substrateName, tankSubstrateLook } from './substrate';
 
 describe('底沙這一層', () => {
   it('依底材換外觀，沒鋪就是裸缸', () => {
@@ -18,6 +18,17 @@ describe('底沙這一層', () => {
     replaceSubstrate(s, SUBSTRATES.soil);
     expect(tankSubstrateLook(s.equipment.substrate)).toBe('soil');
     expect(tankSubstrateLook(null)).toBe('bare');
+  });
+
+  it('商店標「使用中」、設備面板寫的底材，和缸裡畫的是同一種（玩家體驗評測 P2-3）', () => {
+    const s = newGameState(1);
+    expect(substrateName(s.equipment.substrate)).toBe('石英砂');
+    for (const spec of Object.values(SUBSTRATES)) {
+      replaceSubstrate(s, spec);
+      expect(tankSubstrateLook(s.equipment.substrate)).toBe(spec.id);
+      expect(substrateName(s.equipment.substrate)).toBe(spec.name);
+    }
+    expect(substrateName(null)).toBe('裸缸');
   });
 
   it('前低後高：前玻璃那條邊比沙面低，東西停在兩者之間', () => {
