@@ -31,7 +31,7 @@ import * as sim from './sim';
 import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, useTestKit } from './sim';
 import { h } from './ui/dom';
 import { ICONS } from './ui/icons';
-import { describeEvent, fishName, fishStrain } from './ui/labels';
+import { DEATH_ADVICE, describeEvent, fishName, fishStrain } from './ui/labels';
 import {
   debugPanel,
   feedPanel,
@@ -50,7 +50,7 @@ import {
 } from './ui/panels';
 import { Guide } from './ui/guide';
 import { Celebration, type CelebrateSpec } from './ui/celebrate';
-import { firstTime, type MomentId } from './ui/moments';
+import { firstTime, type DeathAdviceCause, type MomentId } from './ui/moments';
 import { causeAdvice, HUNGER_LABEL, illnessOf, needsAdvice } from './ui/owner-advice';
 import { ownerSay } from './ui/owner-ask';
 import { fryArt, guppyArt } from './ui/shop-cards';
@@ -955,6 +955,9 @@ async function start(): Promise<void> {
       const t = game.tanks[tank] ?? game.state;
       const fish = t.fish.find((f) => f.id === e.subjectId);
       analytics.track('fish_died', { cause: e.cause ?? 'unknown', species: fish?.species ?? 'unknown', day: Math.floor(t.hours / 24) });
+      // 第一次餓死、病死：阿德老闆直接說原因和下次怎麼做（#169）
+      const cause = e.cause as DeathAdviceCause | undefined;
+      if (cause && cause in DEATH_ADVICE && firstTime(store, `died_${cause}`)) void ownerSay(DEATH_ADVICE[cause]);
     }
     audio.play(eventSound(e.type));
     if (e.type === 'fry_born' && (e.count ?? 0) > 0) {
@@ -994,7 +997,15 @@ async function start(): Promise<void> {
             sheet.open('設備與維護', () => maintenancePanel(ctx));
           },
         }
-      : undefined;
+      : c.reason === 'starving'
+        ? {
+            label: '去餵食',
+            run: () => {
+              game.switchTo(c.tank);
+              sheet.open('餵食', () => feedPanel(ctx));
+            },
+          }
+        : undefined;
     toasts.show(tankPrefix(c.tank) + crisisText(c), 'warn', fix);
   });
   // 選育成功：自家繁殖的公魚第一次長出沒見過的品系
@@ -1150,6 +1161,8 @@ async function start(): Promise<void> {
         art: 'gear/bottle-bacteria.webp',
         title: '養水完成！',
         sub: '硝化菌長好了，氨和亞硝酸鹽都是 0。現在可以慢慢多加魚',
+        // 魚開始多了：先講出門時誰來餵（#169，評測裡第 6 週整缸餓死）
+        owner: '水養好了！提醒你一件事：關掉遊戲時間也照樣走，魚每天都要吃。要出門好幾天，商店「設備」最下面有假期飼料錠，一顆撐 7 天。',
       });
   };
   setInterval(() => void analytics.flush(), 60_000);

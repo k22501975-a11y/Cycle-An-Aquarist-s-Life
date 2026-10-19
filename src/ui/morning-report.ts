@@ -195,6 +195,8 @@ function crisisAction(c: Crisis): ReportAction {
     case 'ammonia':
     case 'nitrite':
       return 'water_change';
+    case 'starving':
+      return 'feed';
     default:
       return 'equipment';
   }

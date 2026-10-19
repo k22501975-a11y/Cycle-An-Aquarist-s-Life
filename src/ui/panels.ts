@@ -49,7 +49,10 @@ import {
   canClaimStarterPack,
   claimStarterPack,
   buyTank,
+  addHolidayTablet,
   buyTankRefusal,
+  HOLIDAY_TABLET_DAYS,
+  installFeeder,
   LOCKED_SPECIES,
   speciesUnlocked,
   tankLock,
@@ -1025,6 +1028,32 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         item(FANS.clip.name, 'fan:clip', !!eq.fan, () => purchase(ctx, price('fan:clip'), (st) => (st.equipment.fan = { spec: FANS.clip, on: true }), `裝上${FANS.clip.name}`), `降溫約 ${FANS.clip.coolingC}°C，水蒸發快`, 'gear/fan.webp'),
         item(CHILLERS.small.name, 'chiller:small', !!eq.chiller, () => purchase(ctx, price('chiller:small'), (st) => (st.equipment.chiller = { spec: CHILLERS.small, targetC: 26, on: true, cooling: false }), `裝上${CHILLERS.small.name}`), '水溫壓在設定值，很耗電', 'gear/chiller.webp'),
         item('控溫器', 'controller:basic', !!eq.controller, () => purchase(ctx, price('controller:basic'), (st) => (st.equipment.controller = { maxC: 30, tripped: false }), '裝上控溫器'), '超溫就切斷加熱棒'),
+      ),
+      // 出遠門用品（mvp.md §4.7）：關掉遊戲時間照常走，沒人餵魚會餓
+      h('h3', {}, '出遠門'),
+      cardGrid(
+        shopCard({
+          art: 'gear/vacation-tablets.webp',
+          name: '假期飼料錠',
+          price: (economy(game.state).holidayTablets ?? 0) > 0 ? null : price('care:holiday'),
+          unit: '/顆',
+          chips: [`撐約 ${HOLIDAY_TABLET_DAYS} 天`, '有一點髒水'],
+          note: (economy(game.state).holidayTablets ?? 0) > 0 ? `手上有 ${economy(game.state).holidayTablets} 顆送的` : '沉在缸底慢慢溶解，出門前放一顆',
+          actions: [
+            button('放一顆', () => {
+              const e = economy(game.state);
+              if ((e.holidayTablets ?? 0) > 0) {
+                game.act((st) => {
+                  economy(st).holidayTablets = (economy(st).holidayTablets ?? 1) - 1;
+                  addHolidayTablet(st);
+                });
+                toasts.show(`放了一顆假期飼料錠，約 ${HOLIDAY_TABLET_DAYS} 天慢慢溶完`);
+                sheet.refresh();
+              } else purchase(ctx, price('care:holiday'), (st) => addHolidayTablet(st), `放了一顆假期飼料錠，約 ${HOLIDAY_TABLET_DAYS} 天慢慢溶完`);
+            }, 'small'),
+          ],
+        }),
+        item('自動餵食器', 'feeder:auto', !!eq.feeder, () => purchase(ctx, price('feeder:auto'), (st) => installFeeder(st, 1), '裝上自動餵食器，每天早上 9 點投一小撮'), '每天定時投一小撮，吃電池', 'gear/auto-feeder.webp'),
       ),
     );
   } else {
