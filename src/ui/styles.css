@@ -735,3 +735,10 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .item-pic .kit-thermo { height: 30px; margin-bottom: 8px; }
 .item-pic .wc-mini.level { width: 30px; height: 34px; }
 .item-pic .wc-mini.level i { background: rgba(255, 255, 255, 0.08); }
+/* 開缸（F1-a）：每類一排設備卡，底下總價和按鈕；關掉面板時主畫面中間留一顆「開缸」按鈕 */
+.setup-cat h3 { margin: 12px 0 6px; font-size: 15px; }
+.setup-cat .card-note { color: var(--gold); }
+.setup-total { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 14px 0 6px; }
+.setup-panel > .row { justify-content: flex-end; gap: 8px; position: sticky; bottom: 0; padding: 8px 0; }
+.setup-cta { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5; font-size: 18px; padding: 14px 22px; box-shadow: 0 0 24px rgba(227, 189, 109, 0.6); }
+.setup-cta[hidden] { display: none; }

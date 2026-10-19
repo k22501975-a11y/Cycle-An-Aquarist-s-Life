@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newGameState } from '../game/game';
+import { blankGameState, newGameState } from '../game/game';
 import { replaceSubstrate, SUBSTRATES } from '../sim';
 import { dirtSpots, floorY, frontLip, sandSurface, substrateLook, substrateName, tankSubstrateLook } from './substrate';
 
@@ -12,7 +12,8 @@ describe('底沙這一層', () => {
   });
 
   it('新缸存檔沒記底材也畫石英砂，明確拆掉（null）才是裸缸（評測 V1 回歸）', () => {
-    const s = newGameState(1);
+    // 還沒開缸的新遊戲和舊存檔一樣沒記底材
+    const s = blankGameState(1);
     expect(s.equipment.substrate).toBeUndefined();
     expect(tankSubstrateLook(s.equipment.substrate)).toBe('sand');
     replaceSubstrate(s, SUBSTRATES.soil);

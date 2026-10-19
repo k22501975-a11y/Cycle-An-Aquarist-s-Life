@@ -156,6 +156,8 @@ import {
   type Region,
   type TankState,
   type TestKitReading,
+  markDaily,
+  needsSetup,
   type MallItemId,
 } from '../sim';
 import { applySeason, type Game } from '../game/game';
@@ -185,6 +187,8 @@ export interface PanelContext {
   moment?: (id: MomentId, spec: CelebrateSpec) => boolean;
   /** 這條魚在缸裡的樣子（觀察面板頂端的大圖）；沒有就不放圖。 */
   fishPic?: (fish: Fish) => string | null;
+  /** 打開開缸（挑設備）面板。 */
+  openSetup?: () => void;
   /** 拿到錢的演出：金幣從 from 飛進錢包（F8）。 */
   reward?: (from: DOMRect | null, amount: number) => void;
   /** 用商城道具：先跟伺服器扣一個，成功才 apply；回傳 null 是成功，不然是原因。 */
@@ -726,6 +730,8 @@ const yuan = (n: number) => `${n.toLocaleString('zh-TW')} 元`;
 
 export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
   const { game, sheet, toasts } = ctx;
+  // 還沒開缸：設備在開缸時一次挑好，先在商店買會跟開缸重複扣錢（#154 審查）
+  if (needsSetup(game.state)) return h('div.stack', {}, h('p.hint', {}, '缸還沒開好。先挑好魚缸和設備，開完缸再來逛商店。'), ctx.openSetup ? button('去開缸', ctx.openSetup, 'primary') : '');
   const coins = economy(game.state).coins;
   const tabs = iconTabs<ShopTab>(
     [
@@ -1567,6 +1573,8 @@ const PEST_ORDER: PestKind[] = ['bladder', 'ramshorn', 'mts'];
 
 /** 螺的管理：看看缸裡有多少螺，各種清除方法各有代價（design/snails.md §3）。 */
 export function snailPanel(ctx: PanelContext): Node {
+  // 每日小事「找到缸裡的螺」：打開螺的面板就算看過（之後畫面支援點缸裡的螺再改成點螺）
+  markDaily(ctx.game.tanks, 'snail');
   const { game, sheet, toasts } = ctx;
   const st = game.state;
   const s = st.snails;

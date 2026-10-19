@@ -41,6 +41,9 @@ export interface TankState {
   tempLog?: { hours: number; tempC: number }[];
   /** 最近一次換水的時間（遊戲小時）。 */
   lastWaterChangeHours?: number;
+  /** 最近一次餵食、剪下插枝的時間（遊戲小時；每日小事用）。舊存檔沒有。 */
+  lastFedHours?: number;
+  lastTrimHours?: number;
   /** 蝦脫下來的殼（畫面上留在缸底一兩天）：哪隻蝦、什麼時候、脫完的體長。 */
   molts?: Array<{ id: number; hour: number; lengthCm: number }>;
   /** 魚幣、電費、手上的插枝。舊存檔沒有，第一次用到時給起始資金。 */
