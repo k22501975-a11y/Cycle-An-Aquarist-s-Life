@@ -49,7 +49,7 @@ import {
 import { Guide } from './ui/guide';
 import { Celebration, type CelebrateSpec } from './ui/celebrate';
 import { firstTime, type MomentId } from './ui/moments';
-import { causeAdvice, HUNGER_LABEL, needsAdvice } from './ui/owner-advice';
+import { causeAdvice, HUNGER_LABEL, illnessOf, needsAdvice } from './ui/owner-advice';
 import { ownerSay } from './ui/owner-ask';
 import { fryArt, guppyArt } from './ui/shop-cards';
 import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
@@ -371,8 +371,8 @@ async function start(): Promise<void> {
     if (!cond) return;
     const hungry = cond.hunger === 'hungry' || cond.hunger === 'starving';
     // 魚不太舒服、又找得到原因：多一顆有老闆頭像的「為什麼？」，老闆用一句話說原因和怎麼做
-    const ask = needsAdvice(cond)
-      ? h('button.btn.small.primary.ask-owner', { onclick: () => void ownerSay(causeAdvice(fishName(fish), cond.causes)) }, ownerImg('ask-avatar'), '為什麼？')
+    const ask = needsAdvice(cond) || illnessOf(fish)
+      ? h('button.btn.small.primary.ask-owner', { onclick: () => void ownerSay(causeAdvice(fishName(fish), cond.causes, fish)) }, ownerImg('ask-avatar'), '為什麼？')
       : null;
     selCard.replaceChildren(
       close,
