@@ -13,9 +13,9 @@ describe('推播預測', () => {
 
   it('新缸放一堆魚：預測到氨升高，而且比真的死魚早', () => {
     const t = tank(false);
-    for (let i = 0; i < 20; i++) addFish(t, 'guppy', { carriesIch: false, carries: [] });
+    for (let i = 0; i < 30; i++) addFish(t, 'guppy', { carriesIch: false, carries: [] });
     // 出門前倒了一大把飼料
-    feed(t, 3000);
+    feed(t, 6000);
     const alerts = forecast([t], 72);
     const ammonia = alerts.find((a) => a.key === 'ammonia');
     expect(ammonia).toBeDefined();
@@ -25,8 +25,8 @@ describe('推播預測', () => {
 
   it('預測不會改到真的缸，而且和實際模擬的結果一致', () => {
     const t = tank(false, 9);
-    for (let i = 0; i < 20; i++) addFish(t, 'guppy', { carriesIch: false, carries: [] });
-    feed(t, 3000);
+    for (let i = 0; i < 30; i++) addFish(t, 'guppy', { carriesIch: false, carries: [] });
+    feed(t, 6000);
     const snapshot = JSON.stringify(t);
     const alerts = forecast([t], 72);
     expect(JSON.stringify(t)).toBe(snapshot);
@@ -51,8 +51,8 @@ describe('推播預測', () => {
     const a = tank(true, 5);
     const b = tank(false, 6);
     b.label = '繁殖缸';
-    for (let i = 0; i < 20; i++) addFish(b, 'guppy', { carriesIch: false, carries: [] });
-    feed(b, 3000);
+    for (let i = 0; i < 30; i++) addFish(b, 'guppy', { carriesIch: false, carries: [] });
+    feed(b, 6000);
     const alert = forecast([a, b], 72).find((x) => x.key === 'ammonia')!;
     expect(alert.tank).toBe(1);
     expect(alert.body.startsWith('繁殖缸：')).toBe(true);

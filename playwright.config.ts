@@ -11,7 +11,8 @@ const PORT = 4173;
 
 export default defineConfig({
   testDir: 'e2e',
-  timeout: 60_000,
+  // CI 用軟體繪圖，開新遊戲（含開缸演出）就要將近一分鐘：每個測試給兩分鐘
+  timeout: 120_000,
   expect: { timeout: 15_000 },
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

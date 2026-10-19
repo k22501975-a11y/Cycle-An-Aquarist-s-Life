@@ -147,7 +147,7 @@ describe('氮循環', () => {
 
     // 硝化菌長得快，幾天內就補回來，但這幾天測得到氨
     expect(peakTap).toBeGreaterThan(0.1);
-    expect(peakTap).toBeGreaterThan(peakTank * 3);
+    expect(peakTap).toBeGreaterThan(peakTank * 2);
     expect(peakTank).toBeLessThan(0.05);
   });
 

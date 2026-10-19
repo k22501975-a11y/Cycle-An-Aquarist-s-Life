@@ -1,6 +1,6 @@
 import type { SoundId } from '../audio/sounds';
 import type { KeyValueStore } from '../game/save';
-import type { TankState } from '../sim';
+import { checkGoals, nextGoals, UNLOCK_LABELS, type Goal, type TankState } from '../sim';
 import { h } from './dom';
 import { artImg, ownerImg } from './art-icons';
 import { advanceQuest, currentQuest, loadProgress, newProgress, OWNER_NAME, pendingTip, QUESTS, questShopTab, saveProgress, type QuestShopTab, type TutorialProgress } from './tutorial';
@@ -14,6 +14,7 @@ interface Page {
 
 /**
  * 新手引導的介面：左上角的任務小卡，以及老闆說話的對話框。
+ * 教學做完（或跳過）後，小卡改顯示接下來的目標（goals.ts，M19）。
  */
 export class Guide {
   readonly pill = h('button.quest-pill.glass');
@@ -29,6 +30,13 @@ export class Guide {
   questDone: ((step: number, id: string) => void) | null = null;
   /** 打開商店的某一頁（main 接上）。 */
   openShop: ((tab: QuestShopTab) => void) | null = null;
+  /** 發新手任務獎勵（main 接上，加到共用錢包）；回傳實際發了多少，領過的任務是 0。 */
+  reward: ((questId: string, coins: number) => number) | null = null;
+  /** 目標完成、發了獎勵（main 接上：存檔、更新畫面）。 */
+  goalsChanged: (() => void) | null = null;
+  /** 上一次 update 看到的所有缸（小卡顯示目標用）。 */
+  private tanks: TankState[] = [];
+  private shownGoal = '';
 
   constructor(
     host: HTMLElement,
@@ -45,20 +53,36 @@ export class Guide {
   }
 
   get pillVisible(): boolean {
-    return currentQuest(this.progress) !== null;
+    return this.pill.classList.contains('show');
   }
 
-  /** 每半秒檢查一次：任務完成了沒、有沒有該提醒的狀況。對話框開著時先不打斷。 */
-  update(state: TankState): void {
+  /** 教學做完或跳過了：改看目標。 */
+  private get tutorialOver(): boolean {
+    return currentQuest(this.progress) === null;
+  }
+
+  /** 每半秒檢查一次：任務、目標完成了沒、有沒有該提醒的狀況。對話框開著時先不打斷。 */
+  update(state: TankState, tanks: TankState[] = [state]): void {
+    this.tanks = tanks;
     this.renderProgress(state);
     if (this.bubble.classList.contains('open')) return;
     const done = advanceQuest(this.progress, state);
     if (done) {
       this.save();
       this.questDone?.(this.progress.step, done.id);
+      const paid = this.reward?.(done.id, done.reward) ?? 0;
       this.sound('quest');
       const next = currentQuest(this.progress);
-      this.say([{ text: done.done, label: next ? '下一個任務' : '謝謝老闆' }, ...(next ? this.questPages() : [])]);
+      const text = paid > 0 ? `${done.done}（獎勵 ${paid} 魚幣）` : done.done;
+      this.say([{ text, label: next ? '下一個任務' : '謝謝老闆' }, ...(next ? this.questPages() : this.goalPages('接下來可以挑戰這些目標：'))]);
+      return;
+    }
+    const goals = checkGoals(tanks, this.tutorialOver);
+    if (goals.length > 0) {
+      this.goalsChanged?.();
+      this.sound('quest');
+      this.say([...goals.map((g) => ({ text: goalDoneText(g), label: '太好了' })), ...this.goalPages('下一個目標：')]);
+      this.renderPill();
       return;
     }
     const tip = pendingTip(this.progress, state);
@@ -87,8 +111,18 @@ export class Guide {
   }
 
   private showQuest(): void {
-    if (!currentQuest(this.progress)) return;
+    if (!currentQuest(this.progress)) {
+      this.say(this.goalPages('現在的目標：'));
+      return;
+    }
     this.say(this.questPages());
+  }
+
+  /** 接下來的 1～2 個目標，一頁說完。 */
+  private goalPages(lead: string): Page[] {
+    const goals = this.tanks.length > 0 ? nextGoals(this.tanks) : [];
+    if (goals.length === 0) return [];
+    return [{ text: `${lead}${goals.map((g) => `「${g.title}」（${g.coins} 魚幣）`).join('、')}。`, label: '好，我來試試' }];
   }
 
   private questPages(): Page[] {
@@ -154,7 +188,13 @@ export class Guide {
 
   private renderPill(): void {
     const q = currentQuest(this.progress);
-    this.pill.classList.toggle('show', q !== null);
+    const goal = q || this.tanks.length === 0 ? undefined : nextGoals(this.tanks, 1)[0];
+    this.pill.classList.toggle('show', q !== null || goal !== undefined);
+    if (goal) {
+      if (this.shownGoal === goal.id) return;
+      this.shownGoal = goal.id;
+      this.pill.replaceChildren(ownerPortrait('quest-avatar'), h('span.quest-step', {}, '目標'), h('span.quest-title', { title: goal.title }, goal.title));
+    } else this.shownGoal = q || this.tanks.length === 0 ? '' : 'all-done';
     if (q) {
       // 換任務時把上一個任務的進度清掉（遊戲性評測：任務 7 的卡上還寫著任務 6 的「硝化菌 100%」）
       this.shownProgress = '';
@@ -174,6 +214,8 @@ export class Guide {
 
   /** 任務卡上的進度（硝化菌 40% 之類），變了才改 DOM。 */
   private renderProgress(state: TankState): void {
+    // 第一次拿到所有缸（開遊戲、讀檔）時把目標小卡補上
+    if (this.tutorialOver && !this.shownGoal) this.renderPill();
     const q = currentQuest(this.progress);
     const m = q?.meter?.(state);
     this.meterEl.hidden = m === undefined;
@@ -190,6 +232,11 @@ export class Guide {
     saveProgress(this.store, this.progress);
     this.renderPill();
   }
+}
+
+function goalDoneText(g: Goal): string {
+  const prize = [`${g.coins} 魚幣`, ...(g.unlock ? [UNLOCK_LABELS[g.unlock]] : [])].join('，');
+  return `目標達成：${g.title}！${g.done}（獎勵：${prize}）`;
 }
 
 /** 阿德老闆頭像（插畫）。 */

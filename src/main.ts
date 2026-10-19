@@ -872,6 +872,8 @@ async function start(): Promise<void> {
   stage.append(tankLabel);
   const guide = new Guide(stage, store, (id) => audio.play(id), () => requestAnimationFrame(() => measure()));
   guide.openShop = (tab) => openShop(tab);
+  guide.reward = (id, coins) => game.actAll((tanks) => sim.claimQuestReward(tanks[0], id, coins));
+  guide.goalsChanged = () => game.actAll(() => undefined);
   const measure = () => {
     const stageRect = stage.getBoundingClientRect();
     const top = hud.getBoundingClientRect().bottom - stageRect.top;
@@ -1194,7 +1196,7 @@ async function start(): Promise<void> {
       renderCoins();
       renderOrders();
       renderTankChip();
-      guide.update(game.state);
+      guide.update(game.state, game.tanks);
       celebrateStrains();
       for (const entry of unlockCodex(codexSeen, game.state)) {
         saveCodexSeen(store, codexSeen);

@@ -5,12 +5,12 @@ import { gameState, startClean, startGame, watchConsoleErrors, type CycleWindow 
 // 軟體繪圖在高像素密度下慢三倍，這裡不測畫質，用 1 讓 CI 慢的時候也跑得完
 test.use({ deviceScaleFactor: 1, actionTimeout: 20_000 });
 
-test('新遊戲：錢 2,000、任務 1/7、速度 ×7，畫面有畫出東西，沒有 console 錯誤', async ({ page }) => {
+test('新遊戲：錢 2,000、任務 1/9、速度 ×7，畫面有畫出東西，沒有 console 錯誤', async ({ page }) => {
   const consoleErrors = watchConsoleErrors(page);
   await startGame(page);
   await expect(page.locator('button.speed-btn')).toHaveText(/×7/);
   await expect(page.locator('button.coins')).toHaveText(/2,000/);
-  await expect(page.locator('.quest-pill')).toContainText('任務 1/7');
+  await expect(page.locator('.quest-pill')).toContainText('任務 1/9');
   // PNG 壓縮後太小代表畫布幾乎是單色（黑畫面）
   expect((await page.locator('#stage canvas').screenshot()).byteLength).toBeGreaterThan(20_000);
   expect(consoleErrors).toEqual([]);

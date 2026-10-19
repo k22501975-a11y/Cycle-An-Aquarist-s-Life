@@ -95,9 +95,9 @@ export function fishMatchesOrder(fish: Fish, o: ShopOrder): boolean {
   return fish.genome.tail >= (o.minTail ?? 0);
 }
 
-/** 這缸可以拿去交這張單的魚，差的排前面（不會先把最好的魚交出去）；keep 是玩家要留下來的魚。 */
+/** 這缸（連產卵盒裡的）可以拿去交這張單的魚，差的排前面（不會先把最好的魚交出去）；keep 是玩家要留下來的魚。 */
 export function matchingFish(state: TankState, o: ShopOrder, keep: readonly number[] = []): Fish[] {
-  return state.fish.filter((f) => fishMatchesOrder(f, o) && !keep.includes(f.id)).sort((a, b) => a.lengthCm + (a.genome?.tail ?? 0) / 10 - (b.lengthCm + (b.genome?.tail ?? 0) / 10));
+  return [...state.fish, ...(state.quarantine?.fish ?? [])].filter((f) => fishMatchesOrder(f, o) && !keep.includes(f.id)).sort((a, b) => a.lengthCm + (a.genome?.tail ?? 0) / 10 - (b.lengthCm + (b.genome?.tail ?? 0) / 10));
 }
 
 /** 所有缸加起來湊得到幾份（魚從每一缸挑，插枝看手上）。 */
@@ -130,6 +130,7 @@ export function fulfillOrder(tanks: TankState[], orderId: number, keep: readonly
       const give = new Set(matchingFish(t, o, keep).slice(0, left));
       left -= give.size;
       t.fish = t.fish.filter((f) => !give.has(f));
+      if (t.quarantine) t.quarantine.fish = t.quarantine.fish.filter((f) => !give.has(f));
     }
   }
   const coins = o.count * o.unitPrice;
@@ -226,7 +227,7 @@ export function makeOrder(board: OrderBoard, hours: number): ShopOrder {
     [species.includes('guppy') ? 3 : 1, () => {
       // 中魚：客人買回去自己養大，前期最好交
       o.size = 'juvenile';
-      o.count = 3 + Math.floor(r() * 3);
+      o.count = 2 + Math.floor(r() * 3);
       o.unitPrice = round5(40 + r() * 15);
     }],
     [others.length > 0 ? 2 : 0, () => {
@@ -252,9 +253,15 @@ export function makeOrder(board: OrderBoard, hours: number): ShopOrder {
 }
 
 /** 每次模擬更新時呼叫：記下玩家養出了什麼；第一次掛滿 3 張，之後交掉一張隔天補一張。 */
+/** 訂單掛幾天沒交就下架、換新的。 */
+export const ORDER_EXPIRE_DAYS = 7;
+
 export function updateOrders(state: TankState): void {
   const board = orderBoard(state);
   noteProgress(state, board);
+  // 太久沒人交的單，客人就不等了（不用玩家自己撕）
+  const expired = board.orders.filter((o) => state.hours - o.postedHours >= ORDER_EXPIRE_DAYS * 24);
+  if (expired.length > 0) board.orders = board.orders.filter((o) => !expired.includes(o));
   if (board.orders.length >= ORDER_BOARD_SIZE) return;
   if (board.lastChangeHours === undefined) {
     while (board.orders.length < ORDER_BOARD_SIZE) board.orders.push(makeOrder(board, state.hours));

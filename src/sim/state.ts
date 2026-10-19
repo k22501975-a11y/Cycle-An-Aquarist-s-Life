@@ -419,3 +419,9 @@ export function normalizeState(state: TankState): TankState {
   }
   return state;
 }
+
+/**
+ * 新手期（教學走完約 12 個遊戲天，mvp.md §4.6）：店裡的魚不帶柱狀病等細菌病（#118），加熱棒也不會隨機故障（#122）。
+ * 教學還沒教到這些，新手會不知道魚為什麼死。看的是這缸的遊戲時間。
+ */
+export const NEWBIE_HEALTHY_DAYS = 12;

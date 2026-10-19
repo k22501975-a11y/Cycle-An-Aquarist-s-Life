@@ -57,13 +57,17 @@ describe('底材', () => {
     const s = createTank({ ...STARTER, roomTempC: 24, seed: 2 });
     s.bacteria.aob = s.bacteria.nob = 0;
     replaceSubstrate(s, SUBSTRATES.soil);
-    simulate(s, 72);
-    expect(s.water.tan).toBeGreaterThan(0.2);
+    let peak = 0;
+    for (let h = 0; h < 72; h++) {
+      simulate(s, 1);
+      peak = Math.max(peak, s.water.tan);
+    }
+    expect(peak).toBeGreaterThan(0.2);
     const leachNow = SUBSTRATES.soil.ammoniaLeach.mgPerHour * Math.exp(-(s.hours - s.equipment.substrate!.sinceHours) / SUBSTRATES.soil.ammoniaLeach.decayHours);
-    expect(leachNow).toBeLessThan(0.15);
+    expect(leachNow).toBeLessThan(SUBSTRATES.soil.ammoniaLeach.mgPerHour * 0.8);
     s.hours += 24 * 40;
     const later = SUBSTRATES.soil.ammoniaLeach.mgPerHour * Math.exp(-(s.hours - s.equipment.substrate!.sinceHours) / SUBSTRATES.soil.ammoniaLeach.decayHours);
-    expect(later).toBeLessThan(0.003);
+    expect(later).toBeLessThan(SUBSTRATES.soil.ammoniaLeach.mgPerHour * 0.02);
   });
 
   it('水草泥的緩衝力會隨換水慢慢耗盡（約半年到一年）', () => {

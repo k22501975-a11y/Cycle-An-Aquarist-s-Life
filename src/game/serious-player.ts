@@ -5,7 +5,9 @@ import {
   addPlant,
   buybackRefusal,
   buyQuarantine,
+  BOX_CAPACITY,
   buyTank,
+  checkGoals,
   dismissOrder,
   economy,
   feed,
@@ -50,7 +52,7 @@ export interface SeriousRun {
 /**
  * 認真玩家 120 天（design/mvp.md §4.3）：買一組品系 1 公 2 母、種莫絲和矮珍珠，每天餵兩餐、測水、超標或每週換水。
  * 快生的母魚放進檢疫盒當產卵盒，小魚長到 1.6 cm 再放出來；成魚（留種的 3 條除外）賣給店家，太擠才賣中魚。
- * 錢夠又快滿了就加缸，分濾材過去、養好後移魚。新手目標獎勵（M19）還沒做，先在第 10 天直接給 800。
+ * 錢夠又快滿了就加缸，分濾材過去、養好後移魚。新手任務獎勵共 800，簡化成第 10 天一次給；之後的目標（M19）照遊戲每天檢查、發獎勵。
  * takeOrders：每天修剪水草、先交訂單（湊單的魚留著不賣），湊不齊超過 10 天的單撕掉換新。
  */
 export function seriousPlayer(seed: number, strain: number, takeOrders = false): SeriousRun {
@@ -110,7 +112,9 @@ export function seriousPlayer(seed: number, strain: number, takeOrders = false):
         const due = alive(home).find((f) => f.pregnancy > 0.85);
         if (due) moveToQuarantine(home, due.id);
       }
-      const grown = box.filter((f) => isJuvenile(f) && f.lengthCm >= 1.6).map((f) => f.id);
+      // 長到 1.6 cm 放出來；盒子太擠就先放大的出來
+      const crowd = box.length > BOX_CAPACITY ? [...box].sort((a, b) => b.lengthCm - a.lengthCm).slice(0, box.length - BOX_CAPACITY) : [];
+      const grown = box.filter((f) => isJuvenile(f) && (f.lengthCm >= 1.6 || crowd.includes(f))).map((f) => f.id);
       if (grown.length > 0) {
         releaseQuarantine(home, grown);
         const to = tanks.filter((t) => isCycled(t)).reduce((a, b) => (count(b) / cap(b) < count(a) / cap(a) ? b : a));
@@ -118,6 +122,7 @@ export function seriousPlayer(seed: number, strain: number, takeOrders = false):
       }
     }
     if (d === 10) economy(home).coins += 800;
+    checkGoals(tanks, d >= 10);
     // 第 21 天：已經買了第二缸，或者手上的錢買得起
     if (d === 21) coins21 = tanks.length > 1 ? Infinity : economy(home).coins;
     const size = tanks.length === 1 ? 'nano20' : 'std40';
@@ -136,4 +141,37 @@ export function seriousPlayer(seed: number, strain: number, takeOrders = false):
     orderIncome[d] = orderBoard(home).earned;
   }
   return { income, orders: orderIncome, coins21, tanks: tanks.length };
+}
+
+/**
+ * 一般玩家（遊戲性評測 g3 的玩法）：一公兩母藍草、1 株榕、一天兩餐、每週換水三成、能賣就賣（留種的 3 條除外），
+ * 不用產卵盒、不修剪水草、不加缸。takeOrders：訂單板上交得出來的單就交。回傳每天累計的賣魚和訂單收入。
+ */
+export function casualPlayer(seed: number, takeOrders: boolean, days = 90): { income: Record<number, number>; orders: Record<number, number> } {
+  const s = newGameState(seed);
+  const tanks = [s];
+  s.environment.roomTempC = 25;
+  s.environment.roomSwingC = 2;
+  addPlant(s, 'anubias');
+  for (const sex of ['male', 'female', 'female'] as const) addFish(s, 'guppy', { carriesIch: false, carries: [], sex, strain: 0 });
+  const breeders = [...s.fish.map((f) => f.id)];
+  const income: Record<number, number> = {};
+  const orders: Record<number, number> = {};
+  let total = 0;
+  for (let d = 1; d <= days; d++) {
+    for (let k = 0; k < 2; k++) {
+      feed(s, meal(s));
+      simulate(s, 12);
+    }
+    if (d % 7 === 0) waterChange(s, 0.3);
+    if (d === 10) economy(s).coins += 800;
+    checkGoals(tanks, d >= 10);
+    // 有接訂單的話：交得出來就交，訂單要的魚先留著不賣
+    if (takeOrders) for (const o of [...orderBoard(s).orders]) fulfillOrder(tanks, o.id, breeders);
+    const held = new Set(takeOrders ? orderBoard(s).orders.flatMap((o) => (o.kind === 'fish' ? matchingFish(s, o, breeders).slice(0, o.count).map((f) => f.id) : [])) : []);
+    for (const f of alive(s)) if (!breeders.includes(f.id) && !held.has(f.id) && !buybackRefusal(f)) total += sellFish(s, f.id);
+    income[d] = total;
+    orders[d] = orderBoard(s).earned;
+  }
+  return { income, orders };
 }
