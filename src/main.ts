@@ -41,8 +41,11 @@ import {
   trimListPanel,
   waterChangePanel,
   type PanelContext,
+  type ShopTab,
 } from './ui/panels';
 import { Guide } from './ui/guide';
+import { Celebration } from './ui/celebrate';
+import { fryArt } from './ui/shop-cards';
 import { recordsPanel } from './ui/records';
 import { loadCodexSeen, saveCodexSeen, unlockCodex } from './ui/codex';
 import { codexPanel } from './ui/codex-panel';
@@ -98,6 +101,7 @@ async function start(): Promise<void> {
   (window as unknown as { cycle: unknown }).cycle = debugHandle;
   const sheet = new Sheet(document.body);
   const toasts = new Toasts(document.body);
+  const celebration = new Celebration(document.body);
   // 聲音：瀏覽器要等第一次點擊才能出聲
   let audioSettings = loadAudioSettings(store);
   const audio = new AudioEngine(audioSettings);
@@ -427,8 +431,10 @@ async function start(): Promise<void> {
     },
     cloud: () => !!cloud.session,
   });
+  // 商店開在任務要買的那一頁（買水草的任務就直接是水草）
+  const openShop = (tab?: ShopTab) => sheet.open('商店', () => shopPanel(ctx, tab ?? guide.shopTab ?? 'fish'));
   const coinsValue = h('b');
-  const coinsBtn = h('button.coins', { 'aria-label': '錢包', title: '錢包：點一下打開商店', onclick: () => sheet.open('商店', () => shopPanel(ctx)) }, h('i.coin'), coinsValue);
+  const coinsBtn = h('button.coins', { 'aria-label': '錢包', title: '錢包：點一下打開商店', onclick: () => openShop() }, h('i.coin'), coinsValue);
   const renderCoins = () => {
     const coins = sim.economy(game.state).coins;
     const text = coins.toLocaleString('zh-TW');
@@ -736,7 +742,7 @@ async function start(): Promise<void> {
     sheet.open('水質測試', () => testKitPanel(ctx), { live: true });
   });
   tool('trim', '修剪', '#7ccf8a', () => sheet.open('修剪水草', () => trimListPanel(ctx)));
-  tool('shop', '商店', '#ef8a6a', () => sheet.open('商店', () => shopPanel(ctx)));
+  tool('shop', '商店', '#ef8a6a', () => openShop());
   tool('gear', '設備', '#e3bd6d', () => sheet.open('設備與維護', () => maintenancePanel(ctx)));
   const netBtn = tool('net', '撈死魚', '#e88aa8', () => {
     const n = game.act(removeDeadFish);
@@ -772,6 +778,7 @@ async function start(): Promise<void> {
   const tankLabel = h('div.tank-label');
   stage.append(tankLabel);
   const guide = new Guide(stage, store, (id) => audio.play(id), () => requestAnimationFrame(() => measure()));
+  guide.openShop = (tab) => openShop(tab);
   const measure = () => {
     const stageRect = stage.getBoundingClientRect();
     const top = hud.getBoundingClientRect().bottom - stageRect.top;
@@ -780,6 +787,8 @@ async function start(): Promise<void> {
     view.setInsets({ top: Math.round(top), bottom: Math.round(bottom) });
     // 任務小卡在左上角；浮動選取卡排在它下面，下緣留給左下角的缸名標籤。
     guide.pill.style.top = `${Math.round(top + 10)}px`;
+    // 通知讓出任務卡的寬度
+    document.body.style.setProperty('--pill-w', guide.pillVisible ? `${guide.pill.offsetWidth + 14}px` : '0px');
     const pillH = guide.pillVisible ? guide.pill.offsetHeight + 8 : 0;
     const dockTop = dock.getBoundingClientRect().top - stageRect.top;
     cardArea = { x: 0, y: top + 10 + pillH, w: stageRect.width, h: Math.max(0, dockTop - top - 10 - pillH - 34) };
@@ -804,6 +813,19 @@ async function start(): Promise<void> {
       analytics.track('fish_died', { cause: e.cause ?? 'unknown', species: fish?.species ?? 'unknown', day: Math.floor(t.hours / 24) });
     }
     audio.play(eventSound(e.type));
+    if (e.type === 'fry_born' && (e.count ?? 0) > 0) {
+      // 生小魚是大事：跳出慶祝卡，在看的那一缸聚光特寫母魚
+      const t = game.tanks[tank] ?? game.state;
+      const mom = t.fish.find((f) => f.id === e.subjectId);
+      const shrimp = !!mom && sim.isShrimpSpecies(mom.species);
+      if (tank === game.active && e.subjectId !== undefined) view.celebrate(e.subjectId);
+      celebration.show({
+        art: fryArt(mom?.species ?? 'guppy'),
+        title: `${tankPrefix(tank)}${shrimp ? '孵出' : '生了'} ${e.count} ${shrimp ? '隻小蝦' : '尾小魚'}！`,
+        sub: `${mom ? fishName(mom) : '母魚'}當媽媽了。成魚會吃小魚，水草越密越好躲`,
+      });
+      return;
+    }
     const msg = describeEvent(game.tanks[tank] ?? game.state, e);
     if (msg) toasts.show(tankPrefix(tank) + msg.text, msg.tone);
   });

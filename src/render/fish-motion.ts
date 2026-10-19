@@ -50,6 +50,8 @@ export interface MotionContext {
   scale: number;
   /** 飼料顆粒位置（餓的魚會游過去）。 */
   food: Array<{ x: number; y: number }>;
+  /** 剛撒飼料的搶食熱度 0–1：魚不太餓也會衝上去搶。 */
+  frenzy?: number;
 }
 
 export interface FishCondition {
@@ -62,6 +64,8 @@ export interface FishCondition {
   guarding?: boolean;
   /** 顧泡巢的公鬥魚：泡巢的水平位置，公魚守在下面、不時游上去補泡泡。 */
   nestX?: number;
+  /** 畫面上身體的一半長、一半高（像素）：整條魚留在缸裡，不會半個身體出了缸壁或埋進底沙。 */
+  body?: { halfLen: number; halfH: number };
 }
 
 /** 靠近母魚的外人（不是自己的小孩、不是蝦）。 */
@@ -202,7 +206,10 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   // 魚只搶水裡的，沉到底沙的留給蝦；蝦只走向沉到下層的
   const water = bounds.bottom - bounds.surface;
   const reachable = ctx.food.filter((f) => (p.crawler ? f.y > bounds.bottom - water * 0.4 : f.y < floorAt(bounds, f.x) - 6 * scale));
-  if (cond.hungry && !sym.has('not_eating') && reachable.length > 0) {
+  // 剛撒飼料：沒在帶小孩、顧泡巢的魚都會來搶（蝦照自己的步調）
+  const frenzy = p.crawler || cond.follow !== undefined || cond.nestX !== undefined || cond.guarding ? 0 : (ctx.frenzy ?? 0);
+  let chasing = false;
+  if ((cond.hungry || frenzy > 0.05) && !sym.has('not_eating') && reachable.length > 0) {
     let best = reachable[0], bd = Infinity;
     for (const f of reachable) {
       const d = (f.x - s.x) ** 2 + (f.y - s.y) ** 2;
@@ -220,23 +227,28 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
       const near = 40 * scale;
       const pull = p.crawler ? 1 : Math.min(1, Math.abs(dx) / near);
       ax += (dx / d) * 2.5 * pull;
-      if (!p.crawler) ay += ((best.y - s.y) / d) * 2.5;
+      // 往上衝搶水面的飼料：搶食越熱往上拉得越用力
+      if (!p.crawler) ay += ((best.y - s.y) / d) * 2.5 * (1 + 1.5 * frenzy);
       if (pull < 1) s.vx *= Math.pow(0.05, dt * (1 - pull));
-      speed *= 1.6;
+      speed *= 1.6 + 0.9 * frenzy;
+      chasing = !p.crawler;
     }
   }
 
-  // 避開缸壁
-  const margin = 30 * scale;
+  // 避開缸壁：照身體長度留空間，不會整群擠在缸邊
+  const halfLen = cond.body?.halfLen ?? 0;
+  const halfH = cond.body?.halfH ?? 0;
+  const margin = Math.max(30 * scale, halfLen * 2.2);
   if (s.x < margin) ax += (margin - s.x) / margin * 3;
   if (s.x > bounds.width - margin) ax -= (s.x - (bounds.width - margin)) / margin * 3;
-  if (s.y < bounds.surface + margin * 0.5 && cond.nestX === undefined) ay += 2;
-  if (s.y > bounds.bottom - margin * 0.5 && !p.crawler) ay -= 2;
+  const floor = floorAt(bounds, s.x);
+  if (s.y < bounds.surface + margin * 0.5 && cond.nestX === undefined && !chasing) ay += 2;
+  if (s.y > floor - halfH - margin * 0.5 && !p.crawler) ay -= 2;
 
   s.vx += ax * speed * dt * 2;
-  // 魚主要水平游動，垂直方向的速度壓低。
+  // 魚主要水平游動，垂直方向的速度壓低；搶食往上衝時放寬一點
   s.vy += ay * speed * dt * 2;
-  s.vy *= 0.92;
+  s.vy *= chasing ? 0.92 + 0.05 * frenzy : 0.92;
   const v = Math.hypot(s.vx, s.vy);
   if (v > speed) {
     s.vx = (s.vx / v) * speed;
@@ -245,9 +257,11 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   if (p.crawler) {
     s.vy = 0;
   }
-  const edge = 16 * scale;
+  const edge = Math.max(16 * scale, halfLen + 4 * scale);
   s.x = Math.min(bounds.width - edge, Math.max(edge, s.x + s.vx * dt));
-  s.y = p.crawler ? floorAt(bounds, s.x) - 3 * scale : Math.min(bounds.bottom - 3 * scale, Math.max(bounds.surface + 4, s.y + s.vy * dt));
+  s.y = p.crawler
+    ? floorAt(bounds, s.x) - 3 * scale
+    : Math.min(Math.max(bounds.surface + 4, floorAt(bounds, s.x) - Math.max(3 * scale, halfH)), Math.max(bounds.surface + 4 + halfH * 0.3, s.y + s.vy * dt));
   // 病懨懨的魚尾巴也擺得慢
   s.phase += dt * (4 + v / (8 * scale)) * (sym.has('lethargic') || sym.has('loss_of_balance') ? 0.5 : 1);
 }

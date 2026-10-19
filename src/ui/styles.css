@@ -492,3 +492,39 @@ img.portrait { border-radius: 50%; border: 2px solid var(--gold); object-fit: co
 .shop-banner { position: relative; display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; min-height: 86px; padding: 10px 12px; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(8, 28, 38, 0.1), rgba(8, 28, 38, 0.85)), url('/art/ui/shop-banner.webp') center / cover no-repeat; }
 .shop-banner > b { font-size: 18px; letter-spacing: 0.16em; color: var(--gold-bright); text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8); }
 .shop-banner .wallet-bar { padding: 4px 6px 4px 10px; gap: 8px; background: rgba(8, 28, 38, 0.75); }
+
+/* 試玩第 1 輪修正 */
+/* 面板標題列不透明：往下捲時後面的按鈕文字不會透上來 */
+.sheet-head { background: #0a1c25; margin: 0 -20px; padding-left: 20px; padding-right: 20px; }
+.sheet-head::after { content: ''; position: absolute; left: 0; right: 0; bottom: -12px; height: 12px; background: linear-gradient(#0a1c25, rgba(10, 28, 37, 0)); pointer-events: none; }
+/* 通知靠右、讓出左上角的任務卡，不再蓋住任務標題 */
+.toasts { left: auto; right: calc(env(safe-area-inset-right) + 14px); transform: none; width: min(440px, calc(100vw - var(--pill-w, 0px) - 52px)); }
+/* 面板開著時，老闆的對話框移到最上層的畫面頂端，不被面板蓋住 */
+.owner { z-index: 22; }
+body:has(.sheet.open) .owner.open { bottom: auto; top: calc(env(safe-area-inset-top) + 8px); }
+.owner-actions .go-shop { display: inline-flex; align-items: center; gap: 6px; }
+.btn-art { width: 26px; height: 26px; margin-left: -8px; }
+
+/* 生小魚的慶祝卡 */
+.celebrate { position: fixed; z-index: 28; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(0.6); opacity: 0; width: min(360px, calc(100vw - 32px)); padding: 18px 20px 20px; border-radius: 22px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; overflow: hidden; border: 1px solid var(--gold); box-shadow: 0 0 0 1px rgba(227, 189, 109, 0.25), 0 18px 60px rgba(0, 0, 0, 0.55), 0 0 60px rgba(255, 211, 110, 0.25); transition: transform 0.45s cubic-bezier(0.2, 1.5, 0.4, 1), opacity 0.3s; cursor: pointer; }
+.celebrate.in { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+.celebrate.out { transform: translate(-50%, -50%) scale(0.9); opacity: 0; transition-duration: 0.35s; }
+.celebrate-pic { position: relative; width: 150px; height: 104px; display: grid; place-items: center; }
+.celebrate-glow { position: absolute; inset: -10px; border-radius: 50%; background: radial-gradient(closest-side, rgba(255, 220, 140, 0.55), rgba(255, 220, 140, 0)); animation: celebrate-pulse 1.6s ease-in-out infinite; }
+.celebrate-art { position: relative; max-width: 100%; max-height: 100%; object-fit: contain; filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.5)); animation: celebrate-bob 2.4s ease-in-out infinite; }
+.celebrate-title { font-size: 24px; font-weight: 800; letter-spacing: 0.06em; color: #ffe29a; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
+.celebrate-sub { font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+.confetti { position: absolute; inset: 0; pointer-events: none; }
+.confetti i { position: absolute; top: -14px; left: var(--x); width: 7px; height: 12px; border-radius: 2px; background: var(--c); opacity: 0.9; transform: rotate(var(--r)); animation: confetti-fall 2.2s var(--d) cubic-bezier(0.3, 0.6, 0.5, 1) both; }
+@keyframes confetti-fall { from { transform: translateY(0) rotate(var(--r)); opacity: 1; } to { transform: translateY(260px) rotate(calc(var(--r) + 540deg)); opacity: 0; } }
+@keyframes celebrate-pulse { 50% { transform: scale(1.12); opacity: 0.7; } }
+@keyframes celebrate-bob { 50% { transform: translateY(-5px) rotate(-3deg); } }
+@media (prefers-reduced-motion: reduce) { .confetti, .celebrate-glow, .celebrate-art { animation: none; } }
+.celebrate.docked { top: calc(env(safe-area-inset-top) + 78px); opacity: 1; transform: translate(-50%, 0) scale(0.7); transform-origin: top center; transition: top 0.6s cubic-bezier(0.3, 0.9, 0.3, 1), transform 0.6s cubic-bezier(0.3, 0.9, 0.3, 1), opacity 0.3s; }
+.celebrate.docked .celebrate-sub { display: none; }
+.celebrate.docked.out { opacity: 0; }
+/* 橫向時面板在右邊：對話框改放在左邊空出來的地方，整句看得到 */
+@media (orientation: landscape) {
+  body:has(.sheet.open) .owner.open { top: auto; bottom: calc(var(--dock-top, 120px) + 12px); left: calc(env(safe-area-inset-left) + 14px); transform: none; width: calc(100vw - min(420px, 50vw) - 42px); }
+  body:has(.sheet.open) .owner.open .owner-actions { flex-wrap: wrap; }
+}

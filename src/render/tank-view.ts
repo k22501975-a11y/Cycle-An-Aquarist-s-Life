@@ -5,8 +5,9 @@ import { PaintedRig, paintedKey, paintedTexture, resolvePaintedKey } from './pai
 import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { floorAt, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { dirtSpots, floorY, frontLip, sandSurface, substrateLook, SUBSTRATE_PALETTES, type SubstrateLook } from './substrate';
-import { applyFoodLook, BITE_SECONDS, biteKick, mouthOpenness, pickEaten, pickFoodKind, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type FoodLook, type Mouth, type Pellet } from './feeding';
-import { canvasTexture, flakeTextures, makeCanvas, mix, pelletTextures, softDotTexture, tabletTexture, wormTextures } from './paint';
+import { celebrateFrame, CELEBRATE_SECONDS, sparkleAlpha, sparkleBurst, type Sparkle } from './celebrate';
+import { applyFoodLook, BITE_SECONDS, biteKick, frenzyLevel, visiblePellets, mouthOpenness, pickEaten, pickFoodKind, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type FoodLook, type Mouth, type Pellet } from './feeding';
+import { canvasTexture, flakeTextures, spotlightTexture, makeCanvas, mix, pelletTextures, softDotTexture, tabletTexture, wormTextures } from './paint';
 import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame, TEST_SECONDS, WATER_CHANGE_SECONDS, type KitParam } from './ops-fx';
 import { PlantMesh } from './plant-sway';
 import { SnailView } from './snail-view';
@@ -164,6 +165,10 @@ export class TankView {
   /** 換水、測水、修剪的演出。 */
   private readonly opsFx = new Graphics();
   private readonly cuttingLayer = new Container();
+  /** 生小魚的特寫：周圍暗下來，亮點和光環。 */
+  private readonly spot = new Sprite();
+  private readonly partyFx = new Graphics();
+  private party: { id: number; t: number; sparks: Sparkle[] } | null = null;
   private readonly tubeLabels = new Container();
   /** 大缸滑動時的位置條（固定在畫面上）。 */
   private readonly scrollBar = new Graphics();
@@ -182,6 +187,8 @@ export class TankView {
   private fish = new Map<number, FishView>();
   private plants = new Map<number, PlantView>();
   private food: FoodParticle[] = [];
+  /** 上次撒飼料過了幾秒（魚搶食的熱度）；-1 還沒撒過。 */
+  private dropT = -1;
   private cuttings: Cutting[] = [];
   /** 換水演出進行了幾秒（-1 沒在演）與這次換掉的比例。 */
   private wcT = -1;
@@ -271,6 +278,8 @@ export class TankView {
       this.rayLayer,
       this.cuttingLayer,
       this.opsFx,
+      this.spot,
+      this.partyFx,
       this.tubeLabels,
       this.overlay,
       this.scape.overlay,
@@ -445,6 +454,7 @@ export class TankView {
     this.syncMolts(state);
     this.snails.sync(state, { bounds: this.bounds, look: this.look, ppc: this.ppc, hs: this.hs, lit: isLightOn(state), time: this.time });
     this.syncFish(state, dt);
+    this.drawParty(dt);
     this.syncPlants(state);
     this.drawOps(dt);
     this.drawGear(state);
@@ -452,6 +462,63 @@ export class TankView {
     this.updateBubbles(state, dt);
     this.drawOverlay(state);
     this.scape.drawEdit(state, this.bounds, (x) => this.bounds.floor?.(x) ?? this.bounds.bottom, this.selectedScapeRect());
+  }
+
+  /** 生小魚的慶祝特寫：聚光在母魚身上幾秒，金色亮點往上飄。 */
+  celebrate(fishId: number): void {
+    const v = this.fish.get(fishId);
+    if (!v) return;
+    // 母魚游到前景，不要躲在水草後面
+    v.zTarget = 1;
+    this.party = { id: fishId, t: 0, sparks: sparkleBurst(20, v.swimmer.x, v.swimmer.y, this.partySize(fishId), () => this.rand()) };
+  }
+
+  /** 特寫的大小：照母魚畫面上的長度。 */
+  private partySize(id: number): number {
+    const fish = this.seenState?.fish.find((f) => f.id === id);
+    return Math.max(40, fish ? this.lengthPx(fish) * 1.2 : 40);
+  }
+
+  private drawParty(dt: number): void {
+    const fx = this.partyFx;
+    fx.clear();
+    const party = this.party;
+    const v = party ? this.fish.get(party.id) : undefined;
+    if (!party || !v || (party.t += dt) >= CELEBRATE_SECONDS) {
+      this.party = null;
+      this.spot.visible = false;
+      return;
+    }
+    const { x, y } = v.swimmer;
+    const f = celebrateFrame(party.t);
+    const size = this.partySize(party.id);
+    // 聚光圈照魚的大小：亮的地方剛好包住母魚，外面一路暗到畫面邊緣
+    const big = Math.max(Math.max(this.app.screen.width, this.app.screen.height) * 2.3, size * 12);
+    if (this.spot.texture !== spotlightTexture()) {
+      this.spot.texture = spotlightTexture();
+      this.spot.anchor.set(0.5);
+    }
+    this.spot.visible = true;
+    this.spot.width = this.spot.height = big;
+    this.spot.position.set(x, y);
+    this.spot.alpha = f.spot;
+    if (f.ringAlpha > 0) fx.circle(x, y, size * (0.4 + 1.6 * f.ring)).stroke({ color: 0xffe29a, alpha: f.ringAlpha, width: Math.max(2, 3 * this.hs) });
+    // 前 3 秒母魚身邊一直冒亮點，跟著她游
+    if (party.t < 3 && this.rand() < dt * 14) party.sparks.push(...sparkleBurst(1, x, y, size, () => this.rand()).map((p) => ({ ...p, t: 0 })));
+    party.sparks = party.sparks.filter((p) => p.t < p.life);
+    for (const s of party.sparks) {
+      s.t += dt;
+      if (s.t < 0) continue;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.vy *= Math.pow(0.6, dt);
+      const a = sparkleAlpha(s);
+      if (a <= 0) continue;
+      // 金色亮點：外面一圈淡光暈、中間亮核
+      // 金色小星星（圓的會跟氣泡搞混）
+      fx.circle(s.x, s.y, s.r * 2.2).fill({ color: 0xffc94a, alpha: a * 0.18 });
+      fx.star(s.x, s.y, 4, s.r * 2.4, s.r * 0.55, s.t * 1.5).fill({ color: 0xffd760, alpha: Math.min(1, a * 1.5) });
+    }
   }
 
   /** 進入、離開造景模式（null = 一般模式）。 */
@@ -911,8 +978,9 @@ export class TankView {
   private syncFood(state: TankState, dt: number): void {
     const { width, surface, bottom } = this.waterBounds;
     const scale = this.motionScale;
-    const target = Math.min(80, Math.ceil(state.water.foodMg / 2));
-    const r = Math.max(4, 9 * this.hs);
+    const target = visiblePellets(state.water.foodMg);
+    // 飼料畫大一點：手機上原本只有幾個像素，暗缸裡幾乎看不到
+    const r = Math.max(7, 13 * this.hs);
     // 缸裡已經滿是飼料時又撒一把：最舊的幾片先拿掉讓位，新撒的才看得到
     const fresh = state.water.foodMg - this.lastFoodMg;
     this.lastFoodMg = state.water.foodMg;
@@ -952,6 +1020,7 @@ export class TankView {
         pellets = scatterPellets(add, dropX, surface, width * 0.06, () => this.rand());
         for (const p of pellets) applyFoodLook(p, kind);
         this.ripples.push({ x: dropX, t: 0 }, { x: dropX - width * 0.02, t: -0.18 }, { x: dropX + width * 0.025, t: -0.35 });
+        this.dropT = 0;
       }
       for (const p of pellets) {
         const k = (p as Pellet & { kind?: FoodLook }).kind ?? kind;
@@ -966,6 +1035,7 @@ export class TankView {
       }
     }
     this.foodReset = false;
+    if (this.dropT >= 0) this.dropT += dt;
     this.drawTablet();
     // 模擬吃掉的份量：嘴邊那片被咬走，咬的魚往前一衝、噴出碎屑；沒魚碰到的就是沉底爛掉
     const views = [...this.fish.values()].filter((v) => v.mouth);
@@ -1252,14 +1322,17 @@ export class TankView {
     const all = [...this.fish.values()].map((v) => v.swimmer);
     const alive = new Set(state.fish.filter((f) => f.alive).map((f) => f.id));
     const living = all.filter((s) => alive.has(s.id));
-    const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food };
+    const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food, frenzy: this.food.length ? frenzyLevel(this.dropT) : 0 };
     for (const fish of state.fish) {
       const view = this.fish.get(fish.id)!;
       const { swimmer, rig } = view;
       const symptoms = observeSymptoms(state, fish);
       const follow = fish.guardian !== undefined && alive.has(fish.guardian) ? fish.guardian : undefined;
       const nestX = this.nestFor(fish, swimmer.x, dt);
-      updateSwimmer(swimmer, living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX }, ctx, dt, () => this.rand());
+      // 身體大小（上一格的景深）：讓整條魚留在缸裡
+      const halfLen = this.lengthPx(fish) * (0.72 + 0.33 * view.z) * 0.5;
+      const body = { halfLen, halfH: halfLen * ('heightPx' in rig ? rig.heightPx / Math.max(1, rig.lengthPx) : 0.35) };
+      updateSwimmer(swimmer, living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX, body }, ctx, dt, () => this.rand());
 
       // 景深：魚慢慢在前後之間游動；遠的小一點、模糊偏藍，畫在造景後面。
       if (!isShrimpSpecies(fish.species) && fish.alive) {
