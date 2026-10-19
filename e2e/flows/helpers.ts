@@ -73,14 +73,18 @@ export const aliveCount = (page: Page) => gameState<number>(page, 's.fish.filter
  * 也不點最後一頁的「帶我去商店」）。
  */
 export async function dismissGuide(page: Page): Promise<void> {
-  for (let i = 0; i < 10; i++) {
-    const btn = page.locator('.owner .owner-actions button:visible:not(.go-shop)', { hasNotText: '跳過教學' }).first();
-    if (!(await btn.count())) return;
-    // 直接送 click 事件，不走滑鼠輸入：大畫面在慢的 CI 上一幀要好幾秒，真的點擊會等輸入回應等到逾時。
-    // 這裡只是把對話框關掉，不是在測點擊本身。
-    await btn.dispatchEvent('click');
-    await page.waitForTimeout(150);
-  }
+  // 在頁面裡一次點完：翻頁是同步重畫的，不用等。CI 的軟體繪圖一幀要好幾秒，
+  // 原本每頁「找按鈕＋送 click」來回兩次，老闆一次說五頁就吃掉 expect.poll 的 15 秒（新手任務流程測試因此卡住）。
+  // 直接送 click 事件，不走滑鼠輸入：這裡只是把對話框關掉，不是在測點擊本身。
+  await page.evaluate(() => {
+    for (let i = 0; i < 10; i++) {
+      const btn = Array.from(document.querySelectorAll<HTMLElement>('.owner .owner-actions button:not(.go-shop)')).find(
+        (b) => b.getClientRects().length > 0 && !b.textContent?.includes('跳過教學'),
+      );
+      if (!btn) return;
+      btn.click();
+    }
+  });
 }
 
 /** 關掉開著的面板。關掉的面板 DOM 還在（移到畫面外），只看開著的那個；有些操作做完面板會自己關。 */
