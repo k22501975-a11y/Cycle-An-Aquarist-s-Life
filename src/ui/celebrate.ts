@@ -26,6 +26,11 @@ export class Celebration {
 
   constructor(private readonly host: HTMLElement) {}
 
+  /** 有慶祝卡正在顯示（新的會把它蓋掉）。 */
+  get isOpen(): boolean {
+    return this.el !== null;
+  }
+
   show(spec: CelebrateSpec): void {
     this.close();
     const img = h(spec.art.startsWith('ui/icon-') ? 'img.celebrate-art.is-icon' : 'img.celebrate-art', { src: spec.src ?? ART + spec.art, alt: '', draggable: 'false' });

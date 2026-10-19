@@ -604,3 +604,50 @@ body.speed-open > .owner { visibility: hidden; }
 .speed-pop { max-height: calc(100vh - env(safe-area-inset-top) - 80px); overflow-y: auto; }
 /* 分頁籤的圖不要被長字擠扁 */
 .icon-tab .tab-pic { flex: none; }
+
+/* 訂單板（#143）：入口在工具列，有能交的單會發光＋綠色數字，有新單是紅點 */
+.tool { position: relative; }
+.tool .badge.ok { background: var(--sage); color: #1d3a32; box-shadow: 0 0 10px rgba(140, 214, 170, 0.8); }
+.tool .badge.dot { min-width: 10px; width: 10px; height: 10px; padding: 0; top: -2px; right: 2px; }
+.tool.glow .disc { animation: order-glow 1.6s ease-in-out infinite; }
+@keyframes order-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 211, 110, 0); } 50% { box-shadow: 0 0 0 5px rgba(255, 211, 110, 0.55), 0 0 22px rgba(255, 211, 110, 0.6); } }
+.owner-say { display: flex; align-items: center; gap: 10px; padding: 8px 12px 8px 8px; border-radius: 14px; border: 1px solid rgba(227, 189, 109, 0.3); background: rgba(227, 189, 109, 0.06); color: var(--text); font-size: 14px; line-height: 1.45; }
+.owner-say-avatar { width: 46px; height: 46px; flex: 0 0 auto; object-position: 50% 20%; }
+.order-stats { display: flex; gap: 14px; justify-content: flex-end; color: var(--muted); font-size: 13px; }
+.order-stats span { display: inline-flex; align-items: center; gap: 4px; }
+.order-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.order-card .card-pic { height: 100px; }
+.order-card.ready { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 0 18px rgba(255, 211, 110, 0.35); }
+.order-count { position: absolute; left: 8px; top: 6px; padding: 1px 8px; border-radius: 999px; background: rgba(10, 36, 46, 0.8); color: var(--gold-bright); font-weight: 700; font-size: 14px; }
+.order-ready { position: absolute; right: 8px; top: 6px; padding: 1px 8px; border-radius: 999px; background: var(--sage); color: #1d3a32; font-weight: 700; font-size: 12px; }
+.order-card .card-name { font-size: 13.5px; line-height: 1.35; }
+.order-pay { display: flex; align-items: center; gap: 6px; }
+.order-pay b { color: var(--gold-bright); font-size: 17px; font-variant-numeric: tabular-nums; }
+.order-pay small { margin-left: auto; color: var(--muted); font-size: 12px; }
+i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
+.tool .badge.ok, .tool .badge.dot { display: block; }
+/* F8：金幣飛進錢包，錢包跳一下、浮出 +N */
+.coin-fly { position: fixed; z-index: 60; width: 18px; height: 18px; pointer-events: none; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45)); }
+.coins { position: relative; }
+.coins.bump { animation: coins-bump 0.45s cubic-bezier(0.3, 1.6, 0.5, 1); }
+@keyframes coins-bump { 0% { transform: scale(1); } 40% { transform: scale(1.18); border-color: var(--gold); box-shadow: 0 0 16px rgba(255, 211, 110, 0.6); } 100% { transform: scale(1); } }
+.coin-plus { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); color: var(--gold-bright); font-weight: 800; font-size: 15px; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7); pointer-events: none; white-space: nowrap; animation: coin-plus 1.2s ease-out forwards; }
+@keyframes coin-plus { 0% { opacity: 0; transform: translate(-50%, -4px); } 20% { opacity: 1; transform: translate(-50%, 4px); } 100% { opacity: 0; transform: translate(-50%, 18px); } }
+/* #148：訂單條件改成小圖示 */
+.order-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.order-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px 1px 5px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(243, 234, 216, 0.16); font-size: 11.5px; color: var(--text); white-space: nowrap; }
+.order-chip i { font-style: normal; font-size: 12px; color: var(--gold); }
+.order-chip.male i { color: #7fc4ff; }
+.order-chip.female i { color: #ff9cc0; }
+.order-chip.tail i { color: var(--gold-bright); }
+.order-chip.cutting i { color: var(--sage); }
+@media (prefers-reduced-motion: reduce) { .tool.glow .disc, .coins.bump, .coin-plus { animation: none; } }
+.order-meter { position: relative; height: 18px; border-radius: 9px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.order-meter i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #5fb4af, var(--sage)); }
+.order-meter span { position: relative; display: block; text-align: center; font-size: 12px; line-height: 18px; color: var(--text); font-variant-numeric: tabular-nums; }
+.order-actions { display: flex; gap: 6px; margin-top: auto; }
+.order-actions .btn { min-height: 36px; padding: 4px 10px; }
+.order-actions .order-skip { flex: 0 0 40px; width: 40px; margin-top: 0; font-size: 17px; }
+.order-link { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; }
+.order-link img { width: 44px; height: 44px; }
+.order-link span { flex: 1; }

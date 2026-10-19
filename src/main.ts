@@ -54,6 +54,8 @@ import { ownerSay } from './ui/owner-ask';
 import { fryArt, guppyArt } from './ui/shop-cards';
 import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
 import { recordsPanel } from './ui/records';
+import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt, ordersPanel } from './ui/orders-panel';
+import { flyCoins } from './ui/coin-fly';
 import { loadCodexSeen, saveCodexSeen, unlockCodex } from './ui/codex';
 import { codexPanel } from './ui/codex-panel';
 import { Sheet, Toasts } from './ui/sheet';
@@ -488,6 +490,8 @@ async function start(): Promise<void> {
   const openShop = (tab?: ShopTab) => sheet.open('商店', () => shopPanel(ctx, tab ?? guide.shopTab ?? 'fish'));
   const coinsValue = h('b');
   const coinsBtn = h('button.coins', { 'aria-label': '錢包', title: '錢包：點一下打開商店', onclick: () => openShop() }, h('i.coin'), coinsValue);
+  // 拿到錢時金幣飛進錢包（F8）
+  ctx.reward = (from, amount) => flyCoins(from, coinsBtn, amount);
   const renderCoins = () => {
     const coins = sim.economy(game.state).coins;
     const text = coins.toLocaleString('zh-TW');
@@ -762,6 +766,7 @@ async function start(): Promise<void> {
     shop: 'icon-shop',
     gear: 'icon-gear',
     net: 'icon-net',
+    orders: 'icon-orders',
   };
   const tool = (key: keyof typeof ICONS, label: string, color: string, onclick: () => void) => {
     const disc = h('span.disc', {}, icon(ICONS[key]));
@@ -799,6 +804,28 @@ async function start(): Promise<void> {
   tool('trim', '修剪', '#7ccf8a', () => sheet.open('修剪水草', () => trimListPanel(ctx)));
   tool('shop', '商店', '#ef8a6a', () => openShop());
   tool('gear', '設備', '#e3bd6d', () => sheet.open('設備與維護', () => maintenancePanel(ctx)));
+  // 店家訂單（#143）：自己的入口，有能交的單亮綠色數字並發光，有沒看過的新單亮小紅點
+  const seenOrders = loadSeenOrders(store);
+  const ordersBadge = h('span.badge');
+  const ordersBtn = tool('orders', '訂單', '#f0c45a', () => {
+    markOrdersSeen(store, seenOrders, game.state);
+    sheet.open('客人的訂單', () => ordersPanel(ctx));
+  });
+  ordersBtn.append(ordersBadge);
+  const renderOrders = () => {
+    const { ready, fresh } = orderAlert(game.tanks, seenOrders);
+    ordersBadge.textContent = ready.length > 0 ? String(ready.length) : '';
+    ordersBadge.className = ready.length > 0 ? 'badge ok' : fresh > 0 ? 'badge dot' : 'badge';
+    ordersBtn.classList.toggle('glow', ready.length > 0);
+    // 別的慶祝卡還在演就等下一輪，免得互相蓋掉
+    if (ready.length > 0 && !celebration.isOpen)
+      moment('first_order_ready', {
+        art: orderArt(ready[0]),
+        title: '有訂單可以交貨了！',
+        sub: sim.orderTitle(ready[0]),
+        owner: '你養的魚有客人要。按下方的「訂單」就能交貨，錢會直接進錢包',
+      });
+  };
   const netBtn = tool('net', '撈死魚', '#e88aa8', () => {
     const n = game.act(removeDeadFish);
     toasts.show(n > 0 ? `撈出 ${n} 條死魚` : '缸裡沒有死魚');
@@ -1052,6 +1079,7 @@ async function start(): Promise<void> {
       renderTodos();
       renderCaps();
       renderCoins();
+      renderOrders();
       renderTankChip();
       guide.update(game.state);
       celebrateStrains();
