@@ -695,6 +695,29 @@ export class TankView {
     if (!edit) this.scapeDrag = null;
   }
 
+  /**
+   * 造景引導（F1-c）：目前這層第一個拖得動的東西（石頭優先），回傳它在畫布上的位置（CSS 像素）。
+   * 這層什麼都沒有就回傳 null。
+   */
+  scapeHintPos(): { x: number; y: number } | null {
+    const edit = this.scape.editing;
+    if (!edit) return null;
+    let r: Rect | null = null;
+    const rock = this.scape.firstInLayer(edit.layer);
+    if (rock !== null) r = this.scape.hardscapeRect(rock);
+    else {
+      for (const view of this.plants.values()) {
+        if (view.holder.parent !== this.scape.plants[edit.layer]) continue;
+        const bb = this.plantRect(view);
+        r = { x0: bb.minX, y0: bb.minY, x1: bb.maxX, y1: bb.maxY };
+        break;
+      }
+    }
+    if (!r) return null;
+    const k = this.app.screen.width / Math.max(1, this.app.canvas.getBoundingClientRect().width);
+    return { x: ((r.x0 + r.x1) / 2 + this.root.x) / k, y: (r.y0 + (r.y1 - r.y0) * 0.6 + this.root.y) / k };
+  }
+
   /** 水草在畫面上的範圍（root 座標；getBounds 是畫布座標，要扣掉鏡頭的平移）。 */
   private plantRect(view: PlantView): { minX: number; maxX: number; minY: number; maxY: number; width: number } {
     const bb = view.holder.getBounds();

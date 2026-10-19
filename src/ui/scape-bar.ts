@@ -31,6 +31,10 @@ export interface ScapeBarDeps {
   /** 造景狀態變了（畫面要跟著更新）。 */
   onChange: (edit: ScapeEdit) => void;
   onDone: () => void;
+  /** 缸裡什麼都沒有時，直接去商店買石頭（設備頁）或水草。 */
+  openShop?: (tab: 'gear' | 'plants') => void;
+  /** 第一次放開拖曳（造景引導收起來）。 */
+  onDrop?: () => void;
 }
 
 const STEP = 0.05;
@@ -68,8 +72,9 @@ export class ScapeBar {
     return this.edit;
   }
 
+  /** 進造景模式：先停在有東西的那層（只有後景有石頭時，停在中景會什麼都拖不到）。 */
   reset(): void {
-    this.edit = { layer: 'mid', selected: null, guides: this.edit.guides };
+    this.edit = { layer: firstLayer(this.deps.game.state), selected: null, guides: this.edit.guides };
     this.render();
   }
 
@@ -82,6 +87,7 @@ export class ScapeBar {
   /** 放開拖曳：真的移動，算代價。 */
   drop(target: ScapeTarget, x: number): void {
     this.apply(target, { x });
+    this.deps.onDrop?.();
   }
 
   private apply(target: ScapeTarget, change: Partial<Omit<Placement, 'seed'>>): void {
@@ -111,7 +117,16 @@ export class ScapeBar {
       ),
     );
     const fishIn = s.fish.some((f) => f.alive);
-    const info = sel
+    const empty = (s.equipment.hardscape ?? []).length === 0 && s.plants.length === 0;
+    const shop = this.deps.openShop;
+    const info = empty
+      ? h(
+          'div.scape-empty',
+          {},
+          h('div.hint', {}, '缸裡還沒有石頭和水草。先買幾樣，再回來拖到喜歡的位置'),
+          shop ? h('div.row.scape-actions', {}, btn('買石頭、沉木', () => shop('gear')), btn('買水草', () => shop('plants'))) : null,
+        )
+      : sel
       ? h(
           'div.scape-sel',
           {},
@@ -146,6 +161,14 @@ export class ScapeBar {
       ),
     );
   }
+}
+
+/** 第一個擺著東西的層（石頭優先，比較好拖）；空缸就是中景。 */
+export function firstLayer(state: TankState): ScapeLayer {
+  const rocks = hardscapePlacements(state);
+  if (rocks.length > 0) return rocks[0].layer;
+  const plant = state.plants[0];
+  return plant ? plantPlacement(plant).layer : 'mid';
 }
 
 /** 可以往前、往後搬一層。 */

@@ -49,7 +49,7 @@ import {
 } from './ui/panels';
 import { Guide } from './ui/guide';
 import { Celebration, type CelebrateSpec } from './ui/celebrate';
-import { firstTime, type MomentId } from './ui/moments';
+import { firstTime, loadMoments, type MomentId } from './ui/moments';
 import { causeAdvice, HUNGER_LABEL, needsAdvice } from './ui/owner-advice';
 import { ownerSay } from './ui/owner-ask';
 import { fryArt, guppyArt } from './ui/shop-cards';
@@ -448,7 +448,38 @@ async function start(): Promise<void> {
     toasts,
     onChange: (edit) => view.setScapeEdit(edit),
     onDone: () => leaveScape(),
+    openShop: (tab) => (leaveScape(), openShop(tab)),
+    onDrop: () => {
+      if (!scapeCoach) return;
+      firstTime(store, 'first_scape_drag');
+      stopCoach();
+    },
   });
+  // 造景引導（F1-c）：第一次進造景模式，一隻手在石頭（或水草）上左右比劃「按住拖拖看」，拖過一次就不再出現
+  let scapeCoach: { el: HTMLElement; raf: number } | null = null;
+  const stopCoach = () => {
+    if (!scapeCoach) return;
+    cancelAnimationFrame(scapeCoach.raf);
+    scapeCoach.el.remove();
+    scapeCoach = null;
+  };
+  const startCoach = () => {
+    if (scapeCoach || loadMoments(store).has('first_scape_drag')) return;
+    const el = h('div.scape-coach', { 'aria-hidden': 'true' }, h('span.scape-coach-hand'), h('span.scape-coach-text', {}, '按住，左右拖拖看'));
+    stage.append(el);
+    const coach = { el, raf: 0 };
+    const follow = () => {
+      const pos = view.scapeHintPos();
+      el.hidden = !pos;
+      if (pos) {
+        el.style.left = `${Math.round(pos.x)}px`;
+        el.style.top = `${Math.round(pos.y)}px`;
+      }
+      coach.raf = requestAnimationFrame(follow);
+    };
+    follow();
+    scapeCoach = coach;
+  };
   const enterScape = () => {
     if (visiting) return;
     sheet.close();
@@ -459,12 +490,14 @@ async function start(): Promise<void> {
     document.body.classList.add('scaping');
     stage.append(scapeBar.el);
     requestAnimationFrame(() => measure());
+    startCoach();
   };
   const leaveScape = () => {
     scaping = false;
     view.setScapeEdit(null);
     document.body.classList.remove('scaping');
     scapeBar.el.remove();
+    stopCoach();
     requestAnimationFrame(() => measure());
   };
   ctx.openScape = enterScape;
@@ -798,6 +831,7 @@ async function start(): Promise<void> {
     water: 'icon-waterchange',
     test: 'icon-testkit',
     trim: 'icon-trim',
+    scape: 'icon-scape',
     shop: 'icon-shop',
     gear: 'icon-gear',
     net: 'icon-net',
@@ -837,6 +871,8 @@ async function start(): Promise<void> {
     sheet.open('水質測試', () => testKitPanel(ctx), { live: true });
   });
   tool('trim', '修剪', '#7ccf8a', () => sheet.open('修剪水草', () => trimListPanel(ctx)));
+  // 造景（F1-c）：養水的那幾天能做的事，入口放在主畫面
+  tool('scape', '造景', '#9fd6a0', () => enterScape());
   tool('shop', '商店', '#ef8a6a', () => openShop());
   tool('gear', '設備', '#e3bd6d', () => sheet.open('設備與維護', () => maintenancePanel(ctx)));
   // 店家訂單（#143）：自己的入口，有能交的單亮綠色數字並發光，有沒看過的新單亮小紅點
@@ -896,6 +932,7 @@ async function start(): Promise<void> {
   stage.append(tankLabel);
   const guide = new Guide(stage, store, (id) => audio.play(id), () => requestAnimationFrame(() => measure()));
   guide.openShop = (tab) => openShop(tab);
+  guide.openScape = () => enterScape();
   const measure = () => {
     const stageRect = stage.getBoundingClientRect();
     const top = hud.getBoundingClientRect().bottom - stageRect.top;
