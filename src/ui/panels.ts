@@ -147,6 +147,8 @@ import { BROOD_ISSUE_LABELS, DEATH_CAUSE_LABELS, fishName, SYMPTOM_LABELS } from
 import { artImg } from './art-icons';
 import { advice, cardGrid, guppyArt, iconTabs, plantArt, priceTag, shopCard, snailArt, speciesArt } from './shop-cards';
 import type { Sheet, Toasts } from './sheet';
+import type { CelebrateSpec } from './celebrate';
+import type { MomentId } from './moments';
 import { READING_TONES, todos } from './status';
 
 export interface PanelContext {
@@ -159,6 +161,8 @@ export interface PanelContext {
   undoable?: (run: () => void, text: string, tone?: 'warn' | 'info') => void;
   /** 進入造景模式（拖曳擺放石頭、沉木、水草）。 */
   openScape?: () => void;
+  /** 「第一次」的慶祝演出（只演一次）；有演出時回傳 true。 */
+  moment?: (id: MomentId, spec: CelebrateSpec) => boolean;
 }
 
 /** 沒有復原機制時（例如測試）就直接做並顯示通知。 */
@@ -938,7 +942,13 @@ function sellContent(ctx: PanelContext): Node {
     const got = game.act((st) => sellFish(st, pick.id));
     if (got > 0) {
       ctx.sound?.('buy');
-      toasts.show(`把 ${fishName(pick)} 賣給水族店，拿到 ${got} 元`);
+      const celebrated = ctx.moment?.('first_sale', {
+        art: speciesArt(pick.species, pick.sex),
+        title: `第一筆收入 ${got} 元！`,
+        sub: `${fishName(pick)} 賣給水族店了`,
+        owner: '好魚賣得到好價錢。挑尾巴大、顏色亮的留著配對，選育出來的魚能賣好幾倍。',
+      });
+      if (!celebrated) toasts.show(`把 ${fishName(pick)} 賣給水族店，拿到 ${got} 元`);
     } else toasts.show('今天店家不收了，明天再來', 'warn');
     refresh();
   };

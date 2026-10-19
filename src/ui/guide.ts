@@ -26,7 +26,7 @@ export class Guide {
   private pages: Page[] = [];
   private onDone: (() => void) | null = null;
   /** 完成任務時通知（匿名數據分析用來看新手卡在哪一步）。 */
-  questDone: ((step: number) => void) | null = null;
+  questDone: ((step: number, id: string) => void) | null = null;
   /** 打開商店的某一頁（main 接上）。 */
   openShop: ((tab: QuestShopTab) => void) | null = null;
 
@@ -55,7 +55,7 @@ export class Guide {
     const done = advanceQuest(this.progress, state);
     if (done) {
       this.save();
-      this.questDone?.(this.progress.step);
+      this.questDone?.(this.progress.step, done.id);
       this.sound('quest');
       const next = currentQuest(this.progress);
       this.say([{ text: done.done, label: next ? '下一個任務' : '謝謝老闆' }, ...(next ? this.questPages() : [])]);

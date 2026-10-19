@@ -15,7 +15,8 @@ export type SoundId =
   | 'alarm'
   | 'warn'
   | 'restore'
-  | 'quest';
+  | 'quest'
+  | 'fanfare';
 
 /** 模擬事件對應的音效：嚴重的用警報，好事用輕快的和弦。 */
 export function eventSound(type: SimEventType): SoundId {
@@ -62,6 +63,7 @@ export const SOUND_COOLDOWN_MS: Partial<Record<SoundId, number>> = {
   alarm: 4000,
   warn: 1500,
   restore: 1500,
+  fanfare: 3000,
 };
 
 export class Throttle {

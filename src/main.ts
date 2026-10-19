@@ -44,7 +44,8 @@ import {
   type ShopTab,
 } from './ui/panels';
 import { Guide } from './ui/guide';
-import { Celebration } from './ui/celebrate';
+import { Celebration, type CelebrateSpec } from './ui/celebrate';
+import { firstTime, type MomentId } from './ui/moments';
 import { fryArt } from './ui/shop-cards';
 import { recordsPanel } from './ui/records';
 import { loadCodexSeen, saveCodexSeen, unlockCodex } from './ui/codex';
@@ -102,6 +103,13 @@ async function start(): Promise<void> {
   const sheet = new Sheet(document.body);
   const toasts = new Toasts(document.body);
   const celebration = new Celebration(document.body);
+  /** 「第一次」的演出：慶祝卡＋撥弦琶音，每件事只演一次。 */
+  const moment = (id: MomentId, spec: CelebrateSpec): boolean => {
+    if (!firstTime(store, id)) return false;
+    audio.play('fanfare');
+    celebration.show(spec);
+    return true;
+  };
   // 聲音：瀏覽器要等第一次點擊才能出聲
   let audioSettings = loadAudioSettings(store);
   const audio = new AudioEngine(audioSettings);
@@ -154,7 +162,7 @@ async function start(): Promise<void> {
       },
     });
   };
-  const ctx: PanelContext = { game, sheet, toasts, sound: (id) => audio.play(id), undoable };
+  const ctx: PanelContext = { game, sheet, toasts, sound: (id) => audio.play(id), undoable, moment };
   // 存檔匯出成檔案（換手機、怕瀏覽器清掉資料時用）
   const exportSave = () =>
     void saveTextFile(`cycle-save-day${Math.floor(game.state.hours / 24) + 1}.json`, serializeSave(game.tanks[0], game.clock.timeScale, Date.now(), undefined, extraTanks())).catch(() =>
@@ -821,10 +829,13 @@ async function start(): Promise<void> {
       const mom = t.fish.find((f) => f.id === e.subjectId);
       const shrimp = !!mom && sim.isShrimpSpecies(mom.species);
       if (tank === game.active && e.subjectId !== undefined) view.celebrate(e.subjectId);
+      const first = firstTime(store, 'first_fry');
+      if (first) audio.play('fanfare');
       celebration.show({
         art: fryArt(mom?.species ?? 'guppy'),
         title: `${tankPrefix(tank)}${shrimp ? '孵出' : '生了'} ${e.count} ${shrimp ? '隻小蝦' : '尾小魚'}！`,
         sub: `${mom ? fishName(mom) : '母魚'}當媽媽了。成魚會吃小魚，水草越密越好躲`,
+        owner: !first ? undefined : shrimp ? '第一窩小蝦！多放莫絲或水草，小蝦躲得住才長得大。' : '第一胎！小魚長到轉色期才看得出公母，到時候挑尾巴大、顏色亮的留下來配對。',
       });
       return;
     }
@@ -866,7 +877,15 @@ async function start(): Promise<void> {
   window.addEventListener('pagehide', () => void planPush());
   setInterval(() => void autoUpload(cloudDeps), 10 * 60_000);
   analytics.track('session_start', sessionProps());
-  guide.questDone = (step) => analytics.track('quest_done', { step });
+  guide.questDone = (step, id) => {
+    analytics.track('quest_done', { step });
+    if (id === 'cycled')
+      moment('cycled', {
+        art: 'ui/icon-bacteria.webp',
+        title: '養水完成！',
+        sub: '硝化菌長好了，氨和亞硝酸鹽都是 0。現在可以慢慢多加魚',
+      });
+  };
   setInterval(() => void analytics.flush(), 60_000);
   if (analytics.available && analytics.consent === null) setTimeout(() => stage.append(consentCard), 3 * 60_000);
   // 切到背景時畫面停止更新；回來時以 ×7 補算這段時間，和關掉網頁一樣。
