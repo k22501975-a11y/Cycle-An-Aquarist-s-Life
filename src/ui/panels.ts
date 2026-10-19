@@ -213,7 +213,7 @@ export interface PanelContext {
   /** 剛放進缸的魚（對水小遊戲對得完美時，魚一進缸就聚光展開尾巴）。 */
   welcome?: (fishIds: number[], perfect: boolean) => void;
   /** 用商城道具：先跟伺服器扣一個，成功才 apply；回傳 null 是成功，不然是原因。 */
-  useMall?: (item: MallItemId, apply: () => boolean) => Promise<string | null>;
+  useMall?: (item: MallItemId, apply: () => boolean, refusal: () => string | null) => Promise<string | null>;
 }
 
 /** 沒有復原機制時（例如測試）就直接做並顯示通知。 */
@@ -515,7 +515,7 @@ function cureButton(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish, useMal
     {},
     button(`用特效藥（背包剩 ${left} 瓶）`, async () => {
       // 背包是伺服器庫存的副本：先跟伺服器扣一瓶，成功才治
-      const why = await useMall('cure', () => useCure(game.tanks, fish));
+      const why = await useMall('cure', () => useCure(game.tanks, fish), () => cureRefusal(game.tanks, fish));
       if (why) toasts.show(why, 'warn');
       else toasts.show('症狀退了一些。特效藥只治症狀，記得找出生病的原因（水質、病原），不然還會再發');
       sheet.refresh();

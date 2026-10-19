@@ -32,10 +32,13 @@ export async function syncMall(deps: Pick<MallDeps, 'cloud' | 'game'>): Promise<
 /**
  * 跟伺服器用掉一個道具；成功才呼叫 apply 套用效果，背包照伺服器剩下的數量覆寫。
  * 斷線時用同一個 requestId 再送一次，伺服器不會扣兩個。回傳 null 表示成功，不然是給玩家看的原因。
+ * refusal：送出前再檢查一次現在還能不能用（按鈕畫出來之後魚可能死了、缸位可能滿了），不能用就不扣。
  */
-export async function useMallItem(deps: Pick<MallDeps, 'cloud' | 'game'>, item: MallItemId, apply: () => boolean): Promise<string | null> {
+export async function useMallItem(deps: Pick<MallDeps, 'cloud' | 'game'>, item: MallItemId, apply: () => boolean, refusal: () => string | null): Promise<string | null> {
   const { cloud, game } = deps;
   if (!cloud.session) return '商城道具存在帳號裡，要先登入雲端存檔才能用';
+  const before = refusal();
+  if (before) return before;
   const requestId = crypto.randomUUID();
   let res = await cloud.pointsUse(item, requestId);
   if (!res.ok && res.code === 'offline') res = await cloud.pointsUse(item, requestId);
@@ -44,11 +47,12 @@ export async function useMallItem(deps: Pick<MallDeps, 'cloud' | 'game'>, item: 
     return res.message;
   }
   const remaining = res.value.remaining;
-  game.actAll((tanks) => {
-    apply();
+  const applied = game.actAll((tanks) => {
     mallBag(tanks)[item] = remaining;
+    return apply();
   });
-  return null;
+  // 等回應的這一趟網路來回裡情況變了：伺服器已經扣了，照實告訴玩家
+  return applied ? null : '等伺服器回應時情況變了，道具扣掉了卻沒用上。請截圖來信，我們會補發';
 }
 
 export function mallPanel(deps: MallDeps): Node {
@@ -114,7 +118,7 @@ function mallView(deps: MallDeps, cat: PointsCatalog): Node[] {
                 title: tanksetBlock ?? '',
                 onclick: async () => {
                   let tank: ReturnType<typeof placeMallTankset> = null;
-                  const why = await useMallItem(deps, 'tankset', () => !!(tank = placeMallTankset(game.tanks)));
+                  const why = await useMallItem(deps, 'tankset', () => !!(tank = placeMallTankset(game.tanks)), () => tanksetRefusal(game.tanks));
                   if (why) return toasts.show(why, 'warn');
                   if (!tank) return;
                   game.switchTo(game.tanks.indexOf(tank));

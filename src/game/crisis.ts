@@ -1,4 +1,4 @@
-import { DISEASE_SPECS, FISH_SPECIES, hasVisible, isStarving, type DiseaseKind, type Fish, type SimEvent, type SimEventType, type TankState } from '../sim';
+import { DISEASE_SPECS, FISH_SPECIES, hasVisible, starvingCrisis, type DiseaseKind, type Fish, type SimEvent, type SimEventType, type TankState } from '../sim';
 
 /**
  * 快轉時遇到的危機（#142）：設備故障、停電、生病、死魚，水質、水溫突然變危險，或魚餓到開始消耗體力（#169）。
@@ -79,9 +79,9 @@ export function waterAlarms(state: TankState, prev: ReadonlySet<WaterAlarm> = ne
   }
   if (tan > (prev.has('ammonia') ? TOXIC_MG_L / 2 : TOXIC_MG_L)) alarms.add('ammonia');
   if (no2 > (prev.has('nitrite') ? TOXIC_MG_L / 2 : TOXIC_MG_L)) alarms.add('nitrite');
-  // 挨餓：有魚餓到開始消耗體力（成魚完全不餵約 8 天）。蝦會自己找東西吃，不算
+  // 挨餓：成魚餓到開始消耗體力（完全不餵約 8 天）、小魚連續消耗 12 小時（#193）。蝦會自己找東西吃，不算
   const eaters = state.fish.filter((f) => f.alive && !FISH_SPECIES[f.species].invertebrate);
-  if (prev.has('starving') ? eaters.some((f) => f.hunger >= FED_HUNGER) : eaters.some(isStarving)) alarms.add('starving');
+  if (prev.has('starving') ? eaters.some((f) => f.hunger >= FED_HUNGER) : eaters.some(starvingCrisis)) alarms.add('starving');
   return alarms;
 }
 
