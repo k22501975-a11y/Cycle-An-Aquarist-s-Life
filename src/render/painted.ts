@@ -29,7 +29,7 @@ interface PaintedSpec {
 }
 
 const GUPPY_MALE_BODY = { x: 0.14, y: 0.02, rx: 0.2, ry: 0.11 };
-const GUPPY_FEMALE_BODY = { x: 0.12, y: 0.04, rx: 0.22, ry: 0.14 };
+const GUPPY_FEMALE_BODY = { x: 0.1, y: 0.02, rx: 0.3, ry: 0.22 };
 const SHRIMP_BODY = { x: 0.08, y: -0.02, rx: 0.25, ry: 0.12 };
 const ZEBRA_BODY = { x: 0.1, y: 0.0, rx: 0.3, ry: 0.11 };
 const FRY_BODY = { x: 0.12, y: 0.0, rx: 0.25, ry: 0.1 };
