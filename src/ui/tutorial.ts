@@ -17,6 +17,10 @@ export interface Quest {
   /** 完成時老闆說的話。 */
   done: string;
   check: (state: TankState) => boolean;
+  /** 任務卡上的進度（例如「硝酸鹽 0／5」），看得出還差多少。 */
+  progress?: (state: TankState) => string | null;
+  /** 任務卡上的一行提示（要等很久的任務才有）。 */
+  hint?: string;
 }
 
 const living = (s: TankState) => s.fish.filter((f) => f.alive);
@@ -60,12 +64,18 @@ export const QUESTS: Quest[] = [
   {
     id: 'cycled',
     title: '養水完成：氨 0、亞硝 0、測得到硝酸鹽',
-    lines: ['接下來每天測水，看到氨或亞硝酸鹽就換水。', '等到氨和亞硝酸鹽都是 0、而且測得到硝酸鹽，就代表硝化菌把廢物一路轉成了比較無害的硝酸鹽，缸子養好了。'],
+    lines: [
+      '接下來每天測水，看到氨或亞硝酸鹽就換水。',
+      '等到氨和亞硝酸鹽都是 0、而且測得到硝酸鹽，就代表硝化菌把廢物一路轉成了比較無害的硝酸鹽，缸子養好了。',
+      '氨、亞硝都是 0 但測不到硝酸鹽，代表菌還沒長起來，不是養好了；這時不要一直換水。養水通常要 3～6 個遊戲週，等的時候可以用時鐘旁的快轉。',
+    ],
     done: '恭喜，你的缸子「養好了」！現在可以慢慢多加一些魚。',
     check: (s) => {
       const r = s.lastTest?.reading;
       return !!r && living(s).length > 0 && r.ammonia === 0 && r.nitrite === 0 && r.nitrate >= 5 && s.hours - s.lastTest!.hours < 24;
     },
+    progress: cycleProgress,
+    hint: '養水通常要 3～6 個遊戲週，等待期間可以用快轉',
   },
   {
     id: 'babies',
@@ -75,6 +85,22 @@ export const QUESTS: Quest[] = [
     check: (s) => living(s).some((f) => observeSymptoms(s, f).includes('pregnant')),
   },
 ];
+
+/** 養水任務的進度：照上次測水的讀數（玩家看得到的資訊）。 */
+export function cycleProgress(s: TankState): string {
+  const test = s.lastTest;
+  if (!test) return '還沒測過水';
+  const r = test.reading;
+  const parts = [`硝酸鹽 ${fmt(r.nitrate)}／5`];
+  if (r.ammonia > 0) parts.unshift(`氨 ${fmt(r.ammonia)}`);
+  if (r.nitrite > 0) parts.unshift(`亞硝 ${fmt(r.nitrite)}`);
+  const stale = s.hours - test.hours >= 24;
+  return `${parts.join('・')}（${stale ? '上次測水超過一天，再測一次' : '上次測水'}）`;
+}
+
+function fmt(n: number): string {
+  return String(Math.round(n * 100) / 100);
+}
 
 export interface Tip {
   id: string;

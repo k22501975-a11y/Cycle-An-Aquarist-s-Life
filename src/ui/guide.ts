@@ -19,6 +19,8 @@ interface Page {
  */
 export class Guide {
   readonly pill = h('button.quest-pill.glass');
+  private readonly progressEl = h('span.quest-progress');
+  private shownProgress = '';
   private readonly bubble = h('div.owner.glass');
   private progress: TutorialProgress;
   private pages: Page[] = [];
@@ -44,6 +46,7 @@ export class Guide {
 
   /** 每半秒檢查一次：任務完成了沒、有沒有該提醒的狀況。對話框開著時先不打斷。 */
   update(state: TankState): void {
+    this.renderProgress(state);
     if (this.bubble.classList.contains('open')) return;
     const done = advanceQuest(this.progress, state);
     if (done) {
@@ -125,8 +128,24 @@ export class Guide {
     const q = currentQuest(this.progress);
     this.pill.classList.toggle('show', q !== null);
     if (q) {
-      this.pill.replaceChildren(h('span.quest-step', {}, `任務 ${this.progress.step + 1}/${QUESTS.length}`), h('span.quest-title', {}, q.title));
+      this.shownProgress = '';
+      this.pill.replaceChildren(
+        h('span.quest-step', {}, `任務 ${this.progress.step + 1}/${QUESTS.length}`),
+        h('span.quest-title', {}, q.title),
+        this.progressEl,
+        q.hint ? h('span.quest-hint', {}, q.hint) : '',
+      );
     }
+    this.onLayout();
+  }
+
+  /** 任務卡上的進度（硝酸鹽 0／5 之類），變了才改 DOM。 */
+  private renderProgress(state: TankState): void {
+    const text = currentQuest(this.progress)?.progress?.(state) ?? '';
+    if (text === this.shownProgress) return;
+    this.shownProgress = text;
+    this.progressEl.textContent = text;
+    this.progressEl.hidden = !text;
     this.onLayout();
   }
 
