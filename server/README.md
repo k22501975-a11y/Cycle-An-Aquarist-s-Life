@@ -39,12 +39,19 @@ VITE_API_URL=http://localhost:8080 npm run dev
 | `ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:4173,https://localhost` | 遊戲網頁的網址，逗號分隔；`https://localhost` 是 Android App 裡的來源，上線時記得保留 |
 | `MARKET_MIN_ACCOUNT_DAYS` | `3` | 新帳號滿幾天才能在市場上架（防開小號洗錢）；本機測試可以設 `0` |
 | `CYCLE_PRODUCTION` | `false` | 正式環境設 `true`：資料庫用預設密碼、沒設 `SIM_SERVICE_URL` 或 `SIM_TOKEN`、開著 `PAYMENTS_SANDBOX`、`ALLOWED_ORIGINS` 還有 localhost，伺服器就不啟動 |
-| `FORWARD_HEADERS` | `none` | 前面有反向代理時設 `native`（或 `framework`），頻率限制才看得到玩家真正的 IP |
+| `FORWARD_HEADERS` | `none` | **放在反向代理（nginx、Caddy、Cloudflare）後面一定要設 `native`**（或 `framework`）。維持 `none` 時所有玩家都被當成代理的 IP，註冊每小時 5 次、登入次數這些頻率限制會變成全站共用；`CYCLE_PRODUCTION=true` 時啟動會記一條警告。見下方「部署注意」 |
 | `PAYMENTS_SANDBOX` | `false` | 儲值測試模式：不收錢直接入帳。金流還沒接，本機測試商城時設 `true`；正式上線前要接上金流、維持 `false` |
 | `PUSH_SUBJECT` | `mailto:admin@localhost` | 推播服務聯絡營運者用的信箱（`mailto:`）或網址，上線時改成真的 |
 | `VAPID_PUBLIC_KEY`／`VAPID_PRIVATE_KEY` | 空 | 推播的 VAPID 金鑰（base64url）。留空會在第一次啟動時產生並存進資料庫；換金鑰會讓所有裝置的訂閱失效 |
 | `SIM_SERVICE_URL` | 空 | 模擬小服務的網址，例如 `http://sim:8091`。留空代表不用伺服器權威模擬 |
 | `SIM_TOKEN` | 空 | 跟模擬小服務共用的密碼（兩邊設一樣）。模擬小服務沒設就不啟動（本機真的要不設，另外設 `SIM_INSECURE_NO_TOKEN=1`）。模擬小服務另外看 `SIM_PORT`（8091）、`SIM_HOST`（127.0.0.1，容器裡設 0.0.0.0）；它沒有對外的保護，不要開 port 到外面 |
+
+## 部署注意：反向代理和玩家 IP
+
+頻率限制（註冊、登入、事件、推播訂閱）是照玩家 IP 算的。部署架構決定 `FORWARD_HEADERS` 要怎麼設：
+
+- **前面有反向代理**（Lightsail 上的 Caddy／nginx、Cloudflare）：設 `FORWARD_HEADERS=native`，並讓代理覆寫 `X-Forwarded-For`。沒設的話，所有人共用代理的 IP，一個人註冊 5 次就會擋住全站的註冊。
+- **伺服器直接對外**：維持 `none`。這時設 `native` 反而不安全：玩家可以自己帶 `X-Forwarded-For` 假裝成別的 IP 繞過限制。
 
 ## API
 
