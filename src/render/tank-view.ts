@@ -155,7 +155,7 @@ export class TankView {
   private readonly causticsMask = new Sprite();
   private readonly gear = new Graphics();
   /** 有插圖的設備（加熱棒、海綿過濾器）；沒載入就退回程式畫。 */
-  private readonly gearArt = { heater: new Sprite(), sponge: new Sprite() };
+  private readonly gearArt = { heater: new Sprite(), sponge: new Sprite(), intake: new Sprite() };
   private readonly gearArtLayer = new Container();
   private readonly gearGlow = new Container();
   private readonly foodLayer = new Container();
@@ -628,12 +628,26 @@ export class TankView {
         this.gearArtLayer.addChild(sp);
       }
     }
-    const heaterTex = paintedTexture('gear-heater');
+    // 缸內版的加熱棒（看得到發熱絲）優先，沒有才用商品圖
+    const heaterScene = paintedTexture('gear-heater-scene');
+    const heaterTex = heaterScene ?? paintedTexture('gear-heater');
     const spongeTex = paintedTexture('gear-sponge');
+    const intakeTex = paintedTexture('gear-intake');
     this.gearArt.heater.visible = false;
     this.gearArt.sponge.visible = false;
+    this.gearArt.intake.visible = false;
 
-    if (eq.filter?.spec.id === 'hangOn') {
+    if (eq.filter?.spec.id === 'hangOn' && intakeTex) {
+      // 外掛過濾器的進水管插圖：從水面上方垂下來，底端是濾網籠（畫面評測 V8：原本只剩一根細管）
+      const ix = width - 130 * hs - 30;
+      const sp = this.gearArt.intake;
+      sp.texture = intakeTex;
+      sp.visible = true;
+      const h = bottom * 0.62 - top + 40 + 26 * hs;
+      sp.height = h;
+      sp.width = (h * intakeTex.width) / intakeTex.height;
+      sp.position.set(ix, top - 40);
+    } else if (eq.filter?.spec.id === 'hangOn') {
       // 外掛過濾器：右後方垂下的進水管
       const ix = width - 130 * hs - 30;
       g.roundRect(ix - 7 * hs, top - 40, 14 * hs, bottom * 0.62 - top + 40, 7 * hs).fill({ color: 0x24343f, alpha: 0.75 });
@@ -683,7 +697,10 @@ export class TankView {
         sp.height = hh + 14 * hs;
         sp.position.set(hx + 8 * hs, hy - 14 * hs);
         sp.tint = eq.heater.broken && !stuck ? 0x9aa2a8 : 0xffffff;
-        g.roundRect(hx + 8 * hs - w * 0.18, hy + hh * 0.5, w * 0.36, hh * 0.4, w * 0.18).fill({ color: element, alpha: on || eq.heater.broken ? 0.75 : 0.35 });
+        if (heaterScene) {
+          // 缸內版圖本身畫著亮橘色的發熱絲：沒在加熱時把發熱絲蓋暗，壞了是灰的，卡住時紅色閃
+          if (!on || stuck) g.roundRect(hx + 8 * hs - w * 0.16, hy + hh * 0.18, w * 0.32, hh * 0.68, w * 0.14).fill({ color: on ? element : 0x5d6a70, alpha: on ? 0.5 : 0.6 });
+        } else g.roundRect(hx + 8 * hs - w * 0.18, hy + hh * 0.5, w * 0.36, hh * 0.4, w * 0.18).fill({ color: element, alpha: on || eq.heater.broken ? 0.75 : 0.35 });
       } else {
         g.roundRect(hx, hy, 16 * hs, hh, 8 * hs).fill({ color: 0xe8fbff, alpha: 0.18 }).stroke(glass);
         g.roundRect(hx + 4 * hs, hy + hh * 0.46, 8 * hs, hh * 0.48, 4 * hs).fill(element);

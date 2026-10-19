@@ -59,6 +59,32 @@ export const MOCKUP_PX_PER_CM = 1100 / 60;
 export const WATER = { top: 0x2a93b4, mid: 0x14627c, bottom: 0x0a3140 };
 
 /**
+ * 中景（畫面評測 V18：後景只剩漸層，缸很空）：左後方一叢長帶葉、右後方一叢圓葉、中間偏左一組青苔石。
+ * 畫在後景上，比前景模糊、淡一點，接著跟後景一起蓋水色，看起來在缸的最後面；玩家自己的造景永遠在它前面。
+ */
+function paintMidground(ctx: CanvasRenderingContext2D, b: TankBounds, hs: number, k: number): void {
+  const { width: w, bottom } = b;
+  const items: Array<[key: string, x: number, height: number, alpha: number]> = [
+    ['mid-plants-left', 0.07, 210, 0.75],
+    ['mid-rocks', 0.3, 52, 0.7],
+    ['mid-plants-right', 0.86, 92, 0.72],
+  ];
+  for (const [key, fx, height, alpha] of items) {
+    const img = sceneryImage(key);
+    if (!img) continue;
+    const { w: iw, h: ih } = imageSize(img);
+    const dh = height * hs;
+    const dw = (iw / ih) * dh;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.filter = `blur(${(1.4 * k).toFixed(2)}px) saturate(0.8) brightness(0.92)`;
+    // 底部埋進沙裡一點，不會浮在沙面上
+    ctx.drawImage(img, w * fx - dw / 2, bottom - dh + 10 * hs, dw, dh);
+    ctx.restore();
+  }
+}
+
+/**
  * 後景：深青藍的水、上方的光暈、遠處的岩石與水草剪影。
  * 有精繪背景圖時照螢幕解析度畫（手機高解析度螢幕上才不會糊成一片），只留一點點模糊和水色當作遠景；
  * 沒有素材時程式畫的剪影用 1/4 解析度繪製，放大後就是霧濛濛的遠景。
@@ -104,6 +130,7 @@ export function paintBackdrop(b: TankBounds, hs: number, pixelRatio = 1): Textur
       ctx.fillStyle = blend;
       ctx.fillRect(0, dy, w, dh * 0.35);
     }
+    paintMidground(ctx, b, hs, k);
     // 蓋一層青色（濾色）：整體偏青、亮，不是灰綠
     ctx.save();
     ctx.globalCompositeOperation = 'screen';

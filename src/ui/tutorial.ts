@@ -94,6 +94,7 @@ export const QUESTS: Quest[] = [
     lines: ['有公有母、水質穩定、吃得好，孔雀魚就會自己繁殖。', '母魚肚子鼓起來就是快生了。成魚會吃小魚，多種些水草讓小魚有地方躲。'],
     done: '看到肚子鼓鼓的母魚了！引導就到這裡，接下來就靠你自己了。有狀況我還會來提醒你。',
     check: (s) => living(s).some((f) => observeSymptoms(s, f).includes('pregnant')),
+    progress: pairProgress,
   },
 ];
 
@@ -111,6 +112,15 @@ export function cycleProgress(s: TankState): string {
 
 function fmt(n: number): string {
   return String(Math.round(n * 100) / 100);
+}
+
+/** 等母魚懷孕的進度：缸裡有幾尾公、母孔雀魚（沒有公魚或母魚就說要補）。 */
+export function pairProgress(s: TankState): string {
+  const adults = living(s).filter((f) => f.species === 'guppy' && sexVisible(f));
+  const males = adults.filter((f) => f.sex === 'male').length;
+  const females = adults.length - males;
+  if (males === 0 || females === 0) return `公 ${males}・母 ${females}（要有公有母）`;
+  return `公 ${males}・母 ${females}`;
 }
 
 /** 新缸（還沒養好）一次最多放幾條還不容易出事：約每 13 公升一條，至少 3 條。 */

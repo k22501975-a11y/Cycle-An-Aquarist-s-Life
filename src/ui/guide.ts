@@ -156,7 +156,11 @@ export class Guide {
     const q = currentQuest(this.progress);
     this.pill.classList.toggle('show', q !== null);
     if (q) {
+      // 換任務時把上一個任務的進度清掉（遊戲性評測：任務 7 的卡上還寫著任務 6 的「硝化菌 100%」）
       this.shownProgress = '';
+      this.progressEl.textContent = '';
+      this.progressEl.hidden = true;
+      this.meterEl.hidden = true;
       this.pill.replaceChildren(
         ownerPortrait('quest-avatar'),
         h('span.quest-step', {}, `任務 ${this.progress.step + 1}/${QUESTS.length}`),
