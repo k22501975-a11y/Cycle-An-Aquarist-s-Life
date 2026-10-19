@@ -173,6 +173,8 @@ function applyFin(rng: RngState, g: GuppyGenome, fin: FinTrait): void {
   if (fin === 'dumbo') g.dumbo = [1, 1];
   if (fin === 'ribbon' || fin === 'bigC') g.ribbon = [1, 0];
   if (fin === 'bigC') g.fins = Math.max(g.fins, BIG_C_FINS + 4);
+  // 鰭長到大C 的緞帶魚店家會挑出來當大C 賣，一般緞帶的貨不會有
+  else if (fin === 'ribbon') g.fins = Math.min(g.fins, BIG_C_FINS - 1);
   if (fin === 'sword' && g.y) g.y.sword = 3;
   if (fin === 'halfmoon') g.tail = Math.max(g.tail, 72);
 }

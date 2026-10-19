@@ -20,6 +20,10 @@ import {
   receiveFish,
   receivePlants,
   suggestedFishPrice,
+  suggestedPlantPrice,
+  FISH_PRICES,
+  GUPPY_STRAIN_PRICES,
+  phenotype,
   TANKS,
   takeCuttingsForSale,
   unlistFish,
@@ -42,7 +46,20 @@ describe('玩家市場', () => {
     const mom = healthyGuppy(t, 'female');
     expect(listingTitle(mom)).toMatch(/孔雀魚 母（懷孕）$/);
     expect(minFishPrice(male)).toBeGreaterThan(0);
-    expect(suggestedFishPrice(male)).toBeGreaterThan(minFishPrice(male) * 2);
+    expect(suggestedFishPrice(male)).toBeGreaterThan(minFishPrice(male));
+  });
+
+  it('建議售價：普通品系約等於店價，自己選育的稀有品系高於店價', () => {
+    const t = tank();
+    const common = healthyGuppy(t);
+    common.genome!.tail = 50;
+    common.colorBoost = 0;
+    expect(phenotype(common.genome!).albino || phenotype(common.genome!).gold).toBe(false);
+    expect(Math.abs(suggestedFishPrice(common) - FISH_PRICES.guppy)).toBeLessThanOrEqual(10);
+    const rare = healthyGuppy(t);
+    rare.genome = { ...rare.genome!, albino: [1, 1], red: [1, 1], swallow: [1, 1], tail: 70 };
+    expect(suggestedFishPrice(rare)).toBeGreaterThan(Math.max(...GUPPY_STRAIN_PRICES));
+    expect(suggestedPlantPrice('anubias', 3)).toBe(150);
   });
 
   it('送的魚、生病的魚、太小的魚不能上架；上架中的魚不能賣給店家', () => {
