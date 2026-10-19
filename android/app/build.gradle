@@ -7,9 +7,10 @@ android {
         applicationId "tw.cycle.aquarist"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // CI 用執行編號當 versionCode，上架時每版都會比上一版大
+        // 版本規則見 docs/release.md：CI 用執行編號當 versionCode（每版都比上一版大），
+        // versionName 是 package.json 的版本加上測試版編號，例如 0.1.0-beta.123
         versionCode Integer.parseInt(System.getenv('VERSION_CODE') ?: '1')
-        versionName System.getenv('VERSION_NAME') ?: '0.1.0'
+        versionName System.getenv('VERSION_NAME') ?: '0.1.0-dev'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -19,6 +20,14 @@ android {
     }
     // 上架用的簽章：金鑰放在 CI 的 secrets，沒有設定時只打包測試版（debug）
     signingConfigs {
+        // 測試版固定用 repo 裡這把測試用金鑰簽，新版才能直接蓋過舊版安裝（不用先移除、存檔不會不見）。
+        // 這把只給測試版用、公開也沒關係；上架用的金鑰另外放在 CI secrets。
+        debug {
+            storeFile file('beta-test.keystore')
+            storePassword 'android'
+            keyAlias 'cycle-beta'
+            keyPassword 'android'
+        }
         release {
             def keystore = System.getenv('ANDROID_KEYSTORE_PATH')
             if (keystore) {

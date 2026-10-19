@@ -712,7 +712,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         'div.seg.compact',
         {},
         h(`button.seg-opt${shopDrip ? '.active' : ''}`, { title: `滴水對水約 ${dripMinutes(game.state, farm)} 分鐘`, onclick: () => ((shopDrip = true), sheet.refresh?.()) }, h('b', {}, '滴水對水')),
-        h(`button.seg-opt${shopDrip ? '' : '.active'}`, { title: phGap > 0.6 ? '水質差很多，魚會嚇壞' : '水質差不多', onclick: () => ((shopDrip = false), sheet.refresh?.()) }, h('b', {}, '直接倒')),
+        h(`button.seg-opt${shopDrip ? '' : '.active'}`, { title: phGap > 0.6 ? '水質差很多：魚會受驚、容易生病' : '水質差不多', onclick: () => ((shopDrip = false), sheet.refresh?.()) }, h('b', {}, '直接倒')),
       ),
     );
     const add = (label: string, run: () => void, kind = '') => button(label, run, kind ? `small.${kind}` : 'small');

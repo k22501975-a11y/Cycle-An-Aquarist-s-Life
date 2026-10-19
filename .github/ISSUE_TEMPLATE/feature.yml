@@ -1,0 +1,34 @@
+name: 功能需求
+description: 新玩法、新內容或既有功能的改進
+title: "[功能] "
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目標
+      description: 玩家能做什麼、為什麼需要（連到企劃文件的段落）
+    validations: { required: true }
+  - type: textarea
+    id: done
+    attributes:
+      label: 完成定義
+      description: 驗收條件，一條一行，QA 會照這個寫測試
+      placeholder: "- [ ] 商店能買到硝化菌液\n- [ ] 使用後養水時間縮到約 3 天"
+    validations: { required: true }
+  - type: textarea
+    id: scope
+    attributes:
+      label: 範圍與不做的事
+      description: 避免範圍膨脹，寫清楚這次不做什麼
+  - type: input
+    id: deps
+    attributes:
+      label: 依賴
+      description: 要先完成的 Issue（#編號），沒有就留空
+  - type: dropdown
+    id: role
+    attributes:
+      label: 負責角色
+      options: [核心程式, 美術與 UI, 遊戲企劃, 架構, 發布]
+    validations: { required: true }

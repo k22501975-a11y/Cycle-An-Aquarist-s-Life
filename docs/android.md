@@ -4,7 +4,11 @@
 
 ## 拿到測試版 APK
 
-每次推到 GitHub，CI 的 `android` 工作都會打包一個測試版：打開那次執行（Actions › CI），在 Artifacts 下載 `cycle-debug-apk`，解壓後把 `app-debug.apk` 傳到手機安裝。手機要先允許「安裝不明來源的應用程式」。
+手機打開這個網址就能下載最新測試版，裝好後之後的新版會直接蓋過去、存檔保留：
+
+https://github.com/k22501975-a11y/Cycle-An-Aquarist-s-Life/releases/download/beta/cycle-beta.apk
+
+每一版的更新說明和舊版 APK 在 repo 的 Releases 頁。版本號規則和發布流程見 [release.md](release.md)。手機要先允許「安裝不明來源的應用程式」。
 
 測試版的雲端存檔要連得到伺服器，請在 repo 的 Settings › Secrets and variables › Actions › Variables 加上 `VITE_API_URL`（伺服器網址）。沒設定時，App 裡的雲端功能會顯示「還沒開放」，其他功能照常。
 

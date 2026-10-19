@@ -5,3 +5,5 @@ dist-sim/
 .DS_Store
 server/build/
 server/.gradle/
+playwright-report/
+test-results/

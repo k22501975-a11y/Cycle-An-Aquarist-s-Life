@@ -1,0 +1,142 @@
+[
+  {
+    "name": "role:orchestrator",
+    "color": "5319e7",
+    "description": "總控：規劃、拆解、分派"
+  },
+  {
+    "name": "role:design",
+    "color": "d4c5f9",
+    "description": "遊戲企劃：玩法、任務、經濟、MVP 範圍"
+  },
+  {
+    "name": "role:arch",
+    "color": "0052cc",
+    "description": "架構：模組、資料結構、效能預算、規範、程式碼審查"
+  },
+  {
+    "name": "role:core",
+    "color": "1d76db",
+    "description": "核心程式：模擬、遊戲規則、存檔、伺服器"
+  },
+  {
+    "name": "role:art-ui",
+    "color": "f9a03f",
+    "description": "美術與 UI：素材、介面、動畫、特效、字體"
+  },
+  {
+    "name": "role:qa",
+    "color": "0e8a16",
+    "description": "QA 測試：測試案例、流程、相容性"
+  },
+  {
+    "name": "role:debug",
+    "color": "b60205",
+    "description": "Debug 修復：重現、修復、回歸測試"
+  },
+  {
+    "name": "role:perf-sec",
+    "color": "5d4037",
+    "description": "效能與安全：FPS、記憶體、漏洞、敏感資訊"
+  },
+  {
+    "name": "role:release",
+    "color": "006b75",
+    "description": "發布：版本號、APK、隱私文件、上架清單"
+  },
+  {
+    "name": "role:critic-gameplay",
+    "color": "c2e0c6",
+    "description": "遊戲性評測"
+  },
+  {
+    "name": "role:critic-visual",
+    "color": "fef2c0",
+    "description": "畫面與美術評測"
+  },
+  {
+    "name": "role:critic-ux",
+    "color": "bfdadc",
+    "description": "玩家體驗與平衡評測"
+  },
+  {
+    "name": "severity:critical",
+    "color": "b60205",
+    "description": "當機、存檔損毀、無法進行遊戲；最優先，未解決不能出候選版"
+  },
+  {
+    "name": "severity:major",
+    "color": "d93f0b",
+    "description": "主要功能錯誤或體驗明顯受損；未解決不能出候選版"
+  },
+  {
+    "name": "severity:minor",
+    "color": "fbca04",
+    "description": "小問題、外觀瑕疵、可繞過"
+  },
+  {
+    "name": "type:bug",
+    "color": "ee0701",
+    "description": "錯誤"
+  },
+  {
+    "name": "type:feature",
+    "color": "a2eeef",
+    "description": "新功能或改進"
+  },
+  {
+    "name": "type:task",
+    "color": "ededed",
+    "description": "工程工作（重構、工具、文件、素材接入）"
+  },
+  {
+    "name": "type:playtest",
+    "color": "f7c6c7",
+    "description": "評測發現的問題"
+  },
+  {
+    "name": "status:blocked",
+    "color": "000000",
+    "description": "卡在依賴或等使用者決定"
+  },
+  {
+    "name": "status:in-progress",
+    "color": "0e8a16",
+    "description": "有人在做（Issue 內寫明討論串）"
+  },
+  {
+    "name": "status:needs-review",
+    "color": "fbca04",
+    "description": "PR 等審查"
+  },
+  {
+    "name": "area:sim",
+    "color": "c5def5",
+    "description": "src/sim 模擬核心"
+  },
+  {
+    "name": "area:render",
+    "color": "c5def5",
+    "description": "src/render PixiJS 畫面"
+  },
+  {
+    "name": "area:ui",
+    "color": "c5def5",
+    "description": "src/ui HTML 介面"
+  },
+  {
+    "name": "area:server",
+    "color": "c5def5",
+    "description": "server/ Spring Boot 與 src/simsvc"
+  },
+  {
+    "name": "area:android",
+    "color": "c5def5",
+    "description": "android/ Capacitor"
+  },
+  {
+    "name": "area:art",
+    "color": "c5def5",
+    "description": "public/art 素材"
+  }
+]
