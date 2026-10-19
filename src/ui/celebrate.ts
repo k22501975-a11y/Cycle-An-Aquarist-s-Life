@@ -26,7 +26,7 @@ export class Celebration {
 
   show(spec: CelebrateSpec): void {
     this.close();
-    const img = h('img.celebrate-art', { src: ART + spec.art, alt: '', draggable: 'false' });
+    const img = h(spec.art.startsWith('ui/icon-') ? 'img.celebrate-art.is-icon' : 'img.celebrate-art', { src: ART + spec.art, alt: '', draggable: 'false' });
     img.addEventListener('error', () => img.remove());
     const confetti = h(
       'div.confetti',

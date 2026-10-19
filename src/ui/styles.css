@@ -517,7 +517,9 @@ body:has(.sheet.open) .owner.open { bottom: auto; top: calc(env(safe-area-inset-
 .celebrate.out { transform: translate(-50%, -50%) scale(0.9); opacity: 0; transition-duration: 0.35s; }
 .celebrate-pic { position: relative; width: 150px; height: 104px; display: grid; place-items: center; }
 .celebrate-glow { position: absolute; inset: -10px; border-radius: 50%; background: radial-gradient(closest-side, rgba(255, 220, 140, 0.55), rgba(255, 220, 140, 0)); animation: celebrate-pulse 1.6s ease-in-out infinite; }
-.celebrate-art { position: relative; max-width: 100%; max-height: 100%; object-fit: contain; filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.5)); animation: celebrate-bob 2.4s ease-in-out infinite; }
+.celebrate-art { position: relative; max-width: 150px; max-height: 104px; object-fit: contain; filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.5)); animation: celebrate-bob 2.4s ease-in-out infinite; }
+/* 圖示類（方形 App 圖示）縮小一號，不要跟魚圖一樣放大蓋住標題 */
+.celebrate-art.is-icon { max-width: 84px; max-height: 84px; }
 .celebrate-title { font-size: 24px; font-weight: 800; letter-spacing: 0.06em; color: #ffe29a; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
 .celebrate-sub { font-size: 13.5px; line-height: 1.5; color: var(--muted); }
 .celebrate-owner { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding: 8px 12px 8px 8px; border-radius: 14px; background: rgba(4, 22, 30, 0.55); text-align: left; font-size: 13.5px; line-height: 1.45; }
