@@ -1,6 +1,9 @@
 import { expect, test } from '../fixtures';
 import { gameState, NO_WAIT, startClean, startGame } from './helpers';
 
+// 軟體繪圖在高像素密度下慢三倍，這裡不測畫質，用 1 讓 CI 慢的時候也跑得完
+test.use({ deviceScaleFactor: 1, actionTimeout: 20_000 });
+
 const CLOUD_SESSION = JSON.stringify({ token: 'qa-token', username: 'qa', revision: 0 });
 
 test('單機模式：速度選單有暫停、正常和四段快轉；暫停後時間不動', async ({ page }) => {

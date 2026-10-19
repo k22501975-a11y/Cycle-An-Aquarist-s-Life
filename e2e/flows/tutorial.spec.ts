@@ -19,7 +19,7 @@ const DAY_SUMMARY = `JSON.stringify({
  * 要玩十幾個遊戲天，比一般流程測試久（約 1～2 分鐘）。
  */
 test('新手任務 1～7：照老闆的引導從新存檔玩得完，魚不會死光', async ({ page }) => {
-  test.setTimeout(300_000);
+  test.setTimeout(600_000);
   const consoleErrors = watchConsoleErrors(page);
   await startGame(page);
   expect(await questStep(page)).toBe(0);

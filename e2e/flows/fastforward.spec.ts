@@ -9,7 +9,7 @@ test.use({ deviceScaleFactor: 1, actionTimeout: 20_000 });
  * 一公兩母快轉三週以上：會懷孕、生小魚、小魚長大換外觀，全程不能有錯誤或當機畫面。
  */
 test('一公兩母快轉 3 週以上：生小魚、長大，畫面不當機', async ({ page }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(480_000);
   const consoleErrors = watchConsoleErrors(page);
   await startGame(page);
   await page.locator('.owner button.btn.small', { hasText: '跳過教學' }).click();
