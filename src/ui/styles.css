@@ -484,3 +484,11 @@ details.danger[open] { display: flex; flex-direction: column; gap: 8px; }
 @media (max-height: 459px) { .owner-avatar.has-art { flex-basis: 56px; height: 56px; } }
 .btn.media-btn { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; padding: 4px 10px 4px 4px; }
 .btn-art { width: 30px; height: 30px; }
+
+/* 第 11 批介面素材：金幣、阿德老闆頭像、商店招牌 */
+.coin, .price-tag .coin, .wallet-bar .coin, .coins .coin { background: url('/art/ui/coin.webp') center / contain no-repeat; box-shadow: none; border-radius: 0; }
+img.portrait { border-radius: 50%; border: 2px solid var(--gold); object-fit: cover; background: #1d4a52; }
+.owner-art.portrait { filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5)); }
+.shop-banner { position: relative; display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; min-height: 86px; padding: 10px 12px; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(8, 28, 38, 0.1), rgba(8, 28, 38, 0.85)), url('/art/ui/shop-banner.webp') center / cover no-repeat; }
+.shop-banner > b { font-size: 18px; letter-spacing: 0.16em; color: var(--gold-bright); text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8); }
+.shop-banner .wallet-bar { padding: 4px 6px 4px 10px; gap: 8px; background: rgba(8, 28, 38, 0.75); }

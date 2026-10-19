@@ -37,6 +37,13 @@ export function artImg(name: ArtIcon, cls = 'art-icon'): HTMLImageElement {
   return img;
 }
 
+/** 阿德老闆的頭像（插畫，第 11 批）；載入失敗退回選單用的小圖示。 */
+export function ownerImg(cls: string): HTMLImageElement {
+  const img = h(`img.${cls}.portrait`, { src: `${import.meta.env.BASE_URL}art/ui/owner-portrait.webp`, alt: '阿德老闆', draggable: 'false' });
+  img.addEventListener('error', () => img.replaceWith(artImg('owner', cls)), { once: true });
+  return img;
+}
+
 /** 面板標題對應的圖示（Sheet 開啟時放在標題左邊）。 */
 const SHEET_ART: Record<string, ArtIcon> = {
   我的水缸: 'tanks',

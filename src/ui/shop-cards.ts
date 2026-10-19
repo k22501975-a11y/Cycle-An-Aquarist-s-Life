@@ -1,5 +1,5 @@
 import type { AppleColor, FishSpeciesId, PlantSpeciesId, SnailKind } from '../sim';
-import { artImg, type ArtIcon } from './art-icons';
+import { artImg, ownerImg, type ArtIcon } from './art-icons';
 import { h } from './dom';
 
 /**
@@ -97,7 +97,7 @@ export function advice(lines: Array<string | null | undefined | false>, open = f
   const d = h(
     'details.advice',
     {},
-    h('summary', {}, artImg('owner', 'advice-avatar'), h('span', {}, '阿德老闆的建議'), h('small', {}, `${items.length} 則`)),
+    h('summary', {}, ownerImg('advice-avatar'), h('span', {}, '阿德老闆的建議'), h('small', {}, `${items.length} 則`)),
     h('ul', {}, ...items.map((t) => h('li', {}, t))),
   );
   if (open) d.setAttribute('open', '');

@@ -819,10 +819,10 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     );
   } else if (tab === 'gear') {
     const eq = game.state.equipment;
-    // 設備商品圖還在生（art/gear/），先用設備圖示；底材、石頭、沉木用現有的精繪圖
+    // 設備商品圖（art/gear/）；沒有圖的（控溫器）用設備圖示
     const item = (label: string, key: string, owned: boolean, buy: () => void, note = '', art?: string) =>
       shopCard({ art, icon: art ? undefined : 'gear', name: label, price: price(key), badge: owned ? '使用中' : undefined, note, actions: owned ? [] : [button('買', buy, 'small')], cls: owned ? '.owned' : '' });
-    const HARDSCAPE_ART: Record<string, string> = { seiryu: 'scape/rock-seiryu-1.webp', lava: 'scape/rock-seiryu-3.webp', slate: 'scape/rock-seiryu-5.webp', driftwood: 'scape/wood-spider-1.webp' };
+    const HARDSCAPE_ART: Record<string, string> = { seiryu: 'scape/rock-seiryu-1.webp', lava: 'gear/rock-lava.webp', slate: 'gear/rock-slate.webp', driftwood: 'scape/wood-spider-1.webp' };
     content = h(
       'div.stack',
       {},
@@ -848,32 +848,32 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         ...Object.values(FILTERS).map((f) =>
           item(f.name, `filter:${f.id}`, eq.filter?.spec.id === f.id, () => {
             purchase(ctx, price(`filter:${f.id}`), (st) => replaceFilter(st, f), `換上${f.name}，濾材要重新養菌`, 'warn', true);
-          }, `濾材容量 ${f.bacteriaCapacityMgPerHour}`),
+          }, `濾材容量 ${f.bacteriaCapacityMgPerHour}`, `gear/${f.id.toLowerCase()}-filter.webp`),
         ),
         ...Object.values(HEATERS).map((x) =>
           item(x.name, `heater:${x.id}`, eq.heater?.spec.id === x.id && !eq.heater.broken, () => {
             purchase(ctx, price(`heater:${x.id}`), (st) => {
               st.equipment.heater = { spec: x, targetC: st.equipment.heater?.targetC ?? 25, broken: false, heating: false };
             }, `換上${x.name}`);
-          }, eq.heater?.spec.id === x.id && eq.heater.broken ? '目前這支壞了' : ''),
+          }, eq.heater?.spec.id === x.id && eq.heater.broken ? '目前這支壞了' : '', 'gear/heater.webp'),
         ),
         ...Object.values(LIGHTS).map((l) =>
           item(l.name, `light:${l.id}`, eq.light?.spec.id === l.id, () => {
             purchase(ctx, price(`light:${l.id}`), (st) => {
               st.equipment.light = { spec: l, startHour: st.equipment.light?.startHour ?? 10, photoperiodHours: st.equipment.light?.photoperiodHours ?? 8 };
             }, `換上${l.name}`);
-          }, `光照 ${l.par} PAR`),
+          }, `光照 ${l.par} PAR`, `gear/led-${l.id}.webp`),
         ),
-        item(AIR_PUMPS.small.name, 'air:small', !!eq.airPump, () => purchase(ctx, price('air:small'), (st) => (st.equipment.airPump = { spec: AIR_PUMPS.small, on: true }), `裝上${AIR_PUMPS.small.name}`)),
-        item(CO2_KITS.diy.name, 'co2:diy', !!eq.co2, () => purchase(ctx, price('co2:diy'), (st) => (st.equipment.co2 = { spec: CO2_KITS.diy, on: true }), `裝上${CO2_KITS.diy.name}`)),
-        item('檢疫盒', 'quarantine:box', !!game.state.quarantine, () => purchase(ctx, price('quarantine:box'), buyQuarantine, '買了檢疫盒'), '新魚先隔離觀察'),
+        item(AIR_PUMPS.small.name, 'air:small', !!eq.airPump, () => purchase(ctx, price('air:small'), (st) => (st.equipment.airPump = { spec: AIR_PUMPS.small, on: true }), `裝上${AIR_PUMPS.small.name}`), '', 'gear/air-pump.webp'),
+        item(CO2_KITS.diy.name, 'co2:diy', !!eq.co2, () => purchase(ctx, price('co2:diy'), (st) => (st.equipment.co2 = { spec: CO2_KITS.diy, on: true }), `裝上${CO2_KITS.diy.name}`), '', 'gear/co2-set.webp'),
+        item('檢疫盒', 'quarantine:box', !!game.state.quarantine, () => purchase(ctx, price('quarantine:box'), buyQuarantine, '買了檢疫盒'), '新魚先隔離觀察', 'gear/quarantine-box.webp'),
       ),
       h('h3', {}, '底材'),
       cardGrid(
         ...Object.values(SUBSTRATES).map((sub) =>
           item(sub.name, `substrate:${sub.id}`, (eq.substrate?.spec.id ?? 'sand') === sub.id, () => {
             purchase(ctx, price(`substrate:${sub.id}`), (st) => replaceSubstrate(st, sub), `重新鋪了${sub.name}`, 'warn', true);
-          }, SUBSTRATE_NOTES[sub.id], `substrate/substrate-${sub.id}-tile.webp`),
+          }, SUBSTRATE_NOTES[sub.id], `gear/bag-${sub.id}.webp`),
         ),
       ),
       h('h3', {}, '造景石與沉木'),
@@ -899,15 +899,16 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       ),
       h('h3', {}, '控溫'),
       cardGrid(
-        item(FANS.clip.name, 'fan:clip', !!eq.fan, () => purchase(ctx, price('fan:clip'), (st) => (st.equipment.fan = { spec: FANS.clip, on: true }), `裝上${FANS.clip.name}`), `降溫約 ${FANS.clip.coolingC}°C，水蒸發快`),
-        item(CHILLERS.small.name, 'chiller:small', !!eq.chiller, () => purchase(ctx, price('chiller:small'), (st) => (st.equipment.chiller = { spec: CHILLERS.small, targetC: 26, on: true, cooling: false }), `裝上${CHILLERS.small.name}`), '水溫壓在設定值，很耗電'),
+        item(FANS.clip.name, 'fan:clip', !!eq.fan, () => purchase(ctx, price('fan:clip'), (st) => (st.equipment.fan = { spec: FANS.clip, on: true }), `裝上${FANS.clip.name}`), `降溫約 ${FANS.clip.coolingC}°C，水蒸發快`, 'gear/fan.webp'),
+        item(CHILLERS.small.name, 'chiller:small', !!eq.chiller, () => purchase(ctx, price('chiller:small'), (st) => (st.equipment.chiller = { spec: CHILLERS.small, targetC: 26, on: true, cooling: false }), `裝上${CHILLERS.small.name}`), '水溫壓在設定值，很耗電', 'gear/chiller.webp'),
         item('控溫器', 'controller:basic', !!eq.controller, () => purchase(ctx, price('controller:basic'), (st) => (st.equipment.controller = { maxC: 30, tripped: false }), '裝上控溫器'), '超溫就切斷加熱棒'),
       ),
     );
   } else {
     content = sellContent(ctx);
   }
-  return h('div.stack', {}, tabs, wallet, content);
+  const banner = h('div.shop-banner', {}, h('b', {}, '阿德水族館'), wallet);
+  return h('div.stack', {}, banner, tabs, content);
 }
 
 /** 賣給水族店：只收健康的成魚和插枝，價錢是店價的三成，每天有次數上限。 */

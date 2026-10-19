@@ -2,13 +2,8 @@ import type { SoundId } from '../audio/sounds';
 import type { KeyValueStore } from '../game/save';
 import type { TankState } from '../sim';
 import { h } from './dom';
-import { artUrl } from './art-icons';
+import { ownerImg } from './art-icons';
 import { advanceQuest, currentQuest, loadProgress, newProgress, OWNER_NAME, pendingTip, QUESTS, saveProgress, type TutorialProgress } from './tutorial';
-
-/** 阿德老闆的頭像：和按鈕圖示同一套奶油色細線條。 */
-const AVATAR = `<svg viewBox="0 0 48 48" width="100%" height="100%" aria-hidden="true" fill="none" stroke="#f3ead8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-<circle cx="24" cy="18" r="9"/><path d="M15 15 Q24 6 33 15" stroke="#e3bd6d"/><circle cx="20.5" cy="18.5" r="0.9" fill="#f3ead8"/><circle cx="27.5" cy="18.5" r="0.9" fill="#f3ead8"/>
-<path d="M20.5 22.5 Q24 25 27.5 22.5"/><path d="M9 44 Q10 31 24 30 Q38 31 39 44"/><path d="M18 31 L18 44 M30 31 L30 44 M18 38 L30 38" stroke="#e3bd6d"/></svg>`;
 
 interface Page {
   text: string;
@@ -157,13 +152,7 @@ export class Guide {
   }
 }
 
-/** 阿德老闆頭像（插畫）；載入失敗換成線條小人。 */
+/** 阿德老闆頭像（插畫）。 */
 function ownerPortrait(cls = 'owner-art'): HTMLElement {
-  const img = h(`img.${cls}`, { src: artUrl('owner'), alt: OWNER_NAME, draggable: 'false' });
-  img.addEventListener('error', () => {
-    const fallback = h(`span.${cls}`);
-    fallback.innerHTML = AVATAR;
-    img.replaceWith(fallback);
-  });
-  return img;
+  return ownerImg(cls);
 }
