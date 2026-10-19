@@ -60,14 +60,16 @@ CREATE TABLE coin_ledger (
 
 市場會動到錢的請求（買、上架、收款／退款）都多帶 `baseRevision`（遊戲端手上那份雲端存檔的版本）。伺服器在同一個交易裡：
 
-1. 鎖住這個帳號的 `cloud_save`（`SELECT … FOR UPDATE`），版本不同就回 409，遊戲先同步存檔再重試。沒有雲端存檔就回 409 `need_upload`，遊戲先上傳一次。
+1. 鎖住這個帳號的 `cloud_save`（`SELECT … FOR UPDATE`，見 §3.6），版本不同就回 409，遊戲先同步存檔再重試。沒有雲端存檔就回 409 `need_upload`，遊戲先上傳一次。
 2. 讀 `state.economy.coins`。扣款時錢不夠就回 422 `not_enough_coins`，什麼都不改。
 3. 改掛單或訂單（跟現在一樣）。
 4. 寫一筆 `coin_ledger`（`seq` = 這個帳號上一筆加 1）。入帳時如果撞到 `UNIQUE (account_id, reason, ref_id)`，表示已經入過帳，直接回傳上次的結果。
 5. 改存檔：`state.economy.coins += delta`、`state.economy.ledgerSeq = seq`。其他缸（`tanks[i].economy`）同步寫一樣的值，因為讀檔時 `linkTanks` 以第一缸為準，其他缸只是副本。
 6. 存檔版本加 1，`updated_at` **不改**（不然會影響 L2 補算的起點，見 `SaveController.advance`）。
 
-回傳 `{ revision, coins, ledgerSeq, delta }`。遊戲端把自己的 `coins`、`ledgerSeq` 設成回傳的值、記下新的 revision，不自己加減。
+回傳 `{ revision, coins, ledgerSeq, delta }`。遊戲端套用 `coins += delta`、`ledgerSeq` 設成回傳的值、記下新的 revision。
+**不能直接用回傳的 `coins` 覆蓋**：請求送出到回應回來之間，玩家可能在本機又花了錢（買飼料、付電費），這些還沒同步到雲端；直接覆蓋會把那些花費加回來，等於刷錢。回傳的 `coins` 只拿來顯示和除錯。
+同一個回應只能套用一次：遊戲端記著已經套用的 `ledgerSeq`，回傳的 `ledgerSeq` 不比自己的大就不加（重送、重複點擊都不會加兩次）。
 
 **為什麼直接改雲端存檔，而不是另外開一個伺服器錢包**：遊戲裡只有一個錢包，商店、訂單、電費天天在遊戲端加減。分成兩個錢包玩家要搬來搬去，畫面和平衡都要重做；改存檔裡的數字只多一個欄位，遊戲端改動也最小。代價是市場操作前雲端存檔要是最新的（第 1 步），遊戲在打開市場時本來就會先同步。
 
@@ -83,6 +85,13 @@ CREATE TABLE coin_ledger (
 
 A 在市場買了東西（雲端 revision +1、ledgerSeq +1），B 還拿著舊的那份：B 上傳會先撞到 409（revision 不同）；B 選「用這台的」強制覆蓋，會撞到 `ledger_behind` 被擋，只能用雲端那份。所以扣款一定留下來。
 
+### 3.6 同一把鎖
+
+會寫雲端存檔的地方都要拿同一把鎖：`PUT /api/save`、`POST /api/save/advance`、市場的扣款入帳、商城使用道具。
+`CloudSaveRepository` 加 `@Lock(PESSIMISTIC_WRITE) findForUpdate(id)`，這幾個地方都改用它讀存檔。
+不然會發生：`advance` 讀了舊的存檔去跑模擬（幾百毫秒），這中間市場扣了款寫回，`advance` 再把舊的錢寫回去，扣款就不見了。
+`advance` 跑模擬時會一直拿著鎖；模擬服務本來就有逾時，同一個帳號的請求本來就不多，可以接受。
+
 ## 4. 商城道具庫存
 
 ### 4.1 資料表 `mall_inventory`（V9）
@@ -94,6 +103,17 @@ CREATE TABLE mall_inventory (
     count       INT NOT NULL CHECK (count >= 0),
     PRIMARY KEY (account_id, item)
 );
+
+-- 每次使用道具一筆；request_id 防重送
+CREATE TABLE mall_use (
+    id          BIGSERIAL PRIMARY KEY,
+    account_id  BIGINT NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+    request_id  UUID NOT NULL,
+    item        VARCHAR(16) NOT NULL,
+    remaining   INT NOT NULL,
+    created_at  TIMESTAMP WITH TIME ZONE NOT NULL,
+    UNIQUE (account_id, request_id)
+);
 ```
 
 用點數買道具時，跟扣點數同一個交易把 `count` 加 1（`point_grant` 照樣留著當購買紀錄）。
@@ -101,14 +121,16 @@ CREATE TABLE mall_inventory (
 
 ### 4.2 使用道具
 
-`POST /api/mall/use { item, baseRevision }`：庫存不夠回 422，夠就減 1、寫一筆 `point_ledger`（`delta` 0、`reason` = `use`，留紀錄），回傳剩下的數量。遊戲端拿到成功才套用效果（治魚、擺套缸）。
+`POST /api/mall/use { item, requestId, baseRevision }`：`requestId` 是遊戲端每次使用產生的 UUID。
+庫存不夠回 422，夠就減 1、寫一筆 `mall_use`（`account_id`、`request_id` 唯一、`item`、`created_at`），回傳剩下的數量。
+同一個 `requestId` 再送一次（網路斷了重送）直接回上次的結果，不會扣兩個。遊戲端拿到成功才套用效果（治魚、擺套缸）。
 遊戲端的 `economy.mall` 改成只是顯示用的副本，每次打開商城、用道具後照伺服器的數字覆寫；`addMallGrant` 拿掉。
 
 道具效果本身（例如特效藥把症狀消掉）還是遊戲端在跑，沒用道具卻自己把病治好要靠 L2 的模擬比對才抓得到，這不在這份範圍。
 
 ## 5. 遊戲端要改的地方
 
-- `market-panel.ts`：買、上架、收款／退款都不再自己 `coins +=` 或 `-=`，改成套用伺服器回傳的 `coins`、`ledgerSeq`、`revision`。開市場面板前先確定雲端存檔是最新的（已經有的 `autoUpload`）。
+- `market-panel.ts`：買、上架、收款／退款都不再自己算金額，改成套用伺服器回傳的 `delta`（`coins += delta`，見 §3.3）、`ledgerSeq`、`revision`。開市場面板前先確定雲端存檔是最新的（已經有的 `autoUpload`）。
 - `cloud.ts`：市場和商城的請求帶 `baseRevision`；處理 409 `need_upload`、422 `ledger_behind`。
 - `mall-panel.ts`：顯示伺服器的庫存，使用道具先呼叫 `/api/mall/use`。
 - `Economy` 多 `ledgerSeq?: number`。
@@ -122,8 +144,8 @@ CREATE TABLE mall_inventory (
 ## 7. 上線順序
 
 1. **這份文件**（架構審查）。
-2. **遊戲幣帳本**：V9 `coin_ledger`、市場三種請求改成伺服器扣款入帳、上傳檢查、遊戲端改套用回傳值。測試：錢不夠不成交、重送收款只入帳一次、舊存檔上傳被擋、兩台裝置強制覆蓋被擋、扣款和成交在同一個交易（成交失敗不扣錢）。
-3. **商城庫存**：V9 `mall_inventory`、`/api/mall/use`、遊戲端改顯示伺服器庫存。
+2. **遊戲幣帳本**：V9 `coin_ledger`、市場三種請求改成伺服器扣款入帳、上傳檢查、遊戲端改套用回傳值。測試：錢不夠不成交、重送收款只入帳一次、舊存檔上傳被擋、兩台裝置強制覆蓋被擋、扣款和成交在同一個交易（成交失敗不扣錢）、`advance` 和扣款同時進來時扣款不會被蓋掉、遊戲端回應晚到時本機的花費不會被加回來。
+3. **商城庫存**：V9 `mall_inventory`、`mall_use`、`/api/mall/use`、遊戲端改顯示伺服器庫存。測試加同一個 `requestId` 重送只扣一個。
 4. 金流另外開 issue。
 
 舊資料：上線前已經成交、遊戲端還沒收款的訂單（`buyer_done`／`seller_done` 是空的），上線後照新流程由伺服器入帳，不會漏也不會重複（之前沒有入帳紀錄，`coin_ledger` 是空的）。
