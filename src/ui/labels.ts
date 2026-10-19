@@ -16,6 +16,7 @@ export const SYMPTOM_LABELS: Record<Symptom, string> = {
   elderly: '顏色變淡、背有點彎（年紀大了）',
   white_patches: '嘴巴和身上有白色棉絮狀的斑，像在爛',
   gill_flare: '鰓蓋張開、呼吸很快',
+  begging: '在水面游來游去討食（餓了）',
 };
 
 export const DEATH_CAUSE_LABELS: Record<string, string> = {

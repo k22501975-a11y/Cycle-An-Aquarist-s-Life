@@ -227,7 +227,8 @@ export function feedPanel(ctx: PanelContext): Node {
     h(
       'div.row',
       {},
-      button('一小撮', give(meal * 0.5, '一小撮')),
+      // 一小撮是新缸期的維持量：一天兩次，魚不會餓壞，殘餌也少
+      button('一小撮', give(meal * 0.75, '一小撮')),
       button('一餐', give(meal, '一餐'), 'primary'),
       button('一大把', give(meal * 3, '一大把')),
     ),

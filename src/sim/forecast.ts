@@ -1,5 +1,5 @@
 import { linkTanks } from './household';
-import { freeAmmonia } from './processes/fauna';
+import { freeAmmonia, STRESS_CAUSE_LABELS, type StressKey } from './processes/fauna';
 import { FISH_SPECIES } from './species';
 import { TICK_HOURS, step } from './step';
 import type { SimEvent, TankState } from './state';
@@ -45,7 +45,11 @@ function eventAlert(state: TankState, e: SimEvent): Omit<ForecastAlert, 'hours' 
     case 'fish_died':
       return { category: 'crisis', key: 'died', body: `${speciesOf(state, e.subjectId)}撐不住死了。打開遊戲看看是什麼原因，其他魚可能也有危險。` };
     case 'ich_visible':
-      return { category: 'crisis', key: 'ich', body: `${speciesOf(state, e.subjectId)}身上出現白點，要趕快處理，不然會傳染整缸。` };
+      return {
+        category: 'crisis',
+        key: 'ich',
+        body: `${speciesOf(state, e.subjectId)}身上出現白點，要趕快處理，不然會傳染整缸。${e.cause && e.cause in STRESS_CAUSE_LABELS ? `可能的原因：${STRESS_CAUSE_LABELS[e.cause as StressKey]}。` : ''}`,
+      };
     case 'disease_visible':
       return { category: 'crisis', key: 'disease', body: `${speciesOf(state, e.subjectId)}看起來生病了（${e.cause === 'columnaris' ? '身上長白色棉絮' : '鰓蓋張開、呼吸很急'}）。` };
     case 'heater_broke':
@@ -86,6 +90,7 @@ function conditionAlerts(state: TankState): Omit<ForecastAlert, 'hours' | 'tank'
     else if (w.tempC < t.min - 1) out.push({ category: 'crisis', key: 'cold', body: `水溫 ${w.tempC.toFixed(1)}°C，對${FISH_SPECIES[id].name}太冷了。` });
   }
   if (alive.some((f) => f.starvingHours > 0)) out.push({ category: 'crisis', key: 'hungry', body: '魚餓壞了，記得餵食。' });
+  else if (alive.some((f) => f.hunger > 0.8)) out.push({ category: 'crisis', key: 'peckish', body: '魚這幾天沒吃飽，再這樣下去抵抗力會變差，容易生病。' });
   return out;
 }
 

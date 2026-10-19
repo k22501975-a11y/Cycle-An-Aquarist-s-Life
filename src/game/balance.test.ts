@@ -3,6 +3,7 @@ import { newGameState } from './game';
 import {
   addFish,
   addPlant,
+  fishCondition,
   isCycled,
   buybackRefusal,
   canClaimStarterPack,
@@ -21,6 +22,7 @@ import {
   waterChange,
   type TankState,
 } from '../sim';
+import { QUESTS } from '../ui/tutorial';
 
 /** 平衡測試：用「玩家會怎麼玩」的腳本跑模擬，確認難度合理（commercial-gap K1～K3）。 */
 
@@ -44,6 +46,59 @@ function day(s: TankState, careful: boolean): void {
 }
 
 describe('新手前幾週（K1）', () => {
+  it('照教學一天兩次「一小撮」：兩週內魚都不會餓壞，也不會因為餓而緊迫', () => {
+    for (const seed of [1, 2, 3]) {
+      const s = newGameState(seed);
+      for (let i = 0; i < 3; i++) addFish(s, 'guppy', { carriesIch: false, carries: [] });
+      const adults = s.fish.map((f) => f.id);
+      let maxHunger = 0;
+      for (let d = 0; d < 14; d++) {
+        for (const h of [12, 12]) {
+          // 跟遊戲裡的按鈕一樣：一小撮是「現在缸裡所有魚」一餐的 3/4，生了小魚就會跟著變多
+          feed(s, meal(s) * 0.75);
+          simulate(s, h);
+          for (const f of alive(s)) maxHunger = Math.max(maxHunger, f.hunger);
+        }
+      }
+      expect(maxHunger).toBeLessThan(0.8);
+      // 買來的母魚常常已經懷孕，兩週內會生小魚；原本 3 條都要活著
+      expect(alive(s).filter((f) => adults.includes(f.id))).toHaveLength(3);
+      for (const f of alive(s)) expect(fishCondition(s, f).hunger).not.toBe('starving');
+    }
+  });
+
+  it('照教學玩（一公兩母、一天兩次一小撮、每天測水、有氨亞硝就換水）：養水任務 3～8 天內過得了', () => {
+    const cycled = QUESTS.find((q) => q.id === 'cycled')!;
+    for (const seed of [1, 2, 3]) {
+      const s = newGameState(seed);
+      for (const sex of ['male', 'female', 'female'] as const) addFish(s, 'guppy', { carriesIch: false, carries: [], sex });
+      expect(alive(s).map((f) => f.sex)).toEqual(['male', 'female', 'female']);
+      let doneDay = -1;
+      for (let d = 1; d <= 10 && doneDay < 0; d++) {
+        for (let k = 0; k < 2; k++) {
+          feed(s, meal(s) * 0.75);
+          simulate(s, 12);
+        }
+        const r = useTestKit(s);
+        if (cycled.check(s)) doneDay = d;
+        else if (r.ammonia > 0 || r.nitrite > 0) waterChange(s, 0.3);
+      }
+      expect(doneDay).toBeGreaterThanOrEqual(3);
+      expect(doneDay).toBeLessThanOrEqual(8);
+    }
+  });
+
+  it('完全不餵：幾天後魚會餓，點魚看得到「餓了」，生病原因寫沒吃飽', () => {
+    const s = newGameState(7);
+    addFish(s, 'guppy', { carriesIch: false, carries: [] });
+    simulate(s, 24 * 5);
+    const f = alive(s)[0];
+    const c = fishCondition(s, f);
+    expect(c.hunger).toBe('hungry');
+    expect(c.causes[0].key).toBe('hunger');
+    expect(c.causes[0].label).toContain('沒吃飽');
+  });
+
   it('3 條孔雀魚、每天正常餵、不用任何道具：約一週養好水（養水任務過得了）', () => {
     for (const seed of [1, 2, 3]) {
       const s = newGameState(seed);
