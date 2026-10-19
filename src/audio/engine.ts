@@ -72,7 +72,8 @@ export class AudioEngine {
     body.gain.value = 3;
     const soft = ctx.createBiquadFilter();
     soft.type = 'lowpass';
-    soft.frequency.value = 4200;
+    // 高頻壓低一點：尼龍弦的溫暖音色，不刺耳
+    soft.frequency.value = 2600;
     this.musicBus.connect(body).connect(soft);
     soft.connect(this.master);
     soft.connect(this.reverb);
@@ -207,7 +208,9 @@ export class AudioEngine {
       for (const n of barNotes(this.bar, this.ambience.calm)) {
         // 一點點人味：時間微微前後、拇指比手指早一點點
         const swing = n.step % 2 === 1 ? STEP_SECONDS * 0.08 : 0;
-        this.pluck(this.nextBarTime + n.step * STEP_SECONDS + swing + (Math.random() - 0.5) * 0.012, n.midi, n.velocity, this.musicBus);
+        const at = this.nextBarTime + n.step * STEP_SECONDS + swing + (Math.random() - 0.5) * 0.012;
+        if (n.harmonic) this.harmonic(at, n.midi, n.velocity);
+        else this.pluck(at, n.midi, n.velocity, this.musicBus);
       }
       this.nextBarTime += barLen;
       this.bar++;
@@ -240,6 +243,27 @@ export class AudioEngine {
     pan.pan.value = Math.max(-0.5, Math.min(0.5, (midi - 60) / 30));
     src.connect(g).connect(pan).connect(dest);
     src.start(Math.max(t, ctx.currentTime));
+  }
+
+  /** 泛音：純正弦加一點點八度，慢慢淡出，像輕碰弦上第十二格。 */
+  private harmonic(t: number, midi: number, velocity: number): void {
+    const ctx = this.ctx!;
+    const start = Math.max(t, ctx.currentTime);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, start);
+    g.gain.linearRampToValueAtTime(velocity * 0.35, start + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, start + 3);
+    g.connect(this.musicBus);
+    for (const [mult, level] of [[1, 1], [2, 0.12]] as const) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = midiToFreq(midi) * mult;
+      const lv = ctx.createGain();
+      lv.gain.value = level;
+      osc.connect(lv).connect(g);
+      osc.start(start);
+      osc.stop(start + 3.1);
+    }
   }
 
   private tone(t: number, freq: number, dur: number, gain: number, type: OscillatorType, endFreq?: number): void {

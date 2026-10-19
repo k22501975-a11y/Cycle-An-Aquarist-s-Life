@@ -43,6 +43,8 @@ export async function openGame(page: Page): Promise<void> {
     await expect(confirm).toBeEnabled();
     await confirm.dispatchEvent('click');
     await expect(setup).toBeHidden();
+    // 挑完設備會演開缸（約 9 秒）：直接跳完
+    await skipSetupShow(page);
     // 開完缸「開缸」任務馬上完成，老闆會跳出對話框：關掉，免得擋住後面的點擊。
     // 在頁面裡一次點完：軟體繪圖時每次跟頁面來回要一秒多，一顆一顆點會吃掉大半個測試的時間
     await page.evaluate(async () => {
@@ -56,6 +58,17 @@ export async function openGame(page: Page): Promise<void> {
       }
     });
   }
+}
+
+/** 新遊戲的開缸演出（倒沙、注水、開燈，約 9 秒）直接跳完，再把演完跳出的「你的第一個缸」慶祝卡關掉。讀檔進來的不會演。 */
+export async function skipSetupShow(page: Page): Promise<void> {
+  type ViewWindow = { cycle?: { view?: { settingUp: boolean; skipSetup(): void } } };
+  await page.waitForFunction(() => !!(window as unknown as ViewWindow).cycle?.view, null, { timeout: 30_000 });
+  if (!(await page.evaluate(() => (window as unknown as ViewWindow).cycle!.view!.settingUp))) return;
+  await page.evaluate(() => (window as unknown as ViewWindow).cycle!.view!.skipSetup());
+  await page.waitForFunction(() => !(window as unknown as ViewWindow).cycle!.view!.settingUp, null, { timeout: 30_000 });
+  // 卡片在頁面裡直接點掉：用 locator 的話，數到卡片後它剛好自己退場（約 0.4 秒動畫）就會一直等到逾時
+  await page.evaluate(() => document.querySelectorAll<HTMLElement>('.celebrate:not(.out)').forEach((c) => c.click()));
 }
 
 /** 讀目前存檔（localStorage 的 cycle.save.v1），方便核對畫面和模擬狀態。 */
