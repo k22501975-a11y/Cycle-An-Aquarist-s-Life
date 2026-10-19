@@ -1,4 +1,4 @@
-# 本機開發：docker compose up 會起 PostgreSQL 和伺服器（http://localhost:8080）
+# 本機開發：docker compose up 會起 PostgreSQL、模擬小服務和伺服器（http://localhost:8080）
 services:
   db:
     image: postgres:16
@@ -10,15 +10,25 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+  # 伺服器權威模擬（L2）：只給 server 在內部呼叫，不對外開 port
+  sim:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile.sim
+    environment:
+      SIM_TOKEN: local-dev-sim-token
   server:
     build: .
     depends_on:
       - db
+      - sim
     environment:
       DATABASE_URL: jdbc:postgresql://db:5432/cycle
       DATABASE_USER: cycle
       DATABASE_PASSWORD: cycle
       ALLOWED_ORIGINS: http://localhost:5173,http://localhost:4173
+      SIM_SERVICE_URL: http://sim:8091
+      SIM_TOKEN: local-dev-sim-token
     ports:
       - "8080:8080"
 volumes:

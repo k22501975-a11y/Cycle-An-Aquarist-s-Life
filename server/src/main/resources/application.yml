@@ -29,6 +29,12 @@ cycle:
     # VAPID 金鑰（base64url）；留空會自動產生並存在資料庫
     public-key: ${VAPID_PUBLIC_KEY:}
     private-key: ${VAPID_PRIVATE_KEY:}
+  sim:
+    # 伺服器權威模擬（L2）的 Node 小服務，例如 http://localhost:8091；留空代表不用（伺服器只保管存檔）
+    url: ${SIM_SERVICE_URL:}
+    # 兩邊共用的密碼（Node 那邊設 SIM_TOKEN）
+    token: ${SIM_TOKEN:}
+    timeout-seconds: 20
 management:
   endpoints:
     web:

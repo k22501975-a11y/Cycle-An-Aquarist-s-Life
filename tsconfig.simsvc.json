@@ -1,0 +1,10 @@
+{
+  // 模擬小服務（L2）：跑在 Node 上，用 Node 的型別、不用 DOM。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": ["src/simsvc"],
+  "exclude": ["src/simsvc/**/*.test.ts"]
+}

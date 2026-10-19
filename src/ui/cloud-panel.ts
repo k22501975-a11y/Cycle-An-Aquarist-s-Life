@@ -1,4 +1,4 @@
-import type { CloudClient } from '../net/cloud';
+import { SAVE_CHECK_CODES, type CloudClient } from '../net/cloud';
 import { h } from './dom';
 import { saveTextFile } from './native';
 import type { Sheet, Toasts } from './sheet';
@@ -9,8 +9,8 @@ export interface CloudPanelDeps {
   toasts: Toasts;
   /** 目前遊戲的存檔文字（serializeSave）。 */
   saveJson: () => string;
-  /** 用雲端的存檔取代目前的遊戲；讀不出來就回傳 false。 */
-  applyCloud: (save: unknown, revision: number) => boolean;
+  /** 用雲端的存檔取代目前的遊戲；讀不出來就回傳 false。advanced：伺服器已經補算到現在，不用再補算。 */
+  applyCloud: (save: unknown, revision: number, advanced?: boolean) => boolean;
 }
 
 const legal = (label: string, page: 'privacy' | 'terms') => h('a', { href: `./legal/${page}.html`, target: '_blank', rel: 'noopener' }, label);
@@ -21,6 +21,8 @@ const when = (ms: number) => new Date(ms).toLocaleString('zh-TW', { month: 'nume
 export interface CloudConflict {
   revision: number;
   savedAt: number;
+  /** 不是別台裝置，而是這台的存檔跟雲端那份對不上（伺服器的模擬檢查沒過）。 */
+  mismatch?: boolean;
 }
 
 export function cloudPanel(deps: CloudPanelDeps, conflict?: CloudConflict): Node {
@@ -64,10 +66,14 @@ export function cloudPanel(deps: CloudPanelDeps, conflict?: CloudConflict): Node
     status.textContent = '上傳中…';
     const res = await cloud.upload(deps.saveJson(), force);
     if (res.ok) {
-      toasts.show('存到雲端了');
+      if (res.value.notice) toasts.show(res.value.notice, 'warn');
+      else toasts.show('存到雲端了');
       reopen();
     } else if (res.code === 'conflict' && res.revision !== undefined) reopen({ revision: res.revision, savedAt: res.savedAt ?? 0 });
-    else status.textContent = res.message;
+    else if (SAVE_CHECK_CODES.includes(res.code)) {
+      status.textContent = res.message;
+      if (await resolveSaveCheck(deps, res.code, res.message)) sheet.close();
+    } else status.textContent = res.message;
   };
   const download = async () => {
     status.textContent = '下載中…';
@@ -138,7 +144,9 @@ export function cloudPanel(deps: CloudPanelDeps, conflict?: CloudConflict): Node
       ? h(
           'div.item.gift.column',
           {},
-          h('div', {}, h('b', {}, '雲端有另一台裝置的存檔'), h('div.hint', {}, `雲端那份存於 ${when(conflict.savedAt)}。要留哪一份？另一份會被蓋掉。`)),
+          conflict.mismatch
+            ? h('div', {}, h('b', {}, '這台的存檔跟雲端那份對不上'), h('div.hint', {}, '魚的身分（品種、性別或基因）跟雲端的不一樣。要留哪一份？用這台的覆蓋的話，之後幾天不能在市場上架魚。'))
+            : h('div', {}, h('b', {}, '雲端有另一台裝置的存檔'), h('div.hint', {}, `雲端那份存於 ${when(conflict.savedAt)}。要留哪一份？另一份會被蓋掉。`)),
           h(
             'div.row.wrap',
             {},
@@ -198,13 +206,36 @@ export async function checkCloudOnStart(deps: CloudPanelDeps): Promise<void> {
   toasts.show(`雲端有別的裝置存的進度（${when(conflict.savedAt)}）`, 'info', { label: '看看', run: () => sheet.open('雲端存檔', () => cloudPanel(deps, conflict)) });
 }
 
-/** 自動上傳：衝突時不覆蓋，提醒玩家去選。 */
-export async function autoUpload(deps: CloudPanelDeps): Promise<void> {
+/**
+ * 自動上傳：衝突時不覆蓋，提醒玩家去選。回傳有沒有存上去。
+ * 伺服器權威模擬（L2）：裝置時間不對（遊戲時間跑得比伺服器快）時，改用伺服器補算到現在的那份；
+ * 魚的身分跟雲端對不上時不覆蓋，讓玩家選要留哪一份。
+ */
+export async function autoUpload(deps: CloudPanelDeps): Promise<boolean> {
   const { cloud, toasts, sheet } = deps;
-  if (!cloud.available || !cloud.session) return;
+  if (!cloud.available || !cloud.session) return false;
   const res = await cloud.upload(deps.saveJson());
-  if (!res.ok && res.code === 'conflict' && res.revision !== undefined) {
+  if (res.ok) return true;
+  if (res.code === 'conflict' && res.revision !== undefined) {
     const conflict = { revision: res.revision, savedAt: res.savedAt ?? 0 };
     toasts.show('雲端有別的裝置存的進度，沒有自動覆蓋', 'warn', { label: '處理', run: () => sheet.open('雲端存檔', () => cloudPanel(deps, conflict)) });
+  } else if (SAVE_CHECK_CODES.includes(res.code)) return resolveSaveCheck(deps, res.code, res.message);
+  return false;
+}
+
+/**
+ * 伺服器的模擬檢查沒過：時間不對就改用伺服器補算的那份（回傳 true）；
+ * 魚的身分對不上就提醒玩家，讓他選要留雲端的還是強制用這台的。
+ */
+async function resolveSaveCheck(deps: CloudPanelDeps, code: string, message: string): Promise<boolean> {
+  const { cloud, toasts, sheet } = deps;
+  if (code === 'time_ahead') {
+    const server = await cloud.advance();
+    if (server.ok && deps.applyCloud(server.value.save, server.value.revision, true)) {
+      toasts.show('裝置的時間跟伺服器對不上，改用伺服器算的進度', 'warn');
+      return true;
+    }
   }
+  toasts.show(`${message}，沒有上傳`, 'warn', { label: '處理', run: () => sheet.open('雲端存檔', () => cloudPanel(deps, { revision: cloud.session?.revision ?? 0, savedAt: cloud.session?.syncedAt ?? 0, mismatch: true })) });
+  return false;
 }

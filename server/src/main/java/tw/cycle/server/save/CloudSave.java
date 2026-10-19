@@ -30,6 +30,10 @@ public class CloudSave {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
+    /** 強制用一份對不上的存檔覆蓋之後，到這個時間以前不能在市場上架魚（L2）。 */
+    @Column(name = "market_locked_until")
+    private OffsetDateTime marketLockedUntil;
+
     protected CloudSave() {}
 
     public CloudSave(Long accountId) {
@@ -58,5 +62,18 @@ public class CloudSave {
 
     public String getData() {
         return data;
+    }
+
+    /** 伺服器收到這份存檔的時間（伺服器時鐘，不是遊戲端的 savedAt）。 */
+    public OffsetDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public OffsetDateTime getMarketLockedUntil() {
+        return marketLockedUntil;
+    }
+
+    public void lockMarketUntil(OffsetDateTime until) {
+        this.marketLockedUntil = until;
     }
 }
