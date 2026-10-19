@@ -6,8 +6,9 @@ services:
       POSTGRES_DB: cycle
       POSTGRES_USER: cycle
       POSTGRES_PASSWORD: cycle
+    # 只給本機連（#79）；正式環境不要開這個 port
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
   # 伺服器權威模擬（L2）：只給 server 在內部呼叫，不對外開 port
@@ -16,7 +17,7 @@ services:
       context: ..
       dockerfile: server/Dockerfile.sim
     environment:
-      SIM_TOKEN: local-dev-sim-token
+      SIM_TOKEN: ${SIM_TOKEN:-local-dev-sim-token}
   server:
     build: .
     depends_on:
@@ -28,8 +29,8 @@ services:
       DATABASE_PASSWORD: cycle
       ALLOWED_ORIGINS: http://localhost:5173,http://localhost:4173
       SIM_SERVICE_URL: http://sim:8091
-      SIM_TOKEN: local-dev-sim-token
+      SIM_TOKEN: ${SIM_TOKEN:-local-dev-sim-token}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
 volumes:
   pgdata:

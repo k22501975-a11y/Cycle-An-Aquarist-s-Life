@@ -25,8 +25,11 @@ export interface FinShape {
   front: boolean;
   /** 鰭條：折線（x, y 交錯），從根部往外。 */
   rays?: number[][];
-  /** 只疊一層深色、不畫邊和鰭條：讓長鰭靠近根部比較濃，往尖端越來越透。 */
-  inner?: boolean;
+  /**
+   * 薄紗長鰭（大C）：不描硬邊，邊緣羽化，沿著長度一小段一小段由濃到淡、顏色漸漸帶虹彩，鰭條細亮並往尖端漸透（畫面評測 V27、#146）。
+   * points 前半是一側從根到尖、後半是另一側從尖到根，各 n+1 點。
+   */
+  soft?: boolean;
 }
 
 interface Body {
@@ -43,7 +46,7 @@ const qb = (a: P, c: P, b: P, t: number): P => [(1 - t) * (1 - t) * a[0] + 2 * (
  * 一條往外飄的長鰭（大C 的背鰭臀鰭、劍）：沿著二次曲線的中線，從根部的寬度漸漸收到尖端，
  * 鰭條順著中線走。
  */
-function streamer(a: P, c: P, b: P, w0: number, w1: number, n = 14, rayOffs = [-0.6, -0.2, 0.2, 0.6]): FinShape {
+function streamer(a: P, c: P, b: P, w0: number, w1: number, n = 14, rayOffs = [-0.6, -0.2, 0.2, 0.6], rayEnd = n - 2): FinShape {
   const left: number[] = [], right: number[] = [];
   const at = (t: number, off: number): P => {
     const p = qb(a, c, b, t);
@@ -61,19 +64,10 @@ function streamer(a: P, c: P, b: P, w0: number, w1: number, n = 14, rayOffs = [-
   }
   const rays = rayOffs.map((off) => {
     const pts: number[] = [];
-    for (let i = 0; i <= n - 2; i++) pts.push(...at(i / n, off));
+    for (let i = 0; i <= rayEnd; i++) pts.push(...at(i / n, off));
     return pts;
   });
   return { kind: 'fill', front: false, points: [...left, ...right], rays };
-}
-
-/** 長鰭從根部到 t1 的那一段（寬度和整條一樣），用來疊出根部較濃的漸層。 */
-function streamerPart(a: P, c: P, b: P, w0: number, w1: number, t1: number, n = 10): FinShape {
-  const full = streamer(a, c, b, w0, w1, Math.round(n / t1));
-  const m = Math.round(n / t1) + 1;
-  const left = full.points.slice(0, (n + 1) * 2);
-  const right = full.points.slice((2 * m - (n + 1)) * 2);
-  return { kind: 'fill', front: false, points: [...left, ...right] };
 }
 
 /** 依鰭型算出要補畫的形狀。length 是整條魚（含尾鰭）的長度。 */
@@ -94,10 +88,9 @@ export function finShapes(t: FinTraits, body: Body, length: number): FinShape[] 
       const ctl: P = [peduncle + rx * (0.25 + e * 0.15), cy + dir * ry * (dorsal ? 2.9 + e * 0.9 : 2.5 + e * 0.8)];
       const tip: P = [tailEnd + length * (0.01 + e * 0.05), cy + dir * ry * (dorsal ? 1.7 + e * 0.5 : 1.5 + e * 0.4)];
       const w0 = rx * (dorsal ? 0.7 : 0.5);
-      const fin = streamer(root, ctl, tip, w0, ry * 0.18, 18, [-0.75, -0.45, -0.15, 0.15, 0.45, 0.75]);
-      out.push(fin);
-      // 根部再疊幾層越來越短的，看起來由濃到淡
-      for (const t1 of [0.3, 0.5, 0.7]) out.push({ ...streamerPart(root, ctl, tip, w0, ry * 0.18, t1), inner: true });
+      // 鰭條密一點、一路拉到尖端，放大到肖像時看得出是一根根的鰭條撐著的薄膜
+      const rayOffs = Array.from({ length: 10 }, (_, i) => -0.84 + (i * 1.68) / 9);
+      out.push({ ...streamer(root, ctl, tip, w0, ry * 0.05, 24, rayOffs, 23), soft: true });
     }
   }
   if (t.ribbon && !t.bigC) {

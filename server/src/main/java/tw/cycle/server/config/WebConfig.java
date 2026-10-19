@@ -10,10 +10,12 @@ import tw.cycle.server.auth.AuthInterceptor;
 public class WebConfig implements WebMvcConfigurer {
     private final CycleProperties props;
     private final AuthInterceptor authInterceptor;
+    private final RateLimitInterceptor rateLimitInterceptor;
 
-    public WebConfig(CycleProperties props, AuthInterceptor authInterceptor) {
+    public WebConfig(CycleProperties props, AuthInterceptor authInterceptor, RateLimitInterceptor rateLimitInterceptor) {
         this.props = props;
         this.authInterceptor = authInterceptor;
+        this.rateLimitInterceptor = rateLimitInterceptor;
     }
 
     @Override
@@ -27,6 +29,7 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(rateLimitInterceptor).addPathPatterns("/api/auth/register", "/api/auth/login", "/api/events", "/api/push/**");
         // 除了註冊、登入、匿名數據分析和推播（裝置自己的密碼），其他 API 都要帶 token
         registry.addInterceptor(authInterceptor)
                 .addPathPatterns("/api/**")

@@ -2,11 +2,12 @@ import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointer
 import { isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedArtVersion, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
-import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, hungerLook, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
+import { SETUP_SECONDS, setupLook, setupStepAt, type SetupStep } from './setup-show';
+import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, hungerLook, sickLook, spawnSwimmer, stepTurn, swimTilt, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { floorAt, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { dirtSpots, floorY, frontLip, sandSurface, tankSubstrateLook, SUBSTRATE_PALETTES, type SubstrateLook } from './substrate';
 import { celebrateFrame, CELEBRATE_SECONDS, sparkleAlpha, sparkleBurst, type Sparkle } from './celebrate';
-import { applyFoodLook, BITE_SECONDS, biteKick, frenzyLevel, visiblePellets, mouthOpenness, pickEaten, pickFoodKind, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type FoodLook, type Mouth, type Pellet } from './feeding';
+import { applyFoodLook, BITE_SECONDS, biteKick, biteMotion, frenzyLevel, visiblePellets, mouthOpenness, pickEaten, pickFoodKind, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type FoodLook, type Mouth, type Pellet } from './feeding';
 import { canvasTexture, flakeTextures, spotlightTexture, makeCanvas, mix, pelletTextures, softDotTexture, tabletTexture, wormTextures } from './paint';
 import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame, TEST_SECONDS, WATER_CHANGE_SECONDS, type KitParam } from './ops-fx';
 import { PlantMesh } from './plant-sway';
@@ -123,6 +124,8 @@ export interface TankViewEvents {
   /** 造景模式：點選、放開拖曳的物件（x 是 0–1 的橫向位置）。 */
   onScapeSelect?: (target: ScapeTarget | null) => void;
   onScapeDrop?: (target: ScapeTarget, x: number) => void;
+  /** 開缸演出進到下一步（放音效、說明字）。 */
+  onSetupStep?: (step: SetupStep) => void;
 }
 
 /** 魚畫得比真實比例大一些（遊戲裡要看得清楚品系花紋）。 */
@@ -179,6 +182,11 @@ export class TankView {
   private readonly scrollBar = new Graphics();
   private readonly overlay = new Graphics();
   private readonly vignette = new Sprite();
+  /** 開缸演出：空缸時蓋住水的空氣色（畫在後景上、底沙下）、霧濁和倒沙（畫在最上面）、底沙由下往上露出的遮罩。 */
+  private readonly setupBack = new Graphics();
+  private readonly setupFx = new Graphics();
+  private readonly sandMask = new Graphics();
+  private setupT = -1;
 
   private insets: Insets = { top: 0, bottom: 0 };
   private bounds: TankBounds;
@@ -264,6 +272,7 @@ export class TankView {
     this.gearGlow.blendMode = 'add';
     this.root.addChild(
       this.backdrop,
+      this.setupBack,
       this.scape.rocks.back,
       this.scape.plants.back,
       this.backFish,
@@ -292,6 +301,8 @@ export class TankView {
       this.partyFx,
       this.tubeLabels,
       this.overlay,
+      this.setupFx,
+      this.sandMask,
       this.scape.overlay,
       this.vignette,
       this.scrollBar,
@@ -480,7 +491,95 @@ export class TankView {
     this.animateLight(state, dt);
     this.updateBubbles(state, dt);
     this.drawOverlay(state);
+    this.drawSetup(dt);
     this.scape.drawEdit(state, this.bounds, (x) => this.bounds.floor?.(x) ?? this.bounds.bottom, this.selectedScapeRect());
+  }
+
+  /** 播開缸演出：倒沙、注水、裝設備、開燈（約 9 秒）。 */
+  playSetup(): void {
+    this.setupT = 0;
+  }
+
+  /** 跳過開缸演出：下一格直接演完（設備、燈都到位，照樣通知 'done'）。 */
+  skipSetup(): void {
+    if (this.setupT >= 0) this.setupT = Math.max(this.setupT, SETUP_SECONDS - 1e-4);
+  }
+
+  get settingUp(): boolean {
+    return this.setupT >= 0;
+  }
+
+  private drawSetup(dt: number): void {
+    const g = this.setupFx;
+    const back = this.setupBack;
+    g.clear();
+    back.clear();
+    if (this.setupT < 0) return;
+    const prev = this.setupT;
+    this.setupT += dt;
+    const step = setupStepAt(prev, this.setupT);
+    if (step) this.events.onSetupStep?.(step);
+    const fade = [this.gearArtLayer, this.gear, this.gearGlow, this.bubbleLayer, this.rayLayer, this.causticsLayer, this.moteLayer, this.frontFish, this.backFish];
+    if (this.setupT >= SETUP_SECONDS) {
+      this.setupT = -1;
+      for (const c of fade) c.alpha = c === this.backFish ? 0.75 : 1;
+      this.gearArtLayer.y = this.gear.y = this.gearGlow.y = 0;
+      this.front.mask = null;
+      this.sandMask.clear();
+      return;
+    }
+    const L = setupLook(this.setupT);
+    const b = this.bounds;
+    const hs = this.hs;
+    const floor = b.bottom;
+    // 底沙：由下往上堆出來
+    const sandTop = b.surface + (b.bottom - b.surface) * 0.7;
+    const maskTop = b.height - (b.height - sandTop) * L.sand;
+    this.sandMask.clear().rect(0, maskTop, b.width, b.height - maskTop).fill(0xffffff);
+    this.front.mask = this.sandMask;
+    // 水位以上是空氣：玻璃後面淡淡的房間色，蓋住後景的水
+    const waterY = b.height - (b.height - b.surface) * L.water;
+    if (waterY > 0) back.rect(0, 0, b.width, waterY).fill({ color: 0xd9e9ee, alpha: 0.94 });
+    // 倒沙：一道沙流從上方落下，落點濺起一點沙
+    if (L.pouring) {
+      const x = b.width * 0.38 + Math.sin(this.setupT * 1.7) * b.width * 0.08;
+      const top = b.surface - 10 * hs;
+      const land = floor - (floor - sandTop) * L.sand * 0.6;
+      g.rect(x - 7 * hs, top, 14 * hs, land - top).fill({ color: 0xe2cfa4, alpha: 0.75 });
+      g.rect(x - 3 * hs, top, 6 * hs, land - top).fill({ color: 0xf6ead0, alpha: 0.6 });
+      for (let i = 0; i < 40; i++) {
+        const k = (i * 0.137 + this.setupT * 1.9) % 1;
+        const y = top + (land - top) * k;
+        g.circle(x + Math.sin(i * 12.9) * 10 * hs * k, y, (1.6 + (i % 3) * 0.8) * hs).fill({ color: i % 2 ? 0xc9b48e : 0xf0e4c8, alpha: 0.95 });
+      }
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI + this.setupT * 3;
+        g.circle(x + Math.cos(a) * 16 * hs, land - Math.abs(Math.sin(a)) * 8 * hs, 1.5 * hs).fill({ color: 0xd9c49a, alpha: 0.7 });
+      }
+    }
+    // 注水：水面一條亮線，水裡一開始霧濁、慢慢沉澱變清
+    if (L.water > 0 && L.water < 1) {
+      g.rect(0, waterY - 1.5 * hs, b.width, 3 * hs).fill({ color: 0xffffff, alpha: 0.55 });
+      const x = b.width * 0.7;
+      g.rect(x - 4 * hs, 0, 8 * hs, waterY).fill({ color: 0xbfe8f5, alpha: 0.45 });
+      for (let i = 0; i < 10; i++) {
+        const a = this.setupT * 6 + i * 2.1;
+        g.circle(x + Math.cos(a) * 18 * hs, waterY + 6 * hs + Math.abs(Math.sin(a)) * 20 * hs, (2 + (i % 3)) * hs).fill({ color: 0xffffff, alpha: 0.5 });
+      }
+    }
+    if (L.milk > 0.01) g.rect(0, waterY, b.width, b.height - waterY).fill({ color: 0xdde9e2, alpha: L.milk });
+    // 設備：從上面放進缸裡
+    for (const c of [this.gearArtLayer, this.gear, this.gearGlow]) {
+      c.alpha = L.gear;
+      c.y = -(1 - L.gear) * 40 * hs;
+    }
+    this.bubbleLayer.alpha = L.gear;
+    // 開燈：之前整缸偏暗，燈亮後光束、焦散才出現
+    if (L.light < 1) g.rect(0, 0, b.width, b.height).fill({ color: 0x06141c, alpha: (1 - L.light) * 0.38 });
+    this.rayLayer.alpha = this.causticsLayer.alpha = L.light;
+    this.moteLayer.alpha = L.water * (1 - L.milk);
+    this.frontFish.alpha = L.light;
+    this.backFish.alpha = 0.75 * L.light;
   }
 
   /** 生小魚的慶祝特寫：聚光在母魚身上幾秒，金色亮點往上飄。 */
@@ -1455,7 +1554,7 @@ export class TankView {
       view.holder.position.set(swimmer.x, swimmer.y);
       // 圖層是頭朝左畫的：往右游時水平翻轉。轉身時身體先壓窄再彈回，不是瞬間翻面。
       // 蝦受驚往後彈開時頭的方向不變
-      if (fish.alive && !(swimmer.startle! > 0)) stepTurn(view.turn, swimmer.vx, dt);
+      if (fish.alive && !(swimmer.startle! > 0)) stepTurn(view.turn, swimmer.vx, dt, swimmer.eating && !isShrimpSpecies(fish.species));
       const facingLeft = view.turn.f > 0;
       const turn = turnScale(view.turn.f);
       const k = (this.lengthPx(fish) / rig.lengthPx) * depth;
@@ -1476,22 +1575,24 @@ export class TankView {
         rig.scale.y = k * turn.sy * sick.thin * hungerLook(fish.hunger).thin * (1 - 0.55 * sick.flash);
         rig.alpha = rig.look.alpha;
         rig.setDim(sick.dim);
-        const tilt = symptoms.includes('loss_of_balance') ? 1.2 : Math.max(-0.35, Math.min(0.35, Math.atan2(swimmer.vy, Math.abs(swimmer.vx) + 1) * 0.6)) + 0.5 * sick.flash;
+        const tilt = symptoms.includes('loss_of_balance') ? 1.2 : swimTilt(swimmer) + 0.5 * sick.flash;
         rig.rotation = facingLeft ? tilt : -tilt;
         const clamped = symptoms.includes('clamped_fins');
-        rig.animate(swimmer.phase, clamped ? 0.25 : 1, clamped ? 0.55 : 1, fish.finDamage);
+        // 停在飼料旁邊吃：尾巴只輕輕擺著平衡
+        const hovering = swimmer.eating && !isShrimpSpecies(fish.species);
+        rig.animate(swimmer.phase, clamped ? 0.25 : hovering ? 0.35 : 1, clamped ? 0.55 : 1, fish.finDamage);
       }
-      // 咬一口：往前一衝、頭往下點一下
+      // 咬一口：身體只往前吸一點點，動作集中在張嘴
       const len = this.lengthPx(fish) * depth;
       const dir = facingLeft ? -1 : 1;
       view.biteT += dt;
       const kick = biteKick(view.biteT);
       if (kick > 0 && !isShrimpSpecies(fish.species)) {
-        view.holder.x += dir * kick * len * 0.12;
-        rig.rotation += dir * kick * 0.18;
-        // 張口咬的瞬間身體壓扁一成再彈回
-        rig.scale.x *= 1 - 0.1 * kick;
-        rig.scale.y *= 1 + 0.05 * kick;
+        const m = biteMotion(kick);
+        view.holder.x += dir * m.dx * len;
+        rig.rotation += dir * m.rot;
+        rig.scale.x *= m.sx;
+        rig.scale.y *= m.sy;
       }
       if (rig instanceof PaintedRig) rig.setMouthOpen(isShrimpSpecies(fish.species) ? 0 : mouthOpenness(kick));
       if (isShrimpSpecies(fish.species)) this.drawShrimpLimbs(view, fish, dt);

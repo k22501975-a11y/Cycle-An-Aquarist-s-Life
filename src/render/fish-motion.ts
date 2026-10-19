@@ -34,12 +34,14 @@ export interface Swimmer {
   wander: number;
   /** 尾巴擺動相位。 */
   phase: number;
-  /** 蝦：抱著飼料原地夾著吃。 */
+  /** 蝦：抱著飼料原地夾著吃；魚：停在飼料旁邊吃（不轉身、身體不歪）。 */
   eating?: boolean;
   /** 蝦：受驚往後彈開還剩幾秒（這段時間不轉身）。 */
   startle?: number;
   /** 跟著哪尾母魚（親魚護幼的仔魚）。 */
   follow?: number;
+  /** 畫面上身體的一半長、一半高（像素），別的魚算距離時用。 */
+  size?: { halfLen: number; halfH: number };
 }
 
 /** 蝦受驚彈開的時間（秒）。 */
@@ -110,6 +112,7 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
 
   const sym = new Set(cond.symptoms);
   let speed = p.speed * scale;
+  s.size = cond.body;
   s.eating = false;
 
   // 蝦受驚：尾巴一收往後彈開（頭的方向不變），慢慢停下
@@ -141,6 +144,8 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   let targetDepth = p.depth;
   if (sym.has('hiding')) targetDepth = 0.9;
   if (sym.has('gasping')) targetDepth = 0;
+  // 同一群的魚各有一點偏好的上下位置，不會全擠在同一個水層疊成一團（#147）
+  else if (p.cohesion > 0) targetDepth = Math.min(1, Math.max(0, targetDepth + (((s.id * 0.618) % 1) - 0.5) * 0.35));
   const targetY = bounds.surface + 12 * scale + targetDepth * (bounds.bottom - bounds.surface - 24 * scale);
   if (!p.crawler) ay += ((targetY - s.y) / (bounds.bottom - bounds.surface)) * 0.9;
 
@@ -182,6 +187,7 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   }
 
   // 群體：聚集、對齊、分離
+  let sepX = 0, sepY = 0;
   let cx = 0, cy = 0, avx = 0, avy = 0, n = 0;
   for (const o of all) {
     if (o === s) continue;
@@ -192,6 +198,12 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
     if (d2 < minD * minD && d2 > 0.01) {
       ax -= (dx / Math.sqrt(d2)) * 1.2;
       ay -= (dy / Math.sqrt(d2)) * 1.2;
+    }
+    // 照身體大小留個人空間（#147）：前後約半個身長、上下一個身高，靠太近就推開，上下錯開為主
+    if (!mom && !p.crawler && !PROFILES[o.species].crawler && o.follow === undefined) {
+      const sep = personalSpace(s, o, scale);
+      sepX += sep.x;
+      sepY += sep.y;
     }
     if (o.species === s.species && d2 < (120 * scale) ** 2) {
       cx += o.x; cy += o.y; avx += o.vx; avy += o.vy; n++;
@@ -223,6 +235,15 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
       s.eating = true;
       ax = 0;
       s.vx *= Math.pow(0.05, dt);
+    } else if (!p.crawler && d < Math.max(16 * scale, (cond.body?.halfLen ?? 0) * 1.3)) {
+      // 游到飼料旁邊：煞車停住、身體穩穩的，只張嘴吃（YenWel：吃東西只要動嘴巴，不要整條魚左右晃）
+      s.eating = true;
+      ax = ((best.x - s.x) / d) * 0.4;
+      ay = ((best.y - s.y) / d) * 0.4;
+      s.vx *= Math.pow(0.02, dt);
+      s.vy *= Math.pow(0.02, dt);
+      speed *= 0.3;
+      chasing = true;
     } else {
       const dx = best.x - s.x;
       // 快到飼料正上方時放慢橫向、不再硬拉：不然會衝過頭又折回，看起來左右狂晃
@@ -236,6 +257,10 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
       chasing = !p.crawler;
     }
   }
+
+  // 分離最後才加：追飼料、停著吃會蓋掉前面的方向，但不能蓋掉個人空間（停著吃時推得輕一點，大家擠在同一顆飼料邊也看得出幾條）
+  ax += sepX * (s.eating ? 0.5 : 1);
+  ay += sepY * (s.eating ? 0.5 : 1);
 
   // 餓很久又沒飼料：不時游到水面前面討食（玩家一看就知道該餵了）
   if (!chasing && !p.crawler && (cond.begging ?? 0) > 0 && cond.follow === undefined && cond.nestX === undefined && !sym.has('not_eating')) {
@@ -276,6 +301,23 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
     : Math.min(Math.max(bounds.surface + 4, floorAt(bounds, s.x) - Math.max(3 * scale, halfH)), Math.max(bounds.surface + 4 + halfH * 0.3, s.y + s.vy * dt));
   // 病懨懨的魚尾巴也擺得慢
   s.phase += dt * (4 + v / (8 * scale)) * (sym.has('lethargic') || sym.has('loss_of_balance') ? 0.5 : 1);
+}
+
+/**
+ * 兩條魚的個人空間（#147）：以兩條魚身體大小算一個橢圓（前後半個身長以上、上下一個身高），
+ * 在裡面就往外推，越深推越用力；上下推得比前後用力，看起來是錯開一層而不是互相撞開。
+ * 正好疊在同一點時照 id 決定誰往上。
+ */
+export function personalSpace(s: Swimmer, o: Swimmer, scale: number): { x: number; y: number } {
+  const dx = o.x - s.x, dy = o.y - s.y;
+  const rx = Math.max(14 * scale, ((s.size?.halfLen ?? 9 * scale) + (o.size?.halfLen ?? 9 * scale)) * 0.75);
+  const ry = Math.max(8 * scale, ((s.size?.halfH ?? 4 * scale) + (o.size?.halfH ?? 4 * scale)) * 1.3);
+  const nx = dx / rx, ny = dy / ry;
+  const q = Math.sqrt(nx * nx + ny * ny);
+  if (q >= 1) return { x: 0, y: 0 };
+  const push = (1 - q) * 9;
+  if (q < 0.05) return { x: 0, y: (s.id < o.id ? -1 : 1) * push * 1.4 };
+  return { x: -(nx / q) * push * 0.6, y: -(ny / q) * push * 1.4 };
 }
 
 export interface SickLook {
@@ -359,9 +401,10 @@ const TURN_COOLDOWN = 0.9;
 const TURN_URGENT_SPEED = 40;
 
 /** 用彈簧把面向帶到游的方向：稍微衝過頭再彈回，所以轉完會有一下回彈。 */
-export function stepTurn(s: TurnState, vx: number, dt: number): void {
+export function stepTurn(s: TurnState, vx: number, dt: number, hold = false): void {
   const dir = s.dir ?? (Math.sign(s.f) || 1);
-  const want = vx < -TURN_DEADZONE ? 1 : vx > TURN_DEADZONE ? -1 : dir;
+  // hold：停在飼料旁邊吃的時候不轉身，不然一點點橫向漂移就左右翻面
+  const want = hold ? dir : vx < -TURN_DEADZONE ? 1 : vx > TURN_DEADZONE ? -1 : dir;
   s.cool = Math.max(0, (s.cool ?? 0) - dt);
   s.dir = dir;
   if (want !== dir) {
@@ -375,6 +418,12 @@ export function stepTurn(s: TurnState, vx: number, dt: number): void {
   const k = 90, damping = 2 * Math.sqrt(k) * 0.7;
   s.v += (k * (s.dir - s.f) - damping * s.v) * dt;
   s.f = Math.max(-1.2, Math.min(1.2, s.f + s.v * dt));
+}
+
+/** 游泳時身體跟著上下的速度微微仰頭、低頭；停著吃東西時幾乎不歪，不然原地上下漂就前後點頭。 */
+export function swimTilt(s: Swimmer): number {
+  const tilt = Math.max(-0.35, Math.min(0.35, Math.atan2(s.vy, Math.abs(s.vx) + 1) * 0.6));
+  return s.eating && !PROFILES[s.species].crawler ? tilt * 0.15 : tilt;
 }
 
 /** 面向換算成縮放：轉到一半身體壓窄、稍微變高；衝過頭時拉長、變扁。 */

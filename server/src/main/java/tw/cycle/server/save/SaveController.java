@@ -53,6 +53,8 @@ public class SaveController {
     private final MarketService market;
     /** 已經在市場出貨的魚又出現在存檔裡。 */
     private static final String SHIPPED = "shipped_fish";
+    /** 存檔最上層的欄位（src/game/save.ts 的 SaveFile）。 */
+    private static final java.util.Set<String> SAVE_FIELDS = java.util.Set.of("version", "savedAt", "timeScale", "state", "backedUpAt", "tanks", "active");
     /** 補算的最短間隔（#73）。 */
     static final Duration ADVANCE_EVERY = Duration.ofMinutes(1);
     private static final Logger log = LoggerFactory.getLogger(SaveController.class);
@@ -84,7 +86,10 @@ public class SaveController {
     public Map<String, Object> put(@RequestAttribute(AuthInterceptor.ACCOUNT_ID) Long accountId, @Valid @RequestBody Upload upload) throws Exception {
         JsonNode file = upload.save();
         if (!file.path("version").isInt() || !file.path("savedAt").isNumber() || !file.path("state").isObject())
-            throw new ApiException(HttpStatus.BAD_REQUEST, "invalid", "這不是水族人生的存檔");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "invalid", "這不是 Cycle: An Aquarist's Life 的存檔");
+        // 不認得的最上層欄位不收（塞垃圾欄位撐大存檔，#79）
+        for (var names = file.fieldNames(); names.hasNext(); )
+            if (!SAVE_FIELDS.contains(names.next())) throw new ApiException(HttpStatus.BAD_REQUEST, "invalid", "這不是 Cycle: An Aquarist's Life 的存檔");
         String data = json.writeValueAsString(file);
         if (data.getBytes(StandardCharsets.UTF_8).length > props.maxSaveBytes())
             throw new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "too_large", "存檔太大了，雲端放不下");

@@ -59,35 +59,9 @@ export const MOCKUP_PX_PER_CM = 1100 / 60;
 export const WATER = { top: 0x2a93b4, mid: 0x14627c, bottom: 0x0a3140 };
 
 /**
- * 中景（畫面評測 V18：後景只剩漸層，缸很空）：左後方一叢長帶葉、右後方一叢圓葉、中間偏左一組青苔石。
- * 畫在後景上，比前景模糊、淡一點，接著跟後景一起蓋水色，看起來在缸的最後面；玩家自己的造景永遠在它前面。
- */
-function paintMidground(ctx: CanvasRenderingContext2D, b: TankBounds, hs: number, k: number): void {
-  const { width: w, bottom } = b;
-  const items: Array<[key: string, x: number, height: number, alpha: number]> = [
-    ['mid-plants-left', 0.07, 210, 0.75],
-    ['mid-rocks', 0.3, 52, 0.7],
-    ['mid-plants-right', 0.86, 92, 0.72],
-  ];
-  for (const [key, fx, height, alpha] of items) {
-    const img = sceneryImage(key);
-    if (!img) continue;
-    const { w: iw, h: ih } = imageSize(img);
-    const dh = height * hs;
-    const dw = (iw / ih) * dh;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.filter = `blur(${(1.4 * k).toFixed(2)}px) saturate(0.8) brightness(0.92)`;
-    // 底部埋進沙裡一點，不會浮在沙面上
-    ctx.drawImage(img, w * fx - dw / 2, bottom - dh + 10 * hs, dw, dh);
-    ctx.restore();
-  }
-}
-
-/**
- * 後景：深青藍的水、上方的光暈、遠處的岩石與水草剪影。
- * 有精繪背景圖時照螢幕解析度畫（手機高解析度螢幕上才不會糊成一片），只留一點點模糊和水色當作遠景；
- * 沒有素材時程式畫的剪影用 1/4 解析度繪製，放大後就是霧濛濛的遠景。
+ * 後景：只有水（YenWel：「背景應該只有水才對」，design/first-10-minutes.md F1-b）：青藍的水、上方的光暈、往下越來越濃的水霧。
+ * 不畫任何水草、石頭；缸裡看得到的每一株草、每一顆石頭都是玩家自己擺的。
+ * 有精繪背景圖時照螢幕解析度畫（手機高解析度螢幕上才不會糊成一片）；沒有素材時用 1/4 解析度畫漸層。
  */
 export function paintBackdrop(b: TankBounds, hs: number, pixelRatio = 1): Texture {
   const art = sceneryImage('bg-back');
@@ -130,7 +104,6 @@ export function paintBackdrop(b: TankBounds, hs: number, pixelRatio = 1): Textur
       ctx.fillStyle = blend;
       ctx.fillRect(0, dy, w, dh * 0.35);
     }
-    paintMidground(ctx, b, hs, k);
     // 蓋一層青色（濾色）：整體偏青、亮，不是灰綠
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
@@ -150,34 +123,6 @@ export function paintBackdrop(b: TankBounds, hs: number, pixelRatio = 1): Textur
     return canvasTexture(canvas, false);
   }
 
-  const rand = seeded(9173);
-  // 遠處的岩壁：兩層，越遠越淡越藍
-  for (const [depth, color, alpha] of [[0.32, 0x2b7e95, 0.55], [0.18, 0x1d6578, 0.7]] as const) {
-    ctx.fillStyle = rgba(color, alpha);
-    ctx.beginPath();
-    ctx.moveTo(0, h);
-    for (let i = 0; i <= 24; i++) {
-      const x = (i / 24) * w;
-      const edge = Math.abs(i / 24 - 0.5) * 2; // 兩側較高，中間留出深處
-      ctx.lineTo(x, bottom - (h * depth * (0.35 + edge * 0.9)) * (0.75 + 0.25 * Math.sin(i * 1.7 + depth * 10)));
-    }
-    ctx.lineTo(w, h);
-    ctx.fill();
-  }
-  // 遠處的水草剪影
-  ctx.strokeStyle = 'rgba(40,120,110,0.55)';
-  ctx.lineCap = 'round';
-  for (let i = 0; i < w / (7 * Math.max(0.5, hs)); i++) {
-    const x = rand() * w;
-    const side = Math.abs(x / w - 0.5) * 2;
-    if (side < 0.35 && rand() < 0.7) continue;
-    const hh = (40 + rand() * 120) * hs * (0.6 + side);
-    ctx.lineWidth = (3 + rand() * 4) * hs;
-    ctx.beginPath();
-    ctx.moveTo(x, bottom + 10 * hs);
-    ctx.quadraticCurveTo(x + (rand() - 0.5) * 30 * hs, bottom - hh * 0.6, x + (rand() - 0.5) * 20 * hs, bottom - hh);
-    ctx.stroke();
-  }
   // 水的霧氣：越往下越濃
   const haze = ctx.createLinearGradient(0, h * 0.35, 0, h);
   haze.addColorStop(0, 'rgba(20,90,110,0)');

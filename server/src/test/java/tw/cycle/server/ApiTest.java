@@ -98,6 +98,19 @@ class ApiTest {
         for (int i = 0; i < 8; i++)
             send(post("/api/auth/login"), null, "{\"username\":\"locked_out\",\"password\":\"nope-nope\"}").andExpect(status().isUnauthorized());
         send(post("/api/auth/login"), null, "{\"username\":\"locked_out\",\"password\":\"guppy-1234\"}").andExpect(status().isTooManyRequests());
+        // 只鎖那個 IP：別人不能故意把玩家鎖在外面（#79）
+        send(post("/api/auth/login").with(r -> {
+            r.setRemoteAddr("203.0.113.9");
+            return r;
+        }), null, "{\"username\":\"locked_out\",\"password\":\"guppy-1234\"}").andExpect(status().isOk());
+    }
+
+    @Test
+    void 存檔不認得的最上層欄位不收_請求太大直接擋() throws Exception {
+        String token = register("junk_saver");
+        send(put("/api/save"), token, "{\"baseRevision\":0,\"save\":{\"version\":3,\"savedAt\":1,\"state\":{},\"junk\":1}}").andExpect(status().isBadRequest());
+        // 比存檔上限加外層欄位還大的請求，沒解析就回 413（#79）
+        send(put("/api/save"), token, "{\"pad\":\"" + "x".repeat(20_000) + "\"}").andExpect(status().isPayloadTooLarge());
     }
 
     @Test

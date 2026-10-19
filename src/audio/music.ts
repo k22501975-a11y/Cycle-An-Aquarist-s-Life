@@ -1,7 +1,8 @@
 /**
- * 背景音樂：程式即時編的指彈吉他小品（不需要音檔）。
- * D 大調四和弦循環，低音拇指交替彈根音與五度，高音弦用手指撥分解和弦，
- * 每段隨機變化；晚上關燈後彈得更稀疏、更輕。這裡只有純函式，方便測試。
+ * 背景音樂：程式即時編的指彈吉他小品（不需要音檔，沒有授權問題）。
+ * YenWel（自己彈指彈）說原本的吉他「很躁」：改成 64 BPM 的慢板，一個和弦撐兩小節，
+ * 拇指只在第一拍輕輕彈根音，手指慢慢往上撥分解和弦，樂句結尾用泛音收；不刷弦、沒有重低音。
+ * 晚上關燈後彈得更稀疏、更輕。這裡只有純函式，方便測試。
  */
 
 export interface Note {
@@ -10,6 +11,8 @@ export interface Note {
   midi: number;
   /** 0～1 */
   velocity: number;
+  /** 泛音：鐘聲一樣的純音，不是撥弦。 */
+  harmonic?: boolean;
 }
 
 interface Chord {
@@ -20,15 +23,17 @@ interface Chord {
   treble: number[];
 }
 
-/** 吉他常見的開放和弦按法（MIDI 音高）。 */
+/** 吉他常見的開放和弦按法（MIDI 音高），D 大調、開放弦多，聽起來比較空靈。 */
 export const PROGRESSION: Chord[] = [
-  { name: 'Dmaj9', root: 50, fifth: 57, treble: [62, 64, 66, 69, 73, 76] },
-  { name: 'Bm7', root: 47, fifth: 54, treble: [62, 66, 69, 71, 74] },
-  { name: 'Gmaj7', root: 43, fifth: 50, treble: [62, 66, 67, 71, 74] },
-  { name: 'A7sus4', root: 45, fifth: 52, treble: [62, 64, 67, 69, 74] },
+  { name: 'Dmaj9', root: 50, fifth: 57, treble: [62, 64, 66, 69, 73] },
+  { name: 'Gmaj7/D', root: 50, fifth: 55, treble: [62, 66, 67, 71, 74] },
+  { name: 'Bm11', root: 47, fifth: 54, treble: [62, 64, 66, 69, 71] },
+  { name: 'Asus2', root: 45, fifth: 52, treble: [61, 64, 69, 71, 76] },
 ];
 
-export const BPM = 72;
+/** 一個和弦撐幾小節。 */
+export const BARS_PER_CHORD = 2;
+export const BPM = 64;
 export const STEPS_PER_BAR = 8;
 export const STEP_SECONDS = 60 / BPM / 2;
 
@@ -46,8 +51,17 @@ function rng(seed: number): () => number {
 }
 
 export function chordForBar(bar: number): Chord {
-  return PROGRESSION[((bar % PROGRESSION.length) + PROGRESSION.length) % PROGRESSION.length];
+  const i = Math.floor(bar / BARS_PER_CHORD);
+  return PROGRESSION[((i % PROGRESSION.length) + PROGRESSION.length) % PROGRESSION.length];
 }
+
+/** 分解和弦的走法：多半是往上撥、再回來一個音。 */
+const PATTERNS: number[][] = [
+  [0, 1, 2, 3],
+  [0, 2, 1, 3],
+  [1, 2, 3, 2],
+  [0, 1, 3, 2],
+];
 
 /**
  * 一小節要彈的音。
@@ -57,28 +71,28 @@ export function barNotes(bar: number, calm = 0): Note[] {
   const chord = chordForBar(bar);
   const r = rng(bar + 1);
   const notes: Note[] = [];
+  const second = bar % BARS_PER_CHORD === 1;
   const phraseEnd = bar % 16 === 15;
-  // 拇指：1、3 拍根音，2、4 拍五度（Travis picking）
-  for (const [step, midi] of [[0, chord.root], [2, chord.fifth], [4, chord.root], [6, chord.fifth]] as const) {
-    if (calm > 0.5 && (step === 2 || step === 6)) continue;
-    notes.push({ step, midi, velocity: step === 0 ? 0.7 : 0.5 });
-  }
+  // 拇指：換和弦時第一拍輕輕彈根音，第二小節只偶爾補一個五度
+  if (!second) notes.push({ step: 0, midi: chord.root, velocity: 0.42 });
+  else if (r() < 0.5 - calm * 0.4) notes.push({ step: 4, midi: chord.fifth, velocity: 0.3 });
   if (phraseEnd) {
-    // 樂句結尾：只彈和弦加一個高音泛音感的長音
-    notes.push({ step: 0, midi: chord.treble.at(-1)! + 12, velocity: 0.35 });
+    // 樂句結尾：兩個泛音，讓尾巴留白
+    notes.push({ step: 2, midi: chord.treble.at(-1)! + 12, velocity: 0.32, harmonic: true });
+    notes.push({ step: 5, midi: chord.treble.at(-2)! + 12, velocity: 0.24, harmonic: true });
     return notes;
   }
-  // 手指：反拍撥高音，旋律大多往相鄰的音走
-  let idx = Math.floor(r() * chord.treble.length);
-  for (const step of [1, 3, 5, 7]) {
-    if (r() < 0.15 + calm * 0.45) continue;
-    const move = r();
-    idx += move < 0.35 ? -1 : move < 0.7 ? 1 : move < 0.85 ? 2 : -2;
-    idx = Math.max(0, Math.min(chord.treble.length - 1, idx));
-    notes.push({ step, midi: chord.treble[idx], velocity: 0.45 + r() * 0.25 });
-  }
-  // 偶爾在第一拍捏一個高音（pinch）
-  if (r() < 0.4 - calm * 0.3) notes.push({ step: 0, midi: chord.treble[chord.treble.length - 2], velocity: 0.55 });
+  // 手指：慢慢往上撥分解和弦，每個音隔一拍左右，留很多空間
+  const pattern = PATTERNS[Math.floor(r() * PATTERNS.length)];
+  const base = Math.floor(r() * Math.max(1, chord.treble.length - 3));
+  const steps = second ? [1, 3, 6] : [2, 4, 6];
+  steps.forEach((step, i) => {
+    if (r() < 0.12 + calm * 0.5) return;
+    const idx = Math.min(chord.treble.length - 1, base + pattern[i]);
+    notes.push({ step, midi: chord.treble[idx], velocity: 0.28 + r() * 0.14 });
+  });
+  // 偶爾在小節中間點一個泛音
+  if (r() < 0.18 - calm * 0.15) notes.push({ step: 7, midi: chord.treble.at(-1)! + 12, velocity: 0.2, harmonic: true });
   return notes;
 }
 
@@ -98,7 +112,7 @@ export function pluckSamples(freq: number, sampleRate: number, seconds: number, 
   let prev = 0;
   for (let i = 0; i < period && i < out.length; i++) {
     const n = r() * 2 - 1;
-    prev = prev * 0.55 + n * 0.45;
+    prev = prev * 0.72 + n * 0.28;
     out[i] = prev;
   }
   // 高音衰減快、低音衰減慢
