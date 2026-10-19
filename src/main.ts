@@ -436,6 +436,7 @@ async function start(): Promise<void> {
         // 「你的第一個缸」卡片關掉後老闆才開口，不然對話框會從卡片後面露出來（#171）
         celebration.whenClear(() => {
           guideHeld = false;
+          toasts.release();
           guide.start();
         });
         return;
@@ -443,7 +444,7 @@ async function start(): Promise<void> {
       audio.play(step === 'sand' ? 'feed' : step === 'water' ? 'water' : step === 'gear' ? 'buy' : 'restore');
       // 燈有定時：還沒到開燈時間就說幾點會亮，不說「開燈！」卻是暗的
       const light = game.state.equipment.light;
-      toasts.show(step === 'light' && light && !sim.isLightOn(game.state) ? `燈設好定時了，${light.startHour}:00 會亮` : SETUP_CAPTIONS[step]);
+      toasts.showNow(step === 'light' && light && !sim.isLightOn(game.state) ? `燈設好定時了，${light.startHour}:00 會亮` : SETUP_CAPTIONS[step]);
     },
   });
   debugHandle.view = view;
@@ -451,6 +452,8 @@ async function start(): Promise<void> {
   const setupSkip = h('button.setup-skip', { type: 'button', onclick: () => view.skipSetup() }, '跳過 ›');
   const playSetup = () => {
     guideHeld = true;
+    // 演出時其他通知（今天的小事、畫質自動調整…）先排隊，演完再跳（#199）
+    toasts.hold();
     view.playSetup();
     // 演出時只留缸：上方列、任務卡、工具列先藏起來（#171）
     document.body.classList.add('setting-up');
@@ -1409,6 +1412,7 @@ async function start(): Promise<void> {
       if (!guideHeld) guide.update(game.state, game.tanks);
       setupBtn.hidden = !sim.needsSetup(game.tanks[0]) || sheet.isOpen;
       checkDaily();
+      if (scaping) scapeBar.refresh();
       celebrateStrains();
       for (const entry of unlockCodex(codexSeen, game.state)) {
         saveCodexSeen(store, codexSeen);
