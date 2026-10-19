@@ -32,6 +32,8 @@ const CLOSE_PER_S = 1.4;
  */
 const TARGET_S = 40;
 const CAP_S = 90;
+/** 時間到自動滴完時的水質差距：剛好在綠線外，拿「不錯」。 */
+const AUTO_GAP = DRIP_READY_GAP + 0.05;
 /** 一格最多算幾秒、每一小步幾秒。 */
 const MAX_FRAME_S = 2;
 const STEP_S = 0.05;
@@ -131,8 +133,10 @@ export function openDripGame(opts: DripGameOptions): Promise<DripOutcome | null>
       resolve(result);
     };
     cancelBtn.addEventListener('click', () => finish(null));
-    const release = () => {
-      const outcome = dripOutcome(session);
+    // auto：90 秒到了由老闆滴完，最多算「不錯」（差距停在綠線外一點）
+    const release = (auto = false) => {
+      const measured = dripOutcome(session);
+      const outcome = auto ? { ...measured, gap: Math.max(measured.gap, AUTO_GAP) } : measured;
       const grade = dripGrade(outcome);
       opts.sound?.(grade === 'rushed' ? 'warn' : 'quest');
       card.classList.add('done', grade);
@@ -141,7 +145,7 @@ export function openDripGame(opts: DripGameOptions): Promise<DripOutcome | null>
       cancelAnimationFrame(raf);
       window.setTimeout(() => finish(outcome), grade === 'rushed' ? 1500 : 1200);
     };
-    releaseBtn.addEventListener('click', release);
+    releaseBtn.addEventListener('click', () => release());
 
     const frame = (now: number) => {
       // 用現實時間算，切成 0.05 秒一小步（慢的手機一格要好幾秒也照樣滴得完、滴管照樣慢慢開大）；
@@ -152,14 +156,16 @@ export function openDripGame(opts: DripGameOptions): Promise<DripOutcome | null>
         const step = Math.min(STEP_S, dt);
         dt -= step;
         rate = nextValve(rate, holding, safeRate(session), step);
-        stepDrip(session, rate, step * speed);
+        // 加速很多時切細，模擬每步不超過 0.1 秒
+        const n = Math.ceil((step * speed) / 0.1);
+        for (let i = 0; i < n; i++) stepDrip(session, rate, (step * speed) / n);
         realS += step;
       }
       // 90 秒上限：剩下的幫玩家慢慢滴完（差距收到綠線，緊張程度照目前為止的算）
       if (realS >= CAP_S && !card.classList.contains('done')) {
         if (!dripReady(session)) session.addedMl = BAG_ML * (1 / DRIP_READY_GAP - 1);
         render();
-        release();
+        release(true);
         say.textContent = `時間差不多了，剩下的我幫你滴完。${say.textContent}`;
         return;
       }
