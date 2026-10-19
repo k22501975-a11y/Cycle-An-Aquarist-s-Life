@@ -103,6 +103,13 @@ import {
   QUARANTINE_DAYS,
   quarantineDays,
   releaseQuarantine,
+  dismissOrder,
+  fulfillOrder,
+  orderBoard,
+  orderRefusal,
+  orderSupply,
+  orderTitle,
+  type ShopOrder,
   moveToQuarantine,
   AIR_PUMPS,
   CHILLERS,
@@ -976,9 +983,41 @@ function sellContent(ctx: PanelContext): Node {
     } else toasts.show('今天店家不收了，明天再來', 'warn');
     refresh();
   };
+  // 訂單板（M21）：一鍵交貨，魚從所有缸挑最普通的那幾條
+  const board = orderBoard(s);
+  const orderRow = (o: ShopOrder) => {
+    const have = orderSupply(game.tanks, o);
+    const ready = have >= o.count;
+    return h(
+      'div.item.order',
+      {},
+      h('div', {}, h('b', {}, orderTitle(o)), h('div.hint', {}, `每${o.kind === 'cutting' ? '株' : '尾'} ${o.unitPrice} 元・共 ${o.unitPrice * o.count} 元・${ready ? '湊齊了' : `還差 ${o.count - have}`}`)),
+      button(
+        '交貨',
+        () => {
+          const got = game.actAll((tanks) => fulfillOrder(tanks, o.id));
+          if (got > 0) {
+            ctx.sound?.('buy');
+            toasts.show(`交了「${orderTitle(o)}」，拿到 ${got} 元。明天會有新的單`);
+          } else toasts.show(orderRefusal(game.tanks, o.id) ?? '交不了', 'warn');
+          refresh();
+        },
+        ready ? 'primary' : '',
+      ),
+      button('換一張', () => {
+        game.act((st) => dismissOrder(st, o.id));
+        toasts.show('撕掉這張單了，明天會補一張新的');
+        refresh();
+      }),
+    );
+  };
   return h(
     'div.stack',
     {},
+    h('h3', {}, '客人的訂單'),
+    board.orders.length === 0 ? h('p.hint', {}, '目前沒有訂單，明天再來看看。') : null,
+    ...board.orders.map(orderRow),
+    h('h3', {}, '賣給店家'),
     h('p.hint', {}, `水族店收健康的魚和插枝：成魚約店價五成，稀有品系、好鰭型賣得更貴；還沒長大的中魚只收三成，太小、生病的不收。今天還能賣 ${left} 次。`),
     groups.length === 0 && cuttingIds.length === 0 ? h('p', {}, '目前沒有店家會收的魚或插枝。把仔魚養大、修剪水草就有東西可以賣。') : null,
     ...groups.map((g) =>

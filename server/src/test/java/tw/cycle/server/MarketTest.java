@@ -16,6 +16,7 @@ import java.util.random.RandomGenerator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -32,6 +33,8 @@ class MarketTest {
     /** 固定的亂數：roll 決定運輸會不會死（0 一定死、0.99 不會死）。 */
     static class FixedRandom implements RandomGenerator {
         double roll = 0.99;
+        /** 出貨算運輸時間的當下要做的事（模擬同時有另一個請求，例如逾期取消）。 */
+        Runnable duringShip;
 
         @Override
         public long nextLong() {
@@ -40,6 +43,7 @@ class MarketTest {
 
         @Override
         public int nextInt(int bound) {
+            if (duringShip != null) duringShip.run();
             return 0;
         }
 
@@ -69,12 +73,14 @@ class MarketTest {
     @Autowired ObjectMapper json;
     @Autowired MutableClock clock;
     @Autowired FixedRandom random;
+    @Autowired JdbcTemplate db;
 
     record Player(String name, String token) {}
 
     @BeforeEach
     void reset() {
         random.roll = 0.99;
+        random.duringShip = null;
     }
 
     private ResultActions send(MockHttpServletRequestBuilder req, Player p, String body) throws Exception {
@@ -221,6 +227,42 @@ class MarketTest {
     }
 
     @Test
+    void 出貨途中訂單剛好逾期被取消_不能再出貨() throws Exception {
+        // #75：出貨先讀訂單狀態、最後才寫入，中間訂單被逾期取消（買家退款）也照樣改成已出貨，賣家又拿到貨款
+        Player amy = seasoned("amy");
+        Player ben = player("ben");
+        long order = buy(ben, list(amy, 200), "bag");
+        random.duringShip = () -> db.update("update market_order set status = 'cancelled' where id = ?", order);
+        send(post("/api/market/orders/" + order + "/ship"), amy, "{\"item\":{" + SAME_FISH + ",\"health\":1},\"bagTemp\":25,\"bagPh\":7}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("not_paid"));
+        random.duringShip = null;
+        // 出貨失敗整筆回滾（模擬的取消也一起回滾），過了期限照樣是逾期取消、退款給買家
+        clock.advance(Duration.ofHours(25));
+        assertThat(read(send(post("/api/market/orders/" + order + "/collect"), ben, null)).get("result").asText()).isEqualTo("refund");
+        assertThat(read(send(post("/api/market/orders/" + order + "/collect"), amy, null)).get("result").asText()).isEqualTo("cancelled");
+    }
+
+    @Test
+    void 水草插枝_數量要合理_出貨的是上架時的數量() throws Exception {
+        // #75：以前水草上架、出貨都不檢查，可以上架 999 株，或上架 5 株只出 1 株
+        Player amy = seasoned("amy");
+        Player ben = player("ben");
+        String plant = "{\"kind\":\"plant\",\"species\":\"java_moss\",\"title\":\"莫絲插枝\",\"price\":100,\"item\":%s}";
+        send(post("/api/market/listings"), amy, plant.formatted("{\"species\":\"java_moss\",\"count\":999}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("bad_item"));
+        send(post("/api/market/listings"), amy, plant.formatted("{\"species\":\"java_moss\",\"count\":1.5}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("bad_item"));
+        send(post("/api/market/listings"), amy, plant.formatted("{\"species\":\"anubias\",\"count\":3}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("bad_item"));
+        long id = read(send(post("/api/market/listings"), amy, plant.formatted("{\"species\":\"java_moss\",\"count\":3}")).andExpect(status().isCreated())).get("id").asLong();
+        long order = buy(ben, id, "bag");
+        send(post("/api/market/orders/" + order + "/ship"), amy, "{\"item\":{\"species\":\"java_moss\",\"count\":1},\"bagTemp\":25,\"bagPh\":7}").andExpect(status().isOk());
+        clock.advance(Duration.ofHours(4));
+        JsonNode got = read(send(post("/api/market/orders/" + order + "/collect"), ben, null).andExpect(status().isOk()));
+        assertThat(got.get("item").get("count").asInt()).isEqualTo(3);
+    }
+
+    @Test
     void 賣家的魚死了_取消訂單() throws Exception {
         Player amy = seasoned("amy");
         Player ben = player("ben");
@@ -247,6 +289,23 @@ class MarketTest {
         JsonNode seen = read(send(get("/api/market/listings?species=guppy&sort=new"), ben, null)).get(0);
         assertThat(seen.get("seller").get("doaRate").asDouble()).isEqualTo(1.0);
         assertThat(seen.get("seller").get("deals").asInt()).isEqualTo(0);
+    }
+
+    @Test
+    void 更新近況和出貨時不能改魚的血統() throws Exception {
+        // #75：以前只比對編號、品種、性別、基因，世代、近親係數、體質都能改了再賣
+        Player amy = seasoned("amy");
+        Player ben = player("ben");
+        long id = list(amy, 300);
+        send(put("/api/market/listings/" + id), amy, "{\"item\":{" + SAME_FISH + ",\"generation\":9,\"health\":1}}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("not_same_fish"));
+        send(put("/api/market/listings/" + id), amy, "{\"item\":{" + SAME_FISH + ",\"inbreeding\":0.5,\"health\":1}}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("not_same_fish"));
+        long order = buy(ben, id, "bag");
+        send(post("/api/market/orders/" + order + "/ship"), amy, "{\"item\":{" + SAME_FISH + ",\"constitution\":1.3,\"health\":1},\"bagTemp\":25,\"bagPh\":7}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("not_same_fish"));
+        // 近況（健康、長大）照樣可以變
+        ship(amy, order, 0.8);
     }
 
     @Test

@@ -85,6 +85,7 @@ public class MarketService {
         if (title.isBlank() || title.length() > 80) throw bad("bad_title", "名稱太長了");
         if (price < MarketRules.MIN_PRICE || price > MarketRules.MAX_PRICE) throw bad("bad_price", "售價要在 1 到 1,000,000 元之間");
         if ("fish".equals(kind) && sim.enabled()) item = serverFish(me, species, item);
+        if ("plant".equals(kind)) requireCuttings(species, item);
         String data = json.writeValueAsString(item);
         if (data.length() > MarketRules.MAX_ITEM_CHARS) throw bad("too_big", "商品資料太大");
         OffsetDateTime created = db.queryForObject("select created_at from account where id = ?", OffsetDateTime.class, me);
@@ -127,16 +128,52 @@ public class MarketService {
         return found.item();
     }
 
-    /** 同一條魚：品種、性別、基因都一樣（植物不檢查）。 */
+    /**
+     * 魚一出生就定下來、之後不會變的欄位：身分與血統（世代、近親係數、體質、老闆送的）。
+     * 健康、長大、懷孕這些近況會變，不比（#75：以前只比前 4 個，其他可以改了再賣）。
+     * 母魚的父系基因（sire）交配後會變，改由 {@link #serverSire} 用伺服器那份。
+     */
+    private static final List<String> IDENTITY = List.of("id", "species", "sex", "genome", "lineage", "generation", "inbreeding", "constitution", "gift");
+
+    /** 同一條魚：身分與血統都一樣（植物不檢查）。沒有這個欄位和 null 當成一樣。 */
     private static boolean sameFish(JsonNode a, JsonNode b) {
-        for (String key : List.of("id", "species", "sex", "genome"))
-            if (!java.util.Objects.equals(a.get(key), b.get(key))) return false;
+        for (String key : IDENTITY)
+            if (!java.util.Objects.equals(present(a.get(key)), present(b.get(key)))) return false;
         return true;
+    }
+
+    private static JsonNode present(JsonNode v) {
+        return v == null || v.isNull() ? null : v;
+    }
+
+    /**
+     * 母魚肚子裡的父系基因（sire）決定買家拿到的小魚，遊戲端送來的不算（#75）：
+     * 有伺服器模擬時用賣家雲端存檔裡那條魚的；存檔裡找不到（已經撈出來同步過）就用上架時的。
+     */
+    private JsonNode serverSire(long me, String listed, JsonNode item) throws Exception {
+        if (!sim.enabled() || !(item instanceof ObjectNode obj)) return item;
+        JsonNode sire = json.readTree(listed).get("sire");
+        String save = db.query("select data from cloud_save where account_id = ?", rs -> rs.next() ? rs.getString("data") : null, me);
+        if (save != null) {
+            SimClient.Inspect found = sim.inspect(json.readTree(save), item.path("id").asLong());
+            if (found.found() && found.item() != null) sire = found.item().get("sire");
+        }
+        if (present(sire) == null) obj.remove("sire");
+        else obj.set("sire", sire);
+        return obj;
     }
 
     private void requireSameFish(String kind, String listed, JsonNode item) throws Exception {
         if ("fish".equals(kind) && listed != null && !sameFish(json.readTree(listed), item))
             throw bad("not_same_fish", "這不是上架的那條魚");
+    }
+
+    /** 水草插枝：品種要跟上架的一樣，1 到 5 株的整數（#75）。插枝上架時已經從缸裡拿走，之後不會變。 */
+    private static void requireCuttings(String species, JsonNode item) {
+        JsonNode count = item.get("count");
+        if (!species.equals(item.path("species").asText()) || count == null || !count.isIntegralNumber()
+                || count.asInt() < 1 || count.asInt() > MarketRules.MAX_CUTTINGS)
+            throw bad("bad_item", "插枝的資料不對");
     }
 
     /** 賣家的遊戲更新魚的近況（健康、長大），買家看到的是即時的狀態（§3.3）。 */
@@ -147,7 +184,12 @@ public class MarketService {
         Map<String, Object> l = db.query("select kind, item from market_listing where id = ? and seller_id = ? and status = 'open'",
                 rs -> rs.next() ? Map.of("kind", rs.getString("kind"), "item", rs.getString("item")) : null, id, me);
         if (l == null) throw new ApiException(HttpStatus.NOT_FOUND, "no_listing", "這件商品已經不在架上");
+        if ("plant".equals(l.get("kind"))) throw bad("bad_kind", "插枝上架後不能改");
         requireSameFish((String) l.get("kind"), (String) l.get("item"), item);
+        if ("fish".equals(l.get("kind"))) {
+            item = serverSire(me, (String) l.get("item"), item);
+            data = json.writeValueAsString(item);
+        }
         int n = db.update("update market_listing set item = ?, health = ?, updated_at = ? where id = ? and seller_id = ? and status = 'open'", data, health(item), now(), id, me);
         if (n == 0) throw new ApiException(HttpStatus.NOT_FOUND, "no_listing", "這件商品已經不在架上");
     }
@@ -220,15 +262,26 @@ public class MarketService {
         if (data.length() > MarketRules.MAX_ITEM_CHARS) throw bad("too_big", "商品資料太大");
         String kind = (String) o.get("kind");
         // 出貨的要是上架的那條魚（品種、性別、基因一樣）
-        requireSameFish(kind, db.queryForObject("select item from market_listing where id = ?", String.class, o.get("listing_id")), item);
+        String listed = db.queryForObject("select item from market_listing where id = ?", String.class, o.get("listing_id"));
+        requireSameFish(kind, listed, item);
+        if ("fish".equals(kind)) {
+            item = serverSire(me, listed, item);
+            data = json.writeValueAsString(item);
+        } else {
+            // 插枝上架時就從缸裡拿走了，出貨的就是上架的那份，遊戲端送來的數量不算（#75）
+            item = json.readTree(listed);
+            data = listed;
+        }
         MarketRules.Packaging pack = MarketRules.PACKAGING.get((String) o.get("packaging"));
         int transit = MarketRules.MIN_TRANSIT_HOURS + random.nextInt(MarketRules.MAX_TRANSIT_HOURS - MarketRules.MIN_TRANSIT_HOURS + 1);
         boolean doa = random.nextDouble() < MarketRules.doaChance(kind, (String) o.get("species"), health(item), pack, transit);
         long realMinutes = Math.round(transit * 60.0 / MarketRules.TIME_SCALE);
+        // 只有還是「已付款」才能改成出貨：中間被逾期取消（買家已退款）就不能再出貨（#75）
+        int n = db.update("update market_order set status = 'shipped', item = ?, doa = ?, arrival_stress = ?, bag_temp = ?, bag_ph = ?, shipped_at = ?, arrive_at = ? where id = ? and status = 'paid'",
+                data, doa, MarketRules.arrivalStress(pack, transit), clamp(bagTemp, 10, 40), clamp(bagPh, 4, 10), now(), now().plusMinutes(realMinutes), id);
+        if (n == 0) throw new ApiException(HttpStatus.CONFLICT, "not_paid", "這筆訂單不能出貨了");
         if (o.get("buyer_id") != null)
             push.notifyAccount(((Number) o.get("buyer_id")).longValue(), "market", "「" + o.get("title") + "」到貨了，記得對水再放進缸裡", "arrive-" + id, now().plusMinutes(realMinutes));
-        db.update("update market_order set status = 'shipped', item = ?, doa = ?, arrival_stress = ?, bag_temp = ?, bag_ph = ?, shipped_at = ?, arrive_at = ? where id = ?",
-                data, doa, MarketRules.arrivalStress(pack, transit), clamp(bagTemp, 10, 40), clamp(bagPh, 4, 10), now(), now().plusMinutes(realMinutes), id);
         return order(me, id);
     }
 

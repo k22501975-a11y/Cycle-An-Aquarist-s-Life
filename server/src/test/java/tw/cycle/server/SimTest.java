@@ -249,6 +249,29 @@ class SimTest {
     }
 
     @Test
+    void 出貨時母魚肚子裡的父系基因用伺服器那份() throws Exception {
+        // #75：以前遊戲端可以把母魚的父系基因改成好的，買家拿到會生出好魚的母魚
+        String me = player();
+        String buyer = player();
+        clock.advance(Duration.ofDays(3));
+        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        JsonNode real = json.readTree("{\"id\":7,\"species\":\"guppy\",\"sex\":\"female\",\"genome\":{\"tail\":60},\"sire\":{\"genome\":{\"tail\":10},\"lineage\":3,\"inbreeding\":0},\"health\":1}");
+        sim.inspect = new SimClient.Inspect(true, true, real);
+        String fish = "{\"kind\":\"fish\",\"species\":\"guppy\",\"title\":\"孔雀魚 母\",\"price\":200,\"item\":{\"id\":7}}";
+        long listing = read(send(post("/api/market/listings"), me, fish).andExpect(status().isCreated())).get("id").asLong();
+        long order = read(send(post("/api/market/listings/" + listing + "/buy"), buyer, "{\"packaging\":\"bag\"}").andExpect(status().isOk())).get("id").asLong();
+
+        ObjectNode forged = real.deepCopy();
+        ((ObjectNode) forged.get("sire").get("genome")).put("tail", 100);
+        forged.put("health", 0.9);
+        send(post("/api/market/orders/" + order + "/ship"), me, "{\"item\":" + forged + ",\"bagTemp\":25,\"bagPh\":7}").andExpect(status().isOk());
+        // 出貨的那份（買家到貨會拿到的）：父系基因是伺服器的，近況是遊戲端的（到貨死不死是隨機的，所以看賣家這邊）
+        JsonNode shipped = read(send(get("/api/market/mine"), me, null)).get("sales").get(0).get("item");
+        assertThat(shipped.get("sire").get("genome").get("tail").asInt()).isEqualTo(10);
+        assertThat(shipped.get("health").asDouble()).isEqualTo(0.9);
+    }
+
+    @Test
     void 強制覆蓋一份對不上的存檔_收下但暫時不能上架魚() throws Exception {
         String me = player();
         clock.advance(Duration.ofDays(3));
