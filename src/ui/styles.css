@@ -831,3 +831,37 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .setup-panel > .row { justify-content: flex-end; gap: 8px; position: sticky; bottom: calc(-18px - env(safe-area-inset-bottom)); z-index: 2; margin: 0 -20px calc(-18px - env(safe-area-inset-bottom)); padding: 26px 20px calc(18px + env(safe-area-inset-bottom)); /* 卡片捲到按鈕列後面要被蓋住（#186）：上緣淡出、下面不透明 */ background: linear-gradient(180deg, rgba(8, 28, 38, 0) 0, rgb(9, 28, 38) 22px); }
 .setup-cta { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5; font-size: 18px; padding: 14px 22px; box-shadow: 0 0 24px rgba(227, 189, 109, 0.6); }
 .setup-cta[hidden] { display: none; }
+
+/* 每日 3 件小事（F3，#185）：左上角任務卡下面的小卡，三件各一個圖示，做完打勾；全做完發光、出現寶箱 */
+.daily-holder { position: absolute; z-index: 4; left: calc(env(safe-area-inset-left) + 14px); }
+.daily { display: flex; flex-direction: column; gap: 3px; width: min(220px, 40vw); padding: 7px 10px 8px; border-radius: 14px; }
+.daily-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.daily-head b { font-size: 12px; letter-spacing: 0.14em; color: var(--gold); }
+.daily-dots { display: inline-flex; gap: 4px; }
+.daily-dots i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgba(227, 189, 109, 0.7); }
+.daily-dots i.on { background: var(--gold-bright); box-shadow: 0 0 6px var(--gold); }
+.daily-task { display: flex; align-items: center; gap: 8px; padding: 2px 4px 2px 2px; border-radius: 10px; background: none; border: none; color: var(--text); font-size: 13px; text-align: left; cursor: pointer; }
+.daily-task:not(:disabled):hover { background: rgba(255, 255, 255, 0.06); }
+.daily-task img { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 7px; object-fit: contain; }
+.daily-task span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.daily-check { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid rgba(243, 234, 216, 0.4); }
+.daily-task.done { cursor: default; }
+.daily-task.done span { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(169, 188, 192, 0.6); }
+.daily-task.done img { filter: saturate(0.4) brightness(0.8); }
+.daily-task.done .daily-check { border-color: var(--ok); background: var(--ok) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.6 2.6L12 5.6' fill='none' stroke='%230b2a36' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat; }
+.daily.ready { border-color: var(--gold-bright); box-shadow: 0 0 0 1px rgba(246, 216, 145, 0.5), 0 0 22px rgba(246, 216, 145, 0.45); animation: daily-glow 1.8s ease-in-out infinite; }
+@keyframes daily-glow { 50% { box-shadow: 0 0 0 1px rgba(246, 216, 145, 0.7), 0 0 30px rgba(246, 216, 145, 0.7); } }
+.daily-chest { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 4px; padding: 6px 10px; font-size: 13.5px; }
+.daily-chest-icon { width: 24px; height: 20px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 20'%3E%3Cpath d='M2 8h20v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1Z' fill='%23a5652c' stroke='%235a3412' stroke-width='1.2'/%3E%3Cpath d='M2 8c0-4 3-7 10-7s10 3 10 7Z' fill='%23c98a43' stroke='%235a3412' stroke-width='1.2'/%3E%3Cpath d='M2 8h20' stroke='%23f6d891' stroke-width='2'/%3E%3Crect x='10' y='6' width='4' height='6' rx='1' fill='%23f6d891' stroke='%235a3412' stroke-width='1'/%3E%3C/svg%3E") center / contain no-repeat; animation: daily-chest 1.2s ease-in-out infinite; }
+@keyframes daily-chest { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-8deg); } 40% { transform: rotate(8deg); } 60% { transform: rotate(0); } }
+@media (max-height: 460px) { .daily { width: min(190px, 34vw); padding: 5px 8px 6px; gap: 1px; } .daily-task { font-size: 12px; } .daily-task img { width: 22px; height: 22px; } }
+.scaping .daily-holder, .setting-up .daily-holder { display: none; }
+@media (prefers-reduced-motion: reduce) { .daily.ready, .daily-chest-icon { animation: none; } }
+
+/* 早上報告卡的「今天的小事」 */
+.morning-daily { display: flex; flex-direction: column; gap: 6px; }
+.morning-daily-title { font-size: 12px; letter-spacing: 0.14em; color: var(--gold); }
+.morning-daily-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.morning-daily-task { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 6px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(227, 189, 109, 0.3); color: var(--text); font-size: 12.5px; cursor: pointer; }
+.morning-daily-task img { width: 36px; height: 36px; border-radius: 9px; object-fit: contain; }
+.morning-daily-task.done { opacity: 0.55; cursor: default; }

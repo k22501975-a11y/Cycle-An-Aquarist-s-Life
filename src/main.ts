@@ -33,6 +33,7 @@ import { h } from './ui/dom';
 import { ICONS } from './ui/icons';
 import { DEATH_ADVICE, describeEvent, fishName, fishStrain } from './ui/labels';
 import { personaChip } from './ui/persona';
+import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
 import {
   debugPanel,
   feedPanel,
@@ -953,34 +954,48 @@ async function start(): Promise<void> {
         playSetup();
       }),
     );
-  // 每日 3 件小事（F3）：換天出新題、做完一件跳通知，三件都做完可以開寶箱（正式的小卡和寶箱演出由美術與 UI 做）
+  // 每日 3 件小事（F3）：換天出新題、做完一件跳通知（寫明還差哪件）。左上角常駐小卡列出三件，做完打勾，三件都做完按寶箱（#185）
   let dailyDay = sim.dailyTasks(game.tanks)?.day;
-  /** 上次跳「開寶箱」通知的時間（通知消失沒按的話，過一陣子再跳一次）。 */
-  let dailyOffered = -Infinity;
+  const dailyHolder = h('div.daily-holder');
+  stage.append(dailyHolder);
+  const dailyChanged = memo();
+  const claimDailyChest = () => {
+    const coins = game.actAll((tanks) => sim.claimDaily(tanks));
+    if (!coins) return;
+    audio.play('fanfare');
+    flyCoins(dailyHolder.getBoundingClientRect(), coinsBtn, coins);
+    toasts.show(`寶箱裡有 ${coins} 魚幣`);
+    renderDaily();
+  };
+  const goDaily = (id: sim.DailyTaskId) => {
+    if (id === 'test') testBtn.click();
+    else if (id === 'feed') sheet.open('餵食', () => feedPanel(ctx));
+    else if (id === 'water') sheet.open('換水', () => waterChangePanel(ctx));
+    else if (id === 'trim') sheet.open('修剪水草', () => trimListPanel(ctx));
+    else if (id === 'snail') sheet.open('螺', () => snailPanel(ctx));
+    else if (id === 'scape') enterScape();
+    else toasts.show('在缸裡點一尾魚，看看牠今天怎麼樣');
+  };
+  const renderDaily = () => {
+    const d = sim.dailyTasks(game.tanks);
+    const claimable = sim.canClaimDaily(game.tanks);
+    if (!dailyChanged(JSON.stringify([d?.day, d?.tasks, d?.claimed, claimable]))) return;
+    const card = dailyCard(d, claimable, { go: goDaily, claim: claimDailyChest });
+    dailyHolder.replaceChildren(...(card ? [card] : []));
+    requestAnimationFrame(() => measure());
+  };
   const checkDaily = () => {
     const fresh = sim.updateDaily(game.tanks);
     const d = sim.dailyTasks(game.tanks);
-    if (!d) return;
+    if (!d) return renderDaily();
     if (d.day !== dailyDay) {
       dailyDay = d.day;
-      dailyOffered = -Infinity;
-      if (d.tasks.length) toasts.show(`今天的小事：${d.tasks.map((t) => sim.DAILY_TEXT[t.id]).join('、')}`);
+      // 過一晚時早上報告卡會列出來，不另外跳通知
+      if (d.tasks.length && !sleepingNow) toasts.show(`今天的小事：${d.tasks.map((t) => sim.DAILY_TEXT[t.id]).join('、')}`);
     }
-    const done = d.tasks.filter((t) => t.done).length;
-    for (const id of fresh) toasts.show(`✓ ${sim.DAILY_TEXT[id]}（今天的小事 ${done}/${d.tasks.length}）`);
-    if (sim.canClaimDaily(game.tanks) && performance.now() - dailyOffered > 30_000) {
-      dailyOffered = performance.now();
-      toasts.show('今天的小事都做完了！', 'info', {
-        label: '開寶箱',
-        run: () => {
-          const coins = game.actAll((tanks) => sim.claimDaily(tanks));
-          if (coins) {
-            audio.play('quest');
-            toasts.show(`寶箱裡有 ${coins} 魚幣`);
-          }
-        },
-      });
-    }
+    for (const id of fresh) toasts.show(dailyDoneText(d, id));
+    if (fresh.length && sim.canClaimDaily(game.tanks)) audio.play('quest');
+    renderDaily();
   };
   ctx.openSetup = openSetup;
   const setupBtn = h('button.btn.primary.setup-cta', { onclick: openSetup, hidden: true }, '開缸：挑魚缸和設備');
@@ -998,8 +1013,11 @@ async function start(): Promise<void> {
     // 通知讓出任務卡的寬度
     document.body.style.setProperty('--pill-w', guide.pillVisible ? `${guide.pill.offsetWidth + 14}px` : '0px');
     const pillH = guide.pillVisible ? guide.pill.offsetHeight + 8 : 0;
+    // 每日小事卡排在任務卡下面（#185）
+    dailyHolder.style.top = `${Math.round(top + 10 + pillH)}px`;
+    const dailyH = dailyHolder.offsetHeight > 0 ? dailyHolder.offsetHeight + 8 : 0;
     const dockTop = dock.getBoundingClientRect().top - stageRect.top;
-    cardArea = { x: 0, y: top + 10 + pillH, w: stageRect.width, h: Math.max(0, dockTop - top - 10 - pillH - 34) };
+    cardArea = { x: 0, y: top + 10 + pillH + dailyH, w: stageRect.width, h: Math.max(0, dockTop - top - 10 - pillH - dailyH - 34) };
     placeSelCard();
     stage.style.setProperty('--dock-top', `${Math.round(stageRect.bottom - dockTop - stageRect.top)}px`);
     document.body.style.setProperty('--dock-top', `${Math.round(stageRect.bottom - dockTop - stageRect.top)}px`);
@@ -1172,7 +1190,12 @@ async function start(): Promise<void> {
       save();
       analytics.track('sleep', { hours: r.hours, stopped: r.crisis !== null, items: report.items.length });
       shade.classList.add('dawn');
-      const card = morningCard(report, { picture: reportPicture, go: goReport }, () => {
+      checkDaily(); // 換天出題（早上報告卡要列出今天的小事）
+      const today = sim.dailyTasks(game.tanks);
+      const daily = today
+        ? { tasks: today.tasks.map((t) => ({ id: t.id, art: dailyArt(t.id), text: DAILY_SHORT[t.id], done: t.done })), go: (id: string) => goDaily(id as sim.DailyTaskId) }
+        : undefined;
+      const card = morningCard(report, { picture: reportPicture, go: goReport, daily }, () => {
         shade.classList.remove('in');
         window.setTimeout(() => shade.remove(), 450);
         sleepingNow = false;
