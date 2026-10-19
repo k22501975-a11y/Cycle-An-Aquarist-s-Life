@@ -41,12 +41,12 @@ const GEAR_ART: Record<string, string> = {
 /** 疾病：水質類用試劑圖示，病原類用細菌圖示，其他（缺氧、水溫）用設備圖示。 */
 const DISEASE_ICON: Record<string, ArtIcon> = { new_tank: 'testkit', ammonia: 'testkit', nitrite: 'testkit', oxygen: 'gear', temperature: 'gear' };
 
-/** 條目的圖：魚蝦、水草、設備用商品圖；缸和疾病用插畫圖示。 */
+/** 條目的圖：魚蝦、水草、設備、缸用商品圖；疾病用插畫圖示。 */
 export function entryPic(e: CodexEntry): { art?: string; icon?: ArtIcon } {
   const key = e.id.slice(e.id.indexOf(':') + 1);
   if (e.category === 'fish') return { art: speciesArt(key as FishSpeciesId) };
   if (e.category === 'plant') return { art: plantArt(key as PlantSpeciesId) };
-  if (e.category === 'gear') return GEAR_ART[key] ? { art: GEAR_ART[key] } : { icon: /^(nano|std)\d+$/.test(key) ? 'tanks' : 'gear' };
+  if (e.category === 'gear') return GEAR_ART[key] ? { art: GEAR_ART[key] } : /^(nano|std)\d+$/.test(key) ? { art: 'gear/tank-empty.webp' } : { icon: 'gear' };
   return { icon: DISEASE_ICON[key] ?? 'bacteria' };
 }
 

@@ -46,7 +46,7 @@ export function planNotices(alerts: ForecastAlert[], prefs: NotifyPrefs, snapsho
   if (!prefs.enabled || timeScale <= 0) return [];
   return alerts
     .filter((a) => prefs.categories[a.category])
-    .map((a) => ({ at: snapshotAt + (a.hours * 3_600_000) / timeScale, category: a.category, title: '水族人生', body: a.body, tag: `${a.tank}:${a.key}` }))
+    .map((a) => ({ at: snapshotAt + (a.hours * 3_600_000) / timeScale, category: a.category, title: "Aquarist's Life", body: a.body, tag: `${a.tank}:${a.key}` }))
     .filter((n) => n.at > now)
     .sort((a, b) => a.at - b.at)
     .slice(0, MAX_PLANNED);

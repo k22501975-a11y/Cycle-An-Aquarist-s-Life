@@ -891,7 +891,8 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       h('h3', {}, '養水與設備'),
       cardGrid(
         shopCard({
-          icon: 'bacteria',
+          // 無框的物件圖，跟旁邊的設備同一種畫法（畫面評測 V26）
+          art: 'gear/bottle-bacteria.webp',
           name: '硝化菌液',
           price: price('care:bacteria'),
           unit: '/瓶',
@@ -1445,7 +1446,7 @@ export function tanksPanel(ctx: PanelContext): Node {
       sheet.close();
     };
     return shopCard({
-      icon: 'tanks',
+      art: 'gear/tank-empty.webp',
       name: set.tank.name,
       price: cost,
       chips: [`${set.tank.volumeL}L`, set.filter.name.replace(/（.*）/, ''), set.heater.name, slot > 0 ? '含缸架' : ''].filter(Boolean),

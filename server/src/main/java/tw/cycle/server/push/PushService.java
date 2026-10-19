@@ -153,7 +153,7 @@ public class PushService {
             if (at.isAfter(limit)) continue;
             if (at.isBefore(now())) at = now();
             db.update("insert into push_message(device_id, source, category, title, body, tag, send_at) values (?, 'forecast', ?, ?, ?, ?, ?)",
-                    id, s.category(), cut(s.title(), 60, "水族人生"), cut(s.body(), 300, ""), cut(s.tag(), 60, s.category()), at);
+                    id, s.category(), cut(s.title(), 60, "Aquarist's Life"), cut(s.body(), 300, ""), cut(s.tag(), 60, s.category()), at);
             n++;
         }
         return n;
@@ -164,7 +164,7 @@ public class PushService {
         List<Map<String, Object>> devices = db.queryForList("select id, categories from push_device where account_id = ?", accountId);
         for (Map<String, Object> d : devices) {
             if (!Arrays.asList(((String) d.get("categories")).split(",")).contains(category)) continue;
-            db.update("insert into push_message(device_id, source, category, title, body, tag, send_at) values (?, 'event', ?, '水族人生', ?, ?, ?)",
+            db.update("insert into push_message(device_id, source, category, title, body, tag, send_at) values (?, 'event', ?, 'Aquarist''s Life', ?, ?, ?)",
                     d.get("id"), category, cut(body, 300, ""), cut(tag, 60, category), at == null ? now() : at);
         }
     }
