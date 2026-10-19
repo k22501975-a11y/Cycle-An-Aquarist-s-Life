@@ -4,6 +4,15 @@ import { aliveCount, closeSheet, dismissGuide, finishDrip, fastForward, gameStat
 // 要快轉很多天：用 1 倍密度省 CPU（無頭瀏覽器用軟體繪圖）
 test.use({ deviceScaleFactor: 1, actionTimeout: 20_000 });
 
+/**
+ * 任務進度。老闆的對話框開著時任務不會往下走（Guide.update），而情境提示可能在任何時候跳出來，
+ * 所以每次看進度前先把對話框點掉；CI 機器慢時，提示常在買完東西、還沒檢查進度前跳出來。
+ */
+async function questNow(page: Parameters<typeof questStep>[0]): Promise<number> {
+  await dismissGuide(page);
+  return questStep(page);
+}
+
 const DAY_SUMMARY = `JSON.stringify({
   h: Math.round(s.hours),
   alive: s.fish.filter((f) => f.alive).length,
@@ -32,12 +41,12 @@ test('新手任務 1～7：照老闆的引導從新存檔玩得完，魚不會�
   await page.locator('.sheet.open button.icon-tab', { hasText: '水草' }).click();
   await sheetButton(page, '種一株');
   await closeSheet(page);
-  await expect.poll(() => questStep(page)).toBe(1);
+  await expect.poll(() => questNow(page)).toBe(1);
 
   // 2 測水
   await tool(page, '測試');
   await closeSheet(page);
-  await expect.poll(() => questStep(page)).toBe(2);
+  await expect.poll(() => questNow(page)).toBe(2);
 
   // 3 放魚：商店 → 魚 → 第一個品系「一公兩母」（滴水對水）
   await tool(page, '商店');
@@ -46,20 +55,20 @@ test('新手任務 1～7：照老闆的引導從新存檔玩得完，魚不會�
   await finishDrip(page);
   await closeSheet(page);
   await fastForward(page, 2);
-  await expect.poll(() => questStep(page)).toBe(3);
+  await expect.poll(() => questNow(page)).toBe(3);
   expect(await aliveCount(page)).toBe(3);
 
   // 4 餵食
   await tool(page, '餵食');
   await sheetButton(page, '一小撮');
-  await expect.poll(() => questStep(page)).toBe(4);
+  await expect.poll(() => questNow(page)).toBe(4);
 
   // 5 換水
   await tool(page, '換水');
   await sheetButton(page, '開始換水');
   await closeSheet(page);
   await fastForward(page, 1);
-  await expect.poll(() => questStep(page)).toBe(5);
+  await expect.poll(() => questNow(page)).toBe(5);
 
   // 6 養水：照老闆說的一天兩餐、每天測水，測到氨或亞硝就換水；14 個遊戲天內要養好
   const log: string[] = [];

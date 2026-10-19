@@ -26,17 +26,34 @@ export async function openGame(page: Page): Promise<void> {
   await skipSetupShow(page);
 }
 
-/** 新遊戲的開缸演出（倒沙、注水、開燈，約 9 秒）直接跳完，再把演完跳出的「你的第一個缸」慶祝卡關掉。讀檔進來的不會演。 */
+/**
+ * 新遊戲的開缸演出（倒沙、注水、開燈，約 9 秒）直接跳完，再把演完跳出的「你的第一個缸」慶祝卡關掉。讀檔進來的不會演。
+ * 全部在頁面裡的一個 waitForFunction 做完：CI 的軟體繪圖一幀要好幾秒，每來回一次 Playwright 就要等好幾秒，
+ * 原本分五次來回，光開遊戲就吃掉 smoke 測試大半的 60 秒（#163 之後 main 的閘門因此逾時）。
+ * 卡片在頁面裡直接點掉：用 locator 的話，數到卡片後它剛好自己退場（約 0.4 秒動畫）就會一直等到逾時。
+ */
 export async function skipSetupShow(page: Page): Promise<void> {
-  type ViewWindow = { cycle?: { view?: { settingUp: boolean; skipSetup(): void } } };
-  await page.waitForFunction(() => !!(window as unknown as ViewWindow).cycle?.view, null, { timeout: 30_000 });
-  if (!(await page.evaluate(() => (window as unknown as ViewWindow).cycle!.view!.settingUp))) return;
-  await page.evaluate(() => (window as unknown as ViewWindow).cycle!.view!.skipSetup());
-  await page.waitForFunction(() => !(window as unknown as ViewWindow).cycle!.view!.settingUp, null, { timeout: 30_000 });
-  // 卡片在頁面裡直接點掉：用 locator 的話，數到卡片後它剛好自己退場（約 0.4 秒動畫）就會一直等到逾時
-  await page.evaluate(() => document.querySelectorAll<HTMLElement>('.celebrate:not(.out)').forEach((c) => c.click()));
-  // 卡片關掉後老闆才開口（#171）：等對話框出來，後面關教學的步驟才找得到它
-  await page.locator('.owner').first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+  type SetupWindow = { cycle?: { view?: { settingUp: boolean; skipSetup(): void } }; sawSetup?: boolean };
+  await page.waitForFunction(
+    () => {
+      const w = window as unknown as SetupWindow;
+      const view = w.cycle?.view;
+      if (!view) return false;
+      if (view.settingUp) {
+        w.sawSetup = true;
+        view.skipSetup();
+        return false;
+      }
+      if (!w.sawSetup) return true;
+      const cards = document.querySelectorAll<HTMLElement>('.celebrate:not(.out)');
+      cards.forEach((c) => c.click());
+      return cards.length > 0;
+    },
+    null,
+    { timeout: 30_000 },
+  );
+  // 卡片關掉後老闆才開口（#171）：演過開缸才等對話框出來，後面關教學的步驟才找得到它；讀檔進來的不會有
+  if (await page.evaluate(() => !!(window as unknown as SetupWindow).sawSetup)) await page.locator('.owner').first().waitFor({ timeout: 10_000 }).catch(() => undefined);
 }
 
 /** 讀目前存檔（localStorage 的 cycle.save.v1），方便核對畫面和模擬狀態。 */
