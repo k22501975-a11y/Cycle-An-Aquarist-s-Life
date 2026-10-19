@@ -32,6 +32,6 @@ PR 和其他分支的 APK 還是放在那次 CI 的 Artifacts（`cycle-debug-apk
 
 ## 簽章
 
-測試版用 repo 裡的測試用金鑰 `android/app/beta-test.keystore`（密碼 `android`）簽，所以新版可以直接蓋過舊版安裝，存檔不會不見。這把金鑰公開也沒關係，**不能拿來上架**。
+測試版用 repo 裡的測試用金鑰 `android/app/beta-test.keystore`（密碼 `android`）簽，所以新版可以直接蓋過舊版安裝，存檔不會不見。這把金鑰公開也沒關係，**不能拿來上架**。它只適合自己人測試：要對外發測試版（例如 Play 封閉測試）或接近 1.0 時，改用放在 CI secrets 的金鑰。
 
 上架用的金鑰另外產生、放在 CI secrets，見 [android.md](android.md#上架-google-play)。

@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# 預設只能讀 repo；需要寫的工作（beta-release）自己另外開
+permissions:
+  contents: read
+
 # 品質閘門（docs/quality-gate.md）：下面每個工作都要通過，最後的「品質閘門」才會綠，PR 才能合併。
 jobs:
   # 第 1 關：靜態檢查（ESLint、TypeScript 型別、素材大小預算）
