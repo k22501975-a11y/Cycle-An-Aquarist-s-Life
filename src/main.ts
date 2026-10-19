@@ -3,6 +3,7 @@ import { AudioEngine } from './audio/engine';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
 import { eventSound } from './audio/sounds';
 import { applySeason, Game, newGameState } from './game/game';
+import { crisisText } from './game/crisis';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
 import { menuTile, ownerImg } from './ui/art-icons';
 import { SpeedControl } from './ui/speed-control';
@@ -871,6 +872,21 @@ async function start(): Promise<void> {
     }
     const msg = describeEvent(game.tanks[tank] ?? game.state, e);
     if (msg) toasts.show(tankPrefix(tank) + msg.text, msg.tone);
+  });
+  // 快轉時出狀況：遊戲已經切回正常速度，提示玩家並給「去處理」（#142）
+  const GEAR_CRISES = new Set(['heater_broke', 'heater_stuck', 'heater_exposed', 'controller_cut', 'power_out', 'too_hot', 'too_cold']);
+  game.onCrisis((c) => {
+    speed.render();
+    const fix = GEAR_CRISES.has(c.reason)
+      ? {
+          label: '去處理',
+          run: () => {
+            game.switchTo(c.tank);
+            sheet.open('設備與維護', () => maintenancePanel(ctx));
+          },
+        }
+      : undefined;
+    toasts.show(tankPrefix(c.tank) + crisisText(c), 'warn', fix);
   });
   // 選育成功：自家繁殖的公魚第一次長出沒見過的品系
   const strains = new StrainTracker(store);

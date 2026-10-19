@@ -1,5 +1,6 @@
 import {
   createTank,
+  DEFAULT_TIME_SCALE,
   monthOf,
   roomClimate,
   FILTERS,
@@ -13,6 +14,7 @@ import {
   type SimEvent,
   type TankState,
 } from '../sim';
+import { CRISIS_EVENTS, waterAlarms, type Crisis, type WaterAlarm } from './crisis';
 
 /** 時間倍率選項（現實 1 秒 = 遊戲幾秒）。7 是正式的基準倍率。short 顯示在主畫面的速度按鈕上，name 是選單裡的說明。 */
 export const SPEED_OPTIONS = [
@@ -66,6 +68,10 @@ export class Game {
   private lastSeen = new Map<TankState, SimEvent | undefined>();
   private eventListeners: Array<(e: SimEvent, tank: number) => void> = [];
   private changeListeners: Array<() => void> = [];
+  private crisisListeners: Array<(c: Crisis) => void> = [];
+  /** 危機檢查：每缸最後檢查過的事件、目前的水質警報。 */
+  private crisisSeen = new Map<TankState, SimEvent | undefined>();
+  private alarms = new Map<TankState, Set<WaterAlarm>>();
 
   constructor(state: TankState, timeScale = 7, others: TankState[] = [], active = 0) {
     this.clock = new GameClock(timeScale);
@@ -89,6 +95,11 @@ export class Game {
     this.eventListeners.push(listener);
   }
 
+  /** 快轉時遇到危機、已經切回正常速度時通知（#142）。 */
+  onCrisis(listener: (c: Crisis) => void): void {
+    this.crisisListeners.push(listener);
+  }
+
   /** 狀態因玩家操作而改變時通知（畫面據此立即重繪面板）。 */
   onChange(listener: () => void): void {
     this.changeListeners.push(listener);
@@ -97,9 +108,44 @@ export class Game {
   /** 推進現實時間 realMs，回傳實際執行的 tick 數。 */
   advance(realMs: number): number {
     const ticks = Math.min(this.clock.advance(realMs), MAX_TICKS_PER_FRAME);
-    for (let i = 0; i < ticks; i++) for (const t of this.tanks) step(t);
-    if (ticks > 0) this.flushEvents();
-    return ticks;
+    let ran = 0;
+    let crisis: Crisis | null = null;
+    while (ran < ticks) {
+      for (const t of this.tanks) step(t);
+      ran++;
+      crisis = this.checkCrisis();
+      // 快轉時遇到危機：馬上停下，這一幀剩下的時間不跑，切回正常速度
+      if (crisis && this.clock.timeScale > DEFAULT_TIME_SCALE) {
+        this.clock.timeScale = DEFAULT_TIME_SCALE;
+        break;
+      }
+      crisis = null;
+    }
+    if (ran > 0) this.flushEvents();
+    if (crisis) for (const l of this.crisisListeners) l(crisis);
+    return ran;
+  }
+
+  /** 找出上次檢查以後新發生的危機（新的危機事件，或剛變危險的水質）。 */
+  private checkCrisis(): Crisis | null {
+    let found: Crisis | null = null;
+    this.tanks.forEach((t, tank) => {
+      const events = t.events;
+      const last = events.at(-1);
+      const seen = this.crisisSeen.get(t);
+      if (last !== seen) {
+        const fresh = events.slice(seen ? events.lastIndexOf(seen) + 1 : 0);
+        this.crisisSeen.set(t, last);
+        const e = fresh.find((x) => CRISIS_EVENTS.has(x.type));
+        if (e && !found) found = { tank, reason: e.type, event: e };
+      }
+      const before = this.alarms.get(t) ?? new Set<WaterAlarm>();
+      const now = waterAlarms(t, before);
+      this.alarms.set(t, now);
+      const rose = [...now].find((a) => !before.has(a));
+      if (rose && !found) found = { tank, reason: rose };
+    });
+    return found;
   }
 
   /** 對目前這缸執行一個玩家操作，並通知畫面。房間的設定（冷氣、停電）跟著同步到每一缸。 */
@@ -135,6 +181,8 @@ export class Game {
 
   private markSeen(): void {
     this.lastSeen = new Map(this.tanks.map((t) => [t, t.events.at(-1)]));
+    this.crisisSeen = new Map(this.lastSeen);
+    this.alarms = new Map(this.tanks.map((t) => [t, waterAlarms(t)]));
   }
 
   private flushEvents(): void {
