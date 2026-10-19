@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, buyQuarantine, createTank, TANKS, type TankState } from '../sim';
+import { addFish, addPlant, buyNurseryBox, createTank, TANKS, type TankState } from '../sim';
 import { fryEatenText } from './labels';
 
 function tank(): TankState {
@@ -23,14 +23,14 @@ describe('小魚被吃的說法（UX r12）', () => {
   it('看情況給建議：草少教種密草、有盒子教撈進盒、母魚快生教先放進盒', () => {
     const s = tank();
     expect(fryEatenText(s, 1, false)).toMatch(/莫絲|矮珍珠/);
-    buyQuarantine(s);
+    buyNurseryBox(s);
     const fry = addFish(s, 'guppy', { carriesIch: false, carries: [] });
     fry.lengthCm = 0.8;
     fry.ageDays = 3;
-    expect(fryEatenText(s, 1, false)).toContain('撈進檢疫盒');
+    expect(fryEatenText(s, 1, false)).toContain('撈進育幼盒');
     const mom = addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'female' });
     mom.pregnancy = 0.9;
-    expect(fryEatenText(s, 1, false)).toMatch(/母魚.*檢疫盒/);
+    expect(fryEatenText(s, 1, false)).toMatch(/母魚.*育幼盒/);
   });
 
   it('草夠密就不再叫玩家種草', () => {
