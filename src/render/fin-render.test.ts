@@ -13,10 +13,10 @@ const bigC: FinLook = { traits: { bigC: true, length: 0.9 }, color: 0x4fa3ff, al
 
 // 測試環境沒有 DOM：漸層要畫在 canvas 上、模糊濾鏡要問 WebGL 精度，給一個什麼都不做的假 canvas
 const noop = () => undefined;
-const ctx2d = new Proxy({} as Record<string, unknown>, {
+const ctx2d = new Proxy({} as Record<string | symbol, unknown>, {
   get: (t, k) =>
     k in t ? t[k] : k === 'createRadialGradient' || k === 'createLinearGradient' ? () => ({ addColorStop: noop }) : k === 'getShaderPrecisionFormat' ? () => ({ precision: 23 }) : noop,
-  set: (t, k, v) => ((t[k as string] = v), true),
+  set: (t, k, v) => ((t[k] = v), true),
 });
 beforeAll(() => DOMAdapter.set({ ...BrowserAdapter, createCanvas: (width = 1, height = 1) => ({ width, height, getContext: () => ctx2d }) as unknown as HTMLCanvasElement }));
 afterAll(() => DOMAdapter.set(BrowserAdapter));
