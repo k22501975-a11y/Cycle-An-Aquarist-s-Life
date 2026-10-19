@@ -3,6 +3,7 @@ import { newGameState } from './game';
 import {
   addFish,
   addPlant,
+  isCycled,
   buybackRefusal,
   canClaimStarterPack,
   claimStarterPack,
@@ -43,6 +44,21 @@ function day(s: TankState, careful: boolean): void {
 }
 
 describe('新手前幾週（K1）', () => {
+  it('3 條孔雀魚、每天正常餵、不用任何道具：約一週養好水（養水任務過得了）', () => {
+    for (const seed of [1, 2, 3]) {
+      const s = newGameState(seed);
+      for (let i = 0; i < 3; i++) addFish(s, 'guppy', { carriesIch: false, carries: [] });
+      let cycledDay = -1;
+      for (let d = 1; d <= 10 && cycledDay < 0; d++) {
+        feed(s, meal(s) * 2);
+        simulate(s, 24);
+        if (isCycled(s)) cycledDay = d;
+      }
+      expect(cycledDay).toBeGreaterThanOrEqual(3);
+      expect(cycledDay).toBeLessThanOrEqual(8);
+    }
+  });
+
   it('照教學只放 3 條魚、每天測水、超標就換水：新缸期間魚都活著', () => {
     for (const seed of [1, 2, 3]) {
       const s = newGameState(seed);
