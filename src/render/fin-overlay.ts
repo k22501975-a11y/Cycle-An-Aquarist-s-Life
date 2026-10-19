@@ -25,6 +25,8 @@ export interface FinShape {
   front: boolean;
   /** 鰭條：折線（x, y 交錯），從根部往外。 */
   rays?: number[][];
+  /** 只疊一層深色、不畫邊和鰭條：讓長鰭靠近根部比較濃，往尖端越來越透。 */
+  inner?: boolean;
 }
 
 interface Body {
@@ -41,7 +43,7 @@ const qb = (a: P, c: P, b: P, t: number): P => [(1 - t) * (1 - t) * a[0] + 2 * (
  * 一條往外飄的長鰭（大C 的背鰭臀鰭、劍）：沿著二次曲線的中線，從根部的寬度漸漸收到尖端，
  * 鰭條順著中線走。
  */
-function streamer(a: P, c: P, b: P, w0: number, w1: number, n = 14): FinShape {
+function streamer(a: P, c: P, b: P, w0: number, w1: number, n = 14, rayOffs = [-0.6, -0.2, 0.2, 0.6]): FinShape {
   const left: number[] = [], right: number[] = [];
   const at = (t: number, off: number): P => {
     const p = qb(a, c, b, t);
@@ -57,12 +59,21 @@ function streamer(a: P, c: P, b: P, w0: number, w1: number, n = 14): FinShape {
     const r = at(1 - i / n, -1);
     right.push(...r);
   }
-  const rays = [-0.6, -0.2, 0.2, 0.6].map((off) => {
+  const rays = rayOffs.map((off) => {
     const pts: number[] = [];
     for (let i = 0; i <= n - 2; i++) pts.push(...at(i / n, off));
     return pts;
   });
   return { kind: 'fill', front: false, points: [...left, ...right], rays };
+}
+
+/** 長鰭從根部到 t1 的那一段（寬度和整條一樣），用來疊出根部較濃的漸層。 */
+function streamerPart(a: P, c: P, b: P, w0: number, w1: number, t1: number, n = 10): FinShape {
+  const full = streamer(a, c, b, w0, w1, Math.round(n / t1));
+  const m = Math.round(n / t1) + 1;
+  const left = full.points.slice(0, (n + 1) * 2);
+  const right = full.points.slice((2 * m - (n + 1)) * 2);
+  return { kind: 'fill', front: false, points: [...left, ...right] };
 }
 
 /** 依鰭型算出要補畫的形狀。length 是整條魚（含尾鰭）的長度。 */
@@ -73,15 +84,20 @@ export function finShapes(t: FinTraits, body: Body, length: number): FinShape[] 
   const peduncle = cx + rx * 0.95;
   const k = Math.min(1, Math.max(0, t.length ?? 0.45));
   if (t.bigC) {
-    // 大C：背鰭往上、臀鰭往下拉成長長的飄帶，往後彎到尾巴上下，跟尾鰭圍成一個 C。分數越高越長、彎得越大
+    // 大C：背鰭、臀鰭拉成又寬又長的帆，順著身體往後飄到尾巴上下，尖端往回彎，跟尾鰭圍成一個 C。
+    // 根部整段壓在背鰭（臀鰭）的鰭基上，曲線一開始幾乎貼著身體往後走，所以根部的截面就躺在背上，不會浮在半空（畫面評測 V16、#101）。
+    // 分數越高越長、彎得越大
     const e = Math.max(0, k - 0.66) / 0.34; // 剛好達標 0 → 滿分 1
-    const reach = 2.2 + e * 1.6;
     for (const dir of [-1, 1]) {
-      // 根部壓在身體後面一點，從背鰭（臀鰭）的位置長出來
-      const root: P = [cx + rx * (dir < 0 ? 0.15 : 0.4), cy + dir * ry * 0.4];
-      const ctl: P = [peduncle + rx * 0.1, cy + dir * ry * reach * 1.35];
-      const tip: P = [tailEnd + length * (0.02 + e * 0.06), cy + dir * ry * (reach * 0.55 + e * 0.4)];
-      out.push(streamer(root, ctl, tip, ry * (dir < 0 ? 1.1 : 0.8), ry * 0.12));
+      const dorsal = dir < 0;
+      const root: P = [cx + rx * (dorsal ? 0.6 : 0.55), cy + dir * ry * (dorsal ? 0.62 : 0.55)];
+      const ctl: P = [peduncle + rx * (0.25 + e * 0.15), cy + dir * ry * (dorsal ? 2.9 + e * 0.9 : 2.5 + e * 0.8)];
+      const tip: P = [tailEnd + length * (0.01 + e * 0.05), cy + dir * ry * (dorsal ? 1.7 + e * 0.5 : 1.5 + e * 0.4)];
+      const w0 = rx * (dorsal ? 0.7 : 0.5);
+      const fin = streamer(root, ctl, tip, w0, ry * 0.18, 18, [-0.75, -0.45, -0.15, 0.15, 0.45, 0.75]);
+      out.push(fin);
+      // 根部再疊幾層越來越短的，看起來由濃到淡
+      for (const t1 of [0.3, 0.5, 0.7]) out.push({ ...streamerPart(root, ctl, tip, w0, ry * 0.18, t1), inner: true });
     }
   }
   if (t.ribbon && !t.bigC) {

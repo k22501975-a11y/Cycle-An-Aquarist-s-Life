@@ -40,6 +40,7 @@ class SimTest {
         boolean down;
         boolean unreadable;
         final List<Long> verifiedElapsed = new ArrayList<>();
+        final List<Long> advancedFrom = new ArrayList<>();
         final List<List<JsonNode>> verifiedShipped = new ArrayList<>();
         Inspect inspect = new Inspect(false, false, null);
 
@@ -50,6 +51,7 @@ class SimTest {
 
         @Override
         public Advance advance(JsonNode save, long now) {
+            advancedFrom.add(save.path("savedAt").asLong());
             ObjectNode out = save.deepCopy();
             out.put("savedAt", now);
             ((ObjectNode) out.path("state")).put("hours", out.path("state").path("hours").asDouble() + 7);
@@ -100,6 +102,7 @@ class SimTest {
         sim.down = false;
         sim.unreadable = false;
         sim.verifiedElapsed.clear();
+        sim.advancedFrom.clear();
         sim.verifiedShipped.clear();
         sim.inspect = new SimClient.Inspect(false, false, null);
     }
@@ -184,6 +187,7 @@ class SimTest {
         String me = player();
         send(post("/api/save/advance"), me, null).andExpect(status().isNotFound());
         send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        clock.advance(Duration.ofMinutes(5));
         JsonNode r = read(send(post("/api/save/advance"), me, null).andExpect(status().isOk()));
         assertThat(r.get("revision").asLong()).isEqualTo(2);
         assertThat(r.get("hours").asDouble()).isEqualTo(7);
@@ -191,6 +195,29 @@ class SimTest {
         assertThat(r.get("save").get("state").get("hours").asDouble()).isEqualTo(19);
         assertThat(r.get("savedAt").asLong()).isEqualTo(clock.instant().toEpochMilli());
         assertThat(read(send(get("/api/save"), me, null)).get("save").get("state").get("hours").asDouble()).isEqualTo(19);
+    }
+
+    @Test
+    void 伺服器補算_從伺服器收下存檔的時間算起_改savedAt不能快轉() throws Exception {
+        String me = player();
+        // 存檔裡寫 savedAt=1000（1970 年），以前補算會從那時候一路算到現在
+        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        long uploadedAt = clock.instant().toEpochMilli();
+        clock.advance(Duration.ofMinutes(5));
+        send(post("/api/save/advance"), me, null).andExpect(status().isOk());
+        assertThat(sim.advancedFrom).containsExactly(uploadedAt);
+        // 一分鐘內再叫：不補算，回雲端那份
+        clock.advance(Duration.ofSeconds(30));
+        JsonNode again = read(send(post("/api/save/advance"), me, null).andExpect(status().isOk()));
+        assertThat(again.get("hours").asDouble()).isZero();
+        assertThat(again.get("revision").asLong()).isEqualTo(2);
+        assertThat(again.get("save").get("state").get("hours").asDouble()).isEqualTo(19);
+        assertThat(sim.advancedFrom).hasSize(1);
+        // 過了一分鐘可以再補算，起點是上一次補算存下的時間
+        long advancedAt = clock.instant().minusSeconds(30).toEpochMilli();
+        clock.advance(Duration.ofMinutes(1));
+        send(post("/api/save/advance"), me, null).andExpect(status().isOk());
+        assertThat(sim.advancedFrom).containsExactly(uploadedAt, advancedAt);
     }
 
     @Test
