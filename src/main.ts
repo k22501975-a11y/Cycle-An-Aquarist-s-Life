@@ -117,6 +117,8 @@ async function start(): Promise<void> {
   const sheet = new Sheet(document.body);
   const toasts = new Toasts(document.body);
   const celebration = new Celebration(document.body);
+  /** 開缸演出到「你的第一個缸」卡片關掉之前，老闆先不開口（#171）。 */
+  let guideHeld = false;
   /** 「第一次」的演出：慶祝卡＋撥弦琶音，每件事只演一次。 */
   const moment = (id: MomentId, spec: CelebrateSpec): boolean => {
     if (!firstTime(store, id)) return false;
@@ -425,7 +427,10 @@ async function start(): Promise<void> {
         document.body.classList.remove('setting-up');
         moment('first_tank', { art: 'gear/tank-empty.webp', title: '你的第一個缸', sub: '水注滿、設備也裝好了', owner: '先別急著放魚。倒一瓶硝化菌液，讓水先養個幾天。' });
         // 「你的第一個缸」卡片關掉後老闆才開口，不然對話框會從卡片後面露出來（#171）
-        celebration.whenClear(() => guide.start());
+        celebration.whenClear(() => {
+          guideHeld = false;
+          guide.start();
+        });
         return;
       }
       audio.play(step === 'sand' ? 'feed' : step === 'water' ? 'water' : step === 'gear' ? 'buy' : 'restore');
@@ -438,6 +443,7 @@ async function start(): Promise<void> {
   // 開缸演出看過的人可以跳過
   const setupSkip = h('button.setup-skip', { type: 'button', onclick: () => view.skipSetup() }, '跳過 ›');
   const playSetup = () => {
+    guideHeld = true;
     view.playSetup();
     // 演出時只留缸：上方列、任務卡、工具列先藏起來（#171）
     document.body.classList.add('setting-up');
@@ -1317,8 +1323,8 @@ async function start(): Promise<void> {
       renderCoins();
       renderOrders();
       renderTankChip();
-      // 開缸演出和慶祝卡演完才讓老闆開口（「開缸」任務在演出一開始就完成，不能蓋在演出上，#171）
-      if (!document.body.classList.contains('setting-up') && !celebration.isOpen) guide.update(game.state, game.tanks);
+      // 開缸演出和「你的第一個缸」卡片演完才讓老闆開口（「開缸」任務在演出一開始就完成，不能蓋在演出上，#171）
+      if (!guideHeld) guide.update(game.state, game.tanks);
       setupBtn.hidden = !sim.needsSetup(game.tanks[0]) || sheet.isOpen;
       checkDaily();
       celebrateStrains();
