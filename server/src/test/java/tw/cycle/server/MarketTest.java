@@ -277,6 +277,8 @@ class MarketTest {
         send(post("/api/market/listings"), amy, fish(300, 1)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("already_listed"));
         // 別人的 42 號魚不受影響（魚的編號是每個存檔自己的）
         list(seasoned("cat"), 300);
+        // 新遊戲後同編號的另一條魚（基因不一樣）可以上架
+        send(post("/api/market/listings"), amy, fish(300, 1).replace("\"tail\":80", "\"tail\":81")).andExpect(status().isCreated());
     }
 
     @Test

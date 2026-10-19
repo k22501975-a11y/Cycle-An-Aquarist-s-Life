@@ -61,11 +61,23 @@ describe('模擬小服務（L2）', () => {
 
   it('上傳檢查：已經在市場出貨的魚又出現在存檔裡（拿出貨前的舊存檔上傳），會被擋下', () => {
     const { state, raw } = saveAt(T0);
-    const sold = state.fish[0];
+    const sold = inspect(raw, state.fish[0].id).item!;
     // 出貨後遊戲已經把魚撈走；拿出貨前的存檔來上傳，魚又回來了
-    expect(verify(raw, JSON.parse(serializeSave(state, 7, T0)), 0, [sold.id]).map((p) => p.code)).toEqual(['shipped_fish']);
+    expect(verify(raw, JSON.parse(serializeSave(state, 7, T0)), 0, [sold]).map((p) => p.code)).toEqual(['shipped_fish']);
     state.fish.splice(0, 1);
-    expect(verify(raw, JSON.parse(serializeSave(state, 7, T0)), 0, [sold.id])).toEqual([]);
+    expect(verify(raw, JSON.parse(serializeSave(state, 7, T0)), 0, [sold])).toEqual([]);
+  });
+
+  it('上傳檢查：出貨後開新遊戲，同編號但是不同的魚，不算已出貨', () => {
+    const { state, raw } = saveAt(T0);
+    const sold = inspect(raw, state.fish[0].id).item!;
+    // 新遊戲的魚編號從頭開始：同一個編號，基因（或性別、品種）不一樣就是另一條魚
+    const fresh = saveAt(T0, (s) => {
+      s.fish[0].genome = { ...s.fish[0].genome!, tail: (s.fish[0].genome!.tail ?? 0) === 100 ? 0 : 100 };
+    });
+    expect(fresh.state.fish[0].id).toBe(sold.id);
+    expect(verify(fresh.raw, fresh.raw, 0, [sold])).toEqual([]);
+    expect(verify(fresh.raw, fresh.raw, 0, [{ ...sold, sex: 'female' }])).toEqual([]);
   });
 
   it('查魚：找得到就回傳市場用的資料，找不到回 found=false', () => {

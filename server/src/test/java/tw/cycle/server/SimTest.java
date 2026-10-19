@@ -40,7 +40,7 @@ class SimTest {
         boolean down;
         boolean unreadable;
         final List<Long> verifiedElapsed = new ArrayList<>();
-        final List<List<Long>> verifiedShipped = new ArrayList<>();
+        final List<List<JsonNode>> verifiedShipped = new ArrayList<>();
         Inspect inspect = new Inspect(false, false, null);
 
         @Override
@@ -57,13 +57,13 @@ class SimTest {
         }
 
         @Override
-        public List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs, List<Long> shipped) {
+        public List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs, List<JsonNode> shipped) {
             if (down) throw new Unavailable("down", null);
             if (unreadable) throw new HttpSimClient.BadSave("讀不出這份存檔");
             verifiedElapsed.add(elapsedMs);
             verifiedShipped.add(shipped);
             // 假的：只要伺服器說有出貨的魚，就當成存檔裡又出現了
-            if (!shipped.isEmpty()) return List.of(new Problem("shipped_fish", "#" + shipped.get(0) + " 已經在市場賣出了"));
+            if (!shipped.isEmpty()) return List.of(new Problem("shipped_fish", "#" + shipped.get(0).get("id") + " 已經在市場賣出了"));
             return problems;
         }
 
@@ -237,7 +237,12 @@ class SimTest {
         send(post("/api/market/orders/" + order + "/ship"), me, "{\"item\":" + real + ",\"bagTemp\":25,\"bagPh\":7}").andExpect(status().isOk());
         send(put("/api/save"), me, saveBody(2, false))
                 .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("shipped_fish"));
-        assertThat(sim.verifiedShipped.get(1)).containsExactly(7L);
+        // 交給模擬服務比對的是編號＋身分（新遊戲同編號的別條魚不算，handlers.test.ts）
+        JsonNode sold = sim.verifiedShipped.get(1).get(0);
+        assertThat(sim.verifiedShipped.get(1)).hasSize(1);
+        assertThat(sold.get("id").asLong()).isEqualTo(7);
+        assertThat(sold.get("genome").get("tail").asInt()).isEqualTo(60);
+        assertThat(sold.has("health")).isFalse();
         send(put("/api/save"), me, saveBody(2, true))
                 .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("shipped_fish"));
         assertThat(read(send(get("/api/save"), me, null)).get("revision").asLong()).isEqualTo(2);
