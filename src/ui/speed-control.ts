@@ -89,11 +89,16 @@ export class SpeedControl {
       cloud ? h('p.hint.speed-note', {}, '雲端模式時間由伺服器統一，不能加快') : '',
     );
     this.pop.classList.add('open');
+    // 老闆對話框掛在 body、疊在整個遊戲畫面上面；選單打開時先把它藏起來，選單才不會被蓋住（#114）
+    document.body.classList.add('speed-open');
+    this.pop.closest('#hud')?.classList.add('menu-open');
     this.btn.setAttribute('aria-expanded', 'true');
   }
 
   close(): void {
     this.pop.classList.remove('open');
+    document.body.classList.remove('speed-open');
+    this.pop.closest('#hud')?.classList.remove('menu-open');
     this.btn.setAttribute('aria-expanded', 'false');
   }
 

@@ -10,13 +10,22 @@ describe('鰭型補畫（J18）', () => {
   });
 
   it('大C：背鰭往上、臀鰭往下各一片畫在身體後面，鰭長分數越高拉得越遠', () => {
-    const s = finShapes({ bigC: true, ribbon: true, length: 0.7 }, body, 100);
+    const all = finShapes({ bigC: true, ribbon: true, length: 0.7 }, body, 100);
+    const s = all.filter((f) => !f.inner);
     expect(s).toHaveLength(2);
+    // 根部疊幾層淡色，看起來由濃到淡
+    expect(all.filter((f) => f.inner).length).toBeGreaterThan(0);
+    // 根部接在身體上（#101：之前浮在背上方，看起來像一條分開的帶子）
+    for (const f of s) {
+      const n = f.points.length;
+      const x = (f.points[0] + f.points[n - 2]) / 2, y = (f.points[1] + f.points[n - 1]) / 2;
+      expect(((x - body.x) / body.rx) ** 2 + ((y - body.y) / body.ry) ** 2).toBeLessThan(1);
+    }
     expect(Math.min(...ys(s[0].points))).toBeLessThan(-body.ry * 1.8);
     expect(Math.max(...ys(s[1].points))).toBeGreaterThan(body.ry * 1.8);
     expect(s.every((f) => !f.front && f.kind === 'fill')).toBe(true);
-    const longer = finShapes({ bigC: true, length: 1 }, body, 100);
-    expect(Math.min(...ys(longer[0].points))).toBeLessThan(Math.min(...ys(s[0].points)) - body.ry * 0.8);
+    const longer = finShapes({ bigC: true, length: 1 }, body, 100).filter((f) => !f.inner);
+    expect(Math.min(...ys(longer[0].points))).toBeLessThan(Math.min(...ys(s[0].points)) - body.ry * 0.4);
   });
 
   it('雙劍兩支、上劍一支朝上', () => {
