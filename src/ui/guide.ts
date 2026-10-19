@@ -32,8 +32,8 @@ export class Guide {
   openShop: ((tab: QuestShopTab) => void) | null = null;
   /** 發新手任務獎勵（main 接上，加到共用錢包）；回傳實際發了多少，領過的任務是 0。 */
   reward: ((questId: string, coins: number) => number) | null = null;
-  /** 目標完成、發了獎勵（main 接上：存檔、更新畫面）。 */
-  goalsChanged: (() => void) | null = null;
+  /** 目標完成、發了獎勵（main 接上：存檔、更新畫面、解鎖新魚種的演出）。 */
+  goalsChanged: ((goals: Goal[]) => void) | null = null;
   /** 上一次 update 看到的所有缸（小卡顯示目標用）。 */
   private tanks: TankState[] = [];
   private shownGoal = '';
@@ -79,7 +79,7 @@ export class Guide {
     }
     const goals = checkGoals(tanks, this.tutorialOver);
     if (goals.length > 0) {
-      this.goalsChanged?.();
+      this.goalsChanged?.(goals);
       this.sound('quest');
       this.say([...goals.map((g) => ({ text: goalDoneText(g), label: '太好了' })), ...this.goalPages('下一個目標：')]);
       this.renderPill();
