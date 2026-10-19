@@ -929,7 +929,7 @@ async function start(): Promise<void> {
     analytics.track('quest_done', { step });
     if (id === 'cycled')
       moment('cycled', {
-        art: 'ui/icon-bacteria.webp',
+        art: 'gear/bottle-bacteria.webp',
         title: '養水完成！',
         sub: '硝化菌長好了，氨和亞硝酸鹽都是 0。現在可以慢慢多加魚',
       });
@@ -979,7 +979,8 @@ async function start(): Promise<void> {
   app.ticker.add((ticker) => {
     try {
       const t0 = performance.now();
-      tick(ticker.deltaMS);
+      // 模擬用現實經過的時間（elapsedMS 不受 Pixi 每幀 100ms 的上限影響，#113）；動畫用 deltaMS，卡頓時不會跳太大
+      tick(ticker.elapsedMS, ticker.deltaMS);
       if (fpsShown) {
         const now = performance.now();
         fpsMeter.add(ticker.deltaMS, now - t0, now);
@@ -993,11 +994,11 @@ async function start(): Promise<void> {
       crash(error);
     }
   });
-  function tick(deltaMS: number) {
+  function tick(elapsedMS: number, deltaMS: number) {
     const ticker = { deltaMS };
-    game.advance(ticker.deltaMS);
+    game.advance(elapsedMS);
     if (visiting) {
-      const n = Math.min(visitClock.advance(ticker.deltaMS), 60);
+      const n = Math.min(visitClock.advance(elapsedMS), 60);
       for (let i = 0; i < n; i++) sim.step(visiting.state);
     }
     view.update(visiting?.state ?? game.state, ticker.deltaMS / 1000);
