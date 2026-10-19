@@ -62,7 +62,7 @@ export function minPlantPrice(species: PlantSpeciesId, count: number): number {
   return plantBuybackPrice(species) * count;
 }
 
-/** 建議售價：差不多水族店的店價（收購價是店價三成）。 */
+/** 建議售價：差不多水族店的店價（收購價約店價五成）。 */
 export function suggestedFishPrice(fish: Fish): number {
   return Math.max(minFishPrice(fish), Math.round(fishBuybackPrice(fish) / BUYBACK_SHARE));
 }

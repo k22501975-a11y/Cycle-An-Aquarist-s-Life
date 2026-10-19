@@ -42,7 +42,7 @@ describe('玩家市場', () => {
     const mom = healthyGuppy(t, 'female');
     expect(listingTitle(mom)).toMatch(/孔雀魚 母（懷孕）$/);
     expect(minFishPrice(male)).toBeGreaterThan(0);
-    expect(suggestedFishPrice(male)).toBeGreaterThan(minFishPrice(male) * 2);
+    expect(suggestedFishPrice(male)).toBeGreaterThanOrEqual(minFishPrice(male) * 2);
   });
 
   it('送的魚、生病的魚、太小的魚不能上架；上架中的魚不能賣給店家', () => {

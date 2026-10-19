@@ -4,6 +4,13 @@ import {
   addFish,
   addPlant,
   fishCondition,
+  buyTank,
+  GUPPY_STRAIN_PRICES,
+  isJuvenile,
+  linkTanks,
+  moveFish,
+  newTankCost,
+  transferMedia,
   isCycled,
   buybackRefusal,
   canClaimStarterPack,
@@ -171,6 +178,67 @@ describe('長期經營（K2、K3）', () => {
       expect(economy(s).coins).toBeGreaterThan(start);
     }
   }, 60_000);
+});
+
+/**
+ * 認真玩家 120 天（design/mvp.md §4.3）：買一組品系 1 公 2 母，每天餵兩餐、測水、超標或每週換水，
+ * 成魚（留種的 3 條除外）賣給店家，缸太擠才連中魚一起賣；錢夠又快滿了就加缸，分濾材過去、養好後移魚。
+ * 新手目標獎勵（M19）還沒做，先在第 10 天直接給 800。
+ */
+function seriousPlayer(seed: number, strain: number): { income: Record<number, number>; tanks: number } {
+  const home = newGameState(seed);
+  const tanks: TankState[] = [home];
+  linkTanks(tanks);
+  home.environment.roomTempC = 25;
+  home.environment.roomSwingC = 2;
+  addPlant(home, 'anubias');
+  for (const sex of ['male', 'female', 'female'] as const) addFish(home, 'guppy', { carriesIch: false, carries: [], sex, strain });
+  economy(home).coins -= 150 + 3 * GUPPY_STRAIN_PRICES[strain];
+  const breeders = new Set(home.fish.map((f) => f.id));
+  const cap = (t: TankState) => Math.round(t.equipment.tank.volumeL / 2);
+  const count = (t: TankState) => alive(t).length;
+  const income: Record<number, number> = {};
+  let total = 0;
+  for (let d = 1; d <= 120; d++) {
+    for (let k = 0; k < 2; k++) {
+      for (const t of tanks) if (count(t) > 0) feed(t, meal(t));
+      for (const t of tanks) simulate(t, 12);
+    }
+    for (const t of tanks) {
+      const heater = t.equipment.heater;
+      if (heater && (heater.stuckOn || heater.broken)) t.equipment.heater = { spec: heater.spec, targetC: heater.targetC, broken: false, heating: false };
+      const r = useTestKit(t);
+      if (r.ammonia >= 0.25 || r.nitrite >= 0.25 || r.nitrate >= 40 || d % 7 === 0) waterChange(t, 0.3);
+      const crowded = count(t) > cap(t);
+      for (const f of alive(t)) if (!breeders.has(f.id) && !buybackRefusal(f) && (crowded || !isJuvenile(f))) total += sellFish(t, f.id);
+    }
+    if (d === 10) economy(home).coins += 800;
+    const size = tanks.length === 1 ? 'nano20' : 'std40';
+    const fish = tanks.reduce((a, t) => a + count(t), 0);
+    if (tanks.length < 6 && fish > tanks.reduce((a, t) => a + cap(t), 0) * 0.5 && economy(home).coins >= newTankCost(tanks, size) + 100) transferMedia(home, buyTank(tanks, size)!);
+    for (const t of tanks.slice(1)) {
+      if (!isCycled(t) || count(t) >= cap(t) * 0.5) continue;
+      const from = tanks.reduce((a, b) => (count(b) > count(a) ? b : a));
+      if (from !== t) for (const f of alive(from).filter((x) => !breeders.has(x.id)).slice(0, Math.floor(cap(t) * 0.5))) moveFish(from, t, f.id);
+    }
+    income[d] = total;
+  }
+  return { income, tanks: tanks.length };
+}
+
+describe('經濟（mvp.md §4.3）', () => {
+  it('認真玩家 120 天：買得起第二缸，收入一路成長，養白子比禮服賺得多', () => {
+    const tux = seriousPlayer(1, 3);
+    const albino = seriousPlayer(1, 2);
+    for (const run of [tux, albino]) {
+      expect(run.tanks).toBeGreaterThanOrEqual(2);
+      // 還沒到 §4.3 的目標（600／3,000／8,000），先當回歸底線；目標數字等企劃定案、M21 訂單板再補
+      expect(run.income[60]).toBeGreaterThan(50);
+      expect(run.income[120]).toBeGreaterThan(500);
+      expect(run.income[120]).toBeGreaterThan(run.income[60] * 2);
+    }
+    expect(albino.income[120]).toBeGreaterThan(tux.income[120] * 1.3);
+  }, 120_000);
 });
 
 describe('保底起步包', () => {

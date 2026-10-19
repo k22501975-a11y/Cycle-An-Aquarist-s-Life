@@ -945,6 +945,12 @@ function sellContent(ctx: PanelContext): Node {
     .filter((g) => g.fish.length > 0);
   const cuttings = economy(s).cuttings;
   const cuttingIds = (Object.keys(cuttings) as PlantSpeciesId[]).filter((id) => (cuttings[id] ?? 0) > 0);
+  const priceRange = (fish: Fish[]) => {
+    const p = fish.map(fishBuybackPrice);
+    const lo = Math.min(...p);
+    const hi = Math.max(...p);
+    return lo === hi ? `每隻 ${lo} 元` : `每隻 ${lo}～${hi} 元`;
+  };
   const sellOne = (id: FishSpeciesId) => () => {
     // 先賣公的，母的留著繁殖
     const pick = [...s.fish.filter((f) => f.species === id && !buybackRefusal(f))].sort((a, b) => (a.sex === b.sex ? 0 : a.sex === 'male' ? -1 : 1))[0];
@@ -959,13 +965,13 @@ function sellContent(ctx: PanelContext): Node {
   return h(
     'div.stack',
     {},
-    h('p.hint', {}, `水族店用店價的三成收健康的成魚和插枝，太小、生病的不收。今天還能賣 ${left} 次。`),
+    h('p.hint', {}, `水族店收健康的魚和插枝：成魚約店價五成，稀有品系、好鰭型賣得更貴；還沒長大的中魚只收三成，太小、生病的不收。今天還能賣 ${left} 次。`),
     groups.length === 0 && cuttingIds.length === 0 ? h('p', {}, '目前沒有店家會收的魚或插枝。把仔魚養大、修剪水草就有東西可以賣。') : null,
     ...groups.map((g) =>
       h(
         'div.item',
         {},
-        h('div', {}, h('b', {}, FISH_SPECIES[g.id].name), h('div.hint', {}, `可以賣 ${g.fish.length} 隻 · 每隻 ${fishBuybackPrice(g.fish[0])} 元`)),
+        h('div', {}, h('b', {}, FISH_SPECIES[g.id].name), h('div.hint', {}, `可以賣 ${g.fish.length} 隻 · ${priceRange(g.fish)}`)),
         button('賣一隻', sellOne(g.id), left > 0 ? '' : ''),
       ),
     ),
