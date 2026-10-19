@@ -57,13 +57,18 @@ export function sizeRatio(fish: Fish): number {
   return Math.min(1, fish.lengthCm / FISH_SPECIES[fish.species].adultLengthCm);
 }
 
+/** 各種水草讓仔魚躲的效果：莫絲、矮珍珠、牛毛氈這種又密又低的草最好躲，大葉子的榕最差。 */
+const HIDING_WEIGHT: Partial<Record<string, number>> = { moss: 3, glosso: 3, eleocharis: 3, hydrocotyle: 1.5, rotala: 1, anubias: 0.4 };
+/** 躲藏係數上限：草再密，成魚吃仔魚的機率也只降到原本的三成（design/mvp.md §4.3）。 */
+export const MAX_HIDING = 0.7;
+
 /**
- * 躲藏係數 0–0.75：水草越密，仔魚、仔蝦越容易躲過掠食者。
- * Phase 0 只看水草總量 ÷ 水量；莫絲、造景石、沉木在之後加入。
+ * 躲藏係數 0–0.7：水草越密，仔魚、仔蝦越容易躲過掠食者。
+ * 看水草量 ÷ 水量，密草算比較多。
  */
 export function hidingFactor(state: TankState): number {
-  const grams = state.plants.reduce((sum, p) => sum + p.biomassG, 0);
-  return 0.75 * (1 - Math.exp(-grams / state.equipment.tank.volumeL / 0.4));
+  const grams = state.plants.reduce((sum, p) => sum + p.biomassG * (HIDING_WEIGHT[p.species] ?? 1), 0);
+  return MAX_HIDING * (1 - Math.exp(-grams / state.equipment.tank.volumeL / 0.6));
 }
 
 export function updatePopulation(state: TankState, dt: number): void {
@@ -196,7 +201,8 @@ function breed(state: TankState, tf: number, dt: number): void {
   }
 }
 
-function giveBirth(state: TankState, mother: Fish, population: number): void {
+/** 生一胎：仔魚放進主缸，回傳生出來的仔魚（隔離盒裡生的由呼叫端搬走）。 */
+export function giveBirth(state: TankState, mother: Fish, population: number): Fish[] {
   const b = FISH_SPECIES[mother.species].breeding!;
   const u = Math.max(1e-9, nextRandom(state.rng));
   const v = nextRandom(state.rng);
@@ -204,7 +210,8 @@ function giveBirth(state: TankState, mother: Fish, population: number): void {
   const mean = b.broodMean * mother.health;
   let n = Math.round(Math.min(b.broodMax, Math.max(b.broodMin, mean + normal * mean * 0.25)));
   n = Math.max(0, Math.min(n, MAX_FAUNA - population));
-  if (n === 0) return;
+  if (n === 0) return [];
+  const born: Fish[] = [];
   const sp = FISH_SPECIES[mother.species];
   const sire = mother.sire;
   const line = mother.lineage ?? mother.id;
@@ -224,6 +231,8 @@ function giveBirth(state: TankState, mother: Fish, population: number): void {
       fry.constitution *= 1 - 0.4 * inbreeding;
     }
     state.fish.push(fry);
+    born.push(fry);
   }
   recordEvent(state, { type: 'fry_born', subjectId: mother.id, count: n });
+  return born;
 }

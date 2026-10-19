@@ -1,4 +1,5 @@
 import type { SoundId } from '../audio/sounds';
+import { substrateName, tankSubstrateLook } from '../render/substrate';
 import {
   isShrimpSpecies,
   addBottledBacteria,
@@ -102,6 +103,7 @@ import {
   QUARANTINE_DAYS,
   quarantineDays,
   releaseQuarantine,
+  moveToQuarantine,
   AIR_PUMPS,
   CHILLERS,
   CO2_KITS,
@@ -900,7 +902,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       h('h3', {}, '底材'),
       cardGrid(
         ...Object.values(SUBSTRATES).map((sub) =>
-          item(sub.name, `substrate:${sub.id}`, (eq.substrate?.spec.id ?? 'sand') === sub.id, () => {
+          item(sub.name, `substrate:${sub.id}`, tankSubstrateLook(eq.substrate) === sub.id, () => {
             purchase(ctx, price(`substrate:${sub.id}`), (st) => replaceSubstrate(st, sub), `重新鋪了${sub.name}`, 'warn', true);
           }, SUBSTRATE_NOTES[sub.id], `gear/bag-${sub.id}.webp`),
         ),
@@ -951,6 +953,12 @@ function sellContent(ctx: PanelContext): Node {
     .filter((g) => g.fish.length > 0);
   const cuttings = economy(s).cuttings;
   const cuttingIds = (Object.keys(cuttings) as PlantSpeciesId[]).filter((id) => (cuttings[id] ?? 0) > 0);
+  const priceRange = (fish: Fish[]) => {
+    const p = fish.map(fishBuybackPrice);
+    const lo = Math.min(...p);
+    const hi = Math.max(...p);
+    return lo === hi ? `每隻 ${lo} 元` : `每隻 ${lo}～${hi} 元`;
+  };
   const sellOne = (id: FishSpeciesId) => () => {
     // 先賣公的，母的留著繁殖
     const pick = [...s.fish.filter((f) => f.species === id && !buybackRefusal(f))].sort((a, b) => (a.sex === b.sex ? 0 : a.sex === 'male' ? -1 : 1))[0];
@@ -971,13 +979,13 @@ function sellContent(ctx: PanelContext): Node {
   return h(
     'div.stack',
     {},
-    h('p.hint', {}, `水族店用店價的三成收健康的成魚和插枝，太小、生病的不收。今天還能賣 ${left} 次。`),
+    h('p.hint', {}, `水族店收健康的魚和插枝：成魚約店價五成，稀有品系、好鰭型賣得更貴；還沒長大的中魚只收三成，太小、生病的不收。今天還能賣 ${left} 次。`),
     groups.length === 0 && cuttingIds.length === 0 ? h('p', {}, '目前沒有店家會收的魚或插枝。把仔魚養大、修剪水草就有東西可以賣。') : null,
     ...groups.map((g) =>
       h(
         'div.item',
         {},
-        h('div', {}, h('b', {}, FISH_SPECIES[g.id].name), h('div.hint', {}, `可以賣 ${g.fish.length} 隻 · 每隻 ${fishBuybackPrice(g.fish[0])} 元`)),
+        h('div', {}, h('b', {}, FISH_SPECIES[g.id].name), h('div.hint', {}, `可以賣 ${g.fish.length} 隻 · ${priceRange(g.fish)}`)),
         button('賣一隻', sellOne(g.id), left > 0 ? '' : ''),
       ),
     ),
@@ -1068,6 +1076,23 @@ export function quarantinePanel(ctx: PanelContext): Node {
       );
     }),
     dead > 0 ? h('div.warn-text', {}, `有 ${dead} 條死在檢疫盒裡了。還好沒有放進主缸。`) : null,
+    h('h3', {}, '當產卵盒用'),
+    h('p.hint', {}, '肚子鼓起來的母魚放進來，生下的小魚不會被成魚吃掉。母魚生完放回主缸；小魚長到 1.6 cm 左右，成魚就吞不下了。'),
+    ...game.state.fish
+      .filter((f) => f.alive && f.sex === 'female' && f.pregnancy > 0.5)
+      .map((f) =>
+        h(
+          'div.item',
+          {},
+          h('div', {}, h('b', {}, fishName(f)), h('div.hint', {}, f.pregnancy > 0.85 ? '快生了' : '懷孕中')),
+          button('放進盒子', () => {
+            game.act((st) => moveToQuarantine(st, f.id));
+            ctx.sound?.('net');
+            toasts.show(`把 ${fishName(f)} 放進檢疫盒待產`);
+            sheet.close();
+          }),
+        ),
+      ),
     h('h3', {}, '藥浴（只下在檢疫盒）'),
     h('div.row.wrap', {}, bath('ichMedication', '白點藥'), bath('antibiotic', '抗生素'), bath('dewormer', '驅蟲藥')),
     living.length > 0 || dead > 0 ? button(dead > 0 && living.length === 0 ? '撈掉死魚' : '全部移到主缸', () => release()) : null,
@@ -1129,7 +1154,7 @@ export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: P
       h(
         'div',
         {},
-        h('b', {}, `底材：${eq.substrate?.spec.name ?? '石英砂'}`),
+        h('b', {}, `底材：${substrateName(eq.substrate)}`),
         eq.substrate?.spec.khAbsorb
           ? h(eq.substrate.buffer < 0.15 ? 'div.warn-text' : 'div.hint', {}, `緩衝力剩約 ${Math.round(eq.substrate.buffer * 100)}%${eq.substrate.buffer < 0.15 ? '，KH 會慢慢回升，該換新土了' : ''}`)
           : null,

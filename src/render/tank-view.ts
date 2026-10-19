@@ -1,7 +1,7 @@
 import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
 import { isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
-import { PaintedRig, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
+import { PaintedRig, paintedArtVersion, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, hungerLook, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { floorAt, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { dirtSpots, floorY, frontLip, sandSurface, tankSubstrateLook, SUBSTRATE_PALETTES, type SubstrateLook } from './substrate';
@@ -185,6 +185,8 @@ export class TankView {
   /** 相對示意圖的鏡頭倍率：造景、設備的大小。 */
   private hs = 1;
   private sceneKey = '';
+  /** 畫面用到的素材版本：背景載好新圖後，退回程式繪製的魚、水草、場景改畫成精繪圖。 */
+  private artVersion = paintedArtVersion();
   private readonly depthBlur = new BlurFilter({ strength: 2.5, quality: 2 });
   private quality: QualitySpec = qualitySpec('high', 2);
   private fish = new Map<number, FishView>();
@@ -455,6 +457,12 @@ export class TankView {
   update(state: TankState, realDt: number): void {
     const dt = Math.min(0.1, realDt);
     this.time += dt;
+    if (this.artVersion !== paintedArtVersion()) {
+      this.artVersion = paintedArtVersion();
+      this.sceneKey = '';
+      for (const v of this.fish.values()) v.rigKey = '';
+      for (const v of this.plants.values()) v.drawnBiomass = -1;
+    }
     this.layout(state);
     this.scape.sync(state, { bounds: this.bounds, hs: this.hs, look: this.look, sceneKey: this.sceneKey, pixelRatio: this.pixelRatio });
     this.detectOps(state, dt);

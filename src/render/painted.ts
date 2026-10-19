@@ -1,11 +1,12 @@
 import { isShrimpSpecies } from '../sim';
 import { Assets, BlurFilter, ColorMatrixFilter, Container, type DestroyOptions, Mesh, MeshPlane, Texture } from 'pixi.js';
-import type { FishSpeciesId, GrowthStage } from '../sim';
+import type { FishSpeciesId, GrowthStage, TankState } from '../sim';
 import type { FishForm } from './fish-art';
 import { canvasTexture, makeCanvas } from './paint';
 import { parseRecipeKey, patternBase, recolorImage } from './phenotype-art';
 import { guppyLook } from './strains';
 import { trimLru } from './lru';
+import { tankSubstrateLook } from './substrate';
 import { rimLight, toneImage, toneKey } from './tone';
 
 /** 邊緣光的強度（畫面評測 V15）。 */
@@ -200,40 +201,75 @@ function trimToned(): void {
   trimLru(toned, TONED_MAX, (t) => tonedRefs.has(t), (t) => t.destroy(true));
 }
 
-/** 開遊戲前載入素材。個別檔案失敗只會讓那張圖退回程式繪製，不會擋住遊戲。 */
-export async function loadPaintedArt(base = import.meta.env.BASE_URL): Promise<number> {
-  await Promise.all([
-    ...Object.entries(PAINTED).map(async ([key, spec]) => {
+/** 每個素材的鍵、檔案和放進哪個快取（精繪魚蝦、小道具、單片鰭、造景）。 */
+export const ART_FILES: { key: string; file: string; scenery: boolean }[] = [
+  ...Object.entries(PAINTED).flatMap(([key, spec]) => [
+    { key, file: spec.file, scenery: false },
+    ...(spec.eating ? [{ key: `${key}#eating`, file: spec.eating, scenery: false }] : []),
+  ]),
+  ...Object.entries(PROPS).map(([key, file]) => ({ key, file, scenery: false })),
+  ...Object.entries(FIN_PARTS).map(([key, part]) => ({ key, file: part.file, scenery: false })),
+  ...Object.entries(SCENERY).map(([key, file]) => ({ key, file, scenery: true })),
+];
+
+/** 各魚種會用到哪些圖（斑馬魚的仔魚、幼魚共用孔雀魚的圖；蝦都會脫殼）。 */
+const SPECIES_ART: Record<FishSpeciesId, RegExp> = {
+  guppy: /^(guppy-|fin-)/,
+  zebrafish: /^(zebrafish-|guppy-fry$|guppy-juvenile$)/,
+  cherry_shrimp: /^shrimp-(cherry-|molt)/,
+  crystal_shrimp: /^shrimp-(crystal-|molt)/,
+  betta: /^betta-/,
+  apisto: /^apisto-/,
+};
+
+/**
+ * 開機先載哪些圖（Issue #81）：只要這些缸現在畫得到的，其他的進遊戲後在背景慢慢載。
+ * 新遊戲只有缸背景、設備和底沙幾張，不用等全部 4MB。
+ */
+export function startupArt(tanks: TankState[]): Set<string> {
+  // 缸背景和缸內設備（加熱棒、海綿過濾器）每缸都看得到
+  const want: RegExp[] = [/^bg-back$/, /^gear-/];
+  for (const t of tanks) {
+    const look = tankSubstrateLook(t.equipment.substrate);
+    if (look !== 'bare') want.push(new RegExp(`^sub-${look}-`));
+    for (const f of t.fish) want.push(SPECIES_ART[f.species]);
+    for (const p of t.plants) want.push(new RegExp(`^plant-${p.species}$`));
+    if (t.equipment.hardscape?.length) want.push(/^(rock|wood)-/);
+    const sn = t.snails;
+    if (sn && (sn.snails.length || sn.clutches.length || sn.appleYoung || Object.values(sn.pests).some((n) => n > 0))) want.push(/^snail-/);
+  }
+  return new Set(ART_FILES.map((a) => a.key).filter((k) => want.some((re) => re.test(k))));
+}
+
+/** 已經試著載過的圖（成功或失敗都算，不重複載）。 */
+const attempted = new Set<string>();
+let version = 0;
+
+/**
+ * 載入素材：給了 only 就只載那些，沒給就載剩下全部。個別檔案失敗只會讓那張圖退回程式繪製，不會擋住遊戲。
+ * 新圖載好後版本號加一，畫面看到版本變了就把退回程式繪製的魚、水草、場景重畫成精繪圖。
+ */
+export async function loadPaintedArt(only?: Set<string>, base = import.meta.env.BASE_URL): Promise<number> {
+  const todo = ART_FILES.filter((a) => !attempted.has(a.key) && (!only || only.has(a.key)));
+  for (const a of todo) attempted.add(a.key);
+  let loaded = 0;
+  await Promise.all(
+    todo.map(async (a) => {
       try {
-        textures.set(key, await Assets.load<Texture>(`${base}art/${spec.file}`));
-        if (spec.eating) textures.set(`${key}#eating`, await Assets.load<Texture>(`${base}art/${spec.eating}`));
+        (a.scenery ? scenery : textures).set(a.key, await Assets.load<Texture>(`${base}art/${a.file}`));
+        loaded++;
       } catch {
         // 留給程式繪製版
       }
     }),
-    ...Object.entries(PROPS).map(async ([key, file]) => {
-      try {
-        textures.set(key, await Assets.load<Texture>(`${base}art/${file}`));
-      } catch {
-        // 沒有圖就不畫殼
-      }
-    }),
-    ...Object.entries(FIN_PARTS).map(async ([key, part]) => {
-      try {
-        textures.set(key, await Assets.load<Texture>(`${base}art/${part.file}`));
-      } catch {
-        // 改用程式畫的鰭
-      }
-    }),
-    ...Object.entries(SCENERY).map(async ([key, file]) => {
-      try {
-        scenery.set(key, await Assets.load<Texture>(`${base}art/${file}`));
-      } catch {
-        // 留給程式繪製版
-      }
-    }),
-  ]);
-  return textures.size + scenery.size;
+  );
+  if (loaded > 0) version++;
+  return loaded;
+}
+
+/** 素材版本：每載好一批新圖就加一。 */
+export function paintedArtVersion(): number {
+  return version;
 }
 
 export function paintedTexture(key: string | null): Texture | null {

@@ -17,7 +17,7 @@ import { mallPanel, syncMall, type MallDeps } from './ui/mall-panel';
 import { CATEGORY_LABELS, nativePlatform, Notifier, planNotices, webPushPlatform, type PlannedNotice } from './net/push';
 import { Forecaster } from './game/forecaster';
 import { canPromptInstall, isInstalled, isIos, promptInstall, setupPwa } from './ui/pwa';
-import { loadPaintedArt } from './render/painted';
+import { loadPaintedArt, startupArt } from './render/painted';
 import { FrameMonitor, lowerQuality } from './game/frame-monitor';
 import { defaultQuality, isQuality, type Quality, QUALITY_LABELS, qualitySpec } from './render/quality';
 import { TankView } from './render/tank-view';
@@ -87,7 +87,6 @@ async function start(): Promise<void> {
   const app = new Application();
   await app.init({ resizeTo: stage, backgroundAlpha: 0, antialias: true, resolution: Math.min(2, window.devicePixelRatio), autoDensity: true });
   stage.appendChild(app.canvas);
-  await loadPaintedArt();
 
   // 讀取存檔並補算離開期間的時間
   const store = browserStore();
@@ -97,6 +96,8 @@ async function start(): Promise<void> {
   const offline = saved ? catchUp(saved) : null;
   const game = new Game(saved?.state ?? newGameState(), saved?.timeScale ?? 7, saved?.tanks ?? [], saved?.active ?? 0);
   for (const t of game.tanks) applySeason(t);
+  // 只先等這些缸畫得到的圖（Issue #81），其他的等主畫面出來後在背景載
+  await loadPaintedArt(startupArt(game.tanks));
   const extraTanks = () => ({ tanks: game.tanks.slice(1), active: game.active });
   const save = () => writeSave(store, game.tanks[0], game.clock.timeScale, Date.now(), extraTanks());
   // 開發用：在瀏覽器主控台用 cycle.game、cycle.sim 直接操作（截圖、調平衡）。
@@ -985,6 +986,8 @@ async function start(): Promise<void> {
       });
     }
   }
+
+  void loadPaintedArt();
 }
 
 start();

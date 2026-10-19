@@ -3,6 +3,8 @@
  * 這裡只有幾何和配色，畫圖在 scenery.ts，tank-view.ts 用 floor 讓飼料、蝦、死魚停在沙面上。
  */
 
+import { SUBSTRATES } from '../sim';
+
 export type SubstrateLook = 'sand' | 'soil' | 'coral' | 'bare';
 
 export function substrateLook(id: string | null | undefined): SubstrateLook {
@@ -13,6 +15,12 @@ export function substrateLook(id: string | null | undefined): SubstrateLook {
 /** 缸裡實際畫哪種底：套缸附一層石英砂，存檔沒記底材（新缸、舊存檔）就是石英砂；明確拆掉（null）才是裸缸。 */
 export function tankSubstrateLook(sub: { spec: { id: string } } | null | undefined): SubstrateLook {
   return substrateLook(sub === null ? null : (sub?.spec.id ?? 'sand'));
+}
+
+/** 這缸鋪的底材叫什麼（商店「使用中」、設備面板都用這個，和畫面一致）。 */
+export function substrateName(sub: { spec: { id: string } } | null | undefined): string {
+  const look = tankSubstrateLook(sub);
+  return look === 'bare' ? '裸缸' : SUBSTRATES[look].name;
 }
 
 interface Palette {
