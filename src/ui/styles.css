@@ -528,3 +528,24 @@ body:has(.sheet.open) .owner.open { bottom: auto; top: calc(env(safe-area-inset-
   body:has(.sheet.open) .owner.open { top: auto; bottom: calc(var(--dock-top, 120px) + 12px); left: calc(env(safe-area-inset-left) + 14px); transform: none; width: calc(100vw - min(420px, 50vw) - 42px); }
   body:has(.sheet.open) .owner.open .owner-actions { flex-wrap: wrap; }
 }
+/* 任務小卡縮小：只放短標題和進度，不遮住左上角的缸 */
+.quest-pill { padding: 6px 12px 6px 52px; min-height: 50px; max-width: min(220px, 40vw); gap: 1px; }
+.quest-avatar { left: 6px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; }
+.quest-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.quest-progress { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.quest-meter { display: block; width: 100%; min-width: 120px; height: 6px; margin-top: 3px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.quest-meter[hidden] { display: none; }
+.quest-meter i { display: block; height: 100%; width: 0; border-radius: 3px; background: linear-gradient(90deg, #4fc3c9, #9be8a8); transition: width 0.6s ease; }
+/* 商店上方縮成一條：打開第一眼就看得到商品 */
+.shop-banner { min-height: 0; align-items: center; padding: 6px 8px 6px 14px; background: linear-gradient(90deg, rgba(8, 28, 38, 0.85), rgba(8, 28, 38, 0.35) 55%, rgba(8, 28, 38, 0.85)), url('/art/ui/shop-banner.webp') center 40% / cover no-repeat; }
+.shop-banner > b { font-size: 15px; }
+.icon-tab { flex-direction: row; justify-content: center; gap: 4px; padding: 4px 2px; }
+.icon-tab .tab-pic { width: 26px; height: 22px; }
+.drip-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
+.drip-water { flex: 0 0 auto; }
+.seg.compact { flex: 0 1 auto; grid-template-columns: auto auto; gap: 4px; }
+.seg.compact .seg-opt { padding: 4px 12px; border-radius: 999px; }
+.seg.compact .seg-opt b { font-size: 12.5px; }
+/* 商店：老闆的長建議排到商品後面，先看到商品 */
+.shop-stack > .stack > details.advice { order: 99; }
+body > .owner { position: fixed; }

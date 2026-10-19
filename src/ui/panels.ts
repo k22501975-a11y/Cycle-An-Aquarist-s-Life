@@ -707,12 +707,12 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     const dripRow = h(
       'div.drip-row',
       {},
-      h('div.drip-water', {}, h('span', {}, `魚場 pH ${farm.ph}`), h('i.arrow', {}, '→'), h(`span${phGap > 0.6 ? '.warn' : ''}`, {}, `你的缸 pH ${game.state.water.ph.toFixed(1)}`)),
+      h('div.drip-water', {}, h('span', {}, `對水 pH ${farm.ph}`), h('i.arrow', {}, '→'), h(`span${phGap > 0.6 ? '.warn' : ''}`, {}, `${game.state.water.ph.toFixed(1)}`)),
       h(
-        'div.seg',
+        'div.seg.compact',
         {},
-        h(`button.seg-opt${shopDrip ? '.active' : ''}`, { onclick: () => ((shopDrip = true), sheet.refresh?.()) }, h('b', {}, '滴水對水'), h('small', {}, `約 ${dripMinutes(game.state, farm)} 分鐘`)),
-        h(`button.seg-opt${shopDrip ? '' : '.active'}`, { onclick: () => ((shopDrip = false), sheet.refresh?.()) }, h('b', {}, '直接倒進缸'), h('small', {}, phGap > 0.6 ? '水質差很多，魚會嚇壞' : '水質差不多')),
+        h(`button.seg-opt${shopDrip ? '.active' : ''}`, { title: `滴水對水約 ${dripMinutes(game.state, farm)} 分鐘`, onclick: () => ((shopDrip = true), sheet.refresh?.()) }, h('b', {}, '滴水對水')),
+        h(`button.seg-opt${shopDrip ? '' : '.active'}`, { title: phGap > 0.6 ? '水質差很多，魚會嚇壞' : '水質差不多', onclick: () => ((shopDrip = false), sheet.refresh?.()) }, h('b', {}, '直接倒')),
       ),
     );
     const add = (label: string, run: () => void, kind = '') => button(label, run, kind ? `small.${kind}` : 'small');
@@ -917,7 +917,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     content = sellContent(ctx);
   }
   const banner = h('div.shop-banner', {}, h('b', {}, '阿德水族館'), wallet);
-  return h('div.stack', {}, banner, tabs, content);
+  return h('div.stack.shop-stack', {}, banner, tabs, content);
 }
 
 /** 賣給水族店：只收健康的成魚和插枝，價錢是店價的三成，每天有次數上限。 */

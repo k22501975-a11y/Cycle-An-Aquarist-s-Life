@@ -18,8 +18,9 @@ export function finTraitsOf(fish: Fish, painted: string | null): FinLook | null 
   const base = painted?.split('~')[0] ?? '';
   const inArt = (fin: string) => male && base !== patternBase(base) && base.endsWith(`-${fin}`);
   const traits: FinTraits = {
-    swallow: p.swallow && !inArt('swallow'),
-    ribbon: p.ribbon && !inArt('ribbon'),
+    // 母魚的燕尾、緞帶鰭只是稍長，不畫補線（之前畫成腹下兩條白線，像多長了鰭條）
+    swallow: male && p.swallow && !inArt('swallow'),
+    ribbon: male && p.ribbon && !inArt('ribbon'),
     // 大耳的胸鰭有單片圖就用圖，沒有才用程式畫
     dumbo: p.dumbo && !paintedTexture('fin-pectoral-dumbo'),
     bigC: male && p.bigC,

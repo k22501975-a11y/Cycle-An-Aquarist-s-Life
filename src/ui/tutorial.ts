@@ -12,6 +12,10 @@ export const OWNER_NAME = '阿德老闆';
 export interface Quest {
   id: string;
   title: string;
+  /** 任務小卡上的短標題（長標題在小卡上會換成好幾行、遮住缸）。 */
+  short?: string;
+  /** 任務小卡上的進度條（0–1）。 */
+  meter?: (state: TankState) => number;
   /** 老闆開場說的話（分段）。 */
   lines: string[];
   /** 完成時老闆說的話。 */
@@ -70,6 +74,7 @@ export const QUESTS: Quest[] = [
   {
     id: 'cycled',
     title: '養水完成：硝化菌長好、氨 0、亞硝 0',
+    short: '養水完成',
     lines: [
       '接下來每天測水，看到氨或亞硝酸鹽就換水。',
       '硝化菌長起來的途中，亞硝酸鹽會先冒出來一陣子，接著才降回 0。等硝化菌長好、氨和亞硝酸鹽都測到 0，缸子就養好了。',
@@ -82,6 +87,7 @@ export const QUESTS: Quest[] = [
       return !!r && living(s).length > 0 && r.ammonia === 0 && r.nitrite === 0 && s.hours - s.lastTest!.hours < 24 && isCycled(s);
     },
     progress: cycleProgress,
+    meter: (s) => Math.max(0, Math.min(1, cycleMaturity(s))),
     hint: '通常 3～7 天，加硝化菌液 1～3 天',
     shopTab: 'gear',
   },

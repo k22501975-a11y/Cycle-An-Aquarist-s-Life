@@ -794,6 +794,7 @@ async function start(): Promise<void> {
     cardArea = { x: 0, y: top + 10 + pillH, w: stageRect.width, h: Math.max(0, dockTop - top - 10 - pillH - 34) };
     placeSelCard();
     stage.style.setProperty('--dock-top', `${Math.round(stageRect.bottom - dockTop - stageRect.top)}px`);
+    document.body.style.setProperty('--dock-top', `${Math.round(stageRect.bottom - dockTop - stageRect.top)}px`);
     tankLabel.style.bottom = `${Math.round(stageRect.bottom - dock.getBoundingClientRect().top + 8)}px`;
     const size = tankSize(game.state.equipment.tank);
     const named = game.tanks.length > 1 ? `${sim.tankLabel(game.tanks, game.active)}・` : '';

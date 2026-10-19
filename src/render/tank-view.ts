@@ -2,7 +2,7 @@ import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointer
 import { isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
-import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
+import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, hungerLook, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { floorAt, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { dirtSpots, floorY, frontLip, sandSurface, substrateLook, SUBSTRATE_PALETTES, type SubstrateLook } from './substrate';
 import { celebrateFrame, CELEBRATE_SECONDS, sparkleAlpha, sparkleBurst, type Sparkle } from './celebrate';
@@ -154,6 +154,9 @@ export class TankView {
   private readonly causticsB: TilingSprite;
   private readonly causticsMask = new Sprite();
   private readonly gear = new Graphics();
+  /** 有插圖的設備（加熱棒、海綿過濾器）；沒載入就退回程式畫。 */
+  private readonly gearArt = { heater: new Sprite(), sponge: new Sprite() };
+  private readonly gearArtLayer = new Container();
   private readonly gearGlow = new Container();
   private readonly foodLayer = new Container();
   /** 水面漣漪與碎屑，每格重畫。 */
@@ -189,6 +192,8 @@ export class TankView {
   private food: FoodParticle[] = [];
   /** 上次撒飼料過了幾秒（魚搶食的熱度）；-1 還沒撒過。 */
   private dropT = -1;
+  /** 夜晚的程度 0（開燈）～1（關燈），慢慢轉換。 */
+  private night = 0;
   private cuttings: Cutting[] = [];
   /** 換水演出進行了幾秒（-1 沒在演）與這次換掉的比例。 */
   private wcT = -1;
@@ -268,6 +273,7 @@ export class TankView {
       this.moltLayer,
       this.snails.layer,
       this.causticsLayer,
+      this.gearArtLayer,
       this.gear,
       this.gearGlow,
       this.foodLayer,
@@ -385,7 +391,8 @@ export class TankView {
     const y0 = b.surface + (b.bottom - b.surface) * 0.3;
     this.causticsMask.position.set(0, y0);
     this.causticsMask.width = b.width;
-    this.causticsMask.height = b.height - y0;
+    // 焦散只照在水和底沙上，不畫到下方工具列後面
+    this.causticsMask.height = Math.max(1, b.height - this.insets.bottom - y0);
     this.causticsLayer.mask = this.causticsMask;
 
     // 光束與懸浮粒子依畫面大小重建
@@ -568,6 +575,8 @@ export class TankView {
   /** 光束緩慢飄移、焦散流動、粒子漂浮。關燈時光束和焦散消失。 */
   private animateLight(state: TankState, dt: number): void {
     const lit = isLightOn(state);
+    // 開關燈約 1.5 秒淡入淡出，不是瞬間切換
+    this.night += ((lit ? 0 : 1) - this.night) * Math.min(1, dt * 2);
     const t = this.time;
     const b = this.bounds;
     this.rayLayer.visible = lit;
@@ -604,6 +613,17 @@ export class TankView {
     const top = this.insets.top;
     const glowFor: Array<[number, number, number, number]> = [];
     const glass = { color: 0xe8fbff, alpha: 0.55, width: Math.max(1, 1.6 * hs) };
+    if (!this.gearArtLayer.children.length) {
+      for (const sp of Object.values(this.gearArt)) {
+        sp.anchor.set(0.5, 0);
+        sp.visible = false;
+        this.gearArtLayer.addChild(sp);
+      }
+    }
+    const heaterTex = paintedTexture('gear-heater');
+    const spongeTex = paintedTexture('gear-sponge');
+    this.gearArt.heater.visible = false;
+    this.gearArt.sponge.visible = false;
 
     if (eq.filter?.spec.id === 'hangOn') {
       // 外掛過濾器：右後方垂下的進水管
@@ -619,6 +639,17 @@ export class TankView {
       const qx = width - 110 * hs - 20;
       g.roundRect(qx - 5 * hs, top - 40, 10 * hs, surface + 30 * hs - top + 40, 5 * hs).fill({ color: 0x6fbf73, alpha: 0.55 });
       g.roundRect(qx - 70 * hs, surface + 24 * hs, 75 * hs, 10 * hs, 5 * hs).fill({ color: 0x6fbf73, alpha: 0.55 });
+    } else if (eq.filter?.spec.id === 'sponge' && spongeTex) {
+      // 海綿過濾器插圖：立在底沙上，打氣管往上接到水面
+      const sx = 90 * hs + 20;
+      const sp = this.gearArt.sponge;
+      sp.texture = spongeTex;
+      sp.visible = true;
+      const h = Math.min(170 * hs, (bottom - surface) * 0.6);
+      sp.height = h;
+      sp.width = (h * spongeTex.width) / spongeTex.height;
+      sp.position.set(sx, floorAt(this.bounds, sx) - h + 6 * hs);
+      g.moveTo(sx - 4 * hs, top - 20).lineTo(sx - 4 * hs, sp.y + h * 0.05).stroke({ color: 0xd8f0f5, width: Math.max(1, 2.5 * hs), alpha: 0.45 });
     } else if (eq.filter?.spec.id === 'sponge') {
       const sx = 90 * hs + 20;
       g.roundRect(sx - 4 * hs, bottom - 150 * hs, 8 * hs, 110 * hs, 4 * hs).fill({ color: 0xe8fbff, alpha: 0.25 }).stroke(glass);
@@ -634,10 +665,23 @@ export class TankView {
       const on = eq.heater.heating && !state.environment.powerOut;
       const stuck = !!eq.heater.stuckOn;
       const element = eq.heater.broken && !stuck ? 0x4a5055 : on ? (stuck && Math.sin(this.time * 7) > 0 ? 0xff3a1a : 0xff8a3a) : 0x9fb0b8;
-      g.roundRect(hx, hy, 16 * hs, hh, 8 * hs).fill({ color: 0xe8fbff, alpha: 0.18 }).stroke(glass);
-      g.roundRect(hx + 4 * hs, hy + hh * 0.46, 8 * hs, hh * 0.48, 4 * hs).fill(element);
-      g.roundRect(hx + 3 * hs, hy + 6 * hs, 2.5 * hs, hh - 12 * hs, 1.5 * hs).fill({ color: 0xffffff, alpha: 0.45 });
-      g.roundRect(hx + 1 * hs, hy - 10 * hs, 14 * hs, 14 * hs, 4 * hs).fill(0x1f2a33);
+      if (heaterTex) {
+        // 加熱棒插圖：玻璃管加黑色頭；發熱體顏色疊在管子下半段
+        const sp = this.gearArt.heater;
+        sp.texture = heaterTex;
+        sp.visible = true;
+        const w = Math.max(14 * hs, (hh * heaterTex.width) / heaterTex.height);
+        sp.width = w;
+        sp.height = hh + 14 * hs;
+        sp.position.set(hx + 8 * hs, hy - 14 * hs);
+        sp.tint = eq.heater.broken && !stuck ? 0x9aa2a8 : 0xffffff;
+        g.roundRect(hx + 8 * hs - w * 0.18, hy + hh * 0.5, w * 0.36, hh * 0.4, w * 0.18).fill({ color: element, alpha: on || eq.heater.broken ? 0.75 : 0.35 });
+      } else {
+        g.roundRect(hx, hy, 16 * hs, hh, 8 * hs).fill({ color: 0xe8fbff, alpha: 0.18 }).stroke(glass);
+        g.roundRect(hx + 4 * hs, hy + hh * 0.46, 8 * hs, hh * 0.48, 4 * hs).fill(element);
+        g.roundRect(hx + 3 * hs, hy + 6 * hs, 2.5 * hs, hh - 12 * hs, 1.5 * hs).fill({ color: 0xffffff, alpha: 0.45 });
+        g.roundRect(hx + 1 * hs, hy - 10 * hs, 14 * hs, 14 * hs, 4 * hs).fill(0x1f2a33);
+      }
       for (const k of [0.25, 0.7]) g.circle(hx + 19 * hs, hy + hh * k, 4.5 * hs).fill({ color: 0xe8fbff, alpha: 0.35 });
       if (on) glowFor.push([hx + 8 * hs, hy + hh * 0.7, hh * 0.9, stuck ? 0xff4020 : 0xff8a3a]);
     }
@@ -1334,7 +1378,7 @@ export class TankView {
       // 身體大小（上一格的景深）：讓整條魚留在缸裡
       const halfLen = this.lengthPx(fish) * (0.72 + 0.33 * view.z) * 0.5;
       const body = { halfLen, halfH: halfLen * ('heightPx' in rig ? rig.heightPx / Math.max(1, rig.lengthPx) : 0.35) };
-      updateSwimmer(swimmer, living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX, body }, ctx, dt, () => this.rand());
+      updateSwimmer(swimmer, living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX, body, begging: hungerLook(fish.hunger).begging }, ctx, dt, () => this.rand());
 
       // 景深：魚慢慢在前後之間游動；遠的小一點、模糊偏藍，畫在造景後面。
       if (!isShrimpSpecies(fish.species) && fish.alive) {
@@ -1369,7 +1413,7 @@ export class TankView {
         view.deathT = -1;
         // 生病的樣子：越虛弱顏色越淡、消瘦變扁、癢的時候突然側身蹭一下
         const sick = sickLook(symptoms, fish.health, this.time, fish.id);
-        rig.scale.y = k * turn.sy * sick.thin * (1 - 0.55 * sick.flash);
+        rig.scale.y = k * turn.sy * sick.thin * hungerLook(fish.hunger).thin * (1 - 0.55 * sick.flash);
         rig.alpha = rig.look.alpha;
         rig.setDim(sick.dim);
         const tilt = symptoms.includes('loss_of_balance') ? 1.2 : Math.max(-0.35, Math.min(0.35, Math.atan2(swimmer.vy, Math.abs(swimmer.vx) + 1) * 0.6)) + 0.5 * sick.flash;
@@ -1404,7 +1448,8 @@ export class TankView {
         view.tone = tone;
         if (rig instanceof PaintedRig) {
           // 精繪圖：色調烘進快取的貼圖，不掛濾鏡（I1）
-          const q = quantizeTone(sat, 1 + boost * 0.08 - (stage === 'old' ? 0.06 : 0));
+          // 統一調色（畫面評測 V15）：寫實的魚圖整體加一點飽和與亮度，配上插畫風的缸
+          const q = quantizeTone(sat + ART_SAT, (1 + boost * 0.08 - (stage === 'old' ? 0.06 : 0)) * ART_BRIGHT);
           rig.setTone(q.sat, q.bright);
         } else if (sat !== 0 || boost > 0) {
           const f = new ColorMatrixFilter();
@@ -1582,10 +1627,18 @@ export class TankView {
         g.circle(x, edge, (10 + (i % 5) * 7) * this.hs).fill({ color: 0x3f7a22, alpha: a * 0.3 });
       }
     }
-    // 夜晚（關燈或停電）：深藍、只剩一點月光
-    if (!isLightOn(state)) g.rect(0, 0, width, height).fill({ color: 0x041226, alpha: 0.55 });
+    // 夜晚（關燈或停電）：月光藍，魚還看得清楚（原本整片灰暗，新玩家第一眼就是暗畫面）；開關燈慢慢轉換
+    if (this.night > 0.01) {
+      g.rect(0, 0, width, height).fill({ color: 0x0a2246, alpha: 0.34 * this.night });
+      // 水面透下來的一點月光：上面亮一點
+      g.rect(0, surface, width, (bottom - surface) * 0.35).fill({ color: 0x9fc4ff, alpha: 0.05 * this.night });
+    }
   }
 }
+
+/** 魚圖的基本調色：飽和度加多少、亮度乘多少。 */
+const ART_SAT = 0.2;
+const ART_BRIGHT = 1.05;
 
 /** 白點病的白點：固定位置的小白點（座標是魚的圖層像素，以魚中心為原點）。 */
 function drawIchSpots(g: Graphics, rig: FishRig | PaintedRig, count: number): void {

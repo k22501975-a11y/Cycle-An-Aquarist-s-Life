@@ -18,6 +18,8 @@ interface Page {
 export class Guide {
   readonly pill = h('button.quest-pill.glass');
   private readonly progressEl = h('span.quest-progress');
+  private readonly meterFill = h('i');
+  private readonly meterEl = h('span.quest-meter', {}, this.meterFill);
   private shownProgress = '';
   private readonly bubble = h('div.owner.glass');
   private progress: TutorialProgress;
@@ -36,7 +38,9 @@ export class Guide {
   ) {
     this.progress = loadProgress(store);
     this.pill.addEventListener('click', () => this.showQuest());
-    host.append(this.pill, this.bubble);
+    // 對話框掛在 body：面板（商店等）開著時也在最上層，按鈕按得到
+    host.append(this.pill);
+    document.body.append(this.bubble);
     this.renderPill();
   }
 
@@ -145,9 +149,9 @@ export class Guide {
       this.pill.replaceChildren(
         ownerPortrait('quest-avatar'),
         h('span.quest-step', {}, `任務 ${this.progress.step + 1}/${QUESTS.length}`),
-        h('span.quest-title', {}, q.title),
+        h('span.quest-title', { title: q.title }, q.short ?? q.title),
         this.progressEl,
-        q.hint ? h('span.quest-hint', {}, q.hint) : '',
+        this.meterEl,
       );
     }
     this.onLayout();
@@ -155,7 +159,11 @@ export class Guide {
 
   /** 任務卡上的進度（硝化菌 40% 之類），變了才改 DOM。 */
   private renderProgress(state: TankState): void {
-    const text = currentQuest(this.progress)?.progress?.(state) ?? '';
+    const q = currentQuest(this.progress);
+    const m = q?.meter?.(state);
+    this.meterEl.hidden = m === undefined;
+    if (m !== undefined) this.meterFill.style.width = `${Math.round(m * 100)}%`;
+    const text = q?.progress?.(state) ?? '';
     if (text === this.shownProgress) return;
     this.shownProgress = text;
     this.progressEl.textContent = text;
