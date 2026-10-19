@@ -1786,8 +1786,8 @@ export class TankView {
    * （美術對位：圖 512×400，盒身 496×328 從 (8, 64) 開始）。圖還沒載好就先用線畫。
    */
   private drawNurseryBox(state: TankState, g: Graphics): void {
-    const back = paintedTexture('gear-nursery-back');
-    const front = paintedTexture('gear-nursery-front');
+    const back = paintedTexture('nursery-back');
+    const front = paintedTexture('nursery-front');
     const art = !!state.nurseryBox && !!back && !!front;
     this.nurseryBack.visible = this.nurseryFront.visible = art;
     if (!state.nurseryBox) return;
