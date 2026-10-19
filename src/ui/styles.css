@@ -685,7 +685,7 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .morning-item.good { border-left-color: var(--sage); }
 .morning-item.info { border-left-color: #7fc4ff; }
 .morning-pic { position: relative; flex: 0 0 auto; width: 52px; height: 52px; display: grid; place-items: center; border-radius: 12px; background: radial-gradient(closest-side, rgba(120, 220, 230, 0.22), rgba(120, 220, 230, 0)); }
-.morning-pic img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.morning-pic img { width: 100%; height: 100%; object-fit: contain; }
 .morning-count { position: absolute; right: -4px; bottom: -4px; padding: 0 5px; border-radius: 8px; background: rgba(10, 36, 46, 0.9); color: var(--gold-bright); font-size: 11px; }
 .morning-text { flex: 1; }
 .morning-go { flex: 0 0 auto; color: var(--gold-bright); font-size: 13px; font-weight: 700; white-space: nowrap; }
@@ -725,3 +725,12 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .wc-temp .kit-thermo { flex: none; height: 34px; margin: 0 4px 8px; opacity: 0.45; }
 .wc-temp.active { color: var(--text); border-color: var(--sage); }
 .wc-temp.active .kit-thermo { opacity: 1; }
+
+/* 設備與維護：每一列前面放設備的商品圖 */
+.item.has-pic { justify-content: flex-start; }
+.item.has-pic .item-main { flex: 1; min-width: 0; }
+.item-pic { flex: 0 0 48px; width: 48px; height: 48px; display: grid; place-items: center; border-radius: 12px; background: radial-gradient(closest-side, rgba(120, 220, 230, 0.2), rgba(120, 220, 230, 0)); }
+.item-pic img { width: 100%; height: 100%; object-fit: contain; }
+.item-pic .kit-thermo { height: 30px; margin-bottom: 8px; }
+.item-pic .wc-mini.level { width: 30px; height: 34px; }
+.item-pic .wc-mini.level i { background: rgba(255, 255, 255, 0.08); }
