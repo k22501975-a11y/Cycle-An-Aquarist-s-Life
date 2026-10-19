@@ -74,12 +74,16 @@ test('新手任務 1～10：照老闆的引導從新存檔玩得完，魚不會�
       s.label = '我的第一缸';
     });
   });
-  // 老闆的對話框開著時任務不會往下走：關掉「完成」和下一個任務的說明
+  // 老闆的對話框開著時任務不會往下走：關掉「完成」和下一個任務的說明。
+  // 兩個任務各有好幾頁對話，慢的 CI 上一幀要好幾秒，給久一點
   await expect
-    .poll(async () => {
-      await dismissGuide(page);
-      return questStep(page);
-    })
+    .poll(
+      async () => {
+        await dismissGuide(page);
+        return questStep(page);
+      },
+      { timeout: 90_000 },
+    )
     .toBe(8);
 
   // 9 養水：照老闆說的一天兩餐、每天測水，測到氨或亞硝就換水；14 個遊戲天內要養好
