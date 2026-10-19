@@ -98,9 +98,11 @@ export class Guide {
     }
   }
 
-  /** 開場：第一次玩的人直接看到第一個任務。 */
-  start(): void {
-    if (this.progress.step === 0 && !this.progress.skipped) this.showQuest();
+  /** 開場：第一次玩的人直接看到第一個任務；任務已經做完（開缸挑完設備才開場）就不重講，下一次 update 直接說做完了。 */
+  start(state?: TankState): void {
+    if (this.progress.step !== 0 || this.progress.skipped) return;
+    if (state && currentQuest(this.progress)?.check(state)) return;
+    this.showQuest();
   }
 
   restart(): void {

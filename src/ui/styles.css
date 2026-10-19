@@ -831,6 +831,22 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .setup-panel > .row { justify-content: flex-end; gap: 8px; position: sticky; bottom: calc(-18px - env(safe-area-inset-bottom)); z-index: 2; margin: 0 -20px calc(-18px - env(safe-area-inset-bottom)); padding: 26px 20px calc(18px + env(safe-area-inset-bottom)); /* 卡片捲到按鈕列後面要被蓋住（#186）：上緣淡出、下面不透明 */ background: linear-gradient(180deg, rgba(8, 28, 38, 0) 0, rgb(9, 28, 38) 22px); }
 .setup-cta { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5; font-size: 18px; padding: 14px 22px; box-shadow: 0 0 24px rgba(227, 189, 109, 0.6); }
 .setup-cta[hidden] { display: none; }
+/* 開缸 4 步（mvp.md §4.4.4）：底部進度點＋大按鈕；等玩家動手時按鈕會發亮呼吸 */
+.setup-prompt { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 22px); transform: translateX(-50%); z-index: 25; display: flex; flex-direction: column; align-items: center; gap: 10px; animation: rise 0.25s ease-out; }
+.setup-dots { display: flex; gap: 8px; }
+.setup-dots i { width: 9px; height: 9px; border-radius: 50%; background: rgba(255, 255, 255, 0.28); }
+.setup-dots i.on { background: var(--gold); }
+.setup-dots i.now { background: #fff; box-shadow: 0 0 8px rgba(255, 255, 255, 0.8); }
+.setup-go { font-size: 18px; padding: 14px 26px; min-width: 240px; touch-action: none; user-select: none; -webkit-user-select: none; opacity: 0.72; }
+.setup-prompt.waiting .setup-go { opacity: 1; animation: setup-breathe 1.4s ease-in-out infinite; }
+@keyframes setup-breathe { 0%, 100% { box-shadow: 0 0 14px rgba(227, 189, 109, 0.45); } 50% { box-shadow: 0 0 30px rgba(227, 189, 109, 0.95); } }
+/* 開局歡迎：疊在挑設備畫面的缸那一側，點一下收起 */
+.setup-welcome { position: fixed; z-index: 45; left: 50%; top: calc(env(safe-area-inset-top) + 14px); transform: translateX(-50%); width: min(520px, calc(100vw - 28px)); display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 16px; animation: rise 0.3s ease-out; transition: opacity 0.3s; cursor: pointer; }
+.setup-welcome.out { opacity: 0; }
+.setup-welcome p { margin: 0; font-size: 15px; line-height: 1.45; }
+.setup-welcome b { color: var(--gold); font-weight: 600; }
+.setup-welcome-avatar { flex: 0 0 52px; width: 52px; height: 52px; border-radius: 50%; object-fit: cover; }
+@media (orientation: landscape) { .setup-welcome { left: 14px; transform: none; width: calc(100vw - min(420px, 50vw) - 42px); max-width: 520px; } }
 
 /* 每日 3 件小事（F3，#185）：左上角任務卡下面的小卡，三件各一個圖示，做完打勾；全做完發光、出現寶箱 */
 .daily-holder { position: absolute; z-index: 4; left: calc(env(safe-area-inset-left) + 14px); }
