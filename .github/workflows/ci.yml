@@ -45,8 +45,26 @@ jobs:
           echo "$GITLEAKS_SHA256  gitleaks.tgz" | sha256sum -c -
           tar xzf gitleaks.tgz gitleaks
           ./gitleaks git --no-banner --redact --exit-code 1 .
-      - name: 新增套件檢查
+      # dependency-review 需要 repo 開啟 Dependency graph（Settings → Advanced Security）。
+      # 還沒開時只出警告、不擋（否則所有 PR 都過不了）；開了之後有 high 以上漏洞就擋。
+      - name: 確認 Dependency graph 已開啟
+        id: depgraph
         if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/dependency-graph/compare/$BASE...$HEAD" > /dev/null 2> err.txt; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          elif grep -qi "dependency graph\|not supported\|not enabled" err.txt; then
+            echo "::warning title=新增套件檢查略過::這個 repo 還沒開 Dependency graph，請到 Settings → Advanced Security 開啟（docs/quality-gate.md）"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            cat err.txt; exit 1
+          fi
+      - name: 新增套件檢查
+        if: github.event_name == 'pull_request' && steps.depgraph.outputs.enabled == 'true'
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high

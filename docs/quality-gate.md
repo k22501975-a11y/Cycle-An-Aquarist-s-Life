@@ -22,7 +22,7 @@ PR 要合併到 `main`，必須同時符合：
 - **Dependabot**（`.github/dependabot.yml`）：每週一檢查 npm 和伺服器（Gradle）的套件、每月檢查 GitHub Actions，有更新或安全公告就開 PR，照一般流程審查、合併。
 - **相依套件圖**（`.github/workflows/dependency-graph.yml`）：GitHub 看不懂 Gradle，main 上的 `server/` 有改動時實際解析一次送上去，漏洞提醒才涵蓋伺服器。
 - **秘密掃描誤判**：確定不是秘密才可以加進 `.gitleaks.toml` 的 allowlist，並在 PR 說明原因。真的外洩時，先到該服務撤銷金鑰，再清理 repo。
-- 建議 YenWel 也到 repo 的 Settings → Advanced Security 開啟 **Secret Protection 的 Push protection**（公開 repo 免費），在推送時就擋下金鑰。
+- **要 YenWel 開啟一次**：repo 的 Settings → Advanced Security，開啟 **Dependency graph**、**Dependabot alerts**、**Dependabot security updates**，以及 **Secret Protection 的 Push protection**（公開 repo 都免費）。Dependency graph 沒開時，PR 的「新增套件檢查」只出警告不擋，Dependabot 的漏洞提醒也不會出現。
 
 ## 流程測試（Playwright）
 
