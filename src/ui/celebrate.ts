@@ -23,6 +23,9 @@ export class Celebration {
   private el: HTMLElement | null = null;
   private timer = 0;
   private dockTimer = 0;
+  private spec: CelebrateSpec | null = null;
+  private held = false;
+  private readonly waiting: CelebrateSpec[] = [];
 
   constructor(private readonly host: HTMLElement) {}
 
@@ -31,8 +34,36 @@ export class Celebration {
     return this.el !== null;
   }
 
-  show(spec: CelebrateSpec): void {
+  /** 先別演（過一晚的夜幕蓋著）：正在演的和這段期間要演的都排隊，release() 後一張一張演。 */
+  hold(): void {
+    if (this.held) return;
+    this.held = true;
+    if (this.spec) this.waiting.push(this.spec);
     this.close();
+  }
+
+  release(): void {
+    this.held = false;
+    this.next();
+  }
+
+  /** 排隊中的卡（測試和除錯用）。 */
+  get queued(): number {
+    return this.waiting.length;
+  }
+
+  private next(): void {
+    const spec = this.held || this.el ? undefined : this.waiting.shift();
+    if (spec) this.show(spec);
+  }
+
+  show(spec: CelebrateSpec): void {
+    if (this.held) {
+      this.waiting.push(spec);
+      return;
+    }
+    this.close();
+    this.spec = spec;
     const img = h(spec.art.startsWith('ui/icon-') ? 'img.celebrate-art.is-icon' : 'img.celebrate-art', { src: spec.src ?? ART + spec.art, alt: '', draggable: 'false' });
     img.addEventListener('error', () => img.remove());
     const confetti = h(
@@ -71,8 +102,11 @@ export class Celebration {
     const el = this.el;
     if (!el) return;
     this.el = null;
+    this.spec = null;
     el.classList.remove('in');
     el.classList.add('out');
     window.setTimeout(() => el.remove(), 400);
+    // 排隊的下一張等這張退場後再上
+    if (this.waiting.length > 0) window.setTimeout(() => this.next(), 450);
   }
 }

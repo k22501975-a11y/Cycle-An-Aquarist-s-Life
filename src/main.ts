@@ -932,7 +932,8 @@ async function start(): Promise<void> {
   const GEAR_CRISES = new Set(['heater_broke', 'heater_stuck', 'heater_exposed', 'controller_cut', 'power_out', 'too_hot', 'too_cold']);
   game.onCrisis((c) => {
     speed.render();
-    if (sleepingNow) return;
+    // 只有 game.sleep() 那一下不跳：半夜的危機會寫在早上報告卡最上面；報告卡開著時快轉出的事照常提示
+    if (game.sleeping) return;
     const fix = GEAR_CRISES.has(c.reason)
       ? {
           label: '去處理',
@@ -1007,11 +1008,18 @@ async function start(): Promise<void> {
   };
   const goNight = () => {
     if (sleepingNow) return;
+    // 開缸演出還在演：演完會跳「你的第一個缸」，夜幕會把它蓋掉
+    if (view.settingUp) {
+      toasts.show('等開缸演完再過夜，也可以先按「跳過」');
+      return;
+    }
     if (cloud.session) {
       toasts.show('雲端模式的時間跟著伺服器走，不能直接跳過一晚', 'warn');
       return;
     }
     sleepingNow = true;
+    // 夜幕蓋著的時候慶祝卡先排隊，報告卡關掉再一張一張演
+    celebration.hold();
     sheet.close();
     select(null);
     audio.play('open');
@@ -1032,6 +1040,7 @@ async function start(): Promise<void> {
         shade.classList.remove('in');
         window.setTimeout(() => shade.remove(), 450);
         sleepingNow = false;
+        celebration.release();
       });
       shade.setAttribute('aria-hidden', 'false');
       shade.append(card);
@@ -1039,6 +1048,7 @@ async function start(): Promise<void> {
     }, 900);
   };
   debugHandle.sleep = goNight;
+  debugHandle.celebration = celebration;
 
   game.onChange(() => {
     sheet.refresh();
