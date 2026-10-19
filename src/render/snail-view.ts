@@ -20,8 +20,11 @@ export interface SnailScene {
   time: number;
 }
 
-/** 殼的長度（cm）：圖比真的放大一點，不然小螺在大缸裡看不到。 */
-const SIZE_CM = { apple: 4.5, nerite: 2.2, assassin: 2.2, ramshorn: 1.1, bladder: 1, mts: 1.4, babies: 1.6, eggs: 3.2 };
+/**
+ * 整張圖的長度（cm，含伸出殼外的腹足）。魚的圖放大了 1.5～1.8 倍，螺只放大一點，
+ * 成螺才不會跟魚一樣大：蘋果螺成體約一隻成年孔雀魚身長（不含尾鰭）。
+ */
+const SIZE_CM = { apple: 3, nerite: 1.7, assassin: 1.8, ramshorn: 1.1, bladder: 1, mts: 1.4, babies: 1.6, eggs: 3.2 };
 const TEX = {
   apple: (c?: string) => (c === 'blue' ? 'snail-apple-blue' : 'snail-apple-gold'),
   nerite: 'snail-nerite-zebra',
@@ -107,7 +110,7 @@ export class SnailView {
         this.big.set(x.id, c);
         this.layer.addChild(sprite);
       }
-      const len = scene.ppc * SIZE_CM[x.kind] * (x.kind === 'apple' ? Math.min(1, 0.5 + x.ageDays / 140) : 1);
+      const len = scene.ppc * SIZE_CM[x.kind] * (x.kind === 'apple' ? Math.min(1, 0.45 + x.ageDays / 160) : 1);
       if (x.alive) {
         this.place(c, scene, len, tex);
         c.sprite.alpha = 1;

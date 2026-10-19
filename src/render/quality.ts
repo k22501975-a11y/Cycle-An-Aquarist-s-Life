@@ -1,5 +1,6 @@
 /**
- * 畫質設定（低／中／高）。手機或舊電腦可以降級：少畫幾層模糊濾鏡、粒子變少、解析度降低。
+ * 畫質設定（低／中／高）。手機或舊電腦可以降級：少畫幾層模糊濾鏡、粒子變少。
+ * 解析度盡量不降：手機螢幕像素密，降到 1 倍畫面會糊成馬賽克（低畫質才降到 1.5 倍）。
  * 畫面構圖不變，只拿掉最吃效能的效果（design/art-style.md §6 效能）。
  */
 export type Quality = 'low' | 'medium' | 'high';
@@ -22,9 +23,9 @@ export interface QualitySpec {
 export function qualitySpec(q: Quality, dpr: number): QualitySpec {
   switch (q) {
     case 'low':
-      return { resolution: 1, depthBlur: false, softGlow: false, motes: 0.35, doubleCaustics: false };
+      return { resolution: Math.min(1.5, dpr), depthBlur: false, softGlow: false, motes: 0.35, doubleCaustics: false };
     case 'medium':
-      return { resolution: Math.min(1.5, dpr), depthBlur: true, softGlow: true, motes: 0.6, doubleCaustics: true };
+      return { resolution: Math.min(2, dpr), depthBlur: true, softGlow: true, motes: 0.6, doubleCaustics: true };
     case 'high':
       return { resolution: Math.min(2, dpr), depthBlur: true, softGlow: true, motes: 1, doubleCaustics: true };
   }

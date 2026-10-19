@@ -7,18 +7,31 @@ import { CanvasSource, Texture } from 'pixi.js';
 
 export type Ctx = CanvasRenderingContext2D;
 
-export function makeCanvas(width: number, height: number): { canvas: HTMLCanvasElement; ctx: Ctx } {
+/**
+ * 開一張畫布。scale > 1 時畫布像素多 scale 倍、座標照原本的 CSS 像素畫（手機高密度螢幕用），
+ * 轉貼圖時要把同一個 scale 傳給 canvasTexture，畫面上的大小才不變。
+ */
+export function makeCanvas(width: number, height: number, scale = 1): { canvas: HTMLCanvasElement; ctx: Ctx } {
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.ceil(width));
-  canvas.height = Math.max(1, Math.ceil(height));
+  canvas.width = Math.max(1, Math.ceil(width * scale));
+  canvas.height = Math.max(1, Math.ceil(height * scale));
   const ctx = canvas.getContext('2d')!;
+  if (scale !== 1) ctx.scale(scale, scale);
   return { canvas, ctx };
 }
 
-/** Canvas 轉成 Pixi 貼圖；縮小顯示的貼圖開 mipmap，避免鋸齒與閃爍。 */
-export function canvasTexture(canvas: HTMLCanvasElement, mipmaps = true): Texture {
-  const source = new CanvasSource({ resource: canvas, autoGenerateMipmaps: mipmaps, scaleMode: 'linear' });
+/** Canvas 轉成 Pixi 貼圖；縮小顯示的貼圖開 mipmap，避免鋸齒與閃爍。resolution 是畫布的 scale。 */
+export function canvasTexture(canvas: HTMLCanvasElement, mipmaps = true, resolution = 1): Texture {
+  const source = new CanvasSource({ resource: canvas, autoGenerateMipmaps: mipmaps, scaleMode: 'linear', resolution });
   return new Texture({ source });
+}
+
+/** 預先畫好的整幅貼圖最多畫多寬（像素）：再大只是更吃記憶體。 */
+const PAINT_MAX_PX = 2560;
+
+/** 照螢幕解析度畫整幅貼圖的倍率：不低於 1、最多 2 倍、寬度不超過上限。 */
+export function paintScale(pixelRatio: number, width: number): number {
+  return Math.max(1, Math.min(pixelRatio, 2, PAINT_MAX_PX / Math.max(1, width)));
 }
 
 /** 可重現的亂數（同一張圖每次產生都一樣）。 */
