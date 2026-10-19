@@ -244,7 +244,7 @@ export function isShrimpSpecies(id: FishSpeciesId): boolean {
   return FISH_SPECIES[id].invertebrate === true;
 }
 
-export type PlantSpeciesId = 'anubias' | 'rotala';
+export type PlantSpeciesId = 'anubias' | 'rotala' | 'eleocharis' | 'glosso' | 'hydrocotyle' | 'moss';
 
 export interface PlantSpecies {
   id: PlantSpeciesId;
@@ -291,5 +291,53 @@ export const PLANT_SPECIES: Record<PlantSpeciesId, PlantSpecies> = {
     maxGrowthPerHour: 0.015,
     maxBiomassG: 15,
     cuttingMassG: 1,
+  },
+  eleocharis: {
+    id: 'eleocharis',
+    name: '牛毛氈',
+    lightType: 'high',
+    lightSaturationPar: 90,
+    lightTolerancePar: 280,
+    compensationPar: 35,
+    co2HalfSaturation: 3,
+    maxGrowthPerHour: 0.008,
+    maxBiomassG: 12,
+    cuttingMassG: 1,
+  },
+  glosso: {
+    id: 'glosso',
+    name: '矮珍珠',
+    lightType: 'high',
+    lightSaturationPar: 130,
+    lightTolerancePar: 320,
+    compensationPar: 60,
+    co2HalfSaturation: 8,
+    maxGrowthPerHour: 0.012,
+    maxBiomassG: 10,
+    cuttingMassG: 0.5,
+  },
+  hydrocotyle: {
+    id: 'hydrocotyle',
+    name: '大葉珍珠',
+    lightType: 'low',
+    lightSaturationPar: 80,
+    lightTolerancePar: 260,
+    compensationPar: 20,
+    co2HalfSaturation: 1.5,
+    maxGrowthPerHour: 0.01,
+    maxBiomassG: 14,
+    cuttingMassG: 1,
+  },
+  moss: {
+    id: 'moss',
+    name: '莫絲',
+    lightType: 'low',
+    lightSaturationPar: 25,
+    lightTolerancePar: 150,
+    compensationPar: 5,
+    co2HalfSaturation: 0.3,
+    maxGrowthPerHour: 0.004,
+    maxBiomassG: 15,
+    cuttingMassG: 2,
   },
 };

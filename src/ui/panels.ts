@@ -644,22 +644,25 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
   );
   const wallet = h('div.wallet-bar', {}, h('span', {}, '錢包'), priceTag(coins));
 
-  const buyFish = (species: FishSpeciesId, count: number, strain?: number, finStrain?: (typeof GUPPY_FIN_STRAINS)[number]) => () => {
+  // sexes 有給就照順序決定每隻的公母（孔雀魚品系：公、母、一公兩母），沒給就隨機
+  const buyFish = (species: FishSpeciesId, count: number, strain?: number, finStrain?: (typeof GUPPY_FIN_STRAINS)[number], sexes?: ('male' | 'female')[]) => () => {
     const quarantined = !!game.state.quarantine;
     const name = finStrain ? `${finStrain.name}孔雀魚` : strain !== undefined ? `${GUPPY_STRAINS[strain]}孔雀魚` : FISH_SPECIES[species].name;
     const each = finStrain ? finStrain.price : strain !== undefined ? GUPPY_STRAIN_PRICES[strain] : FISH_PRICES[species];
+    const males = sexes?.filter((x) => x === 'male').length ?? 0;
+    const sexNote = !sexes ? '' : males === count ? '（公）' : males === 0 ? '（母）' : `（${males} 公 ${count - males} 母）`;
     const options = { ...(finStrain ? { strain: finStrain.strain, fin: finStrain.fin } : { strain }), drip: shopDrip };
     purchase(
       ctx,
       each * count,
       (st) => {
-        for (let i = 0; i < count; i++) (quarantined ? addFishToQuarantine : addFish)(st, species, options);
+        for (let i = 0; i < count; i++) (quarantined ? addFishToQuarantine : addFish)(st, species, { ...options, sex: sexes?.[i] });
       },
       quarantined
-        ? `買了 ${count} 隻${name}，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天`
+        ? `買了 ${count} 隻${name}${sexNote}，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天`
         : shopDrip
-          ? `買了 ${count} 隻${name}，慢慢滴水對水後放進缸裡`
-          : `買了 ${count} 隻${name}，直接倒進缸裡${Math.abs(farmHabit(species).ph - game.state.water.ph) > 0.6 ? '，水質差很多，牠們嚇壞了' : ''}`,
+          ? `買了 ${count} 隻${name}${sexNote}，慢慢滴水對水後放進缸裡`
+          : `買了 ${count} 隻${name}${sexNote}，直接倒進缸裡${Math.abs(farmHabit(species).ph - game.state.water.ph) > 0.6 ? '，水質差很多，牠們嚇壞了' : ''}`,
       !shopDrip && Math.abs(farmHabit(species).ph - game.state.water.ph) > 0.6 ? 'warn' : 'info',
     );
   };
@@ -713,6 +716,12 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       ),
     );
     const add = (label: string, run: () => void, kind = '') => button(label, run, kind ? `small.${kind}` : 'small');
+    // 孔雀魚公母外觀差很多（公魚才有花色和長尾）：分開賣，也有一公兩母的組合
+    const guppyActions = (strain?: number, finStrain?: (typeof GUPPY_FIN_STRAINS)[number]) => [
+      add('公', buyFish('guppy', 1, strain, finStrain, ['male'])),
+      add('母', buyFish('guppy', 1, strain, finStrain, ['female'])),
+      add('一公兩母', buyFish('guppy', 3, strain, finStrain, ['male', 'female', 'female'])),
+    ];
     const guppyChips = [`${FISH_SPECIES.guppy.temp.min}–${FISH_SPECIES.guppy.temp.max}°C`, '會繁殖'];
     content = h(
       'div.stack',
@@ -743,10 +752,10 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       h('h3', {}, '孔雀魚品系'),
       cardGrid(
         ...GUPPY_STRAINS.map((strain, i) =>
-          shopCard({ art: guppyArt(i), name: strain, price: GUPPY_STRAIN_PRICES[i], unit: '/隻', chips: guppyChips, actions: [add('+1', buyFish('guppy', 1, i)), add('+3', buyFish('guppy', 3, i))] }),
+          shopCard({ art: guppyArt(i), name: strain, price: GUPPY_STRAIN_PRICES[i], unit: '/隻', chips: guppyChips, actions: guppyActions(i) }),
         ),
         ...GUPPY_FIN_STRAINS.map((fs) =>
-          shopCard({ art: guppyArt(fs.strain, fs.fin), name: fs.name, price: fs.price, unit: '/隻', chips: ['鰭型品系'], actions: [add('+1', buyFish('guppy', 1, undefined, fs)), add('+3', buyFish('guppy', 3, undefined, fs))] }),
+          shopCard({ art: guppyArt(fs.strain, fs.fin), name: fs.name, price: fs.price, unit: '/隻', chips: ['鰭型品系'], actions: guppyActions(undefined, fs) }),
         ),
       ),
       h('h3', {}, '其他魚蝦'),

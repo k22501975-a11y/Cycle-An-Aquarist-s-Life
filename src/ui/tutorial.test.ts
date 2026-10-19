@@ -27,13 +27,17 @@ describe('新手引導任務', () => {
     expect(currentQuest(p)?.id).toBe('cycled');
   });
 
-  it('養水完成要氨 0、亞硝 0 且測得到硝酸鹽，而且是一天內測的', () => {
+  it('養水完成要硝化菌長好、氨 0、亞硝 0，而且是一天內測的；不用等到測得到硝酸鹽', () => {
     const s = tank();
     addFish(s, 'guppy');
     const p = { ...newProgress(), step: QUESTS.findIndex((q) => q.id === 'cycled') };
-    s.lastTest = { hours: 0, reading: { ammonia: 0, nitrite: 0.25, nitrate: 10, ph: 7.2, kh: 4 } };
+    // 剛放魚：測到 0 但硝化菌還沒長起來
+    s.lastTest = { hours: 0, reading: { ammonia: 0, nitrite: 0, nitrate: 0, ph: 7.2, kh: 4 } };
     expect(advanceQuest(p, s)).toBeNull();
-    s.lastTest = { hours: 0, reading: { ammonia: 0, nitrite: 0, nitrate: 10, ph: 7.2, kh: 4 } };
+    s.bacteria.aob = s.bacteria.nob = 0.5;
+    s.lastTest = { hours: 0, reading: { ammonia: 0, nitrite: 0.25, nitrate: 0, ph: 7.2, kh: 4 } };
+    expect(advanceQuest(p, s)).toBeNull();
+    s.lastTest = { hours: 0, reading: { ammonia: 0, nitrite: 0, nitrate: 0, ph: 7.2, kh: 4 } };
     s.hours = 30;
     expect(advanceQuest(p, s)).toBeNull();
     s.hours = 5;
@@ -78,14 +82,16 @@ describe('情境提示', () => {
 });
 
 describe('養水任務進度', () => {
-  it('照上次測水顯示硝酸鹽還差多少', () => {
+  it('照上次測水顯示氨、亞硝和硝化菌長到幾成', () => {
     const s = tank();
     expect(cycleProgress(s)).toBe('還沒測過水');
     s.hours = 10;
     s.lastTest = { hours: 10, reading: { ammonia: 0, nitrite: 0, nitrate: 0, ph: 7.2, kh: 4 } };
-    expect(cycleProgress(s)).toBe('硝酸鹽 0／5（上次測水）');
-    s.lastTest = { hours: 10, reading: { ammonia: 0.5, nitrite: 0.25, nitrate: 2, ph: 7.2, kh: 4 } };
-    expect(cycleProgress(s)).toBe('亞硝 0.25・氨 0.5・硝酸鹽 2／5（上次測水）');
+    s.bacteria.aob = 0.15;
+    s.bacteria.nob = 0.06;
+    expect(cycleProgress(s)).toBe('硝化菌 20%（上次測水）');
+    s.lastTest = { hours: 10, reading: { ammonia: 0.5, nitrite: 0.25, nitrate: 0, ph: 7.2, kh: 4 } };
+    expect(cycleProgress(s)).toBe('亞硝 0.25・氨 0.5・硝化菌 20%（上次測水）');
     s.hours = 40;
     expect(cycleProgress(s)).toContain('再測一次');
   });
