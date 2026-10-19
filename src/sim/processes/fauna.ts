@@ -11,8 +11,16 @@ import { sizeRatio } from './population';
 /** 吃下的飼料中，以氨氮形式排出的比例；其餘一部分變成糞便。 */
 const TAN_PER_MG_FOOD = 0.03;
 const FECES_PER_MG_FOOD = 0.25;
-/** 飢餓值從 0 升到 1 需要的天數（完全不餵）。 */
-const DAYS_TO_STARVING = 3;
+/**
+ * 飢餓值的時間尺度（天）。每天吃到 dailyFoodMg 剛好打平（一天兩餐）。
+ * 吃不飽時代謝會放慢（HUNGER_SLOWDOWN），所以少量餵會停在「有點餓」而不是一路餓到底：
+ * 每天吃 3/4 份停在約 0.6，要吃不到四成才會餓壞；完全不餵約 6 天才餓到底。
+ */
+const DAYS_TO_STARVING = 6;
+/** 飢餓值超過 0.3 後，每多 0.1 代謝慢 8%。 */
+const HUNGER_SLOWDOWN = 0.8;
+/** 胃口：一次最多吃到「飢餓值 × 幾天份」就飽了（吃不完的飼料留在缸裡腐敗）。 */
+const STOMACH_DAYS = 3;
 
 /** 每項壓力來源的強度 0–1，給診斷畫面說明「為什麼魚有壓力」。 */
 export interface Stressors {
@@ -112,6 +120,39 @@ export function computeStressors(state: TankState, fish: Fish, census: TankCensu
   };
 }
 
+export type StressKey = keyof Stressors;
+
+/** 玩家看得懂的壓力來源說明（生病時「為什麼」）。 */
+export const STRESS_CAUSE_LABELS: Record<StressKey, string> = {
+  temperature: '水溫不適合',
+  ph: 'pH 和牠習慣的差太多',
+  ammonia: '水裡有氨',
+  nitrite: '亞硝酸鹽偏高',
+  nitrate: '硝酸鹽太高，該換水了',
+  oxygen: '水裡氧氣不夠',
+  co2: 'CO₂ 太多',
+  hunger: '這幾天沒吃飽，抵抗力變差',
+  crowding: '缸裡太擠',
+  group: '同伴太少，群游魚會不安',
+  suddenChange: '水溫或 pH 變化太快',
+  medication: '藥物刺激',
+  disease: '身上已經有病',
+  injury: '鰭被咬傷',
+  territory: '被地盤性強的魚欺負',
+};
+
+/**
+ * 這尾魚最可能的壓力來源，由大到小（只列夠明顯的）。給診斷畫面、老闆台詞、生病事件用。
+ * 免疫力被壓低時白點蟲才會上身，所以這也是「為什麼會生病」的答案。
+ */
+export function likelyCauses(state: TankState, fish: Fish, census?: TankCensus): { key: StressKey; label: string; weight: number }[] {
+  const s = computeStressors(state, fish, census);
+  return (Object.keys(s) as StressKey[])
+    .filter((k) => k !== 'disease' && s[k] >= 0.08)
+    .sort((a, b) => s[b] - s[a])
+    .map((k) => ({ key: k, label: STRESS_CAUSE_LABELS[k], weight: Math.min(1, s[k]) }));
+}
+
 function computeDamage(state: TankState, fish: Fish, sp: FishSpecies): Damage[] {
   const { water } = state;
   const sensitivity = 1.5 - hardiness(fish, sp);
@@ -161,7 +202,8 @@ export function updateFauna(state: TankState, dt: number): void {
     driftAcclimation(state, fish, dt);
 
     // 代謝：飢餓、耗氧、排出 CO₂。
-    fish.hunger = Math.min(1, fish.hunger + (dt / 24 / DAYS_TO_STARVING) * Math.sqrt(tf));
+    const slowdown = 1 - HUNGER_SLOWDOWN * Math.max(0, fish.hunger - 0.3);
+    fish.hunger = Math.min(1, fish.hunger + (dt / 24 / DAYS_TO_STARVING) * Math.sqrt(tf) * slowdown);
     fish.starvingHours = fish.hunger >= 1 ? fish.starvingHours + dt : 0;
     water.o2 = Math.max(0, water.o2 - (sp.o2UseMgPerHour * metabolic * tf * dt) / volume);
     water.co2 += (sp.o2UseMgPerHour * metabolic * 1.375 * tf * dt) / volume;
@@ -254,7 +296,7 @@ function feed(state: TankState, living: Fish[], dt: number): void {
     // 壓力超過 0.5 後食慾逐漸下降，最低剩三成。
     const appetite = 1 - 0.7 * Math.min(1, Math.max(0, (f.stress - 0.5) / 0.5));
     // 約半小時內吃完一餐；吃到飽（飢餓值歸零）就不再吃。
-    const room = f.hunger * daily * DAYS_TO_STARVING;
+    const room = f.hunger * daily * STOMACH_DAYS;
     return Math.min(room, daily * 4 * appetite * dt);
   });
 
@@ -332,7 +374,8 @@ function updateIch(state: TankState, fish: Fish, sp: FishSpecies, dt: number): v
       fish.ich.progress += (dt / 72) * tf;
       if (fish.ich.progress >= 1) {
         fish.ich = { stage: 'visible', progress: 0 };
-        recordEvent(state, { type: 'ich_visible', subjectId: fish.id });
+        // 附上最可能的誘因（例如沒吃飽、水溫忽高忽低），老闆和魚的資訊可以說出為什麼會生病
+        recordEvent(state, { type: 'ich_visible', subjectId: fish.id, cause: likelyCauses(state, fish)[0]?.key });
       }
       break;
     case 'visible':
