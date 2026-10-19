@@ -62,15 +62,39 @@ export class Sheet {
   }
 }
 
+type ToastArgs = [text: string, tone?: 'bad' | 'warn' | 'info', action?: { label: string; run: () => void }];
+
 export class Toasts {
   private readonly host = h('div.toasts');
+  /** hold() 期間的通知先排隊，release() 再一起跳（開缸演出時只留演出的說明，#199）。 */
+  private held: ToastArgs[] | null = null;
 
   constructor(parent: HTMLElement) {
     parent.append(this.host);
   }
 
   /** action：通知上的按鈕（例如「復原」），有按鈕的通知停留久一點。 */
-  show(text: string, tone: 'bad' | 'warn' | 'info' = 'info', action?: { label: string; run: () => void }): void {
+  show(...args: ToastArgs): void {
+    if (this.held) this.held.push(args);
+    else this.showNow(...args);
+  }
+
+  /** 先把通知排隊（例如演出時）。 */
+  hold(): void {
+    this.held ??= [];
+  }
+
+  /** 放出排隊的通知：同一則只跳一次，太多只留最後 3 則。 */
+  release(): void {
+    const queued = this.held ?? [];
+    this.held = null;
+    const seen = new Set<string>();
+    const unique = queued.filter(([text]) => !seen.has(text) && seen.add(text));
+    for (const args of unique.slice(-3)) this.showNow(...args);
+  }
+
+  /** 不管有沒有 hold，馬上跳出來（演出本身的說明）。 */
+  showNow(text: string, tone: 'bad' | 'warn' | 'info' = 'info', action?: { label: string; run: () => void }): void {
     const el = h(`div.toast.${tone}`, {}, h('span', {}, text));
     if (action) {
       el.append(

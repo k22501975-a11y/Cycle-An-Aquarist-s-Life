@@ -62,9 +62,15 @@ export function disturbanceText(d: Disturbance): { text: string; tone: 'warn' | 
   return null;
 }
 
+function contentsKey(s: TankState): string {
+  return `${(s.equipment.hardscape ?? []).length}|${s.plants.map((p) => p.id).join(',')}`;
+}
+
 export class ScapeBar {
   readonly el = h('div.scape-bar.glass');
   private edit: ScapeEdit = { layer: 'mid', selected: null, guides: true };
+  /** 上次畫的時候缸裡有哪些石頭、水草（買了、拔了要重畫，#199）。 */
+  private contents = '';
 
   constructor(private readonly deps: ScapeBarDeps) {}
 
@@ -103,8 +109,14 @@ export class ScapeBar {
     this.render();
   }
 
+  /** 每格呼叫：缸裡的石頭、水草變了（在商店買了、拔掉了）才重畫。 */
+  refresh(): void {
+    if (contentsKey(this.deps.game.state) !== this.contents) this.render();
+  }
+
   render(): void {
     const s = this.deps.game.state;
+    this.contents = contentsKey(s);
     const edit = this.edit;
     const sel = edit.selected ? describeTarget(s, edit.selected) : null;
     if (edit.selected && !sel) this.edit = { ...edit, selected: null };

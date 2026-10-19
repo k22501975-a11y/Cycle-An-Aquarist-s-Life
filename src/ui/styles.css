@@ -865,3 +865,8 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .morning-daily-task { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 6px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(227, 189, 109, 0.3); color: var(--text); font-size: 12.5px; cursor: pointer; }
 .morning-daily-task img { width: 36px; height: 36px; border-radius: 9px; object-fit: contain; }
 .morning-daily-task.done { opacity: 0.55; cursor: default; }
+
+/* #199：橫向時面板從右邊滑出，通知改到面板左邊（缸的上方），不蓋住面板第一排 */
+@media (orientation: landscape) {
+  body:has(.sheet.open) .toasts { right: calc(min(420px, 50vw) + 14px); width: min(400px, calc(100vw - min(420px, 50vw) - 28px)); }
+}
