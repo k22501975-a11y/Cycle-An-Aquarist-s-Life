@@ -74,7 +74,10 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
     case 'power_bill':
       return { text: `繳了這週的電費 ${e.count ?? 0} 元${Number(e.cause) > 0 ? `、飼料 ${e.cause} 元` : ''}`, tone: 'info' };
     case 'disease_visible':
-      return { text: `${fish ? fishName(fish) : '有魚'} ${e.cause === 'columnaris' ? '嘴巴和身上長出白色棉絮狀的斑' : '鰓蓋張開、呼吸很急'}`, tone: e.cause === 'columnaris' ? 'bad' : 'warn' };
+      return {
+        text: `${fish ? fishName(fish) : '有魚'} ${e.cause === 'columnaris' ? '嘴巴和身上長出白色棉絮狀的斑：柱狀病，快下抗生素' : '鰓蓋張開、呼吸很急：水質正常的話是鰓吸蟲，下驅蟲藥'}`,
+        tone: e.cause === 'columnaris' ? 'bad' : 'warn',
+      };
     case 'ich_visible':
       return { text: `${fish ? fishName(fish) : '有魚'} 身上出現白點`, tone: 'warn' };
     case 'plant_died':
