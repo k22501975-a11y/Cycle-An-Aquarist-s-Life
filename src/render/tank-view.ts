@@ -121,6 +121,8 @@ interface Ray {
 export interface TankViewEvents {
   onSelectFish?: (id: number | null) => void;
   onSelectPlant?: (id: number) => void;
+  /** 點到螺（每日小事「找到螺，點一下」）。 */
+  onTapSnail?: () => void;
   /** 造景模式：點選、放開拖曳的物件（x 是 0–1 的橫向位置）。 */
   onScapeSelect?: (target: ScapeTarget | null) => void;
   onScapeDrop?: (target: ScapeTarget, x: number) => void;
@@ -229,6 +231,7 @@ export class TankView {
   /** 這次按下後拖動過，放開時不算點選。 */
   private dragged = false;
   private ripples: Array<{ x: number; t: number }> = [];
+  private targetHint: 'fish' | 'snail' | null = null;
   /** 手指點水裡空白處（F6）：好奇的魚游過來看，點的地方泛一圈水波。 */
   private poke: { x: number; y: number; age: number; seq: number } | null = null;
   /** 玩家剛撒飼料，還沒有魚吃到第一口。 */
@@ -447,6 +450,19 @@ export class TankView {
     this.foodReset = true;
   }
 
+  /** 每日小事要玩家點的東西：畫面上加光圈（null 收掉）。 */
+  setTargetHint(kind: 'fish' | 'snail' | null): void {
+    this.targetHint = kind;
+  }
+
+  /** 「點一尾魚」的光圈只框一尾（全部都框太亂）：挑編號最小、還活著的那尾。 */
+  private hintFish(): Array<{ x: number; y: number; r: number }> {
+    let pick: FishView | undefined;
+    for (const v of this.fish.values()) if (v.deathT < 0 && (!pick || v.swimmer.id < pick.swimmer.id)) pick = v;
+    if (!pick) return [];
+    return [{ x: pick.swimmer.x, y: pick.swimmer.y, r: pick.rig.lengthPx * Math.abs(pick.rig.scale.y) * 0.38 }];
+  }
+
   private handleTap(x: number, y: number): void {
     let best: number | null = null;
     let bestD = Infinity;
@@ -460,6 +476,11 @@ export class TankView {
     }
     if (best !== null) {
       this.events.onSelectFish?.(best);
+      return;
+    }
+    // 螺很小：點的範圍放大到至少 22 像素
+    if (this.snails.targets().some((t) => Math.hypot(t.x - x, t.y - y) < Math.max(22 * this.hs, t.r * 1.4))) {
+      this.events.onTapSnail?.();
       return;
     }
     for (const [id, view] of this.plants) {
@@ -1322,6 +1343,16 @@ export class TankView {
       if (w.t < 0) continue;
       const { r: rr, alpha } = ripple(w.t, 46 * this.hs);
       fx.ellipse(w.x, surface + 3, rr, rr * 0.22).stroke({ color: 0xffffff, alpha, width: Math.max(1, 2 * this.hs) });
+    }
+    // 每日小事的目標（點一尾魚、找到螺）：金色光圈一縮一放，做完才消失（mvp.md §4.4.2 #188）
+    if (this.targetHint) {
+      const pulse = 0.5 + 0.5 * Math.sin(this.time * 4);
+      const spots = this.targetHint === 'snail' ? this.snails.targets() : this.hintFish();
+      for (const t of spots) {
+        const r = Math.max(16 * this.hs, t.r) * (1.25 + 0.15 * pulse);
+        fx.circle(t.x, t.y, r).stroke({ color: 0xf6d891, alpha: 0.45 + 0.4 * pulse, width: Math.max(1.5, 2.4 * this.hs) });
+        fx.circle(t.x, t.y, r * (1.25 + 0.25 * pulse)).stroke({ color: 0xf6d891, alpha: 0.25 * (1 - pulse), width: Math.max(1, 1.5 * this.hs) });
+      }
     }
     // 手指點的地方：兩圈淡淡的水波往外散
     if (this.poke && this.poke.age < 0.9) {

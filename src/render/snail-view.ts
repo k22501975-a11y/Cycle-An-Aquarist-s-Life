@@ -93,6 +93,19 @@ export class SnailView {
     c.sprite.rotation = c.onGlass === null ? 0 : (c.phase % 1 > 0.5 ? -1 : 1) * 0.35 * dir;
   }
 
+  /** 看得到的螺在缸裡的位置（root 座標、大概的半徑）：給點螺、每日小事的光圈用。 */
+  targets(): Array<{ x: number; y: number; r: number }> {
+    const out: Array<{ x: number; y: number; r: number }> = [];
+    for (const c of [...this.big.values(), ...this.pests]) {
+      const s = c.sprite;
+      if (!s.visible || s.destroyed) continue;
+      const r = Math.max(s.width, s.height) / 2;
+      // 錨點在殼底（0.9），中心往上半個身高
+      out.push({ x: s.x, y: s.y - s.height * 0.4, r });
+    }
+    return out;
+  }
+
   private syncBig(snails: Snail[], scene: SnailScene): void {
     const live = new Set<number>();
     for (const x of snails) {

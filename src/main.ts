@@ -404,6 +404,8 @@ async function start(): Promise<void> {
 
   const view = new TankView(app, {
     onSelectFish: (id) => select(id),
+    // 在缸裡點到螺：打開螺的面板（每日小事「找到螺點一下」也就做完了）
+    onTapSnail: () => sheet.open('螺', () => snailPanel(ctx)),
     onSelectPlant: (id) => sheet.open('水草', () => plantPanel(ctx, id), { live: true }),
     onScapeSelect: (target) => scapeBar.select(target),
     onScapeDrop: (target, x) => scapeBar.drop(target, x),
@@ -980,6 +982,9 @@ async function start(): Promise<void> {
   const renderDaily = () => {
     const d = sim.dailyTasks(game.tanks);
     const claimable = sim.canClaimDaily(game.tanks);
+    // 要在缸裡點的小事還沒做：魚或螺身上一圈金色光圈提示（#188 第 3 點）
+    const todo = (id: sim.DailyTaskId) => !!d?.tasks.some((t) => t.id === id && !t.done);
+    view.setTargetHint(todo('observe') ? 'fish' : todo('snail') ? 'snail' : null);
     if (!dailyChanged(JSON.stringify([d?.day, d?.tasks, d?.claimed, claimable]))) return;
     const card = dailyCard(d, claimable, { go: goDaily, claim: claimDailyChest });
     dailyHolder.replaceChildren(...(card ? [card] : []));
