@@ -47,6 +47,8 @@ interface PlantView {
   drawnBiomass: number;
   drawnAlgae: number;
   drawnMelting: boolean;
+  /** 畫這張貼圖時的解析度（畫質改了要重畫）。 */
+  drawnRes: number;
   /** 上一格的生物量（判斷是不是剛剪過）。 */
   seenBiomass: number;
 }
@@ -225,6 +227,11 @@ export class TankView {
   private seed = 12345;
   private time = 0;
 
+  /** 繪圖解析度（裝置像素比），預先畫好的貼圖照這個倍率畫才不會糊。 */
+  private get pixelRatio(): number {
+    return this.app.renderer.resolution;
+  }
+
   constructor(private readonly app: Application, private readonly events: TankViewEvents = {}) {
     this.bounds = sceneBounds(app.screen.width, app.screen.height, this.insets);
     const tex = causticsTexture();
@@ -327,8 +334,8 @@ export class TankView {
     this.cam.pan = clampPan(this.cam.pan, this.cam.span, screen.width);
     this.root.x = -this.cam.pan;
     const look = substrateLook(state.equipment.substrate?.spec.id);
-    // 還沒放任何造景材料的缸畫預設的裝飾石與沉木；放了以後依玩家擺的位置畫（scape-view.ts）
-    const decor = (state.equipment.hardscape ?? []).length === 0;
+    // 石頭沉木只畫玩家買來擺的（scape-view.ts）：新缸沒買造景就只有底沙，不送預設裝飾
+    const decor = false;
     const key = `${screen.width}x${screen.height}:${this.insets.top},${this.insets.bottom}:${size.w}x${size.h}:${this.cam.span}:${look}:${decor}`;
     if (key === this.sceneKey) return;
     this.sceneKey = key;
@@ -351,9 +358,9 @@ export class TankView {
       sprite.height = b.height;
       if (old !== Texture.EMPTY && old !== tex) old.destroy(true);
     };
-    swap(this.backdrop, paintBackdrop(b, this.hs));
-    swap(this.driftwood, paintDriftwood(b, this.hs, decor));
-    swap(this.front, paintFront(b, this.hs, look, decor));
+    swap(this.backdrop, paintBackdrop(b, this.hs, this.pixelRatio));
+    swap(this.driftwood, paintDriftwood(b, this.hs, decor, this.pixelRatio));
+    swap(this.front, paintFront(b, this.hs, look, decor, this.pixelRatio));
     swap(this.vignette, paintVignette(b.width, b.height));
 
     // 焦散：主要照在底沙上，往上漸漸消失
@@ -431,7 +438,7 @@ export class TankView {
     const dt = Math.min(0.1, realDt);
     this.time += dt;
     this.layout(state);
-    this.scape.sync(state, { bounds: this.bounds, hs: this.hs, look: this.look, sceneKey: this.sceneKey });
+    this.scape.sync(state, { bounds: this.bounds, hs: this.hs, look: this.look, sceneKey: this.sceneKey, pixelRatio: this.pixelRatio });
     this.detectOps(state, dt);
     this.syncFood(state, dt);
     this.drawDirt(state);
@@ -1373,7 +1380,7 @@ export class TankView {
     for (const plant of state.plants) {
       let view = this.plants.get(plant.id);
       if (!view) {
-        view = { holder: new Container(), rig: null, drawnBiomass: -1, drawnAlgae: -1, drawnMelting: false, seenBiomass: -1 };
+        view = { holder: new Container(), rig: null, drawnBiomass: -1, drawnAlgae: -1, drawnMelting: false, drawnRes: 0, seenBiomass: -1 };
         this.plants.set(plant.id, view);
       }
       // 剛剪過：從目前的圖切下葉尖當插枝飄走（要在重畫、舊圖被銷毀之前）
@@ -1383,17 +1390,19 @@ export class TankView {
       const melting = plant.growthRate < -0.0002;
       if (
         view.drawnBiomass < 0 ||
+        view.drawnRes !== this.pixelRatio ||
         Math.abs(view.drawnBiomass - plant.biomassG) > 0.05 * Math.max(1, plant.biomassG) ||
         Math.abs(view.drawnAlgae - plant.leafAlgae) > 0.05 ||
         view.drawnMelting !== melting
       ) {
-        const painting = paintPlant(plant, this.hs);
+        const painting = paintPlant(plant, this.hs, Math.max(1, Math.min(this.pixelRatio, 2)));
         view.rig?.destroy();
         view.rig = new PlantMesh(painting.texture, painting.anchorX, painting.anchorY);
         view.holder.addChild(view.rig.mesh);
         view.drawnBiomass = plant.biomassG;
         view.drawnAlgae = plant.leafAlgae;
         view.drawnMelting = melting;
+        view.drawnRes = this.pixelRatio;
       }
       // 種在哪一層、哪個位置（造景編輯）：後景小一點、淡一點，前景大一點
       const place = plantPlacement(plant);
