@@ -1,4 +1,4 @@
-import { isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, quarantineDays, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
+import { HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, quarantineDays, PLANT_SPECIES, type TankState, type TestKitReading } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -158,7 +158,7 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
     const sinceChange = state.hours - (state.lastWaterChangeHours ?? 0);
     if (sinceChange > 7 * 24) out.push({ text: `該換水了（${Math.floor(sinceChange / 24)} 天沒換）`, tone: 'warn' });
     const hunger = living.reduce((sum, f) => sum + f.hunger, 0) / living.length;
-    if (hunger > 0.6) out.push({ text: '魚餓了，該餵食', tone: 'warn' });
+    if (hunger > HUNGRY) out.push({ text: '魚餓了，該餵食', tone: 'warn' });
   }
 
   const pregnant = symptoms.filter((x) => x.s.includes('pregnant'));

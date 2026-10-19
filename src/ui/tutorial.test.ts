@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, buyQuarantine, createTank, feed, FILTERS, HEATERS, TANKS, useTestKit, waterChange } from '../sim';
+import { addFish, addHardscape, addPlant, buyQuarantine, HARDSCAPE, createTank, feed, FILTERS, HEATERS, TANKS, useTestKit, waterChange } from '../sim';
 import { advanceQuest, currentQuest, cycleProgress, loadProgress, newProgress, overloadWarning, pairProgress, pendingTip, questShopTab, QUESTS, saveProgress } from './tutorial';
 
 function tank() {
@@ -24,6 +24,12 @@ describe('新手引導任務', () => {
     s.hours = 30;
     waterChange(s, 0.3);
     expect(advanceQuest(p, s)?.id).toBe('water');
+    // 等養水的空檔：擺造景、取名字
+    expect(currentQuest(p)?.id).toBe('scape');
+    addHardscape(s, HARDSCAPE.lava);
+    expect(advanceQuest(p, s)?.id).toBe('scape');
+    s.label = '第一缸';
+    expect(advanceQuest(p, s)?.id).toBe('name');
     expect(currentQuest(p)?.id).toBe('cycled');
   });
 
@@ -42,6 +48,10 @@ describe('新手引導任務', () => {
     expect(advanceQuest(p, s)).toBeNull();
     s.hours = 5;
     expect(advanceQuest(p, s)?.id).toBe('cycled');
+  });
+
+  it('新手獎勵加起來 800（第 21 天買第二缸靠它，mvp.md §4.3）', () => {
+    expect(QUESTS.reduce((a, q) => a + q.reward, 0)).toBe(800);
   });
 
   it('跳過後就沒有任務', () => {
@@ -147,7 +157,7 @@ describe('養水任務進度', () => {
 
   it('養水任務的老闆說明有講要等多久、怎麼加快', () => {
     const lines = QUESTS.find((q) => q.id === 'cycled')!.lines.join('');
-    expect(lines).toContain('3～7 天');
+    expect(lines).toContain('4～7 天');
     expect(lines).toContain('硝化菌液');
   });
 });

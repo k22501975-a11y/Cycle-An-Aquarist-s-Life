@@ -11,6 +11,7 @@ import {
   HEATERS,
   infect,
   LIGHTS,
+  NEWBIE_HEALTHY_DAYS,
   observeSymptoms,
   quarantineDays,
   releaseQuarantine,
@@ -134,5 +135,16 @@ describe('檢疫盒', () => {
     doseQuarantine(s, 'ichMedication');
     simulate(s, 48, fed);
     expect(f.ich.stage).toBe('none');
+  });
+});
+
+describe('新手期買的魚不帶細菌病（#118）', () => {
+  it(`開缸 ${NEWBIE_HEALTHY_DAYS} 天內店裡的魚都不帶病；之後才會帶`, () => {
+    const s = createTank({ ...STARTER, seed: 11 });
+    for (let i = 0; i < 150; i++) addFish(s, 'guppy');
+    expect(s.fish.every((f) => (f.infections ?? []).length === 0)).toBe(true);
+    s.hours = NEWBIE_HEALTHY_DAYS * 24;
+    for (let i = 0; i < 150; i++) addFish(s, 'guppy');
+    expect(s.fish.some((f) => (f.infections ?? []).length > 0)).toBe(true);
   });
 });

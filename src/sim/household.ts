@@ -1,4 +1,5 @@
 import { economy, PRICES, spend } from './economy';
+import { tankLock, unlockHint } from './goals';
 import { FILTERS, HEATERS, LIGHTS, TANKS, type FilterSpec, type HeaterSpec, type TankSpec } from './equipment';
 import { nextRandom } from './random';
 import { createTank, type TankState } from './state';
@@ -75,6 +76,8 @@ export function syncRoom(from: TankState, to: TankState): void {
 /** 為什麼不能再加缸；可以加就回傳 null。 */
 export function buyTankRefusal(tanks: TankState[], id: TankSizeId): string | null {
   if (tanks.length >= MAX_TANKS) return `房間最多放 ${MAX_TANKS} 缸`;
+  const lock = tankLock(tanks, id);
+  if (lock) return unlockHint(lock);
   if (economy(tanks[0]).coins < newTankCost(tanks, id)) return '錢不夠';
   return null;
 }

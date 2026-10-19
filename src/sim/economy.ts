@@ -2,6 +2,7 @@ import { isJuvenile, isLightOn, recordEvent, type Fish, type TankState } from '.
 import { FISH_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 import { phenotype, type GuppyPhenotype } from './genetics';
 import { updateOrders, type OrderBoard } from './orders';
+import type { GoalState } from './goals';
 
 /**
  * 經濟（GAME_DESIGN 第 7 節、market-and-breeding.md §3.1）：
@@ -83,6 +84,10 @@ export interface Economy {
   starterPackHours?: number;
   /** 下一個新缸用的 id 區段（每缸的魚和水草 id 從不同區段開始，魚換缸也不會撞號）。 */
   nextTankBlock?: number;
+  /** 新手教學之後的目標與解鎖（M19）；舊存檔沒有，第一次檢查時建立。 */
+  goals?: GoalState;
+  /** 累計賣給店家幾條魚。 */
+  fishSold?: number;
   /** 店家訂單板（M21）；舊存檔沒有，第一次更新時掛上。 */
   orders?: OrderBoard;
   /** 用儲值點數買的商城道具（背包）；舊存檔沒有。 */
@@ -238,7 +243,9 @@ export function sellFish(state: TankState, fishId: number): number {
   if (!fish || buybackRefusal(fish) || !countSale(state)) return 0;
   const coins = fishBuybackPrice(fish);
   state.fish = state.fish.filter((f) => f !== fish);
-  economy(state).coins += coins;
+  const e = economy(state);
+  e.coins += coins;
+  e.fishSold = (e.fishSold ?? 0) + 1;
   return coins;
 }
 

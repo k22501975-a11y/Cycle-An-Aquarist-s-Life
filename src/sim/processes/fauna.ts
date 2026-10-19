@@ -13,12 +13,13 @@ const TAN_PER_MG_FOOD = 0.03;
 const FECES_PER_MG_FOOD = 0.25;
 /**
  * 飢餓值的時間尺度（天）。每天吃到 dailyFoodMg 剛好打平（一天兩餐）。
- * 吃不飽時代謝會放慢（HUNGER_SLOWDOWN），所以少量餵會停在「有點餓」而不是一路餓到底：
- * 每天吃 3/4 份停在約 0.6，要吃不到四成才會餓壞；完全不餵約 6 天才餓到底。
+ * 吃不飽時代謝會放慢（HUNGER_SLOWDOWN），所以少量餵會停在某個飢餓值，而不是一路餓到底：
+ * 一天兩次「一小撮」（0.85 份）停在約 0.4（吃飽），一天一次約 0.62（有點餓）；完全不餵兩週多才餓到底。
  */
 const DAYS_TO_STARVING = 6;
-/** 飢餓值超過 0.3 後，每多 0.1 代謝慢 8%。 */
-const HUNGER_SLOWDOWN = 0.8;
+/** 飢餓值超過 0.3 後，每多 0.1 代謝慢 20%，最慢到原本的 15%。 */
+const HUNGER_SLOWDOWN = 2;
+const MIN_METABOLISM = 0.15;
 /** 胃口：一次最多吃到「飢餓值 × 幾天份」就飽了（吃不完的飼料留在缸裡腐敗）。 */
 const STOMACH_DAYS = 3;
 
@@ -202,7 +203,7 @@ export function updateFauna(state: TankState, dt: number): void {
     driftAcclimation(state, fish, dt);
 
     // 代謝：飢餓、耗氧、排出 CO₂。
-    const slowdown = 1 - HUNGER_SLOWDOWN * Math.max(0, fish.hunger - 0.3);
+    const slowdown = Math.max(MIN_METABOLISM, 1 - HUNGER_SLOWDOWN * Math.max(0, fish.hunger - 0.3));
     fish.hunger = Math.min(1, fish.hunger + (dt / 24 / DAYS_TO_STARVING) * Math.sqrt(tf) * slowdown);
     fish.starvingHours = fish.hunger >= 1 ? fish.starvingHours + dt : 0;
     water.o2 = Math.max(0, water.o2 - (sp.o2UseMgPerHour * metabolic * tf * dt) / volume);

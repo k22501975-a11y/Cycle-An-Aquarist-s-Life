@@ -48,6 +48,10 @@ import {
   claimStarterPack,
   buyTank,
   buyTankRefusal,
+  LOCKED_SPECIES,
+  speciesUnlocked,
+  tankLock,
+  unlockHint,
   moveFish,
   newTankCost,
   removeTank,
@@ -103,10 +107,13 @@ import {
   QUARANTINE_DAYS,
   quarantineDays,
   releaseQuarantine,
+  PINCH_MEALS,
   dismissOrder,
   fulfillOrder,
   orderBoard,
   orderRefusal,
+  matchingFish,
+  ORDER_EXPIRE_DAYS,
   orderSupply,
   orderTitle,
   type ShopOrder,
@@ -242,8 +249,8 @@ export function feedPanel(ctx: PanelContext): Node {
     h(
       'div.row',
       {},
-      // 一小撮是新缸期的維持量：一天兩次，魚不會餓壞，殘餌也少
-      button('一小撮', give(meal * 0.75, '一小撮')),
+      // 一小撮是新缸期的維持量：一天兩次吃得飽、一天一次有點餓但不會餓壞，殘餌也少
+      button('一小撮', give(meal * PINCH_MEALS, '一小撮')),
       button('一餐', give(meal, '一餐'), 'primary'),
       button('一大把', give(meal * 3, '一大把')),
     ),
@@ -801,6 +808,9 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
               : id === 'betta'
                 ? [add(`公 ${FISH_PRICES.betta}`, buyOne(id, 'male', FISH_PRICES.betta)), add(`母 ${BETTA_FEMALE_PRICE}`, buyOne(id, 'female', BETTA_FEMALE_PRICE))]
                 : [add('+1', buyFish(id, 1)), add('+6', buyFish(id, 6))];
+          // 鬥魚、水晶蝦要先完成目標才開賣（goals.ts，M19）
+          const lock = LOCKED_SPECIES[id];
+          if (lock && !speciesUnlocked(game.tanks, id)) return shopCard({ art: speciesArt(id), name: sp.name, price: null, chips: ['🔒 ' + unlockHint(lock)], actions: [], cls: '.locked' });
           return shopCard({ art: speciesArt(id), name: sp.name, price: FISH_PRICES[id], unit: '/隻', chips, actions });
         }),
       ),
@@ -967,8 +977,10 @@ function sellContent(ctx: PanelContext): Node {
     return lo === hi ? `每隻 ${lo} 元` : `每隻 ${lo}～${hi} 元`;
   };
   const sellOne = (id: FishSpeciesId) => () => {
-    // 先賣公的，母的留著繁殖
-    const pick = [...s.fish.filter((f) => f.species === id && !buybackRefusal(f))].sort((a, b) => (a.sex === b.sex ? 0 : a.sex === 'male' ? -1 : 1))[0];
+    // 先賣公的，母的留著繁殖；訂單要的魚最後才賣（一般玩家一直按也不會把湊單的魚賣掉）
+    const held = new Set(orderBoard(s).orders.flatMap((o) => (o.kind === 'fish' ? matchingFish(s, o).slice(0, o.count).map((f) => f.id) : [])));
+    const rank = (f: Fish) => (held.has(f.id) ? 2 : 0) + (f.sex === 'male' ? 0 : 1);
+    const pick = [...s.fish.filter((f) => f.species === id && !buybackRefusal(f))].sort((a, b) => rank(a) - rank(b))[0];
     if (!pick) return;
     const got = game.act((st) => sellFish(st, pick.id));
     if (got > 0) {
@@ -991,7 +1003,7 @@ function sellContent(ctx: PanelContext): Node {
     return h(
       'div.item.order',
       {},
-      h('div', {}, h('b', {}, orderTitle(o)), h('div.hint', {}, `每${o.kind === 'cutting' ? '株' : '尾'} ${o.unitPrice} 元・共 ${o.unitPrice * o.count} 元・${ready ? '湊齊了' : `還差 ${o.count - have}`}`)),
+      h('div', {}, h('b', {}, orderTitle(o)), h('div.hint', {}, `每${o.kind === 'cutting' ? '株' : '尾'} ${o.unitPrice} 元・共 ${o.unitPrice * o.count} 元・${ready ? '湊齊了' : `還差 ${o.count - have}`}・${Math.max(1, Math.ceil(ORDER_EXPIRE_DAYS - (s.hours - o.postedHours) / 24))} 天後下架`)),
       button(
         '交貨',
         () => {
@@ -1419,7 +1431,14 @@ export function tanksPanel(ctx: PanelContext): Node {
     return h(
       'div.item',
       {},
-      h('div', {}, h('b', {}, set.tank.name), h('div.hint', {}, `${set.filter.name}、${set.heater.name}、基本 LED 燈`), h('div.hint', {}, `${parts} = ${yuan(cost)}`)),
+      h(
+        'div',
+        {},
+        h('b', {}, set.tank.name),
+        h('div.hint', {}, `${set.filter.name}、${set.heater.name}、基本 LED 燈`),
+        h('div.hint', {}, `${parts} = ${yuan(cost)}`),
+        tankLock(game.tanks, id) ? h('div.hint', {}, '🔒 ' + unlockHint(tankLock(game.tanks, id)!)) : null,
+      ),
       button('買', () => {
         if (refusal) {
           toasts.show(refusal === '錢不夠' ? `錢不夠：要 ${cost} 元，現在有 ${coins} 元` : refusal, 'warn');
