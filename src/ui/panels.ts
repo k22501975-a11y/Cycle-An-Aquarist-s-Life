@@ -155,6 +155,7 @@ import {
   type Region,
   type TankState,
   type TestKitReading,
+  markDaily,
 } from '../sim';
 import { applySeason, type Game } from '../game/game';
 import { h } from './dom';
@@ -1487,6 +1488,8 @@ const PEST_ORDER: PestKind[] = ['bladder', 'ramshorn', 'mts'];
 
 /** 螺的管理：看看缸裡有多少螺，各種清除方法各有代價（design/snails.md §3）。 */
 export function snailPanel(ctx: PanelContext): Node {
+  // 每日小事「找到缸裡的螺」：打開螺的面板就算看過（之後畫面支援點缸裡的螺再改成點螺）
+  markDaily(ctx.game.tanks, 'snail');
   const { game, sheet, toasts } = ctx;
   const st = game.state;
   const s = st.snails;
