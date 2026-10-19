@@ -84,7 +84,7 @@ public class SaveController {
     public Map<String, Object> put(@RequestAttribute(AuthInterceptor.ACCOUNT_ID) Long accountId, @Valid @RequestBody Upload upload) throws Exception {
         JsonNode file = upload.save();
         if (!file.path("version").isInt() || !file.path("savedAt").isNumber() || !file.path("state").isObject())
-            throw new ApiException(HttpStatus.BAD_REQUEST, "invalid", "這不是水族人生的存檔");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "invalid", "這不是 Cycle: An Aquarist's Life 的存檔");
         String data = json.writeValueAsString(file);
         if (data.getBytes(StandardCharsets.UTF_8).length > props.maxSaveBytes())
             throw new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "too_large", "存檔太大了，雲端放不下");

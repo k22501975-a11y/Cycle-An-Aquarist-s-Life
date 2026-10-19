@@ -296,7 +296,7 @@ async function start(): Promise<void> {
     const list = planNotices(forecastAlerts, notifier.prefs, forecastAt, game.clock.timeScale > 0 ? sim.DEFAULT_TIME_SCALE : 0);
     // App 收不到伺服器的通知，到貨時間自己排（網頁版由伺服器送）
     if (notifier.platform?.kind === 'native' && notifier.prefs.categories.market)
-      list.push(...knownArrivals().map((a) => ({ at: a.at, category: 'market' as const, title: '水族人生', body: `「${a.title}」到貨了，記得對水再放進缸裡`, tag: `arrive-${a.id}` })));
+      list.push(...knownArrivals().map((a) => ({ at: a.at, category: 'market' as const, title: "Aquarist's Life", body: `「${a.title}」到貨了，記得對水再放進缸裡`, tag: `arrive-${a.id}` })));
     return list.sort((a, b) => a.at - b.at).slice(0, 20);
   };
   const planPush = async () => {
@@ -458,7 +458,7 @@ async function start(): Promise<void> {
 
   // ---- 狀態列：時間、水質膠囊（沒測過顯示「?」）、待辦、選單 ----
   const clockValue = h('span.value');
-  const clock = h('div.time', {}, h('span.label', {}, '水族人生'), clockValue);
+  const clock = h('div.time', {}, h('span.label', {}, "Aquarist's Life"), clockValue);
   // 時鐘旁的速度按鈕：暫停、正常、快轉（雲端模式只能暫停或正常）
   const speed = new SpeedControl({
     get: () => game.clock.timeScale,

@@ -1,4 +1,4 @@
-# 水族人生 Cycle: An Aquarist's Life — 遊戲設計文件
+# Cycle: An Aquarist's Life — 遊戲設計文件
 
 > 給 Claude Code 的實作依據。標記「✅ 已定案」的項目照做；「💡 建議」是討論中的方向，實作時可調整；「❓ 待決定」尚未拍板，遇到時先問我。
 
@@ -8,7 +8,7 @@
 
 **從一個小缸開始的養魚愛好者，用真實的養魚知識把魚養好、繁殖，培育出稀有品種，在玩家市場上賣錢，再用賺到的錢擴缸。**
 
-- 名稱：中文「水族人生」，英文「Cycle: An Aquarist's Life」✅
+- 名稱：App 與商店用英文「Cycle: An Aquarist's Life」，桌面短名「Aquarist's Life」（2026-10-19 YenWel 決定；遊戲內文字維持繁中）。中文「水族人生」只當暱稱 ✅
   - Cycle 雙關：Nitrogen Cycle（氮循環）＋ Life Cycle（生命循環）
   - 上架前需再查 Google Play / App Store / 商標是否撞名（已知同題材遊戲《Aquarist》，須區隔）
 - 類型：經營模擬 ＋ 硬核生態模擬 ✅
