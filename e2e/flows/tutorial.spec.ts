@@ -1,4 +1,5 @@
 import { expect, test } from '../fixtures';
+import type { Page } from '@playwright/test';
 import { aliveCount, closeSheet, dismissGuide, fastForward, gameState, questStep, seedRng, setSpeed, sheetButton, startGame, tool, watchConsoleErrors, type CycleWindow } from './helpers';
 
 // 要快轉很多天：用 1 倍密度省 CPU（無頭瀏覽器用軟體繪圖）
@@ -18,6 +19,19 @@ const DAY_SUMMARY = `JSON.stringify({
  * 回歸：任務 6 養水曾經因為看硝酸鹽而永遠過不了（#65 修正）。
  * 要玩十幾個遊戲天，比一般流程測試久（約 1～2 分鐘）。
  */
+/** 等任務走到第 n 步：老闆的對話框開著時任務不會往下走，邊等邊關；慢的 CI 上一幀要好幾秒，給久一點。 */
+async function questReached(page: Page, n: number): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        await dismissGuide(page);
+        return questStep(page);
+      },
+      { timeout: 60_000 },
+    )
+    .toBe(n);
+}
+
 test('新手任務 1～10：照老闆的引導從新存檔玩得完，魚不會死光', async ({ page }) => {
   test.setTimeout(600_000);
   const consoleErrors = watchConsoleErrors(page);
@@ -51,20 +65,20 @@ test('新手任務 1～10：照老闆的引導從新存檔玩得完，魚不會�
   await sheetButton(page, '一公兩母');
   await closeSheet(page);
   await fastForward(page, 2);
-  await expect.poll(() => questStep(page)).toBe(4);
+  await questReached(page, 4);
   expect(await aliveCount(page)).toBe(3);
 
   // 5 餵食
   await tool(page, '餵食');
   await sheetButton(page, '一小撮');
-  await expect.poll(() => questStep(page)).toBe(5);
+  await questReached(page, 5);
 
   // 6 換水
   await tool(page, '換水');
   await sheetButton(page, '開始換水');
   await closeSheet(page);
   await fastForward(page, 1);
-  await expect.poll(() => questStep(page)).toBe(6);
+  await questReached(page, 6);
 
   // 7 擺石頭、8 幫缸取名（等養水的空檔；造景拖放和改名的畫面另有測試，這裡直接改狀態）
   await page.evaluate(() => {

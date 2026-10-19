@@ -5,6 +5,8 @@ import { expect, openGame, test } from './fixtures';
  * 內容沒變的時候不能重畫（按鈕要還是同一個元素）。
  */
 test('面板內容沒變時不重畫，按鈕點得到', async ({ page }) => {
+  // 慢的 CI 上光是開新遊戲就要將近一分鐘
+  test.setTimeout(120_000);
   await openGame(page);
   await page.evaluate(() => {
     (window as unknown as { cycle: { game: { clock: { timeScale: number } } } }).cycle.game.clock.timeScale = 0;
