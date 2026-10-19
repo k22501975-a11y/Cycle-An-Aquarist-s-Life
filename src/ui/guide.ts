@@ -106,6 +106,13 @@ export class Guide {
     this.renderBubble();
   }
 
+  /** 收起對話框，打開商店的對應分頁。 */
+  private goShop(tab: QuestShopTab): void {
+    this.pages = [];
+    this.renderBubble();
+    this.openShop?.(tab);
+  }
+
   private renderBubble(): void {
     const page = this.pages[0];
     if (!page) {
@@ -117,20 +124,18 @@ export class Guide {
     // 阿德老闆的插畫頭像；圖載不到就退回線條小人
     const avatar = h('div.owner-avatar.has-art', {}, ownerPortrait());
     const q = currentQuest(this.progress);
-    const next = h('button.btn.small.primary', { onclick: () => (this.pages.shift(), this.renderBubble()) }, page.label ?? '好');
+    const turnPage = () => {
+      this.pages.shift();
+      this.renderBubble();
+    };
+    const next = h('button.btn.small.primary', { onclick: turnPage }, page.label ?? '好');
     const skip =
       q && this.progress.step === 0
         ? h('button.btn.small', { onclick: () => this.skip() }, '跳過教學')
         : null;
     const shop =
       page.shop && this.openShop
-        ? h('button.btn.small.primary.go-shop', {
-              onclick: () => {
-                this.pages = [];
-                this.renderBubble();
-                this.openShop!(page.shop!);
-              },
-            }, artImg('shop', 'btn-art'), '帶我去商店')
+        ? h('button.btn.small.primary.go-shop', { onclick: () => this.goShop(page.shop!) }, artImg('shop', 'btn-art'), '帶我去商店')
         : null;
     if (shop) next.classList.remove('primary');
     this.bubble.replaceChildren(
