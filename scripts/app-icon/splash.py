@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ART = 'public/art/'
 M = 'android/app/src/main/res/'
-FONT = '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc'
+TITLE_FONT = '/usr/share/fonts/truetype/crosextra/Caladea-Bold.ttf'
 
 back = Image.open(ART + 'bg/bg-tank-back.webp').convert('RGBA')
 icon = Image.open('public/icons/icon-512.png').convert('RGBA')
@@ -48,11 +48,14 @@ for p in sorted(glob.glob(M + 'drawable*/splash.png')):
     cy = int(h * 0.42 - s / 2)
     b.alpha_composite(sh, (cx - pad, cy - pad + int(s * 0.05)))
     b.alpha_composite(ic, (cx, cy))
+    # App 名稱改英文（YenWel 2026-10-19）：上面小字「Cycle」，下面大字「Aquarist's Life」
     fs = int(min(w, h) * 0.085)
-    f = ImageFont.truetype(FONT, fs)
+    f = ImageFont.truetype(TITLE_FONT, fs)
+    small = ImageFont.truetype(TITLE_FONT, int(fs * 0.5))
     d = ImageDraw.Draw(b)
-    t = '水族人生'
-    tw = d.textlength(t, font=f)
-    d.text(((w - tw) / 2, cy + s + int(fs * 0.55)), t, font=f, fill=(255, 236, 170), stroke_width=max(2, fs // 12), stroke_fill=(40, 30, 10))
+    ty = cy + s + int(fs * 0.35)
+    for text, font, y in (('Cycle', small, ty), ("Aquarist's Life", f, ty + int(fs * 0.62))):
+        tw = d.textlength(text, font=font)
+        d.text(((w - tw) / 2, y), text, font=font, fill=(255, 236, 170), stroke_width=max(2, fs // 12), stroke_fill=(40, 30, 10))
     b.convert('RGB').save(p, optimize=True)
 print('ok')
