@@ -78,7 +78,7 @@ describe('快轉遇到危機自動切回正常速度（#142）', () => {
     expect(game.clock.timeScale).toBe(3600);
   });
 
-  it('同一缸同一種病傳染開來，只打斷一次；病消失或下過藥後再發病才重新打斷（#160）', () => {
+  it('同一缸同一種病傳染開來只打斷一次，治療期間也不打斷；這一波過了才重新算（#160、#165）', () => {
     const s = cycledTank();
     for (let i = 0; i < 6; i++) addFish(s, 'guppy', { carriesIch: false });
     const game = new Game(s, 3600);
@@ -111,12 +111,23 @@ describe('快轉遇到危機自動切回正常速度（#142）', () => {
     game.clock.timeScale = 3600;
     game.advance(1000);
     expect(crises.filter((r) => r === 'disease_visible')).toHaveLength(2);
-    // 下過抗生素以後，柱狀病再發病就重新算
+    // 下藥治療期間再有魚發病也不打斷（#165：同一波白點下過藥還被打斷）
     game.act((st) => {
       st.water.antibiotic = (st.water.antibiotic ?? 0) + 1;
     });
     game.advance(1000);
     sick(4);
+    game.clock.timeScale = 3600;
+    game.advance(1000);
+    expect(crises.filter((r) => r === 'disease_visible')).toHaveLength(2);
+    // 這一波過了（缸裡沒有魚帶著柱狀病超過 3 天），下一波再發病才重新打斷
+    game.act((st) => {
+      for (const f of st.fish) f.infections = (f.infections ?? []).filter((i) => i.kind !== 'columnaris');
+      st.water.antibiotic = 0;
+    });
+    game.clock.timeScale = 3600;
+    for (let i = 0; i < 80; i++) game.advance(1000);
+    sick(5);
     game.clock.timeScale = 3600;
     game.advance(1000);
     expect(crises.filter((r) => r === 'disease_visible')).toHaveLength(3);
@@ -146,5 +157,39 @@ describe('快轉遇到危機自動切回正常速度（#142）', () => {
       game.advance(1000);
     }
     expect(crises.filter((c) => c === 'starving')).toHaveLength(2);
+  });
+
+  it('同一波白點：一條條長出白點、中間下過白點藥，快轉只停一次（#165）', () => {
+    const s = cycledTank();
+    for (let i = 0; i < 6; i++) addFish(s, 'guppy', { carriesIch: false });
+    const game = new Game(s, 3600);
+    const crises: string[] = [];
+    game.onCrisis((c) => crises.push(c.reason));
+    game.advance(1000);
+    for (let i = 0; i < 5; i++) {
+      game.act((st) => {
+        const f = st.fish.filter((x) => x.alive)[i];
+        f.ich = { stage: 'visible', progress: 0 };
+        recordEvent(st, { type: 'ich_visible', subjectId: f.id });
+        if (i === 2) st.water.medication += 1;
+      });
+      game.clock.timeScale = 3600;
+      game.advance(1000);
+    }
+    expect(crises.filter((r) => r === 'ich_visible')).toEqual(['ich_visible']);
+  });
+
+  it('建立時只有潛伏的白點（店魚帶來的）不算回報過，之後真的發病要打斷（#167 審查）', () => {
+    const s = cycledTank();
+    s.fish[0].ich = { stage: 'incubating', progress: 0.5 };
+    const game = new Game(s, 3600);
+    const crises: string[] = [];
+    game.onCrisis((c) => crises.push(c.reason));
+    game.act((st) => {
+      st.fish[0].ich = { stage: 'visible', progress: 0 };
+      recordEvent(st, { type: 'ich_visible', subjectId: st.fish[0].id });
+    });
+    game.advance(1000);
+    expect(crises).toContain('ich_visible');
   });
 });
