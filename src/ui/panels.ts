@@ -166,6 +166,8 @@ export interface PanelContext {
   openScape?: () => void;
   /** 「第一次」的慶祝演出（只演一次）；有演出時回傳 true。 */
   moment?: (id: MomentId, spec: CelebrateSpec) => boolean;
+  /** 這條魚在缸裡的樣子（觀察面板頂端的大圖）；沒有就不放圖。 */
+  fishPic?: (fish: Fish) => string | null;
 }
 
 /** 沒有復原機制時（例如測試）就直接做並顯示通知。 */
@@ -387,7 +389,7 @@ export function ageLabel(days: number): string {
   return `約 ${years < 10 ? (Math.floor(years * 2) / 2).toString() : Math.floor(years)} 歲`;
 }
 
-export function fishPanel({ game, sheet, toasts }: PanelContext, fishId: number): Node {
+export function fishPanel({ game, sheet, toasts, fishPic }: PanelContext, fishId: number): Node {
   const fish = game.state.fish.find((f) => f.id === fishId);
   if (!fish) return h('p', {}, '這條魚已經不在缸裡了。');
   if (!fish.alive) {
@@ -404,9 +406,11 @@ export function fishPanel({ game, sheet, toasts }: PanelContext, fishId: number)
     );
   }
   const symptoms = observeSymptoms(game.state, fish);
+  const pic = fishPic?.(fish);
   return h(
     'div.stack',
     {},
+    pic ? h('div.fish-hero', {}, h('img', { src: pic, alt: '', draggable: 'false' })) : null,
     h('p', {}, `${fishName(fish)} · 體長約 ${fish.lengthCm.toFixed(1)} cm · ${ageLabel(fish.ageDays)}`),
     h('p', {}, growthLine(game.state, fish)),
     h('p', {}, habitLine(game.state, fish)),

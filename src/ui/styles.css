@@ -95,6 +95,10 @@ button.todo-item.split:hover { color: var(--accent, #f0c96a); }
 .selcard .bar i.ok { background: linear-gradient(90deg, #4fb36a, var(--ok)); }
 .selcard .bar i.warn { background: linear-gradient(90deg, #d9a43a, var(--warn)); }
 .selcard .bar i.bad { background: linear-gradient(90deg, #c94a3e, var(--bad)); }
+.selcard .sel-pic + .card-title + .card-sub { clear: both; }
+.selcard .sel-pic { float: right; width: 92px; height: 52px; margin: 22px 0 0 6px; object-fit: contain; filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.45)); }
+.fish-hero { display: grid; place-items: center; height: 130px; border-radius: 16px; background: radial-gradient(closest-side, rgba(120, 220, 230, 0.22), rgba(120, 220, 230, 0)); }
+.fish-hero img { max-width: 78%; max-height: 120px; object-fit: contain; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.5)); }
 .selcard .dead { color: var(--bad); margin: 6px 0; }
 .card-x { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; padding: 0; border: 1px solid rgba(243, 234, 216, 0.2); border-radius: 50%; background: transparent; font-size: 11px; line-height: 1; color: var(--muted); }
 .selcard.empty .card-x { display: none; }
@@ -543,7 +547,7 @@ body:has(.sheet.open) .owner.open { bottom: auto; top: calc(env(safe-area-inset-
 .quest-pill { padding: 6px 12px 6px 52px; min-height: 50px; max-width: min(220px, 40vw); gap: 1px; }
 .quest-avatar { left: 6px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; }
 .quest-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.quest-progress { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.quest-progress { font-size: 12px; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; max-width: 100%; }
 .quest-meter { display: block; width: 100%; min-width: 120px; height: 6px; margin-top: 3px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
 .quest-meter[hidden] { display: none; }
 .quest-meter i { display: block; height: 100%; width: 0; border-radius: 3px; background: linear-gradient(90deg, #4fc3c9, #9be8a8); transition: width 0.6s ease; }
