@@ -57,7 +57,7 @@ jobs:
         run: |
           if gh api "repos/$GITHUB_REPOSITORY/dependency-graph/compare/$BASE...$HEAD" > /dev/null 2> err.txt; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
-          elif grep -qi "dependency graph\|not supported\|not enabled" err.txt; then
+          elif grep -qi "HTTP 403\|dependency graph\|not supported" err.txt; then
             echo "::warning title=新增套件檢查略過::這個 repo 還沒開 Dependency graph，請到 Settings → Advanced Security 開啟（docs/quality-gate.md）"
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           else
