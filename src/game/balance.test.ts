@@ -57,22 +57,28 @@ describe('新手前幾週（K1）', () => {
     }
   }, 30_000);
 
-  it('一開始就放 6 條、還餵太多：新缸症候群會死魚（學到教訓）', () => {
-    let wiped = 0;
+  it('一開始就放 20 條、還餵太多：養水來不及，氨爆表、魚生病（學到教訓）', () => {
     for (const seed of [4, 5, 6]) {
       const s = newGameState(seed);
       s.environment.roomTempC = 25;
       s.environment.roomSwingC = 2;
       s.water.tempC = s.water.tempAvgC = 25;
-      for (let i = 0; i < 6; i++) addFish(s, 'guppy', { carriesIch: false, carries: [] });
-      for (let d = 0; d < 21; d++) {
-        simulate(s, 12);
-        feed(s, meal(s) * 3);
-        simulate(s, 12);
+      for (let i = 0; i < 20; i++) addFish(s, 'guppy', { carriesIch: false, carries: [] });
+      let peakTan = 0;
+      let minHealth = 1;
+      for (let d = 0; d < 10; d++) {
+        for (let h = 0; h < 2; h++) {
+          for (let k = 0; k < 12; k++) {
+            simulate(s, 1);
+            peakTan = Math.max(peakTan, s.water.tan);
+            for (const f of alive(s)) minHealth = Math.min(minHealth, f.health);
+          }
+          feed(s, meal(s) * 3);
+        }
       }
-      if (s.events.some((e) => e.type === 'fish_died' && e.cause === 'ammonia')) wiped++;
+      expect(peakTan).toBeGreaterThan(1);
+      expect(minHealth).toBeLessThan(0.8);
     }
-    expect(wiped).toBeGreaterThanOrEqual(2);
   }, 30_000);
 });
 

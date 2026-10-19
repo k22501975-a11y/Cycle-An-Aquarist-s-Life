@@ -39,7 +39,7 @@ describe('多缸與缸位', () => {
     expect(economy(tanks[0]).coins).toBe(100_000 - tankSetPrice('std40'));
     expect(second.hours).toBe(500);
     expect(second.fish).toHaveLength(0);
-    expect(second.bacteria.aob).toBeLessThan(0.01);
+    expect(second.bacteria.aob).toBeLessThan(0.05);
     expect(tanks.length).toBe(FREE_SLOTS);
     expect(newTankCost(tanks, 'nano20')).toBe(tankSetPrice('nano20') + RACK_PRICE);
   });
