@@ -1,5 +1,5 @@
 import type { KeyValueStore } from '../game/save';
-import { cycleMaturity, isCycled, observeSymptoms, type TankState } from '../sim';
+import { cycleMaturity, isCycled, observeSymptoms, sexVisible, type TankState } from '../sim';
 
 /**
  * 新手引導任務（GAME_DESIGN 定案）：水族館老闆一步步帶玩家開缸、放魚、餵食、換水、養水。
@@ -67,7 +67,7 @@ export const QUESTS: Quest[] = [
   {
     id: 'water',
     title: '換一次水',
-    lines: ['新缸前幾天氨和亞硝酸鹽會冒出來，這叫「新缸症候群」。', '測到它們不是 0 的時候，點「換水」換掉三成左右的水，把毒素稀釋掉。新水的溫度要和缸水差不多，魚才不會受驚。'],
+    lines: ['先試一次換水，熟悉操作：點「換水」換掉三成左右的水。新水的溫度要和缸水差不多，魚才不會受驚。', '新缸前幾天氨和亞硝酸鹽可能會冒出來，這叫「新缸症候群」。之後測到它們不是 0，就像這樣換水把毒素稀釋掉。'],
     done: '換水是養魚最重要的功夫，之後每週都要換一次喔。',
     check: (s) => (s.lastWaterChangeHours ?? 0) > 0,
   },
@@ -109,11 +109,27 @@ export function cycleProgress(s: TankState): string {
   if (r.ammonia > 0) parts.unshift(`氨 ${fmt(r.ammonia)}`);
   if (r.nitrite > 0) parts.unshift(`亞硝 ${fmt(r.nitrite)}`);
   const stale = s.hours - test.hours >= 24;
-  return `${parts.join('・')}（${stale ? '上次測水超過一天，再測一次' : '上次測水'}）`;
+  return `${parts.join('・')}（${stale ? '要看今天的讀數，再測一次' : '上次測水'}）`;
 }
 
 function fmt(n: number): string {
   return String(Math.round(n * 100) / 100);
+}
+
+/** 新缸（還沒養好）一次最多放幾條還不容易出事：約每 13 公升一條，至少 3 條。 */
+export function newTankFishLimit(s: TankState): number {
+  return Math.max(3, Math.round(s.equipment.tank.volumeL / 13));
+}
+
+/**
+ * 買魚前的老闆提醒：新缸還沒養好、這次買完會超過負荷，就回傳要說的話（只提醒，玩家可以照買）。
+ * 有檢疫盒、缸已經養好、量還不多就回傳 null。
+ */
+export function overloadWarning(s: TankState, adding: number): string | null {
+  if (s.quarantine || isCycled(s)) return null;
+  const after = living(s).length + adding;
+  if (after <= newTankFishLimit(s)) return null;
+  return `${OWNER_NAME}：新缸的硝化菌還沒長好，一次放到 ${after} 條，廢物會多到處理不了，魚很容易生病，甚至整缸死光。建議先放 2～3 條，養好水再慢慢加。還是要買嗎？`;
 }
 
 export interface Tip {
@@ -158,6 +174,19 @@ export const TIPS: Tip[] = [
     id: 'heater',
     text: '加熱棒好像卡住一直在加熱！趕快到「設備」把它拔掉，不然水會越來越燙。',
     check: (s) => !!s.equipment.heater?.stuckOn,
+  },
+  {
+    id: 'alkaline',
+    text: '新缸測到 pH 8 左右是正常的，台灣的自來水大多偏鹼。孔雀魚、米蝦都養得很好，重點是穩定，不用加藥去調；買魚時選「滴水對水」讓牠們慢慢適應就好。',
+    check: (s) => (s.lastTest?.reading.ph ?? 0) >= 8 && s.hours - (s.lastTest?.hours ?? -999) < 2,
+  },
+  {
+    id: 'pair',
+    text: '缸裡的孔雀魚都是同一種性別，這樣不會生小魚。公魚尾巴大、顏色鮮豔，母魚比較大隻、顏色淡。到商店補一條另一種性別的，或買「一公兩母」。',
+    check: (s) => {
+      const adults = living(s).filter((f) => f.species === 'guppy' && sexVisible(f));
+      return adults.length >= 2 && new Set(adults.map((f) => f.sex)).size === 1 && isCycled(s);
+    },
   },
   {
     id: 'algae',
