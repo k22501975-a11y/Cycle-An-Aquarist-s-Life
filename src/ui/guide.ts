@@ -200,9 +200,12 @@ export class Guide {
     const goal = q || this.tanks.length === 0 ? undefined : nextGoals(this.tanks, 1)[0];
     this.pill.classList.toggle('show', q !== null || goal !== undefined);
     if (goal) {
-      if (this.shownGoal === goal.id) return;
-      this.shownGoal = goal.id;
-      this.pill.replaceChildren(ownerPortrait('quest-avatar'), h('span.quest-step', {}, '目標'), h('span.quest-title', { title: goal.title }, goal.title));
+      // 數得出來的目標顯示進度（#183：「養大 5 條」交單後看得出還差幾條）
+      const p = goal.progress?.(this.tanks);
+      const title = p ? `${goal.title}（${p[0]}/${p[1]}）` : goal.title;
+      if (this.shownGoal === goal.id + title) return;
+      this.shownGoal = goal.id + title;
+      this.pill.replaceChildren(ownerPortrait('quest-avatar'), h('span.quest-step', {}, '目標'), h('span.quest-title', { title }, title));
     } else this.shownGoal = q || this.tanks.length === 0 ? '' : 'all-done';
     if (q) {
       // 換任務時把上一個任務的進度清掉（遊戲性評測：任務 7 的卡上還寫著任務 6 的「硝化菌 100%」）
@@ -223,8 +226,8 @@ export class Guide {
 
   /** 任務卡上的進度（硝化菌 40% 之類），變了才改 DOM。 */
   private renderProgress(state: TankState): void {
-    // 第一次拿到所有缸（開遊戲、讀檔）時把目標小卡補上
-    if (this.tutorialOver && !this.shownGoal) this.renderPill();
+    // 第一次拿到所有缸（開遊戲、讀檔）時把目標小卡補上；之後目標的「3/5」變了也更新（renderPill 沒變就不動 DOM）
+    if (this.tutorialOver && (!this.shownGoal || !currentQuest(this.progress))) this.renderPill();
     const q = currentQuest(this.progress);
     const m = q?.meter?.(state);
     this.meterEl.hidden = m === undefined;

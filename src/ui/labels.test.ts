@@ -31,6 +31,11 @@ describe('小魚被吃的說法（UX r12）', () => {
     const mom = addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'female' });
     mom.pregnancy = 0.9;
     expect(fryEatenText(s, 1, false)).toMatch(/母魚.*育幼盒/);
+    // 母魚進了盒子：盒子不收小魚，叫玩家等她生完，不叫人撈進去（架構建議，#191）
+    mom.nursery = true;
+    const tip = fryEatenText(s, 1, false);
+    expect(tip).toMatch(/等她生完/);
+    expect(tip).not.toMatch(/滿了/);
   });
 
   it('草夠密就不再叫玩家種草', () => {
