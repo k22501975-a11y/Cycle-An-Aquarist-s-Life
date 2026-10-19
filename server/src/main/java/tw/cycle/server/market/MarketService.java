@@ -85,6 +85,7 @@ public class MarketService {
         if (title.isBlank() || title.length() > 80) throw bad("bad_title", "名稱太長了");
         if (price < MarketRules.MIN_PRICE || price > MarketRules.MAX_PRICE) throw bad("bad_price", "售價要在 1 到 1,000,000 元之間");
         if ("fish".equals(kind) && sim.enabled()) item = serverFish(me, species, item);
+        if ("plant".equals(kind)) requireCuttings(species, item);
         String data = json.writeValueAsString(item);
         if (data.length() > MarketRules.MAX_ITEM_CHARS) throw bad("too_big", "商品資料太大");
         OffsetDateTime created = db.queryForObject("select created_at from account where id = ?", OffsetDateTime.class, me);
@@ -167,6 +168,14 @@ public class MarketService {
             throw bad("not_same_fish", "這不是上架的那條魚");
     }
 
+    /** 水草插枝：品種要跟上架的一樣，1 到 5 株的整數（#75）。插枝上架時已經從缸裡拿走，之後不會變。 */
+    private static void requireCuttings(String species, JsonNode item) {
+        JsonNode count = item.get("count");
+        if (!species.equals(item.path("species").asText()) || count == null || !count.isIntegralNumber()
+                || count.asInt() < 1 || count.asInt() > MarketRules.MAX_CUTTINGS)
+            throw bad("bad_item", "插枝的資料不對");
+    }
+
     /** 賣家的遊戲更新魚的近況（健康、長大），買家看到的是即時的狀態（§3.3）。 */
     @Transactional
     public void update(long me, long id, JsonNode item) throws Exception {
@@ -175,6 +184,7 @@ public class MarketService {
         Map<String, Object> l = db.query("select kind, item from market_listing where id = ? and seller_id = ? and status = 'open'",
                 rs -> rs.next() ? Map.of("kind", rs.getString("kind"), "item", rs.getString("item")) : null, id, me);
         if (l == null) throw new ApiException(HttpStatus.NOT_FOUND, "no_listing", "這件商品已經不在架上");
+        if ("plant".equals(l.get("kind"))) throw bad("bad_kind", "插枝上架後不能改");
         requireSameFish((String) l.get("kind"), (String) l.get("item"), item);
         if ("fish".equals(l.get("kind"))) {
             item = serverSire(me, (String) l.get("item"), item);
@@ -257,6 +267,10 @@ public class MarketService {
         if ("fish".equals(kind)) {
             item = serverSire(me, listed, item);
             data = json.writeValueAsString(item);
+        } else {
+            // 插枝上架時就從缸裡拿走了，出貨的就是上架的那份，遊戲端送來的數量不算（#75）
+            item = json.readTree(listed);
+            data = listed;
         }
         MarketRules.Packaging pack = MarketRules.PACKAGING.get((String) o.get("packaging"));
         int transit = MarketRules.MIN_TRANSIT_HOURS + random.nextInt(MarketRules.MAX_TRANSIT_HOURS - MarketRules.MIN_TRANSIT_HOURS + 1);
