@@ -100,7 +100,7 @@ export function nurseryBirth(state: TankState, mother: Fish, fry: Fish[]): void 
 }
 
 /**
- * 每個 tick：長夠大的小魚放回主缸；第一次有母魚快生了，阿德老闆送一個育幼盒（記一筆 nursery_gift，畫面帶玩家放進去）。
+ * 每個 tick：長夠大的小魚、沒懷孕的成魚放回主缸；第一次有母魚快生了，阿德老闆送一個育幼盒（記一筆 nursery_gift，畫面帶玩家放進去）。
  */
 export function updateNursery(state: TankState): void {
   // 沒有盒子的缸不會有盒裡的魚（舊資料、別的路徑漏清的標記在這裡收掉，魚不會卡住）
@@ -109,6 +109,8 @@ export function updateNursery(state: TankState): void {
   }
   if (state.nurseryBox) {
     const inside = nurseryFish(state);
+    // 盒裡沒懷孕的成魚（在盒裡長大的、生完沒放回去的）放回主缸：留著會擋住盒子、也不會配對
+    for (const f of inside) if (!isJuvenile(f) && f.pregnancy <= 0) f.nursery = undefined;
     if (inside.length > 0) {
       const mouth = mouthCm(state);
       const grown = inside.filter((f) => isJuvenile(f) && f.lengthCm >= NURSERY_RELEASE_CM && f.lengthCm > mouth);

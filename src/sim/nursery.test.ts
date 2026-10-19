@@ -134,7 +134,7 @@ describe('育幼盒（mvp.md §4.4.2，#187）', () => {
     expect(nurseryRefusal(s, mom2)).toMatch(/還有小魚/);
   });
 
-  it('盒裡的母魚不會再跟公魚配對', () => {
+  it('盒裡沒懷孕的母魚不會一直關著：回主缸、照常配對', () => {
     const s = tank(5);
     adults(s, 3, 'male');
     const [mom] = adults(s, 1, 'female');
@@ -143,7 +143,8 @@ describe('育幼盒（mvp.md §4.4.2，#187）', () => {
     moveToNursery(s, mom.id);
     mom.pregnancy = 0;
     days(s, 10);
-    expect(mom.pregnancy).toBe(0);
+    expect(mom.nursery).toBeUndefined();
+    expect(mom.pregnancy).toBeGreaterThan(0);
   });
 
   it('換缸、放進檢疫盒都會離開育幼盒，母魚不會卡在盒裡（#191 審查）', () => {
@@ -170,5 +171,18 @@ describe('育幼盒（mvp.md §4.4.2，#187）', () => {
     mom.nursery = true;
     simulate(b, 1);
     expect(mom.nursery).toBeFalsy();
+  });
+
+  it('盒裡沒懷孕的成魚自動放回主缸（架構建議，#191）', () => {
+    const s = tank(31);
+    buyNurseryBox(s);
+    const [mom] = adults(s, 1, 'female');
+    mom.pregnancy = 0.9;
+    expect(moveToNursery(s, mom.id)).toBe(true);
+    simulate(s, 0.1);
+    expect(mom.nursery).toBe(true);
+    mom.pregnancy = 0;
+    simulate(s, 0.1);
+    expect(mom.nursery).toBeUndefined();
   });
 });

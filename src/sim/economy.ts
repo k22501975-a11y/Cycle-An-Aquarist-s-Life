@@ -1,5 +1,6 @@
 import { isJuvenile, isLightOn, recordEvent, type Fish, type TankState } from './state';
-import { FISH_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
+import { growthStage } from './growth';
+import { FISH_SPECIES, isShrimpSpecies, type FishSpeciesId, type PlantSpeciesId } from './species';
 import { phenotype, type GuppyPhenotype } from './genetics';
 import { updateOrders, type OrderBoard } from './orders';
 import type { GoalState } from './goals';
@@ -95,6 +96,8 @@ export interface Economy {
   goals?: GoalState;
   /** 累計賣給店家幾條魚。 */
   fishSold?: number;
+  /** 自己繁殖、養過仔魚期才交訂單的魚（目標「養大 5 條」也算這些，#183）。 */
+  raisedGone?: number;
   /** 已經領過獎勵的新手任務（任務進度存在裝置上，換裝置、匯入存檔重跑教學也不能再領）。 */
   questRewards?: string[];
   /** 手上還沒用的假期飼料錠（目標送的）。 */
@@ -286,6 +289,16 @@ export function sellFish(state: TankState, fishId: number): number {
   e.coins += coins;
   e.fishSold = (e.fishSold ?? 0) + 1;
   return coins;
+}
+
+/**
+ * 交訂單的魚如果是自己繁殖、養過仔魚期的，記一筆（#183）：中魚單常把剛長大的魚拿走，目標「養大 5 條」不會因此倒退。
+ * 賣給店家的不算：那是玩家自己選擇換錢，目標本來就要留著魚看轉色。
+ */
+export function noteRaisedGone(state: TankState, fish: Fish): void {
+  if ((fish.generation ?? 0) < 1 || isShrimpSpecies(fish.species) || growthStage(fish) === 'fry') return;
+  const e = economy(state);
+  e.raisedGone = (e.raisedGone ?? 0) + 1;
 }
 
 /** 把手上的插枝全部賣掉（算一次），回傳拿到多少錢。 */

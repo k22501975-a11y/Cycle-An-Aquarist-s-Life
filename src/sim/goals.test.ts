@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, buyQuarantine, buyTank, economy, maxLengthCm, moveToQuarantine } from './index';
-import { CALM_DAYS, checkGoals, goalState, isUnlocked, nextGoals, speciesUnlocked, unlockHint } from './goals';
+import { addFish, buyQuarantine, buyTank, economy, fulfillOrder, maxLengthCm, moveToQuarantine, orderBoard, sellFish, type ShopOrder } from './index';
+import { CALM_DAYS, checkGoals, GOALS, goalState, isUnlocked, nextGoals, raisedCount, speciesUnlocked, unlockHint } from './goals';
 import type { TankState } from './state';
 
 const calmFish = { carriesIch: false, carries: [] };
@@ -44,6 +44,27 @@ describe('新手之後的目標（M19）', () => {
     const done = checkGoals(tanks).map((g) => g.id);
     expect(done).toContain('raise5');
     expect(isUnlocked(tanks, 'selection')).toBe(true);
+  });
+
+  it('養大 5 條：交訂單拿走的也算，任務卡顯示幾條／5 條；賣給店家的不算（#183）', () => {
+    const tanks = [newGameState(1)];
+    const young = [0, 1, 2].map(() => bredFish(tanks[0], 0.55));
+    bredFish(tanks[0], 0.65);
+    const raise5 = GOALS.find((g) => g.id === 'raise5')!;
+    expect(raise5.progress!(tanks)).toEqual([1, 5]);
+    // 中魚單把三條剛長大的拿走
+    const board = orderBoard(tanks[0]);
+    board.orders = [{ id: 990, kind: 'fish', species: 'guppy', size: 'juvenile', count: 3, unitPrice: 40, postedHours: tanks[0].hours } as ShopOrder];
+    expect(fulfillOrder(tanks, 990)).toBeGreaterThan(0);
+    expect(young.every((f) => !tanks[0].fish.includes(f))).toBe(true);
+    expect(raisedCount(tanks)).toBe(4);
+    expect(checkGoals(tanks).map((g) => g.id)).not.toContain('raise5');
+    // 賣給店家的不算
+    expect(sellFish(tanks[0], bredFish(tanks[0], 0.65).id)).toBeGreaterThan(0);
+    expect(raisedCount(tanks)).toBe(4);
+    bredFish(tanks[0], 0.65);
+    expect(raise5.progress!(tanks)).toEqual([5, 5]);
+    expect(checkGoals(tanks).map((g) => g.id)).toContain('raise5');
   });
 
   it('買第二個缸：店裡開始賣鬥魚', () => {

@@ -39,6 +39,8 @@ export interface Goal {
   /** 額外送的東西。 */
   gift?: 'holiday_tablet';
   check: (tanks: TankState[], g: GoalState) => boolean;
+  /** 數得出來的目標：現在做到幾個／要幾個（任務卡顯示「3/5」）。 */
+  progress?: (tanks: TankState[]) => [number, number];
 }
 
 export interface GoalState {
@@ -57,6 +59,12 @@ const allFish = (tanks: TankState[], withBox = false) =>
   tanks.flatMap((t) => [...living(t), ...(withBox ? (t.quarantine?.fish ?? []).filter((f) => f.alive) : [])]);
 const bred = (f: Fish) => (f.generation ?? 0) >= 1;
 const STAGES = ['fry', 'juvenile', 'coloring', 'subadult', 'adult', 'old'];
+
+/** 養大了幾條自己繁殖的魚：缸裡（含檢疫盒）長到轉色期的，加上養過仔魚期才交訂單的（#183：交單不會讓目標倒退）。 */
+export function raisedCount(tanks: TankState[]): number {
+  const now = allFish(tanks, true).filter((f) => bred(f) && !isShrimpSpecies(f.species) && STAGES.indexOf(growthStage(f)) >= 2).length;
+  return now + (economy(tanks[0]).raisedGone ?? 0);
+}
 
 /** 缸裡有沒有玩家看得到的警告：氨、亞硝、水溫、生病、死魚。 */
 export function tankAlarm(t: TankState): boolean {
@@ -87,7 +95,8 @@ export const GOALS: Goal[] = [
     coins: 80,
     unlock: 'selection',
     gift: 'holiday_tablet',
-    check: (tanks) => allFish(tanks, true).filter((f) => bred(f) && !isShrimpSpecies(f.species) && STAGES.indexOf(growthStage(f)) >= 2).length >= 5,
+    check: (tanks) => raisedCount(tanks) >= 5,
+    progress: (tanks) => [Math.min(5, raisedCount(tanks)), 5],
   },
   {
     id: 'sale',
