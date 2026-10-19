@@ -269,10 +269,9 @@ describe('經濟（mvp.md §4.3）', () => {
     for (const run of [tux, albino]) {
       expect(run.coins21).toBeGreaterThanOrEqual(newTankCost([newGameState(1)], 'nano20'));
       expect(run.tanks).toBeGreaterThanOrEqual(2);
-      // 只算賣魚（訂單板 M21 另外加）。企劃目標是第 60 天 1,000、第 120 天 3,000，
-      // 目前受限於缸位和成長時間只到約三分之一，先當回歸底線（數據已回報總控）
-      expect(run.income[60]).toBeGreaterThan(120);
-      expect(run.income[120]).toBeGreaterThan(800);
+      // 只算賣魚的下限（企劃 2026-10-19 定案）；加上訂單板（M21）的目標另外測
+      expect(run.income[60]).toBeGreaterThanOrEqual(150);
+      expect(run.income[120]).toBeGreaterThanOrEqual(900);
       expect(run.income[120]).toBeGreaterThan(run.income[60] * 3);
     }
     expect(albino.income[120]).toBeGreaterThan(tux.income[120]);
