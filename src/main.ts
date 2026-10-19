@@ -829,6 +829,7 @@ async function start(): Promise<void> {
         toasts.show('缸開好了！');
       }),
     );
+  ctx.openSetup = openSetup;
   const setupBtn = h('button.btn.primary.setup-cta', { onclick: openSetup, hidden: true }, '開缸：挑魚缸和設備');
   stage.append(setupBtn);
   guide.reward = (id, coins) => game.actAll((tanks) => sim.claimQuestReward(tanks[0], id, coins));

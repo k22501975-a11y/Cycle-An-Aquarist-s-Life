@@ -25,7 +25,11 @@ export async function openGame(page: Page): Promise<void> {
   await expect(page.locator('button.tool').first()).toBeVisible();
   const setup = page.locator('.sheet.open .setup-panel');
   if (await setup.waitFor({ timeout: 3000 }).then(() => true, () => false)) {
-    await setup.getByRole('button', { name: '開缸', exact: true }).click();
+    // 不預選：還沒挑完設備時「開缸」按不下去，按「推薦組合」一次選好
+    const confirm = setup.getByRole('button', { name: '開缸', exact: true });
+    await expect(confirm).toBeDisabled();
+    await setup.getByRole('button', { name: '推薦組合', exact: true }).click();
+    await confirm.click();
     await expect(setup).toBeHidden();
   }
 }

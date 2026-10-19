@@ -1,4 +1,4 @@
-import { applySetup, economy, RECOMMENDED_SETUP, setupCards, setupCost, setupRefusal, withTank, type SetupCategory, type SetupChoice } from '../sim';
+import { applySetup, economy, RECOMMENDED_SETUP, setupCards, setupCost, setupRefusal, withTank, type SetupCategory, type SetupChoice, type SetupDraft } from '../sim';
 import { h } from './dom';
 import type { PanelContext } from './panels';
 import { cardGrid, priceTag, shopCard } from './shop-cards';
@@ -8,8 +8,8 @@ import { cardGrid, priceTag, shopCard } from './shop-cards';
  * 卡片資料來自 setupCards()，美術與 UI 之後可以換成正式版面（F1-b 的演出接在「開缸」之後）。
  */
 
-/** 玩家在開缸畫面上的選擇（關掉面板再打開還在）。 */
-let draft: SetupChoice = { ...RECOMMENDED_SETUP };
+/** 玩家在開缸畫面上的選擇（關掉面板再打開還在）。一開始什麼都沒選，要自己挑或按「推薦組合」。 */
+let draft: SetupDraft = {};
 
 export function setupPanel(ctx: PanelContext, onDone: () => void): HTMLElement {
   const { game, sheet, toasts } = ctx;
@@ -47,7 +47,7 @@ export function setupPanel(ctx: PanelContext, onDone: () => void): HTMLElement {
     {},
     h('span', {}, '合計 '),
     priceTag(cost),
-    h('span', {}, `　買完剩 ${(coins - cost).toLocaleString('zh-TW')} 元買魚和水草`),
+    h('span', {}, `　剩 ${(coins - cost).toLocaleString('zh-TW')} 元買魚和水草`),
   );
   const recommend = h('button.btn', { onclick: () => ((draft = { ...RECOMMENDED_SETUP }), sheet.refresh()) }, '推薦組合');
   const confirm = h(
@@ -57,7 +57,7 @@ export function setupPanel(ctx: PanelContext, onDone: () => void): HTMLElement {
       onclick: () => {
         const why = game.act((s) => applySetup(s, draft));
         if (why) return toasts.show(why, 'warn');
-        draft = { ...RECOMMENDED_SETUP };
+        draft = {};
         sheet.close();
         onDone();
       },
