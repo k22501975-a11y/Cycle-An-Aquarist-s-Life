@@ -70,6 +70,14 @@ export function finCacheSize(): number {
 }
 
 /** 把模糊過的鰭烘成貼圖：濾鏡只跑一次，之後每格只畫一張圖。 */
+function cachedSprite(key: string): Sprite | null {
+  const hit = bakedFins.get(key);
+  if (!hit) return null;
+  const s = new Sprite(hit.tex);
+  s.position.set(hit.x, hit.y);
+  return s;
+}
+
 function bake(renderer: Renderer, g: Graphics, key: string, pad: number): Sprite | null {
   let hit = bakedFins.get(key);
   if (hit === undefined) {
@@ -82,95 +90,102 @@ function bake(renderer: Renderer, g: Graphics, key: string, pad: number): Sprite
     bakedFins.set(key, hit);
   }
   g.destroy();
-  if (!hit) return null;
-  const s = new Sprite(hit.tex);
-  s.position.set(hit.x, hit.y);
-  return s;
+  return cachedSprite(key);
 }
 
 /** renderer 有給就把鰭烘成共用的貼圖（遊戲裡）；沒給就直接掛著模糊的 Graphics。 */
 export function drawFinOverlay(rig: FishRig | PaintedRig, fins: FinLook, renderer?: Renderer): void {
   const { bodyEllipse: e, R } = rig.art;
   const body = { x: e.x * R, y: e.y * R, rx: e.rx * R, ry: e.ry * R };
-  const shapes = finShapes(fins.traits, body, rig.lengthPx);
-  const back = new Graphics(), front = new Graphics();
-  const light = mix(fins.color, 0xffffff, 0.55);
-  const deep = mix(fins.color, 0x000000, 0.25);
-  const gradients = { back: [] as FillGradient[], front: [] as FillGradient[] };
-  const paint = (g: Graphics, list: FinShape[], made: FillGradient[]) => {
-    for (const sh of list) {
-      if (sh.soft) {
-        // 薄紗鰭：不描邊（邊緣靠模糊柔化），薄膜和鰭條都從根部往尖端漸透
-        const sheen = mix(fins.color, 0xbff6ff, 0.45);
-        // 薄膜用放射漸層：以鰭根為中心，根部濃、往尖端越來越透，顏色漸漸帶一點虹彩
-        const p = sh.points, n = p.length;
-        const rx = (p[0] + p[n - 2]) / 2, ry = (p[1] + p[n - 1]) / 2;
-        let reach = 1;
-        for (let i = 0; i < n; i += 2) reach = Math.max(reach, Math.hypot(p[i] - rx, p[i + 1] - ry));
-        const rgba = (c: number, a: number) => ({ r: (c >> 16) & 255, g: (c >> 8) & 255, b: c & 255, a });
-        const base = mix(fins.color, 0xffffff, 0.15);
-        const membrane = gradient(made, {
-          type: 'radial',
-          center: { x: rx, y: ry },
-          innerRadius: 0,
-          outerCenter: { x: rx, y: ry },
-          outerRadius: reach,
-          colorStops: [
-            { offset: 0, color: rgba(base, fins.alpha * 0.7) },
-            { offset: 0.5, color: rgba(mix(base, sheen, 0.3), fins.alpha * 0.48) },
-            { offset: 1, color: rgba(sheen, fins.alpha * 0.2) },
-          ],
-          textureSpace: 'global',
-        });
-        g.poly(p).fill(membrane);
-        // 鰭條也用同一個中心的漸層：根部亮、往尖端漸透，亮暗相間帶一點虹彩
-        const rayFill = (c: number) =>
-          gradient(made, {
+  const backKey = finCacheKey(fins, body, rig.lengthPx, 'back');
+  const frontKey = finCacheKey(fins, body, rig.lengthPx, 'front');
+  if (renderer && bakedFins.has(backKey) && bakedFins.has(frontKey)) {
+    // 同樣的鰭已經烘過：直接拿共用貼圖，不重畫、不建漸層和模糊濾鏡（#151 審查）
+    const b = cachedSprite(backKey);
+    const f = cachedSprite(frontKey);
+    if (b) rig.addChildAt(b, 0);
+    if (f) rig.addChild(f);
+  } else {
+    const shapes = finShapes(fins.traits, body, rig.lengthPx);
+    const back = new Graphics(), front = new Graphics();
+    const light = mix(fins.color, 0xffffff, 0.55);
+    const deep = mix(fins.color, 0x000000, 0.25);
+    const gradients = { back: [] as FillGradient[], front: [] as FillGradient[] };
+    const paint = (g: Graphics, list: FinShape[], made: FillGradient[]) => {
+      for (const sh of list) {
+        if (sh.soft) {
+          // 薄紗鰭：不描邊（邊緣靠模糊柔化），薄膜和鰭條都從根部往尖端漸透
+          const sheen = mix(fins.color, 0xbff6ff, 0.45);
+          // 薄膜用放射漸層：以鰭根為中心，根部濃、往尖端越來越透，顏色漸漸帶一點虹彩
+          const p = sh.points, n = p.length;
+          const rx = (p[0] + p[n - 2]) / 2, ry = (p[1] + p[n - 1]) / 2;
+          let reach = 1;
+          for (let i = 0; i < n; i += 2) reach = Math.max(reach, Math.hypot(p[i] - rx, p[i + 1] - ry));
+          const rgba = (c: number, a: number) => ({ r: (c >> 16) & 255, g: (c >> 8) & 255, b: c & 255, a });
+          const base = mix(fins.color, 0xffffff, 0.15);
+          const membrane = gradient(made, {
             type: 'radial',
             center: { x: rx, y: ry },
             innerRadius: 0,
             outerCenter: { x: rx, y: ry },
             outerRadius: reach,
             colorStops: [
-              { offset: 0, color: rgba(c, Math.min(1, fins.alpha * 1.1)) },
-              { offset: 1, color: rgba(c, fins.alpha * 0.15) },
+              { offset: 0, color: rgba(base, fins.alpha * 0.7) },
+              { offset: 0.5, color: rgba(mix(base, sheen, 0.3), fins.alpha * 0.48) },
+              { offset: 1, color: rgba(sheen, fins.alpha * 0.2) },
             ],
             textureSpace: 'global',
           });
-        const rayColors = [mix(fins.color, 0xffffff, 0.35), sheen, light].map(rayFill);
-        (sh.rays ?? []).forEach((ray, i) => g.poly(ray, false).stroke({ fill: rayColors[i % 3], width: Math.max(0.7, body.ry * 0.035), cap: 'round', join: 'round' }));
-      } else if (sh.kind === 'fill') {
-        // 底色深一點、上面再疊一層亮的，看起來是薄薄一片透光的鰭
-        g.poly(sh.points).fill({ color: deep, alpha: fins.alpha * 0.5 });
-        g.poly(sh.points).fill({ color: mix(fins.color, 0xffffff, 0.15), alpha: fins.alpha * 0.6 });
-        for (const ray of sh.rays ?? []) g.poly(ray, false).stroke({ color: deep, alpha: fins.alpha * 0.6, width: Math.max(0.8, body.ry * 0.05), cap: 'round' });
-        g.poly(sh.points).stroke({ color: light, alpha: fins.alpha * 0.9, width: Math.max(0.8, body.ry * 0.05), join: 'round' });
-      } else {
-        const [x0, y0, cx, cy, x1, y1] = sh.points;
-        g.moveTo(x0, y0).quadraticCurveTo(cx, cy, x1, y1).stroke({ color: mix(fins.color, 0xffffff, 0.2), alpha: Math.min(1, fins.alpha + 0.2), width: Math.max(1.2, body.ry * 0.1), cap: 'round' });
+          g.poly(p).fill(membrane);
+          // 鰭條也用同一個中心的漸層：根部亮、往尖端漸透，亮暗相間帶一點虹彩
+          const rayFill = (c: number) =>
+            gradient(made, {
+              type: 'radial',
+              center: { x: rx, y: ry },
+              innerRadius: 0,
+              outerCenter: { x: rx, y: ry },
+              outerRadius: reach,
+              colorStops: [
+                { offset: 0, color: rgba(c, Math.min(1, fins.alpha * 1.1)) },
+                { offset: 1, color: rgba(c, fins.alpha * 0.15) },
+              ],
+              textureSpace: 'global',
+            });
+          const rayColors = [mix(fins.color, 0xffffff, 0.35), sheen, light].map(rayFill);
+          (sh.rays ?? []).forEach((ray, i) => g.poly(ray, false).stroke({ fill: rayColors[i % 3], width: Math.max(0.7, body.ry * 0.035), cap: 'round', join: 'round' }));
+        } else if (sh.kind === 'fill') {
+          // 底色深一點、上面再疊一層亮的，看起來是薄薄一片透光的鰭
+          g.poly(sh.points).fill({ color: deep, alpha: fins.alpha * 0.5 });
+          g.poly(sh.points).fill({ color: mix(fins.color, 0xffffff, 0.15), alpha: fins.alpha * 0.6 });
+          for (const ray of sh.rays ?? []) g.poly(ray, false).stroke({ color: deep, alpha: fins.alpha * 0.6, width: Math.max(0.8, body.ry * 0.05), cap: 'round' });
+          g.poly(sh.points).stroke({ color: light, alpha: fins.alpha * 0.9, width: Math.max(0.8, body.ry * 0.05), join: 'round' });
+        } else {
+          const [x0, y0, cx, cy, x1, y1] = sh.points;
+          g.moveTo(x0, y0).quadraticCurveTo(cx, cy, x1, y1).stroke({ color: mix(fins.color, 0xffffff, 0.2), alpha: Math.min(1, fins.alpha + 0.2), width: Math.max(1.2, body.ry * 0.1), cap: 'round' });
+        }
       }
+    };
+    paint(back, shapes.filter((sh) => !sh.front), gradients.back);
+    paint(front, shapes.filter((sh) => sh.front), gradients.front);
+    // 邊緣柔一點，不像剪紙
+    const blur = Math.max(0.4, body.ry * 0.015);
+    back.filters = [new BlurFilter({ strength: blur, quality: 2 })];
+    front.filters = [new BlurFilter({ strength: blur, quality: 2 })];
+    if (renderer) {
+      const pad = Math.ceil(blur * 4 + 2);
+      const b = bake(renderer, back, backKey, pad);
+      const f = bake(renderer, front, frontKey, pad);
+      // 已經烘進貼圖了，漸層用不到（#151 審查：沒釋放的話每次烘約漏 2MB）
+      freeGradients(gradients.back);
+      freeGradients(gradients.front);
+      if (b) rig.addChildAt(b, 0);
+      if (f) rig.addChild(f);
+    } else {
+      back.once('destroyed', () => freeGradients(gradients.back));
+      front.once('destroyed', () => freeGradients(gradients.front));
+      rig.addChildAt(back, 0);
+      rig.addChild(front);
     }
-  };
-  paint(back, shapes.filter((sh) => !sh.front), gradients.back);
-  paint(front, shapes.filter((sh) => sh.front), gradients.front);
-  // 邊緣柔一點，不像剪紙
-  const blur = Math.max(0.4, body.ry * 0.015);
-  back.filters = [new BlurFilter({ strength: blur, quality: 2 })];
-  front.filters = [new BlurFilter({ strength: blur, quality: 2 })];
-  if (renderer) {
-    const pad = Math.ceil(blur * 4 + 2);
-    const b = bake(renderer, back, finCacheKey(fins, body, rig.lengthPx, 'back'), pad);
-    const f = bake(renderer, front, finCacheKey(fins, body, rig.lengthPx, 'front'), pad);
-    // 已經烘進貼圖了，漸層用不到（#151 審查：沒釋放的話每次烘約漏 2MB）
-    freeGradients(gradients.back);
-    freeGradients(gradients.front);
-    if (b) rig.addChildAt(b, 0);
-    if (f) rig.addChild(f);
-  } else {
-    back.once('destroyed', () => freeGradients(gradients.back));
-    front.once('destroyed', () => freeGradients(gradients.front));
-    rig.addChildAt(back, 0);
-    rig.addChild(front);
   }
   const tex = fins.dumboArt ? paintedTexture(fins.family === 'blue' ? 'fin-pectoral-dumbo' : `fin-pectoral-dumbo~${fins.family}`) : null;
   if (tex) {

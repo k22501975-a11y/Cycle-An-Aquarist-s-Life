@@ -38,3 +38,16 @@ describe('大C 薄紗鰭的漸層不會漏記憶體（#151 審查）', () => {
     expect(liveFinGradients()).toBe(before);
   });
 });
+
+describe('烘過的鰭直接用快取', () => {
+  it('同樣的鰭第二次不再建漸層、不再烘', () => {
+    let baked = 0;
+    const renderer = { generateTexture: () => (baked++, Texture.WHITE) } as unknown as Renderer;
+    const look = { ...bigC, alpha: 0.77 };
+    drawFinOverlay(fakeRig(), look, renderer);
+    const first = baked;
+    drawFinOverlay(fakeRig(), look, renderer);
+    expect(first).toBeGreaterThan(0);
+    expect(baked).toBe(first);
+  });
+});
