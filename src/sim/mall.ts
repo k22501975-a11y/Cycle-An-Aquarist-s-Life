@@ -6,27 +6,25 @@ import { FISH_SPECIES } from './species';
 import type { Fish, TankState } from './state';
 
 /**
- * 商城道具（design/monetization.md）：用儲值點數買，伺服器扣點，遊戲把道具放進背包、由玩家決定什麼時候用。
+ * 商城道具（design/monetization.md）：用儲值點數買，伺服器扣點、保管庫存（docs/ledger.md §4），由玩家決定什麼時候用。
+ * 用的時候先跟伺服器扣一個，成功才在這裡套用效果。
  * 原則是「付錢買的是省時間，不是跳過照顧」：特效藥只治症狀，套缸的生物照樣會因為照顧不當生病。
  */
 
-export type MallItemId = keyof Omit<MallBag, 'claimed'>;
+export type MallItemId = keyof MallBag;
 
 export const MALL_ITEMS: MallItemId[] = ['cure', 'tankset'];
 
 export function mallBag(tanks: TankState[]): MallBag {
-  return (economy(tanks[0]).mall ??= { cure: 0, tankset: 0, claimed: [] });
+  return (economy(tanks[0]).mall ??= { cure: 0, tankset: 0 });
 }
 
-/** 把伺服器的道具放進背包；同一個編號只放一次。回傳有沒有新放進去。 */
-export function addMallGrant(tanks: TankState[], grant: { id: number; item: string }): boolean {
-  const bag = mallBag(tanks);
-  if (bag.claimed.includes(grant.id) || !(MALL_ITEMS as string[]).includes(grant.item)) return false;
-  bag[grant.item as MallItemId] += 1;
-  bag.claimed.push(grant.id);
-  // 只留最近的紀錄就夠（伺服器領過的不會再給）
-  if (bag.claimed.length > 200) bag.claimed.splice(0, bag.claimed.length - 200);
-  return true;
+/** 背包照伺服器的庫存覆寫（伺服器沒列的道具當作 0）。 */
+export function setMallBag(tanks: TankState[], bag: Partial<Record<string, number>>): void {
+  const mine = mallBag(tanks);
+  for (const id of MALL_ITEMS) mine[id] = Math.max(0, Math.floor(bag[id] ?? 0));
+  // 舊存檔記著領過哪些伺服器道具；現在庫存在伺服器，用不到了
+  delete (mine as MallBag & { claimed?: unknown }).claimed;
 }
 
 /** 水質造成的傷：特效藥對這些效果減半，提醒玩家去找原因。 */

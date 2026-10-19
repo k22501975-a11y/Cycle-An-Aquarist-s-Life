@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 import tw.cycle.server.auth.AuthInterceptor;
 import tw.cycle.server.config.ApiException;
 import tw.cycle.server.config.CycleProperties;
+import tw.cycle.server.ledger.CoinLedger;
 import tw.cycle.server.market.MarketService;
 import tw.cycle.server.sim.HttpSimClient;
 import tw.cycle.server.sim.SimClient;
@@ -51,6 +52,7 @@ public class SaveController {
     private final Clock clock;
     private final SimClient sim;
     private final MarketService market;
+    private final CoinLedger ledger;
     /** 已經在市場出貨的魚又出現在存檔裡。 */
     private static final String SHIPPED = "shipped_fish";
     /** 存檔最上層的欄位（src/game/save.ts 的 SaveFile）。 */
@@ -59,13 +61,14 @@ public class SaveController {
     static final Duration ADVANCE_EVERY = Duration.ofMinutes(1);
     private static final Logger log = LoggerFactory.getLogger(SaveController.class);
 
-    public SaveController(CloudSaveRepository saves, CycleProperties props, ObjectMapper json, Clock clock, SimClient sim, MarketService market) {
+    public SaveController(CloudSaveRepository saves, CycleProperties props, ObjectMapper json, Clock clock, SimClient sim, MarketService market, CoinLedger ledger) {
         this.saves = saves;
         this.props = props;
         this.json = json;
         this.clock = clock;
         this.sim = sim;
         this.market = market;
+        this.ledger = ledger;
     }
 
     public record Upload(
@@ -93,10 +96,11 @@ public class SaveController {
         String data = json.writeValueAsString(file);
         if (data.getBytes(StandardCharsets.UTF_8).length > props.maxSaveBytes())
             throw new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "too_large", "存檔太大了，雲端放不下");
-        CloudSave save = saves.findById(accountId).orElseGet(() -> new CloudSave(accountId));
+        CloudSave save = saves.findForUpdate(accountId).orElseGet(() -> new CloudSave(accountId));
         if (!upload.force() && save.getRevision() != upload.baseRevision()) {
             throw new ConflictException(save.getRevision(), save.getSavedAt());
         }
+        requireLedger(accountId, file);
         OffsetDateTime now = OffsetDateTime.now(clock);
         Map<String, Object> out = new LinkedHashMap<>();
         List<SimClient.Problem> problems = check(accountId, save, file, now, upload.force());
@@ -112,6 +116,18 @@ public class SaveController {
         out.put("revision", save.getRevision());
         out.put("savedAt", save.getSavedAt());
         return out;
+    }
+
+    /**
+     * 存檔要套用到帳本最新一筆（docs/ledger.md §3.4）：落後表示沒扣款或是扣款前的舊存檔，超前只可能是改過的存檔。
+     * 強制覆蓋也不收，不然選舊的那份就能把市場的扣款洗掉。
+     */
+    private void requireLedger(long accountId, JsonNode file) {
+        int seq = file.path("state").path("economy").path("ledgerSeq").asInt(0);
+        int latest = ledger.latestSeq(accountId);
+        if (seq < latest)
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "ledger_behind", "這份存檔少了市場的收支紀錄，請改用雲端那份");
+        if (seq > latest) throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "ledger_ahead", "這份存檔的市場收支對不上");
     }
 
     /**
@@ -139,7 +155,7 @@ public class SaveController {
     @Transactional
     public Map<String, Object> advance(@RequestAttribute(AuthInterceptor.ACCOUNT_ID) Long accountId) throws Exception {
         if (!sim.enabled()) throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "no_sim", "伺服器沒有開模擬");
-        CloudSave save = saves.findById(accountId).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "none", "雲端還沒有存檔"));
+        CloudSave save = saves.findForUpdate(accountId).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "none", "雲端還沒有存檔"));
         OffsetDateTime now = OffsetDateTime.now(clock);
         JsonNode stored = json.readTree(save.getData());
         Map<String, Object> out = new LinkedHashMap<>();
@@ -175,7 +191,7 @@ public class SaveController {
         public final long revision;
         public final long savedAt;
 
-        ConflictException(long revision, long savedAt) {
+        public ConflictException(long revision, long savedAt) {
             super(HttpStatus.CONFLICT, "conflict", "另一台裝置剛上傳過存檔");
             this.revision = revision;
             this.savedAt = savedAt;

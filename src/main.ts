@@ -14,7 +14,7 @@ import { CloudClient } from './net/cloud';
 import { autoUpload, checkCloudOnStart, cloudPanel, type CloudPanelDeps } from './ui/cloud-panel';
 import { friendsPanel, giftPanel, type FriendsDeps } from './ui/friends-panel';
 import { knownArrivals, marketPanel, syncMarket, type MarketDeps } from './ui/market-panel';
-import { mallPanel, syncMall, type MallDeps } from './ui/mall-panel';
+import { mallPanel, syncMall, useMallItem, type MallDeps } from './ui/mall-panel';
 import { CATEGORY_LABELS, nativePlatform, Notifier, planNotices, webPushPlatform, type PlannedNotice } from './net/push';
 import { Forecaster } from './game/forecaster';
 import { canPromptInstall, isInstalled, isIos, promptInstall, setupPwa } from './ui/pwa';
@@ -316,6 +316,7 @@ async function start(): Promise<void> {
   };
   const marketDeps: MarketDeps = { cloud, game, sheet, toasts, sound: ctx.sound, openCloud: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)), syncSave: () => autoUpload(cloudDeps) };
   const mallDeps: MallDeps = marketDeps;
+  ctx.useMall = (item, apply) => useMallItem(mallDeps, item, apply);
   const checkGifts = async () => {
     if (!cloud.session) return;
     const res = await cloud.gifts();
