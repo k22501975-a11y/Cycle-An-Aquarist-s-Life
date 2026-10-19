@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { HUNGRY } from '../sim';
 import { hungerLook, spawnSwimmer, stepTurn, updateSwimmer, type TurnState } from './fish-motion';
 
 /** 一條餓的孔雀魚追一顆停在水中的飼料：數牠 10 秒內翻面幾次。 */
@@ -102,6 +103,7 @@ describe('不貼缸壁疊成一排', () => {
 describe('餓的魚看得出來', () => {
   it('普通餓不變，餓很久肚子扁、會討食', () => {
     expect(hungerLook(0.3)).toEqual({ thin: 1, begging: 0 });
+    expect(hungerLook(HUNGRY).begging).toBe(0);
     expect(hungerLook(0.95).thin).toBeLessThan(0.9);
     expect(hungerLook(0.95).begging).toBe(1);
   });

@@ -4,7 +4,7 @@ import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audi
 import { eventSound } from './audio/sounds';
 import { applySeason, Game, newGameState } from './game/game';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
-import { menuTile } from './ui/art-icons';
+import { menuTile, ownerImg } from './ui/art-icons';
 import { SpeedControl } from './ui/speed-control';
 import { installCrashGuard } from './ui/crash';
 import { Analytics } from './net/analytics';
@@ -46,6 +46,8 @@ import {
 import { Guide } from './ui/guide';
 import { Celebration, type CelebrateSpec } from './ui/celebrate';
 import { firstTime, type MomentId } from './ui/moments';
+import { causeAdvice, HUNGER_LABEL, needsAdvice } from './ui/owner-advice';
+import { ownerSay } from './ui/owner-ask';
 import { fryArt } from './ui/shop-cards';
 import { recordsPanel } from './ui/records';
 import { loadCodexSeen, saveCodexSeen, unlockCodex } from './ui/codex';
@@ -336,7 +338,8 @@ async function start(): Promise<void> {
   const selChanged = memo();
   const renderSelCard = () => {
     const fish = game.state.fish.find((f) => f.id === selected);
-    if (!selChanged(fish ? `${fish.id}:${fish.alive}:${Math.round(fish.health * 50)}:${Math.round(fish.stress * 50)}:${fishName(fish)}` : '-')) return;
+    const cond = fish?.alive ? sim.fishCondition(game.state, fish) : null;
+    if (!selChanged(fish ? `${fish.id}:${fish.alive}:${Math.round(fish.health * 50)}:${Math.round(fish.stress * 50)}:${fishName(fish)}:${cond?.hunger}:${cond?.causes[0]?.key}` : '-')) return;
     selCard.classList.toggle('empty', !fish);
     if (!fish) {
       selCard.replaceChildren(h('div.card-title', {}, '觀察'), h('p.hint', {}, '點缸裡的魚，看看牠的狀況。'));
@@ -353,13 +356,20 @@ async function start(): Promise<void> {
       selCard.replaceChildren(close, h('div.card-title', {}, title), h('div.card-sub', {}, sub), h('p.dead', {}, '已經死了'), h('button.btn.small.primary', { onclick: () => sheet.open('死掉的魚', () => fishPanel(ctx, fish.id), { live: true }) }, '看原因'));
       return;
     }
+    if (!cond) return;
+    const hungry = cond.hunger === 'hungry' || cond.hunger === 'starving';
+    // 魚不太舒服、又找得到原因：多一顆有老闆頭像的「為什麼？」，老闆用一句話說原因和怎麼做
+    const ask = needsAdvice(cond)
+      ? h('button.btn.small.primary.ask-owner', { onclick: () => void ownerSay(causeAdvice(fishName(fish), cond.causes)) }, ownerImg('ask-avatar'), '為什麼？')
+      : null;
     selCard.replaceChildren(
       close,
-      h('div.card-title', {}, title),
+      h('div.card-title', {}, title, h(`span.hunger-chip.${cond.hunger}`, {}, HUNGER_LABEL[cond.hunger])),
       h('div.card-sub', {}, sub),
       bar('健康', fish.health, fish.health > 0.6 ? 'ok' : fish.health > 0.3 ? 'warn' : 'bad'),
       bar('壓力', fish.stress, fish.stress < 0.4 ? 'warn' : 'bad'),
-      h('button.btn.small', { onclick: () => sheet.open('觀察這條魚', () => fishPanel(ctx, fish.id), { live: true }) }, '詳細'),
+      bar('飽足', 1 - cond.hungerValue, hungry ? (cond.hunger === 'starving' ? 'bad' : 'warn') : 'ok'),
+      h('div.row', {}, ask, h('button.btn.small', { onclick: () => sheet.open('觀察這條魚', () => fishPanel(ctx, fish.id), { live: true }) }, '詳細')),
     );
   };
   const select = (id: number | null) => {

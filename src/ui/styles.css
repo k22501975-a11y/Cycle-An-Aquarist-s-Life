@@ -552,3 +552,13 @@ body:has(.sheet.open) .owner.open { bottom: auto; top: calc(env(safe-area-inset-
 /* 商店：老闆的長建議排到商品後面，先看到商品 */
 .shop-stack > .stack > details.advice { order: 99; }
 body > .owner { position: fixed; }
+/* 老闆問一句（取代 confirm）：疊在引導對話框上面 */
+.owner.owner-ask { z-index: 23; }
+/* 資訊卡：飢餓小標、問老闆「為什麼？」 */
+.hunger-chip { margin-left: 8px; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; vertical-align: 2px; background: rgba(79, 179, 106, 0.2); color: var(--ok); }
+.hunger-chip.hungry { background: rgba(217, 164, 58, 0.2); color: var(--warn); }
+.hunger-chip.starving { background: rgba(201, 74, 62, 0.22); color: var(--bad); }
+.selcard .row { display: flex; gap: 6px; }
+.selcard .row .btn { flex: 1; min-width: 0; white-space: nowrap; padding: 0 8px; }
+.ask-owner { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.ask-avatar { flex: none; width: 20px; height: 20px; border-radius: 50%; object-fit: cover; object-position: 50% 20%; border: 1px solid var(--gold); }
