@@ -1,0 +1,15 @@
+import { describe, expect, it } from 'vitest';
+import { seriousPlayer } from './serious-player';
+
+/** 企劃定的感受目標：賣魚加訂單第 60 天 ≥800、第 120 天 ≥3,000（mvp.md §4.3）。 */
+function check(strain: number): void {
+  const run = seriousPlayer(1, strain, true);
+  const sum = (d: number) => run.income[d] + run.orders[d];
+  expect(sum(60)).toBeGreaterThanOrEqual(800);
+  expect(sum(120)).toBeGreaterThanOrEqual(3000);
+}
+
+describe('經濟劇本：認真玩家 120 天、有接訂單（M21）', () => {
+  it('養禮服', () => check(3), 120_000);
+  it('養白子全紅', () => check(2), 120_000);
+});
