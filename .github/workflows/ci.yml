@@ -82,7 +82,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # 測試要用主控台的 window.cycle（正式版不開，#76）
       - run: npm run build
+        env:
+          VITE_DEBUG_HANDLE: '1'
       - run: node scripts/check-assets.mjs --dist
       - run: npm run build:sim
       - id: pw
