@@ -26,6 +26,15 @@ export const CRISIS_EVENTS: ReadonlySet<SimEventType> = new Set<SimEventType>([
   'power_out',
 ]);
 
+/** 自然死亡（老死、蝦脫殼失敗）不算危機：魚蝦一多就常常發生，算進來快轉會一直被打斷。 */
+const NATURAL_DEATHS = new Set(['old_age', 'molt']);
+
+/** 這個事件算不算危機。 */
+export function isCrisisEvent(e: SimEvent): boolean {
+  if (!CRISIS_EVENTS.has(e.type)) return false;
+  return !(e.type === 'fish_died' && NATURAL_DEATHS.has(e.cause ?? ''));
+}
+
 /** 水溫超出魚的適溫幾度算危險（跟狀態列溫度變紅一致）。 */
 const TEMP_MARGIN_C = 2;
 /** 總氨、亞硝酸超過多少算危險（測試劑讀到 0.5 以上）；降到一半以下才解除，避免在門檻附近一直觸發。 */
@@ -45,6 +54,53 @@ export function waterAlarms(state: TankState, prev: ReadonlySet<WaterAlarm> = ne
   if (tan > (prev.has('ammonia') ? TOXIC_MG_L / 2 : TOXIC_MG_L)) alarms.add('ammonia');
   if (no2 > (prev.has('nitrite') ? TOXIC_MG_L / 2 : TOXIC_MG_L)) alarms.add('nitrite');
   return alarms;
+}
+
+/**
+ * 危機偵測（可重用：遊戲迴圈的快轉、之後的「過一晚」都用它）。
+ * 記住每缸看過的最後一個事件和目前的水質警報；check 回報上次以後新發生的危機，
+ * sync 只更新記錄、不回報（正常速度下用，切到快轉時不會把已經知道的狀況當成新的）。
+ */
+export class CrisisWatch {
+  private seen = new Map<TankState, SimEvent | undefined>();
+  private alarms = new Map<TankState, Set<WaterAlarm>>();
+
+  constructor(tanks: readonly TankState[] = []) {
+    this.reset(tanks);
+  }
+
+  /** 從現在的狀態重新開始（讀檔、換存檔）。 */
+  reset(tanks: readonly TankState[]): void {
+    this.seen = new Map(tanks.map((t) => [t, t.events.at(-1)]));
+    this.alarms = new Map(tanks.map((t) => [t, waterAlarms(t)]));
+  }
+
+  /** 上次 check／sync 以後新發生的第一個危機；沒有回 null。 */
+  check(tanks: readonly TankState[]): Crisis | null {
+    let found: Crisis | null = null;
+    tanks.forEach((t, tank) => {
+      const events = t.events;
+      const last = events.at(-1);
+      const seen = this.seen.get(t);
+      if (last !== seen) {
+        const fresh = events.slice(seen ? events.lastIndexOf(seen) + 1 : 0);
+        this.seen.set(t, last);
+        const e = fresh.find(isCrisisEvent);
+        if (e && !found) found = { tank, reason: e.type, event: e };
+      }
+      const before = this.alarms.get(t) ?? new Set<WaterAlarm>();
+      const now = waterAlarms(t, before);
+      this.alarms.set(t, now);
+      const rose = [...now].find((a) => !before.has(a));
+      if (rose && !found) found = { tank, reason: rose };
+    });
+    return found;
+  }
+
+  /** 只更新記錄、不回報。 */
+  sync(tanks: readonly TankState[]): void {
+    this.check(tanks);
+  }
 }
 
 const ALARM_TEXT: Record<WaterAlarm, string> = {

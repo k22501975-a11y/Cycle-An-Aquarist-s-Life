@@ -49,6 +49,21 @@ describe('快轉遇到危機自動切回正常速度（#142）', () => {
     expect(game.clock.timeScale).toBe(DEFAULT_TIME_SCALE);
   });
 
+  it('老死不算危機，快轉不會被打斷', () => {
+    const game = new Game(cycledTank(), 3600);
+    const crises: string[] = [];
+    game.onCrisis((c) => crises.push(c.reason));
+    const died: (string | undefined)[] = [];
+    game.onEvent((e) => e.type === 'fish_died' && died.push(e.cause));
+    const old = game.state.fish[0];
+    old.ageDays = 3650;
+    old.health = 0.001;
+    for (let i = 0; i < 5 && died.length === 0; i++) game.advance(1000);
+    expect(died).toEqual(['old_age']);
+    expect(crises).toEqual([]);
+    expect(game.clock.timeScale).toBe(3600);
+  });
+
   it('正常速度或暫停時不會改速度；同一個狀況不會一直重複觸發', () => {
     const game = new Game(cycledTank(), DEFAULT_TIME_SCALE);
     const crises: string[] = [];
