@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">水族人生</string>
-    <string name="title_activity_main">水族人生</string>
+    <string name="app_name">Aquarist\'s Life</string>
+    <string name="title_activity_main">Aquarist\'s Life</string>
     <string name="package_name">tw.cycle.aquarist</string>
     <string name="custom_url_scheme">tw.cycle.aquarist</string>
 </resources>
