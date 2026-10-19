@@ -691,3 +691,17 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .morning-go { flex: 0 0 auto; color: var(--gold-bright); font-size: 13px; font-weight: 700; white-space: nowrap; }
 .morning-start { flex: none; margin-top: 4px; }
 @media (prefers-reduced-motion: reduce) { .night-z { animation: none; } .morning { animation: none; } }
+/* 水質測試：一項一支試管，液體顏色就是比色結果 */
+.kit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+.kit-card { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px 10px; border-radius: 16px; background: linear-gradient(180deg, rgba(120, 220, 230, 0.12), rgba(4, 22, 30, 0.35)); border: 1px solid rgba(227, 189, 109, 0.28); text-align: center; }
+.kit-tube { position: relative; width: 22px; height: 64px; border-radius: 4px 4px 11px 11px; border: 2px solid rgba(235, 248, 250, 0.75); border-top-width: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; box-shadow: inset 3px 0 0 rgba(255, 255, 255, 0.25), 0 4px 10px rgba(0, 0, 0, 0.35); }
+.kit-tube i { position: absolute; left: 0; right: 0; bottom: 0; height: 68%; background: linear-gradient(90deg, color-mix(in srgb, var(--liquid) 80%, white), var(--liquid) 45%, color-mix(in srgb, var(--liquid) 75%, black)); }
+.kit-thermo { position: relative; width: 12px; height: 56px; margin: 4px 0 4px; border-radius: 6px; border: 2px solid rgba(235, 248, 250, 0.75); background: rgba(255, 255, 255, 0.08); }
+.kit-thermo::after { content: ''; position: absolute; left: 50%; bottom: -10px; width: 18px; height: 18px; transform: translateX(-50%); border-radius: 50%; background: #e0503c; border: 2px solid rgba(235, 248, 250, 0.75); }
+.kit-thermo i { position: absolute; left: 2px; right: 2px; bottom: 0; height: 60%; border-radius: 3px; background: #e0503c; }
+.kit-name { font-size: 12.5px; color: var(--muted); }
+.kit-value { font-size: 17px; font-variant-numeric: tabular-nums; }
+.kit-value small { font-size: 11px; font-weight: 400; color: var(--muted); }
+.kit-value.ok { color: var(--ok); }
+.kit-value.warn { color: var(--warn); }
+.kit-value.bad { color: var(--bad); }

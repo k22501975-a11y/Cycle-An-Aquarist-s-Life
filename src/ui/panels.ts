@@ -1,5 +1,6 @@
 import type { SoundId } from '../audio/sounds';
 import { substrateName, tankSubstrateLook } from '../render/substrate';
+import { kitColor, type KitParam } from '../render/ops-fx';
 import {
   isShrimpSpecies,
   addBottledBacteria,
@@ -297,15 +298,24 @@ export function waterChangePanel({ game, sheet, toasts, sound, undoable }: Panel
   );
 }
 
-const READING_ROWS: Array<{ key: keyof TestKitReading; label: string; unit: string }> = [
-  { key: 'ammonia', label: '氨 NH₃/NH₄⁺', unit: 'ppm' },
-  { key: 'nitrite', label: '亞硝酸鹽 NO₂', unit: 'ppm' },
-  { key: 'nitrate', label: '硝酸鹽 NO₃', unit: 'ppm' },
-  { key: 'ph', label: 'pH', unit: '' },
-  { key: 'kh', label: 'KH', unit: 'dKH' },
+const READING_ROWS: Array<{ key: keyof TestKitReading; label: string; short: string; unit: string; kit?: KitParam }> = [
+  { key: 'ammonia', label: '氨 NH₃/NH₄⁺', short: '氨', unit: 'ppm', kit: 'ammonia' },
+  { key: 'nitrite', label: '亞硝酸鹽 NO₂', short: '亞硝酸鹽', unit: 'ppm', kit: 'nitrite' },
+  { key: 'nitrate', label: '硝酸鹽 NO₃', short: '硝酸鹽', unit: 'ppm', kit: 'nitrate' },
+  { key: 'ph', label: 'pH', short: 'pH', unit: '', kit: 'ph' },
+  { key: 'kh', label: 'KH', short: 'KH', unit: 'dKH' },
 ];
 
-/** 顯示最近一次測水的結果（測試按鈕會先測一次）。 */
+const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
+
+/** 一支試管：裝著跟缸裡一樣的比色結果（KH 沒有比色，用淡藍）。 */
+function tube(color: string): HTMLElement {
+  const t = h('span.kit-tube', { 'aria-hidden': 'true' }, h('i'));
+  t.style.setProperty('--liquid', color);
+  return t;
+}
+
+/** 顯示最近一次測水的結果（測試按鈕會先測一次）：每一項是一支試管，顏色就是比色的結果。 */
 export function testKitPanel({ game }: PanelContext): Node {
   const test = game.state.lastTest;
   if (!test) return h('p', {}, '還沒測過水。');
@@ -313,16 +323,17 @@ export function testKitPanel({ game }: PanelContext): Node {
   return h(
     'div.stack',
     {},
-    h('p.hint', {}, '試劑只能比對色卡，讀到的是大約的級距。結果會顯示在上方的狀態列：超過一天會變淡（水可能已經變了），三天後就當作不知道。養水任務要看當天的讀數。'),
     h(
-      'table.readings',
+      'div.kit-grid',
       {},
       ...READING_ROWS.map((row) => {
         const tone = READING_TONES[row.key](r[row.key]);
-        return h('tr', {}, h('td', {}, row.label), h(`td.value.${tone}`, {}, `${r[row.key]} ${row.unit}`));
+        const color = row.kit ? hex(kitColor(row.kit, r[row.key])) : '#9fd3e6';
+        return h('div.kit-card', { title: row.label }, tube(color), h('span.kit-name', {}, row.short), h(`b.kit-value.${tone}`, {}, `${r[row.key]}`, row.unit ? h('small', {}, ` ${row.unit}`) : ''));
       }),
-      h('tr', {}, h('td', {}, '水溫（溫度計）'), h('td.value', {}, `${game.state.water.tempC.toFixed(1)} °C`)),
+      h('div.kit-card', { title: '溫度計' }, h('span.kit-thermo', { 'aria-hidden': 'true' }, h('i')), h('span.kit-name', {}, '水溫'), h('b.kit-value', {}, game.state.water.tempC.toFixed(1), h('small', {}, ' °C'))),
     ),
+    advice(['試劑只能比對色卡，讀到的是大約的級距。結果會顯示在上方的狀態列：超過一天會變淡（水可能已經變了），三天後就當作不知道。養水任務要看當天的讀數。']),
   );
 }
 
