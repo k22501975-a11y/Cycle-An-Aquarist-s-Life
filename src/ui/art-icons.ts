@@ -25,7 +25,8 @@ export type ArtIcon =
   | 'owner'
   | 'bacteria'
   | 'media-transfer'
-  | 'orders';
+  | 'orders'
+  | 'scape';
 
 export function artUrl(name: ArtIcon): string {
   return `${import.meta.env.BASE_URL}art/ui/icon-${name}.webp`;

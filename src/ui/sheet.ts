@@ -31,6 +31,8 @@ export class Sheet {
   }
 
   open(title: string, render: () => Node, options: { live?: boolean } = {}): void {
+    // 換成別的面板從最上面開始看，不沿用上一個面板捲到的位置（#172）；同一個面板重畫（例如商店換分頁後買東西）保留位置
+    const fresh = !this.isOpen || this.title.textContent !== title;
     this.title.textContent = title;
     const art = sheetArt(title);
     this.icon.replaceChildren(...(art ? [artImg(art, 'sheet-art')] : []));
@@ -38,6 +40,7 @@ export class Sheet {
     this.render = render;
     this.live = options.live ?? false;
     this.refresh();
+    if (fresh) this.panel.scrollTop = this.body.scrollTop = 0;
     this.backdrop.classList.add('open');
     this.panel.classList.add('open');
   }

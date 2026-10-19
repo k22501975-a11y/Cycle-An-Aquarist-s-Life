@@ -26,6 +26,7 @@ export class Celebration {
   private spec: CelebrateSpec | null = null;
   private held = false;
   private readonly waiting: CelebrateSpec[] = [];
+  private readonly onClear: Array<() => void> = [];
 
   constructor(private readonly host: HTMLElement) {}
 
@@ -45,11 +46,18 @@ export class Celebration {
   release(): void {
     this.held = false;
     this.next();
+    if (!this.el) this.onClear.splice(0).forEach((run) => run());
   }
 
   /** 排隊中的卡（測試和除錯用）。 */
   get queued(): number {
     return this.waiting.length;
+  }
+
+  /** 沒有卡片在演、也沒有排隊的時候做 run（現在就沒有的話馬上做）。 */
+  whenClear(run: () => void): void {
+    if (!this.el && this.waiting.length === 0) run();
+    else this.onClear.push(run);
   }
 
   private next(): void {
@@ -106,7 +114,8 @@ export class Celebration {
     el.classList.remove('in');
     el.classList.add('out');
     window.setTimeout(() => el.remove(), 400);
-    // 排隊的下一張等這張退場後再上
+    // 排隊的下一張等這張退場後再上；都演完了就做等著的事
     if (this.waiting.length > 0) window.setTimeout(() => this.next(), 450);
+    else if (!this.held) window.setTimeout(() => this.onClear.splice(0).forEach((run) => run()), 400);
   }
 }
