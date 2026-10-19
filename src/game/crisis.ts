@@ -1,4 +1,4 @@
-import { DISEASE_SPECS, FISH_SPECIES, hasVisible, type DiseaseKind, type Fish, type SimEvent, type SimEventType, type TankState } from '../sim';
+import { DISEASE_SPECS, FISH_SPECIES, type DiseaseKind, type Fish, type SimEvent, type SimEventType, type TankState } from '../sim';
 
 /**
  * 快轉時遇到的危機（#142）：設備故障、停電、生病、死魚，或水質、水溫突然變危險。
@@ -44,18 +44,14 @@ function illnessOf(e: SimEvent): Illness | null {
   return null;
 }
 
-/** 缸裡（含檢疫盒）還有沒有魚正在發這個病。 */
-function stillSick(state: TankState, illness: Illness): boolean {
-  const showing = (f: Fish) => f.alive && (illness === 'ich' ? f.ich.stage === 'visible' : hasVisible(f, illness));
-  return state.fish.some(showing) || (state.quarantine?.fish.some(showing) ?? false);
+/** 缸裡（含檢疫盒）還有沒有魚帶著這個病（潛伏或發病都算：同一波還沒過）。 */
+function carrying(state: TankState, illness: Illness): boolean {
+  const has = (f: Fish) => f.alive && (illness === 'ich' ? f.ich.stage !== 'none' : (f.infections ?? []).some((i) => i.kind === illness));
+  return state.fish.some(has) || (state.quarantine?.fish.some(has) ?? false);
 }
 
-/** 治這個病的藥在缸裡（含檢疫盒）的濃度，用來看玩家有沒有下藥。 */
-function medicineFor(state: TankState, illness: Illness): number {
-  const { water, quarantine: q } = state;
-  if (illness === 'ich') return water.medication + (q?.ichMedication ?? 0);
-  return DISEASE_SPECS[illness].cure === 'antibiotic' ? (water.antibiotic ?? 0) + (q?.antibiotic ?? 0) : (water.dewormer ?? 0) + (q?.dewormer ?? 0);
-}
+/** 一個病在缸裡完全沒有魚帶著超過這麼久（遊戲小時，約白點一個潛伏期），才算這一波過了。 */
+const WAVE_OVER_HOURS = 72;
 
 /** 水溫超出魚的適溫幾度算危險（跟狀態列溫度變紅一致）。 */
 const TEMP_MARGIN_C = 2;
@@ -82,13 +78,13 @@ export function waterAlarms(state: TankState, prev: ReadonlySet<WaterAlarm> = ne
  * 危機偵測（可重用：遊戲迴圈的快轉、之後的「過一晚」都用它）。
  * 記住每缸看過的最後一個事件和目前的水質警報；check 回報上次以後新發生的危機，
  * sync 只更新記錄、不回報（正常速度下用，切到快轉時不會把已經知道的狀況當成新的）。
- * 同一缸同一種病只回報第一次發病：病在缸裡傳開時不會每多一條就打斷一次（#160）；
- * 等這個病在缸裡消失，或玩家下了治它的藥，之後再發病才重新算。
+ * 同一缸同一種病一波只回報一次：病在缸裡傳開時不會每多一條就打斷一次（#160、#165）；
+ * 下藥治療期間也不再打斷。等這個病在缸裡完全沒有魚帶著、過了 WAVE_OVER_HOURS，下一波才重新算。
  */
 export class CrisisWatch {
   private seen = new Map<TankState, SimEvent | undefined>();
   private alarms = new Map<TankState, Set<WaterAlarm>>();
-  /** 每缸已經回報過、還在缸裡的病，和回報時（或上次看到時）的藥量。 */
+  /** 每缸已經回報過、這一波還沒過的病，和最後一次看到有魚帶著的時間（遊戲小時）。 */
   private illnesses = new Map<TankState, Map<Illness, number>>();
 
   constructor(tanks: readonly TankState[] = []) {
@@ -100,17 +96,16 @@ export class CrisisWatch {
     this.seen = new Map(tanks.map((t) => [t, t.events.at(-1)]));
     this.alarms = new Map(tanks.map((t) => [t, waterAlarms(t)]));
     const all: Illness[] = ['ich', ...(Object.keys(DISEASE_SPECS) as DiseaseKind[])];
-    this.illnesses = new Map(tanks.map((t) => [t, new Map(all.filter((i) => stillSick(t, i)).map((i) => [i, medicineFor(t, i)]))]));
+    this.illnesses = new Map(tanks.map((t) => [t, new Map(all.filter((i) => carrying(t, i)).map((i) => [i, t.hours]))]));
   }
 
-  /** 病消失了，或藥量比上次高（玩家下藥了），就忘掉這個病。 */
+  /** 還有魚帶著的病更新時間；完全沒有魚帶著超過 WAVE_OVER_HOURS 就忘掉（這一波過了）。 */
   private forgetHandled(t: TankState): Map<Illness, number> {
     let known = this.illnesses.get(t);
     if (!known) this.illnesses.set(t, (known = new Map()));
-    for (const [illness, med] of known) {
-      const now = medicineFor(t, illness);
-      if (!stillSick(t, illness) || now > med + 1e-6) known.delete(illness);
-      else known.set(illness, now);
+    for (const [illness, lastSeen] of known) {
+      if (carrying(t, illness)) known.set(illness, t.hours);
+      else if (t.hours - lastSeen >= WAVE_OVER_HOURS) known.delete(illness);
     }
     return known;
   }
@@ -131,7 +126,7 @@ export class CrisisWatch {
           const illness = illnessOf(e);
           if (illness) {
             if (known.has(illness)) continue;
-            known.set(illness, medicineFor(t, illness));
+            known.set(illness, t.hours);
           }
           if (!found) found = { tank, reason: e.type, event: e };
         }
