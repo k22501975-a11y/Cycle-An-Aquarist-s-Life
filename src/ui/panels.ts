@@ -276,25 +276,46 @@ const GRADE_NOTES: Record<FoodGrade, string> = {
 export function waterChangePanel({ game, sheet, toasts, sound, undoable }: PanelContext): Node {
   let fraction = 0.3;
   let matchTemp = true;
-  const label = h('span', {}, '30%');
-  const slider = h('input', { type: 'range', min: '10', max: '80', step: '5', value: '30' }) as HTMLInputElement;
-  slider.addEventListener('input', () => {
-    fraction = Number(slider.value) / 100;
-    label.textContent = `${slider.value}%`;
+  // 一個小缸：上面要換掉的舊水標成黃濁色，下面留著的是缸裡的水，拉桿和選項都跟著動
+  const old = h('i.wc-old');
+  const pct = h('b.wc-pct');
+  const gauge = h('div.wc-tank', { 'aria-hidden': 'true' }, h('i.wc-keep'), old, pct);
+  const slider = h('input', { type: 'range', min: '10', max: '80', step: '5', value: '30', 'aria-label': '換水量' }) as HTMLInputElement;
+  const PRESETS = [
+    { pct: 20, name: '小換', note: '每週保養' },
+    { pct: 30, name: '一般', note: '推薦' },
+    { pct: 50, name: '大換', note: '水變差時' },
+  ];
+  const presetBtns = PRESETS.map((p) =>
+    h('button.wc-preset', { type: 'button', onclick: () => set(p.pct) }, h('span.wc-mini', { 'aria-hidden': 'true' }, h('i', { style: `height:${p.pct}%` })), h('b', {}, `${p.name} ${p.pct}%`), h('small', {}, p.note)),
+  );
+  const set = (value: number) => {
+    fraction = value / 100;
+    slider.value = String(value);
+    old.style.height = `${value}%`;
+    pct.textContent = `換 ${value}%`;
+    PRESETS.forEach((p, i) => presetBtns[i].classList.toggle('active', p.pct === value));
+  };
+  slider.addEventListener('input', () => set(Number(slider.value)));
+  set(30);
+  const temp = h('button.wc-temp.active', { type: 'button', 'aria-pressed': 'true' }, h('span.kit-thermo', { 'aria-hidden': 'true' }, h('i')), h('span', {}, h('b', {}, '新水對好溫度'), h('small', {}, '沒對溫，水溫驟變會讓魚緊迫')));
+  temp.addEventListener('click', () => {
+    matchTemp = !matchTemp;
+    temp.classList.toggle('active', matchTemp);
+    temp.setAttribute('aria-pressed', String(matchTemp));
   });
-  const check = h('input', { type: 'checkbox', checked: 'checked' }) as HTMLInputElement;
-  check.addEventListener('change', () => (matchTemp = check.checked));
   return h(
     'div.stack',
     {},
-    h('p.hint', {}, '換水能稀釋氨、亞硝酸鹽、硝酸鹽，並補回 KH。每週 20–30% 是好習慣。'),
-    h('label.field', {}, '換水量 ', label, slider),
-    h('label.check', {}, check, ' 新水對好溫度（沒對溫，水溫驟變會讓魚緊迫）'),
+    h('div.wc-top', {}, gauge, h('div.wc-presets', {}, ...presetBtns)),
+    h('label.field', {}, slider),
+    temp,
     button('開始換水', () => {
       doUndoable({ toasts, undoable }, () => game.act((st) => waterChange(st, fraction, matchTemp ? { tempC: st.water.tempC } : {})), `換了 ${Math.round(fraction * 100)}% 的水`);
       sound?.('water');
       sheet.close();
     }, 'primary'),
+    advice(['換水能稀釋氨、亞硝酸鹽、硝酸鹽，並補回 KH。每週 20–30% 是好習慣。']),
   );
 }
 
