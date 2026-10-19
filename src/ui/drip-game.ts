@@ -5,7 +5,8 @@ import { h } from './dom';
 
 /**
  * 對水小遊戲（design/first-10-minutes.md F5）：袋子裡的魚、上面一支滴管。
- * 按住「滴水」滴管越開越大，放開就慢慢關小；滴太快魚會緊張（顏色變淡、發抖）。
+ * 按住「滴水」滴管慢慢開大，開到綠線（魚受得了的最快滴速）就停在那裡，放開就慢慢關小（#197：一直按住不會被罵太快）。
+ * 綠線會隨著袋子水變多往右移，所以一直按住也會越滴越快；滴太快魚會緊張（顏色變淡、發抖）。
  * 差距條收到綠線就可以放魚，也可以提早放（休克大一點）。數值都在 sim/drip.ts。
  */
 
@@ -28,6 +29,12 @@ const CLOSE_PER_S = 1.4;
 /** 一格最多算幾秒、每一小步幾秒。 */
 const MAX_FRAME_S = 2;
 const STEP_S = 0.05;
+
+/** 滴管下一小步開多大：按住就往綠線（target）開，到了就停在綠線上，已經超過時照放開的速度關回來；放開就慢慢關小。 */
+export function nextValve(rate: number, holding: boolean, target: number, step: number): number {
+  if (!holding) return Math.max(0, rate - CLOSE_PER_S * step);
+  return rate < target ? Math.min(target, rate + OPEN_PER_S * step) : Math.max(target, rate - CLOSE_PER_S * step);
+}
 
 const GRADE_TEXT: Record<DripGrade, string> = {
   perfect: '對得剛剛好，牠一點都不緊張！',
@@ -131,7 +138,7 @@ export function openDripGame(opts: DripGameOptions): Promise<DripOutcome | null>
       while (dt > 0) {
         const step = Math.min(STEP_S, dt);
         dt -= step;
-        rate = holding ? Math.min(1, rate + OPEN_PER_S * step) : Math.max(0, rate - CLOSE_PER_S * step);
+        rate = nextValve(rate, holding, safeRate(session), step);
         stepDrip(session, rate, step);
       }
       render();
@@ -170,12 +177,12 @@ export function openDripGame(opts: DripGameOptions): Promise<DripOutcome | null>
       say.textContent = ready
         ? '差不多了，水質已經接近。按「放魚」把牠放進缸裡！'
         : nervous > 0.35
-          ? '太快了！牠在發抖，先放開讓牠喘口氣。'
-          : rate > safe + 0.02
-            ? '滴慢一點，指針別超過綠色那段。'
-            : session.addedMl < 1
-              ? '按住滴水，讓缸水一滴一滴進袋子。水質差越多越要慢慢來。'
-              : '很好，就這樣慢慢滴。';
+          ? '牠有點緊張，先放開讓牠喘口氣。'
+          : session.addedMl < 1
+            ? '按住滴水，滴管會開到綠線那麼大，缸水一滴一滴進袋子。'
+            : holding
+              ? '很好，就這樣按著，水越多滴管會開得越大。'
+              : '放開滴管就慢慢關小。準備好再按住繼續滴。';
     };
     render();
     raf = requestAnimationFrame(frame);
