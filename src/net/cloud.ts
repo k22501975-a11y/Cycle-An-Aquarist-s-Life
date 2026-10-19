@@ -30,8 +30,8 @@ export interface ServerAdvance extends CloudSave {
   births: number;
 }
 
-/** 上傳時伺服器的模擬檢查沒過（L2）：遊戲時間跑太快、魚的身分被改。 */
-export const SAVE_CHECK_CODES = ['time_ahead', 'identity_changed', 'gift_removed', 'shipped_fish'];
+/** 上傳時伺服器的模擬檢查沒過（L2）：遊戲時間跑太快或倒退、魚的身分被改、多了來路不明的魚。 */
+export const SAVE_CHECK_CODES = ['time_ahead', 'time_behind', 'identity_changed', 'unknown_fish', 'gift_removed', 'shipped_fish'];
 
 export interface FriendInfo {
   username: string;

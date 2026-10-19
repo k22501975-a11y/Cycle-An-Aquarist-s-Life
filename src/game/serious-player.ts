@@ -52,8 +52,9 @@ export interface SeriousRun {
  * 快生的母魚放進檢疫盒當產卵盒，小魚長到 1.6 cm 再放出來；成魚（留種的 3 條除外）賣給店家，太擠才賣中魚。
  * 錢夠又快滿了就加缸，分濾材過去、養好後移魚。新手目標獎勵（M19）還沒做，先在第 10 天直接給 800。
  * takeOrders：每天修剪水草、先交訂單（湊單的魚留著不賣），湊不齊超過 10 天的單撕掉換新。
+ * onDay：每天結束時叫一次（例如存一份檔給伺服器檢查）。
  */
-export function seriousPlayer(seed: number, strain: number, takeOrders = false): SeriousRun {
+export function seriousPlayer(seed: number, strain: number, takeOrders = false, onDay?: (day: number, tanks: TankState[]) => void): SeriousRun {
   const home = newGameState(seed);
   const tanks: TankState[] = [home];
   linkTanks(tanks);
@@ -134,6 +135,7 @@ export function seriousPlayer(seed: number, strain: number, takeOrders = false):
     }
     income[d] = total;
     orderIncome[d] = orderBoard(home).earned;
+    onDay?.(d, tanks);
   }
   return { income, orders: orderIncome, coins21, tanks: tanks.length };
 }

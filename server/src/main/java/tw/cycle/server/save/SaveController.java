@@ -38,7 +38,9 @@ import tw.cycle.server.sim.SimClient;
  *
  * <p>伺服器權威模擬（L2，有設定模擬服務時）：上傳的存檔先跟上一份比（遊戲時間不能比伺服器時鐘快、
  * 已經存在的魚身分不能被改），不對就回 422；玩家可以改用 {@code POST /api/save/advance}
- * 拿伺服器補算到現在的那份。強制覆蓋（兩台裝置選一份）時對不上也收，但幾天內不能在市場上架魚。
+ * 拿伺服器補算到現在的那份。強制覆蓋（兩台裝置選一份）時對不上也收，但幾天內不能在市場上架魚，
+ * 而且標成未驗證：之後上傳的存檔要跟覆蓋前最後一份驗證過的比對通過，才能再上架魚。
+ * 第一次上傳沒有上一份可比，也標成未驗證，通過一次一般比對才解除（#76）。
  * 模擬服務檢查不了（連不上回 503、存檔讀不出或太大回 422）時不收，強制覆蓋則照對不上處理（#74）。
  * 已經在市場出貨的魚又出現（拿出貨前的舊存檔上傳）強制覆蓋也不收，不然魚就被複製了（#75）。
  */
@@ -100,7 +102,13 @@ public class SaveController {
             if (!upload.force() || SHIPPED.equals(first.code())) throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, first.code(), first.message());
             // 強制覆蓋：可能是另一台裝置上完全不同的進度，收下，但這幾天的魚不能拿去市場賣
             save.lockMarketUntil(now.plusDays(Math.max(1, props.marketMinAccountDays())));
+            save.markUnverified();
             out.put("notice", "這份存檔跟雲端上的對不上（" + first.message() + "），覆蓋後 " + Math.max(1, props.marketMinAccountDays()) + " 天內不能在市場上架魚");
+        }
+        if (sim.enabled()) {
+            // 第一次上傳沒有上一份可比，先標成未驗證；之後通過一次比對才能在市場上架魚（#76）
+            if (save.getData() == null) save.markUnverified();
+            else if (problems.isEmpty() && save.isUnverified() && passesSinceVerified(accountId, save, file, now)) save.markVerified();
         }
         save.update(file.path("savedAt").asLong(), file.path("version").asInt(), data, now);
         saves.save(save);
@@ -116,11 +124,25 @@ public class SaveController {
     private List<SimClient.Problem> check(long accountId, CloudSave previous, JsonNode next, OffsetDateTime now, boolean force) throws Exception {
         if (!sim.enabled() || previous.getData() == null) return List.of();
         try {
-            return sim.verify(json.readTree(previous.getData()), next, Duration.between(previous.getUpdatedAt(), now).toMillis(), market.shippedFish(accountId));
+            return sim.verify(json.readTree(previous.getData()), next, Duration.between(previous.getUpdatedAt(), now).toMillis(), market.shippedFish(accountId), market.receivedFish(accountId));
         } catch (SimClient.Unavailable | HttpSimClient.BadSave e) {
             log.warn("模擬服務檢查不了這次上傳（{}）：{}", force ? "強制覆蓋，鎖市場" : "不收", e.getMessage());
             if (!force) throw e;
             return List.of(new SimClient.Problem("unverified", "伺服器這次檢查不了"));
+        }
+    }
+
+    /**
+     * 未驗證的存檔：跟強制覆蓋前最後一份驗證過的比（偽造的魚不會因為之後正常上傳一次就洗白），
+     * 第一次上傳沒有那一份，通過一次一般比對就算。檢查不了就先維持未驗證。
+     */
+    private boolean passesSinceVerified(long accountId, CloudSave save, JsonNode next, OffsetDateTime now) throws Exception {
+        if (save.getVerifiedData() == null) return true;
+        try {
+            return sim.verify(json.readTree(save.getVerifiedData()), next, Duration.between(save.getVerifiedAt(), now).toMillis(), market.shippedFish(accountId), market.receivedFish(accountId)).isEmpty();
+        } catch (SimClient.Unavailable | HttpSimClient.BadSave e) {
+            log.warn("模擬服務檢查不了未驗證的存檔，先維持未驗證：{}", e.getMessage());
+            return false;
         }
     }
 

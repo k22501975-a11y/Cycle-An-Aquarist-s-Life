@@ -1,16 +1,18 @@
 import { catchUp, parseSave, serializeSave, type SaveFile } from '../game/save';
-import { DEFAULT_TIME_SCALE, marketItem, type Fish, type TankState } from '../sim';
+import { DEFAULT_TIME_SCALE, ID_BLOCK, marketItem, type Fish, type TankState } from '../sim';
+import { canonical, unexplainedFish, type ReceivedFish } from './provenance';
 
 /**
  * 伺服器權威模擬（L2）：Spring Boot 把存檔丟過來，這裡用跟遊戲同一份模擬程式計算。
  * - advance：離線補算到伺服器的現在時間（玩家改裝置時鐘也沒用）
- * - verify：上傳的存檔跟伺服器上一份比，遊戲時間不能跑得比現實快，已經存在的魚身分（基因、品種、性別）不能被改，
+ * - verify：上傳的存檔跟伺服器上一份比，每一缸的遊戲時間不能跑得比現實快、也不能倒退，
+ *   已經存在的魚身分（基因、品種、性別）不能被改，新出現的魚要說得出從哪裡來（provenance.ts），
  *   已經在市場出貨的魚不能又出現
  * - inspect：找出存檔裡的某一條魚（市場上架用伺服器這份的資料，不信任遊戲端送來的）
  */
 
 export interface Problem {
-  code: 'time_ahead' | 'identity_changed' | 'gift_removed' | 'shipped_fish';
+  code: 'time_ahead' | 'time_behind' | 'identity_changed' | 'unknown_fish' | 'gift_removed' | 'shipped_fish';
   message: string;
 }
 
@@ -28,6 +30,11 @@ function load(raw: unknown): SaveFile {
 
 function tanksOf(file: SaveFile): TankState[] {
   return [file.state, ...(file.tanks ?? [])];
+}
+
+/** 缸的編號區段：每一缸的魚、水草編號從自己的區段發（household.ts）。 */
+function tankKey(t: TankState): number {
+  return Math.floor(t.nextId / ID_BLOCK);
 }
 
 function allFish(file: SaveFile): Fish[] {
@@ -62,23 +69,43 @@ export function advance(raw: unknown, now: number): AdvanceResult {
 
 /**
  * 檢查上傳的存檔：previous 是伺服器上一份，elapsedMs 是伺服器收到上一份到現在的現實時間，
- * shipped 是這個玩家已經在市場出貨的魚（市場用的魚資料；拿出貨前的舊存檔上傳，魚會又回來，#75）。
+ * shipped 是這個玩家已經在市場出貨的魚（市場用的魚資料；拿出貨前的舊存檔上傳，魚會又回來，#75），
+ * received 是在市場買到、已經到貨的魚（新出現的魚可以是這些）。
  * 回傳發現的問題（空的代表沒問題）。
  */
-export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number, shipped: readonly ShippedFish[] = []): Problem[] {
+export function verify(
+  previousRaw: unknown,
+  nextRaw: unknown,
+  elapsedMs: number,
+  shipped: readonly ShippedFish[] = [],
+  received: readonly ReceivedFish[] = [],
+): Problem[] {
   const prev = load(previousRaw);
   const next = load(nextRaw);
   const problems: Problem[] = [];
 
   // 遊戲時鐘由伺服器統一：遊戲時間最多比現實 × 7 多一點（暫停時會少，沒關係）
   const allowed = (Math.max(0, elapsedMs) / 3_600_000) * DEFAULT_TIME_SCALE * TIME_SLACK_RATIO + TIME_SLACK_HOURS;
-  const ran = next.state.hours - prev.state.hours;
-  if (ran > allowed) {
+  // 每一缸都看（缸用編號區段認，賣掉一缸後面的缸不會錯位）；新買的缸從主缸的時間算起
+  const prevTanks = new Map(tanksOf(prev).map((t) => [tankKey(t), t]));
+  let ahead = 0;
+  let behind = 0;
+  for (const t of tanksOf(next)) {
+    const old = prevTanks.get(tankKey(t));
+    ahead = Math.max(ahead, t.hours - (old ?? prev.state).hours - allowed);
+    if (old) behind = Math.max(behind, old.hours - t.hours);
+  }
+  if (ahead > 0) {
     problems.push({
       code: 'time_ahead',
-      message: `遊戲時間跑得比伺服器快（多了約 ${Math.round(ran - allowed)} 個遊戲小時），可能是裝置的時間不對`,
+      message: `遊戲時間跑得比伺服器快（多了約 ${Math.round(ahead)} 個遊戲小時），可能是裝置的時間不對`,
     });
   }
+  // 時間倒退：拿比雲端舊的存檔蓋上去（回溯）
+  if (behind > TIME_SLACK_HOURS) {
+    problems.push({ code: 'time_behind', message: `這份存檔比雲端上的舊（早了約 ${Math.round(behind)} 個遊戲小時）` });
+  }
+  const ran = next.state.hours - prev.state.hours;
 
   // 已經存在的魚：身分不會變（基因、品種、性別、第幾代）；老闆送的魚不能變成可以賣的
   const before = new Map(allFish(prev).map((f) => [f.id, f]));
@@ -87,6 +114,11 @@ export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number
     if (!old) continue;
     if (!sameIdentity(old, f)) problems.push({ code: 'identity_changed', message: `#${f.id} 這條魚的身分（品種、性別或基因）跟伺服器上的不一樣` });
     if (old.gift && !f.gift) problems.push({ code: 'gift_removed', message: `#${f.id} 是老闆送的魚，不能改成可以賣` });
+  }
+
+  // 新出現的魚：店裡買的、市場到貨的、缸裡生的才說得通（#76）
+  for (const f of unexplainedFish(allFish(prev), allFish(next), ran, received)) {
+    problems.push({ code: 'unknown_fish', message: `#${f.id} 這條魚不是店裡買的、市場買的，也對不上缸裡哪條母魚生的` });
   }
 
   // 編號和身分都一樣才是同一條：新遊戲或換裝置從頭玩，編號會重來，同編號的是另一條魚
@@ -110,15 +142,6 @@ type Identity = Pick<ShippedFish, 'species' | 'sex' | 'generation' | 'genome'>;
 /** 魚的身分：品種、性別、第幾代、基因（基因不看欄位順序）。 */
 function sameIdentity(a: Identity, b: Identity): boolean {
   return a.species === b.species && a.sex === b.sex && (a.generation ?? 0) === (b.generation ?? 0) && canonical(a.genome ?? null) === canonical(b.genome ?? null);
-}
-
-function canonical(v: unknown): string {
-  if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`;
-  if (v && typeof v === 'object') {
-    const o = v as Record<string, unknown>;
-    return `{${Object.keys(o).filter((k) => o[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${canonical(o[k])}`).join(',')}}`;
-  }
-  return JSON.stringify(v ?? null);
 }
 
 export interface InspectResult {
