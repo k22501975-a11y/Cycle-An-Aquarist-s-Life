@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { PAINTED, paintedKey, paintedTexture, SCENERY, sceneryImage } from './painted';
+import { newGameState } from '../game/game';
+import { addFish, addPlant, addSnail, FISH_SPECIES, HARDSCAPE, PLANT_SPECIES, type FishSpeciesId, type GrowthStage, type PlantSpeciesId } from '../sim';
+import { ART_FILES, PAINTED, paintedKey, paintedTexture, SCENERY, sceneryImage, startupArt } from './painted';
 import { GUPPY_LOOKS } from './strains';
 
 describe('精繪素材對應', () => {
@@ -38,5 +40,46 @@ describe('精繪素材對應', () => {
   it('素材沒載入時拿不到貼圖（畫面會退回程式繪製版）', () => {
     expect(paintedTexture('guppy-male-bluegrass')).toBeNull();
     expect(paintedTexture(null)).toBeNull();
+  });
+});
+
+describe('開機只先載當前缸用到的圖（Issue #81）', () => {
+  it('新遊戲只要缸背景和石英砂，不用等全部素材', () => {
+    const need = startupArt([newGameState(1)]);
+    expect([...need].sort()).toEqual(['bg-back', 'sub-sand-side', 'sub-sand-tile']);
+    expect(ART_FILES.length).toBeGreaterThan(70);
+  });
+
+  it('缸裡有的魚、蝦、螺、水草、造景，各種外觀的圖都在開機清單裡', () => {
+    const species = Object.keys(FISH_SPECIES) as FishSpeciesId[];
+    for (const sp of species) {
+      const s = newGameState(1);
+      addFish(s, sp);
+      const need = startupArt([s]);
+      const stages: (GrowthStage | undefined)[] = [undefined, 'fry', 'juvenile', 'subadult', 'coloring', 'adult', 'old'];
+      for (const form of ['male', 'female', 'juvenile'] as const)
+        for (const gravid of [false, true])
+          for (const stage of stages)
+            for (const variant of [0, 1, 2, 3, 4]) {
+              const key = paintedKey(sp, form, variant, gravid, stage);
+              if (key) expect(need, `${sp} ${form} ${stage}`).toContain(key);
+            }
+    }
+    const s = newGameState(1);
+    for (const p of Object.keys(PLANT_SPECIES) as PlantSpeciesId[]) addPlant(s, p);
+    addSnail(s, 'nerite');
+    s.equipment.hardscape = [HARDSCAPE.seiryu, HARDSCAPE.driftwood];
+    const need = startupArt([s]);
+    for (const p of Object.keys(PLANT_SPECIES)) if (SCENERY[`plant-${p}`]) expect(need).toContain(`plant-${p}`);
+    expect(need).toContain('snail-nerite-zebra');
+    expect(need).toContain('rock-1');
+    expect(need).toContain('wood-1');
+  });
+
+  it('其他缸（多缸）用到的圖也算進去', () => {
+    const a = newGameState(1);
+    const b = newGameState(2);
+    addFish(b, 'betta');
+    expect(startupArt([a, b])).toContain('betta-female');
   });
 });
