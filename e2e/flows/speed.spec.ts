@@ -31,7 +31,6 @@ test('雲端模式：速度選單只有暫停和正常速度', async ({ page }) 
 
 /** 邊界：登入前開著快轉（存檔記著 6時/秒），登入雲端後不能還在快轉。 */
 test('雲端模式：存檔裡記著的快轉速度不會帶進雲端模式', async ({ page }) => {
-  test.fail(true, '已知問題 #112：雲端模式沒有限制存檔裡的時間倍率；修好後拿掉這行');
   await page.addInitScript((session) => localStorage.setItem('cycle.cloud.v1', session), CLOUD_SESSION);
   await startGame(page);
   await page.evaluate(() => {
