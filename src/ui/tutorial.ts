@@ -12,6 +12,10 @@ export const OWNER_NAME = '阿德老闆';
 export interface Quest {
   id: string;
   title: string;
+  /** 任務小卡上的短標題（長標題在小卡上會換成好幾行、遮住缸）。 */
+  short?: string;
+  /** 任務小卡上的進度條（0–1）。 */
+  meter?: (state: TankState) => number;
   /** 老闆開場說的話（分段）。 */
   lines: string[];
   /** 完成時老闆說的話。 */
@@ -21,7 +25,11 @@ export interface Quest {
   progress?: (state: TankState) => string | null;
   /** 任務卡上的一行提示（要等很久的任務才有）。 */
   hint?: string;
+  /** 任務要去商店買東西時，商店直接開在這一頁（不然打開是「魚」，找不到水草）。 */
+  shopTab?: QuestShopTab;
 }
+
+export type QuestShopTab = 'fish' | 'snails' | 'plants' | 'gear';
 
 const living = (s: TankState) => s.fish.filter((f) => f.alive);
 
@@ -32,6 +40,7 @@ export const QUESTS: Quest[] = [
     lines: ['歡迎！我是隔壁水族館的阿德。這個缸剛開，水裡還沒有能分解魚便便的硝化菌。', '先到「商店」買幾株水草種下去吧。水草會吸收養分，讓新缸穩定得快一點。'],
     done: '種得不錯！水草也會給之後的小魚躲藏的地方。',
     check: (s) => s.plants.length > 0,
+    shopTab: 'plants',
   },
   {
     id: 'test',
@@ -46,6 +55,7 @@ export const QUESTS: Quest[] = [
     lines: ['硝化菌要靠魚的排泄物（氨）才長得起來。先放少量好養的魚，例如 2～3 條孔雀魚。', '別一次放太多，新缸的細菌還處理不了那麼多廢物。'],
     done: '歡迎新住民！牠們剛運到會有點緊張，過一陣子就會放鬆了。',
     check: (s) => living(s).length > 0,
+    shopTab: 'fish',
   },
   {
     id: 'feed',
@@ -64,6 +74,7 @@ export const QUESTS: Quest[] = [
   {
     id: 'cycled',
     title: '養水完成：硝化菌長好、氨 0、亞硝 0',
+    short: '養水完成',
     lines: [
       '接下來每天測水，看到氨或亞硝酸鹽就換水。',
       '硝化菌長起來的途中，亞硝酸鹽會先冒出來一陣子，接著才降回 0。等硝化菌長好、氨和亞硝酸鹽都測到 0，缸子就養好了。',
@@ -76,7 +87,9 @@ export const QUESTS: Quest[] = [
       return !!r && living(s).length > 0 && r.ammonia === 0 && r.nitrite === 0 && s.hours - s.lastTest!.hours < 24 && isCycled(s);
     },
     progress: cycleProgress,
+    meter: (s) => Math.max(0, Math.min(1, cycleMaturity(s))),
     hint: '通常 3～7 天，加硝化菌液 1～3 天',
+    shopTab: 'gear',
   },
   {
     id: 'babies',
@@ -164,6 +177,11 @@ export const TUTORIAL_KEY = 'cycle.tutorial.v1';
 
 export function newProgress(): TutorialProgress {
   return { step: 0, skipped: false, seenTips: [] };
+}
+
+/** 現在的任務要去商店哪一頁；沒有就 null（照原本的「魚」）。 */
+export function questShopTab(p: TutorialProgress): QuestShopTab | null {
+  return currentQuest(p)?.shopTab ?? null;
 }
 
 export function currentQuest(p: TutorialProgress): Quest | null {

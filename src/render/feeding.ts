@@ -17,6 +17,24 @@ export interface Pellet {
   wiggle?: boolean;
 }
 
+/**
+ * 畫面上要畫幾片飼料：一小撮（2～4 mg）也要看得到好幾片，不然新手照老闆說的少量餵根本看不到飼料；
+ * 份量多時增加得慢一點，最多 80 片。份量越多片數一定越多（吃掉一份就少一片）。
+ */
+export function visiblePellets(foodMg: number): number {
+  if (foodMg <= 0) return 0;
+  return Math.min(80, Math.ceil(3 * Math.sqrt(foodMg) + foodMg / 4));
+}
+
+/** 剛撒飼料後的搶食熱度（1 → 0）：魚就算不太餓也會衝上去搶，之後慢慢冷下來。 */
+export const FRENZY_SECONDS = 7;
+
+export function frenzyLevel(sinceDrop: number): number {
+  if (sinceDrop < 0 || sinceDrop >= FRENZY_SECONDS) return 0;
+  const k = sinceDrop / FRENZY_SECONDS;
+  return 1 - k * k;
+}
+
 /** 一把飼料撒下去：集中在落點附近，各片漂浮時間不同。 */
 export function scatterPellets(n: number, dropX: number, surface: number, spread: number, rand: () => number): Pellet[] {
   const out: Pellet[] = [];

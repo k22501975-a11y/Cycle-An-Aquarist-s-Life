@@ -31,3 +31,34 @@ export function toneImage(data: Uint8ClampedArray, sat: number, bright: number):
     data[i + 2] = Math.round(b * 255);
   }
 }
+
+/**
+ * 邊緣光（畫面評測 V15）：寫實的魚圖放進插畫風的缸裡顯得灰暗。
+ * 身體上緣（上方幾個像素是透明的地方）加一道偏青的亮光，像水面的光打在背上，魚就從背景跳出來。
+ * width 是邊緣光的厚度（像素），strength 0–1。
+ */
+export function rimLight(data: Uint8ClampedArray, w: number, h: number, width: number, strength: number): void {
+  const alphaAt = (x: number, y: number) => (x < 0 || y < 0 || x >= w || y >= h ? 0 : data[(y * w + x) * 4 + 3]);
+  const lit = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const a = alphaAt(x, y);
+      if (a < 128) continue;
+      // 往上找第一個透明的像素：越靠近邊緣越亮
+      for (let d = 1; d <= width; d++) {
+        if (alphaAt(x, y - d) < 64) {
+          lit[y * w + x] = 1 - (d - 1) / width;
+          break;
+        }
+      }
+    }
+  }
+  for (let i = 0; i < lit.length; i++) {
+    const k = lit[i] * strength;
+    if (k <= 0) continue;
+    const p = i * 4;
+    data[p] = Math.round(data[p] + (210 - data[p]) * k);
+    data[p + 1] = Math.round(data[p + 1] + (245 - data[p + 1]) * k);
+    data[p + 2] = Math.round(data[p + 2] + (255 - data[p + 2]) * k);
+  }
+}

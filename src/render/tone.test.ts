@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { quantizeTone, toneImage, toneRGB } from './tone';
+import { quantizeTone, rimLight, toneImage, toneRGB } from './tone';
 
 describe('色調烘進貼圖（I1）', () => {
   it('不調色時顏色不變；飽和度 -1 變灰；提高飽和度讓主色更突出', () => {
@@ -21,5 +21,18 @@ describe('色調烘進貼圖（I1）', () => {
 
   it('色調量化：很接近的值共用同一張圖', () => {
     expect(quantizeTone(0.43, 1.031)).toEqual(quantizeTone(0.41, 1.039));
+  });
+});
+
+describe('邊緣光', () => {
+  it('只有身體上緣變亮，裡面和透明的地方不動', () => {
+    // 4×4：上面一行透明，下面三行不透明的灰
+    const w = 4, h = 4;
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let y = 1; y < h; y++) for (let x = 0; x < w; x++) data.set([100, 100, 100, 255], (y * w + x) * 4);
+    rimLight(data, w, h, 1, 0.5);
+    expect(data[(1 * w + 1) * 4 + 2]).toBeGreaterThan(100);
+    expect(data[(3 * w + 1) * 4 + 2]).toBe(100);
+    expect(data[(0 * w + 1) * 4 + 3]).toBe(0);
   });
 });

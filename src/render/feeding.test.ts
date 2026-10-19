@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { biteKick, BITE_SECONDS, pickEaten, ripple, scatterPellets, stepPellet } from './feeding';
+import { biteKick, BITE_SECONDS, frenzyLevel, FRENZY_SECONDS, pickEaten, ripple, scatterPellets, stepPellet, visiblePellets } from './feeding';
 
 const rand = (() => { let s = 7; return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646; })();
 
@@ -41,5 +41,26 @@ describe('餵食演出', () => {
     expect(b.r).toBeGreaterThan(a.r);
     expect(b.alpha).toBeLessThan(a.alpha);
     expect(ripple(5, 40).alpha).toBe(0);
+  });
+});
+
+describe('飼料看得到、魚會搶', () => {
+  it('一小撮也畫好幾片，份量越多片數越多，最多 80 片', () => {
+    expect(visiblePellets(0)).toBe(0);
+    expect(visiblePellets(2)).toBeGreaterThanOrEqual(5);
+    let prev = 0;
+    for (let mg = 0.5; mg < 600; mg += 0.5) {
+      const n = visiblePellets(mg);
+      expect(n).toBeGreaterThanOrEqual(prev);
+      prev = n;
+    }
+    expect(visiblePellets(10000)).toBe(80);
+  });
+
+  it('剛撒下去最熱，幾秒後冷下來', () => {
+    expect(frenzyLevel(0)).toBe(1);
+    expect(frenzyLevel(FRENZY_SECONDS / 2)).toBeLessThan(1);
+    expect(frenzyLevel(FRENZY_SECONDS)).toBe(0);
+    expect(frenzyLevel(-1)).toBe(0);
   });
 });
