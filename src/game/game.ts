@@ -14,14 +14,14 @@ import {
   type TankState,
 } from '../sim';
 
-/** 開發用的時間倍率選項（現實 1 秒 = 遊戲幾秒）。7 是正式的基準倍率。 */
+/** 時間倍率選項（現實 1 秒 = 遊戲幾秒）。7 是正式的基準倍率。short 顯示在主畫面的速度按鈕上，name 是選單裡的說明。 */
 export const SPEED_OPTIONS = [
-  { scale: 0, label: '暫停' },
-  { scale: 7, label: '×7' },
-  { scale: 60, label: '1分/秒' },
-  { scale: 600, label: '10分/秒' },
-  { scale: 3600, label: '1時/秒' },
-  { scale: 21600, label: '6時/秒' },
+  { scale: 0, label: '暫停', short: '暫停', name: '暫停時間' },
+  { scale: 7, label: '×7', short: '×7', name: '正常速度（現實 1 天＝遊戲 1 週）' },
+  { scale: 60, label: '1分/秒', short: '1分/秒', name: '快轉：每秒 1 分鐘' },
+  { scale: 600, label: '10分/秒', short: '10分/秒', name: '快轉：每秒 10 分鐘' },
+  { scale: 3600, label: '1時/秒', short: '1時/秒', name: '快轉：每秒 1 小時' },
+  { scale: 21600, label: '6時/秒', short: '6時/秒', name: '快轉：每秒 6 小時' },
 ] as const;
 
 /** 每個畫面最多跑幾個 tick，避免分頁切回來時一次補算太多而卡住。 */

@@ -2,9 +2,10 @@ import { Application } from 'pixi.js';
 import { AudioEngine } from './audio/engine';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
 import { eventSound } from './audio/sounds';
-import { applySeason, Game, newGameState, SPEED_OPTIONS } from './game/game';
+import { applySeason, Game, newGameState } from './game/game';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
 import { menuTile } from './ui/art-icons';
+import { SpeedControl } from './ui/speed-control';
 import { installCrashGuard } from './ui/crash';
 import { Analytics } from './net/analytics';
 import { isNativeApp, saveTextFile } from './ui/native';
@@ -417,6 +418,15 @@ async function start(): Promise<void> {
   // ---- 狀態列：時間、水質膠囊（沒測過顯示「?」）、待辦、選單 ----
   const clockValue = h('span.value');
   const clock = h('div.time', {}, h('span.label', {}, '水族人生'), clockValue);
+  // 時鐘旁的速度按鈕：暫停、正常、快轉（雲端模式只能暫停或正常）
+  const speed = new SpeedControl({
+    get: () => game.clock.timeScale,
+    set: (scale) => {
+      game.clock.timeScale = scale;
+      save();
+    },
+    cloud: () => !!cloud.session,
+  });
   const coinsValue = h('b');
   const coinsBtn = h('button.coins', { 'aria-label': '錢包', title: '錢包：點一下打開商店', onclick: () => sheet.open('商店', () => shopPanel(ctx)) }, h('i.coin'), coinsValue);
   const renderCoins = () => {
@@ -629,30 +639,7 @@ async function start(): Promise<void> {
       h('p.hint', {}, '燈號除了顏色也用形狀區分：圓形正常、三角形注意、菱形危險。'),
       h('h3', {}, '時間'),
       h('p.hint', {}, '遊戲時間是現實的 7 倍：現實 1 天＝遊戲 1 週，現實 1 小時＝遊戲 7 小時。關掉網頁時時間照常前進，下次打開會補算（最多兩週）。'),
-      h(
-        'details.dev',
-        {},
-        h('summary', {}, '開發用：加快時間'),
-        h(
-          'div.tabs',
-          {},
-          // 登入雲端後遊戲時鐘由伺服器統一（L2）：只能暫停，不能加快
-          ...SPEED_OPTIONS.filter((opt) => !cloud.session || opt.scale <= sim.DEFAULT_TIME_SCALE).map((opt) =>
-            h(
-              `button.tab${game.clock.timeScale === opt.scale ? '.active' : ''}`,
-              {
-                onclick: () => {
-                  game.clock.timeScale = opt.scale;
-                  save();
-                  sheet.refresh();
-                },
-              },
-              opt.label,
-            ),
-          ),
-        ),
-        cloud.session ? h('p.hint', {}, '登入雲端後時間由伺服器統一，不能加快。') : null,
-      ),
+      h('p.hint', {}, '暫停和快轉在主畫面時鐘旁邊的速度按鈕。'),
       h('h3', {}, '存檔'),
       h('div.row', {}, h('button.btn', { onclick: exportSave }, '匯出存檔'), h('button.btn', { onclick: importSave }, '從檔案匯入')),
       h('p.hint', {}, '遊戲每 10 秒自動存檔，每 30 分鐘自動備份一次；存檔壞掉時會自動用備份還原。換手機時可以匯出成檔案帶過去。'),
@@ -701,7 +688,7 @@ async function start(): Promise<void> {
     );
   const menuBtn = h('button.hud-btn', { onclick: () => sheet.open('選單', menu), 'aria-label': '選單' }, icon(ICONS.menu));
   hud.classList.add('glass');
-  hud.append(clock, coinsBtn, tankBtn, h('span.hud-sep'), caps, todoBtn, menuBtn);
+  hud.append(clock, speed.el, coinsBtn, tankBtn, h('span.hud-sep'), caps, todoBtn, menuBtn);
 
   // ---- 下方櫃台：待辦卡｜圓形工具列｜選取卡 ----
   const tools = h('div.tools.glass');
@@ -916,6 +903,7 @@ async function start(): Promise<void> {
     view.update(visiting?.state ?? game.state, ticker.deltaMS / 1000);
 
     clockValue.textContent = `${clockLabel(game.state.hours)}${game.clock.timeScale === 0 ? '・暫停' : ''}`;
+    speed.render();
     netBtn.classList.toggle('alert', game.state.fish.some((f) => !f.alive));
 
     // 每半秒更新一次卡片與數值

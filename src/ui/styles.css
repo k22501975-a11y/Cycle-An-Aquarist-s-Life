@@ -403,3 +403,24 @@ details.danger[open] { display: flex; flex-direction: column; gap: 8px; }
   .menu-art { width: 44px; height: 44px; }
   .menu-tile { padding: 6px 8px 6px 6px; }
 }
+
+/* 時間速度按鈕（speed-control.ts）：時鐘旁邊，點開選暫停、正常、快轉 */
+.speed { position: relative; flex: 0 0 auto; }
+.speed-btn { display: inline-flex; align-items: center; gap: 6px; min-width: 44px; min-height: 40px; padding: 4px 12px 4px 9px; border-radius: 999px; background: linear-gradient(160deg, rgba(63, 133, 131, 0.35), rgba(10, 36, 46, 0.6)); border: 1px solid var(--line); color: var(--text); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14); }
+.speed-btn:hover { border-color: var(--gold); }
+.speed-btn:active { transform: scale(0.95); }
+.speed-btn .speed-ico { color: var(--gold-bright); }
+.speed-btn.paused { border-color: rgba(255, 207, 90, 0.8); }
+.speed-btn.paused .speed-ico { color: var(--warn); animation: blink 1.6s steps(2) infinite; }
+.speed-btn.fast .speed-ico { color: #8fe0e6; }
+.speed-ico { display: inline-block; width: 20px; height: 18px; flex: 0 0 auto; }
+.speed-ico svg { display: block; }
+.speed-pop { position: absolute; z-index: 15; top: calc(100% + 8px); left: 0; min-width: 236px; display: none; flex-direction: column; gap: 4px; padding: 8px; border-radius: 16px; background: var(--glass-strong); }
+.speed-pop.open { display: flex; animation: rise 0.18s ease-out; }
+.speed-opt { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 12px; border-radius: 12px; background: transparent; border: 1px solid transparent; color: var(--text); font-size: 14px; text-align: left; white-space: nowrap; }
+.speed-opt:hover { background: rgba(255, 255, 255, 0.06); }
+.speed-opt.active { border-color: var(--gold); background: rgba(227, 189, 109, 0.12); color: var(--gold-bright); }
+.speed-opt .speed-ico { color: var(--gold); }
+.speed-note { font-size: 12px; padding: 4px 8px 2px; }
+@media (max-width: 640px) { .speed-btn { min-height: 36px; padding: 3px 9px 3px 7px; font-size: 12px; } }
+@media (orientation: landscape) and (max-height: 500px) { .speed-btn { min-height: 44px; padding: 2px 10px 2px 8px; font-size: 13px; } }
