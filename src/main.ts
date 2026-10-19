@@ -873,6 +873,8 @@ async function start(): Promise<void> {
   stage.append(tankLabel);
   const guide = new Guide(stage, store, (id) => audio.play(id), () => requestAnimationFrame(() => measure()));
   guide.openShop = (tab) => openShop(tab);
+  guide.reward = (id, coins) => game.actAll((tanks) => sim.claimQuestReward(tanks[0], id, coins));
+  guide.goalsChanged = () => game.actAll(() => undefined);
   const measure = () => {
     const stageRect = stage.getBoundingClientRect();
     const top = hud.getBoundingClientRect().bottom - stageRect.top;
@@ -1181,8 +1183,9 @@ async function start(): Promise<void> {
     speed.render();
     netBtn.classList.toggle('alert', game.state.fish.some((f) => !f.alive));
 
-    // 每半秒更新一次卡片與數值
-    refreshTimer += ticker.deltaMS;
+    // 每半秒更新一次卡片與數值。用現實經過的時間：deltaMS 每幀最多只算 100ms，
+    // 畫面很卡時會變成好幾秒才更新一次（任務、待辦、金幣跟著慢；新手任務流程測試在 CI 上因此卡住）
+    refreshTimer += elapsedMS;
     if (refreshTimer > 500) {
       refreshTimer = 0;
       for (const t of game.tanks) applySeason(t);
@@ -1194,7 +1197,7 @@ async function start(): Promise<void> {
       renderCoins();
       renderOrders();
       renderTankChip();
-      guide.update(game.state);
+      guide.update(game.state, game.tanks);
       celebrateStrains();
       for (const entry of unlockCodex(codexSeen, game.state)) {
         saveCodexSeen(store, codexSeen);

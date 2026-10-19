@@ -3,6 +3,7 @@ import {
   addFish,
   buyTank,
   buyTankRefusal,
+  goalState,
   economy,
   FREE_SLOTS,
   ID_BLOCK,
@@ -57,7 +58,14 @@ describe('多缸與缸位', () => {
     expect(buyTank(tanks, 'nano20')).toBeNull();
     const poor = [newGameState(1)];
     economy(poor[0]).coins = 100;
-    expect(buyTankRefusal(poor, 'std90')).toBe('錢不夠');
+    expect(buyTankRefusal(poor, 'std40')).toBe('錢不夠');
+  });
+
+  it('90L 缸要先完成「穩定 14 天」的目標才買得到；舊存檔已經有 90L 的不鎖', () => {
+    const tanks = rich();
+    expect(buyTankRefusal(tanks, 'std90')).toContain('穩定');
+    goalState(tanks).unlocked.push('std90');
+    expect(buyTankRefusal(tanks, 'std90')).toBeNull();
   });
 
   it('每缸的 id 從不同區段開始，魚換缸不會撞號', () => {

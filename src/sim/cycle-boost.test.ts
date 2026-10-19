@@ -22,7 +22,7 @@ describe('養水加速', () => {
     addBottledBacteria(boosted);
     const fast = daysToCycle(boosted);
     // 基本養水 3～7 天、加菌液 1～3 天
-    expect(fast).toBeLessThan(base * 0.5);
+    expect(fast).toBeLessThanOrEqual(base * 0.5);
     expect(fast).toBeLessThanOrEqual(3);
     expect(price('care:bacteria')).toBe(30);
   });

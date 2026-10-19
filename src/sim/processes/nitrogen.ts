@@ -4,6 +4,11 @@ import { hardscapeBacteriaCapacity } from './hardscape';
 
 /** 半飽和常數（mg/L）：受質濃度在此時細菌以一半速度工作。 */
 const HALF_SATURATION = 0.2;
+/**
+ * 族群成長的半飽和常數（mg/L），比分解的低：廢物很少（1 株水草、一公兩母、一天一小撮）時菌也長得起來，
+ * 新缸約第 5 天養好；一次放太多魚、餵太多，氨還是來不及處理（design/mvp.md §4.6）。
+ */
+const GROWTH_HALF_SATURATION = 0.04;
 /** 最大比生長率（每小時）。少量魚、正常餵食時新缸約 3～7 天養好（YenWel 2026-10-19 定案）；一次放太多魚還是會氨爆。 */
 const AOB_GROWTH = 0.12;
 const NOB_GROWTH = 0.14;
@@ -69,8 +74,10 @@ export function updateNitrogen(state: TankState, dt: number): void {
   );
 
   // 族群成長：有食物才長，受濾材容量限制；容量變小（過濾器停機）時會死掉一部分。
-  bacteria.aob = grow(bacteria.aob, AOB_GROWTH * tanSat * activity, capacity, dt);
-  bacteria.nob = grow(bacteria.nob, NOB_GROWTH * no2Sat * activity, capacity, dt);
+  const tanGrowth = water.tan / (GROWTH_HALF_SATURATION + water.tan);
+  const no2Growth = water.no2 / (GROWTH_HALF_SATURATION + water.no2);
+  bacteria.aob = grow(bacteria.aob, AOB_GROWTH * tanGrowth * activity, capacity, dt);
+  bacteria.nob = grow(bacteria.nob, NOB_GROWTH * no2Growth * activity, capacity, dt);
 }
 
 function grow(population: number, growthRate: number, capacity: number, dt: number): number {

@@ -2,6 +2,7 @@ import { isJuvenile, isLightOn, recordEvent, type Fish, type TankState } from '.
 import { FISH_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 import { phenotype, type GuppyPhenotype } from './genetics';
 import { updateOrders, type OrderBoard } from './orders';
+import type { GoalState } from './goals';
 
 /**
  * 經濟（GAME_DESIGN 第 7 節、market-and-breeding.md §3.1）：
@@ -83,6 +84,12 @@ export interface Economy {
   starterPackHours?: number;
   /** 下一個新缸用的 id 區段（每缸的魚和水草 id 從不同區段開始，魚換缸也不會撞號）。 */
   nextTankBlock?: number;
+  /** 新手教學之後的目標與解鎖（M19）；舊存檔沒有，第一次檢查時建立。 */
+  goals?: GoalState;
+  /** 累計賣給店家幾條魚。 */
+  fishSold?: number;
+  /** 已經領過獎勵的新手任務（任務進度存在裝置上，換裝置、匯入存檔重跑教學也不能再領）。 */
+  questRewards?: string[];
   /** 店家訂單板（M21）；舊存檔沒有，第一次更新時掛上。 */
   orders?: OrderBoard;
   /** 用儲值點數買的商城道具（背包）：只是伺服器庫存的副本（docs/ledger.md §4），打開商城、用道具後照伺服器的數字覆寫；舊存檔沒有。 */
@@ -247,12 +254,24 @@ function countSale(state: TankState): boolean {
 }
 
 /** 把一條魚賣給水族店，回傳拿到多少錢（不收就回傳 0）。 */
+/** 發新手任務獎勵：每個任務只發一次，記在存檔裡。回傳這次發了多少（領過就是 0）。 */
+export function claimQuestReward(state: TankState, questId: string, coins: number): number {
+  const e = economy(state);
+  const got = (e.questRewards ??= []);
+  if (got.includes(questId)) return 0;
+  got.push(questId);
+  e.coins += coins;
+  return coins;
+}
+
 export function sellFish(state: TankState, fishId: number): number {
   const fish = state.fish.find((f) => f.id === fishId);
   if (!fish || buybackRefusal(fish) || !countSale(state)) return 0;
   const coins = fishBuybackPrice(fish);
   state.fish = state.fish.filter((f) => f !== fish);
-  economy(state).coins += coins;
+  const e = economy(state);
+  e.coins += coins;
+  e.fishSold = (e.fishSold ?? 0) + 1;
   return coins;
 }
 
