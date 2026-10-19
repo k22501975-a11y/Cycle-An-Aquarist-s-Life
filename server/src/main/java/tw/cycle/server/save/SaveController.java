@@ -2,6 +2,7 @@ package tw.cycle.server.save;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -52,6 +53,8 @@ public class SaveController {
     private final MarketService market;
     /** 已經在市場出貨的魚又出現在存檔裡。 */
     private static final String SHIPPED = "shipped_fish";
+    /** 補算的最短間隔（#73）。 */
+    static final Duration ADVANCE_EVERY = Duration.ofMinutes(1);
     private static final Logger log = LoggerFactory.getLogger(SaveController.class);
 
     public SaveController(CloudSaveRepository saves, CycleProperties props, ObjectMapper json, Clock clock, SimClient sim, MarketService market) {
@@ -124,6 +127,8 @@ public class SaveController {
     /**
      * 伺服器補算：把雲端存檔用伺服器的時鐘補算到現在，存成新的一版並回傳。
      * 玩家改裝置時間被擋下時，遊戲改用這一份。
+     * 起點是伺服器收下雲端那份的時間（{@code updated_at}），不是存檔裡的 savedAt；
+     * 距離上次寫入不到一分鐘就不補算，直接回雲端那份（#73）。
      */
     @PostMapping("/advance")
     @Transactional
@@ -131,10 +136,25 @@ public class SaveController {
         if (!sim.enabled()) throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "no_sim", "伺服器沒有開模擬");
         CloudSave save = saves.findById(accountId).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "none", "雲端還沒有存檔"));
         OffsetDateTime now = OffsetDateTime.now(clock);
-        SimClient.Advance result = sim.advance(json.readTree(save.getData()), now.toInstant().toEpochMilli());
+        JsonNode stored = json.readTree(save.getData());
+        Map<String, Object> out = new LinkedHashMap<>();
+        if (Duration.between(save.getUpdatedAt(), now).compareTo(ADVANCE_EVERY) < 0) {
+            // 一分鐘內又來補算：直接回雲端那份，不再跑模擬
+            out.put("revision", save.getRevision());
+            out.put("savedAt", save.getSavedAt());
+            out.put("save", stored);
+            out.put("hours", 0);
+            out.put("capped", false);
+            out.put("deaths", 0);
+            out.put("births", 0);
+            return out;
+        }
+        // 從伺服器收下這份的時間開始補算，不看存檔裡遊戲端寫的 savedAt（改成很久以前就能無限快轉，#73）
+        ObjectNode from = stored.deepCopy();
+        from.put("savedAt", save.getUpdatedAt().toInstant().toEpochMilli());
+        SimClient.Advance result = sim.advance(from, now.toInstant().toEpochMilli());
         save.update(result.save().path("savedAt").asLong(), result.save().path("version").asInt(), json.writeValueAsString(result.save()), now);
         saves.save(save);
-        Map<String, Object> out = new LinkedHashMap<>();
         out.put("revision", save.getRevision());
         out.put("savedAt", save.getSavedAt());
         out.put("save", result.save());
