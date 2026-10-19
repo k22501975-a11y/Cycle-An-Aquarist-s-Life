@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, createTank, feed, infect, recordEvent, DEFAULT_TIME_SCALE, FILTERS, HEATERS, LIGHTS, TANKS, type TankState } from '../sim';
+import { addFish, createTank, feed, infect, pinchMg, recordEvent, DEFAULT_TIME_SCALE, FILTERS, HEATERS, LIGHTS, TANKS, type TankState } from '../sim';
+import { morningReport, snapshot } from '../ui/morning-report';
 import { Game } from './game';
 
 /** 養好水的 40L 缸＋4 條孔雀魚（評測第 4 輪的情境，#142）。 */
@@ -191,5 +192,55 @@ describe('快轉遇到危機自動切回正常速度（#142）', () => {
     });
     game.advance(1000);
     expect(crises).toContain('ich_visible');
+  });
+
+  it('有幼魚時一天餵一次一小撮：過夜不會被「魚餓壞了」叫醒，早上報告提醒一天餵兩次；整天不餵才叫醒（#193）', () => {
+    const s = cycledTank();
+    for (let i = 0; i < 4; i++) {
+      const f = addFish(s, 'guppy', { carriesIch: false, pregnant: false });
+      f.lengthCm = 1.2;
+      f.ageDays = 10;
+      f.generation = 1;
+    }
+    s.hours = 24 * 37 + 20;
+    const game = new Game(s, DEFAULT_TIME_SCALE);
+    const crises: string[] = [];
+    game.onCrisis((c) => crises.push(c.reason));
+    let report: string[] = [];
+    for (let night = 0; night < 4; night++) {
+      game.act((st) => feed(st, pinchMg(st)));
+      const before = snapshot(game.tanks);
+      const r = game.sleep();
+      report = morningReport(before, game.tanks, r.hours, r.crisis).items.map((i) => i.text);
+      game.sleep(12);
+    }
+    expect(crises).not.toContain('starving');
+    expect(report).toContain('小魚長得快、餓得也快，一天餵兩次比較好');
+    // 一整天都不餵：小魚撐不住，要在餓死前叫醒
+    for (let i = 0; i < 2; i++) game.sleep();
+    expect(crises).toContain('starving');
+    expect(crises).not.toContain('fish_died');
+  });
+
+  it('有幼魚時一天餵兩次一小撮：早上報告不會提醒一天餵兩次（#193）', () => {
+    const s = cycledTank();
+    for (let i = 0; i < 4; i++) {
+      const f = addFish(s, 'guppy', { carriesIch: false, pregnant: false });
+      f.lengthCm = 1.2;
+      f.ageDays = 10;
+      f.generation = 1;
+    }
+    s.hours = 24 * 37 + 20;
+    const game = new Game(s, DEFAULT_TIME_SCALE);
+    let report: string[] = [];
+    for (let night = 0; night < 4; night++) {
+      game.act((st) => feed(st, pinchMg(st)));
+      const before = snapshot(game.tanks);
+      const r = game.sleep();
+      report = morningReport(before, game.tanks, r.hours, r.crisis).items.map((i) => i.text);
+      game.act((st) => feed(st, pinchMg(st)));
+      game.sleep(12);
+    }
+    expect(report).not.toContain('小魚長得快、餓得也快，一天餵兩次比較好');
   });
 });
