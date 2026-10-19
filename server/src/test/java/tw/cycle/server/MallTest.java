@@ -80,18 +80,35 @@ class MallTest {
         send(post("/api/points/buy"), me, "{\"item\":\"cure\"}").andExpect(status().isOk());
     }
 
+    private ResultActions use(String token, String item, String requestId) throws Exception {
+        return send(post("/api/points/use"), token, "{\"item\":\"" + item + "\",\"requestId\":\"" + requestId + "\"}");
+    }
+
     @Test
-    void 道具要領_領過不會再出現() throws Exception {
+    void 道具放在伺服器庫存_用一個扣一個_重送不會扣兩個() throws Exception {
         String me = player();
         String other = player();
         send(post("/api/points/topup"), me, "{\"pack\":\"p300\"}").andExpect(status().isOk());
-        long id = read(send(post("/api/points/buy"), me, "{\"item\":\"tankset\"}")).get("grant").get("id").asLong();
-        send(get("/api/points/grants"), me, null).andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].item").value("tankset"));
-        send(post("/api/points/grants/" + id + "/claim"), other, null).andExpect(status().isNotFound());
-        send(post("/api/points/grants/" + id + "/claim"), me, null).andExpect(status().isNoContent());
-        send(post("/api/points/grants/" + id + "/claim"), me, null).andExpect(status().isNoContent());
-        send(get("/api/points/grants"), me, null).andExpect(jsonPath("$.length()").value(0));
-        send(get("/api/me/export"), me, null).andExpect(jsonPath("$.points").value(170)).andExpect(jsonPath("$.payments[0].amount_twd").value(300));
+        send(post("/api/points/buy"), me, "{\"item\":\"cure\"}").andExpect(status().isOk()).andExpect(jsonPath("$.bag.cure").value(1));
+        send(post("/api/points/buy"), me, "{\"item\":\"cure\"}").andExpect(status().isOk()).andExpect(jsonPath("$.bag.cure").value(2));
+        send(get("/api/points"), me, null).andExpect(jsonPath("$.bag.cure").value(2)).andExpect(jsonPath("$.bag.tankset").value(0));
+
+        String first = java.util.UUID.randomUUID().toString();
+        use(me, "cure", first).andExpect(status().isOk()).andExpect(jsonPath("$.remaining").value(1));
+        // 網路斷了重送同一個請求：回上次的結果，不會再扣
+        use(me, "cure", first).andExpect(status().isOk()).andExpect(jsonPath("$.remaining").value(1));
+        // 同一個編號拿去用別的道具不行
+        use(me, "tankset", first).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("request_reused"));
+        use(me, "cure", java.util.UUID.randomUUID().toString()).andExpect(status().isOk()).andExpect(jsonPath("$.remaining").value(0));
+        use(me, "cure", java.util.UUID.randomUUID().toString()).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("no_item"));
+        use(me, "tankset", java.util.UUID.randomUUID().toString()).andExpect(status().isUnprocessableEntity());
+        use(me, "nope", java.util.UUID.randomUUID().toString()).andExpect(status().isBadRequest());
+        // 別人的庫存是分開的；別人拿同一個編號也不會拿到我的結果
+        use(other, "cure", first).andExpect(status().isUnprocessableEntity());
+
+        send(get("/api/points"), me, null).andExpect(jsonPath("$.bag.cure").value(0));
+        send(get("/api/me/export"), me, null).andExpect(jsonPath("$.points").value(260)).andExpect(jsonPath("$.mallUses.length()").value(2))
+                .andExpect(jsonPath("$.payments[0].amount_twd").value(300));
     }
 
     @Test

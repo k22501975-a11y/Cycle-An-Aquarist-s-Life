@@ -123,7 +123,17 @@ class SimTest {
     }
 
     private static String saveBody(long base, boolean force) {
-        return "{\"baseRevision\":" + base + ",\"force\":" + force + ",\"save\":{\"version\":3,\"savedAt\":1000,\"timeScale\":7,\"state\":{\"hours\":12}}}";
+        return saveBody(base, force, 0);
+    }
+
+    /** ledgerSeq：存檔套用到帳本第幾筆（市場的錢由伺服器記帳，docs/ledger.md）。 */
+    private static String saveBody(long base, boolean force, int ledgerSeq) {
+        return "{\"baseRevision\":" + base + ",\"force\":" + force + ",\"save\":{\"version\":3,\"savedAt\":1000,\"timeScale\":7,\"state\":{\"hours\":12,\"economy\":{\"coins\":10000,\"ledgerSeq\":" + ledgerSeq + "}}}}";
+    }
+
+    /** 會動到錢的市場請求帶上雲端存檔的版本。 */
+    private static String withRevision(String body, long revision) {
+        return body.substring(0, body.length() - 1) + ",\"baseRevision\":" + revision + "}";
     }
 
     private static final String FISH = "{\"kind\":\"fish\",\"species\":\"guppy\",\"title\":\"孔雀魚 公\",\"price\":200,\"item\":{\"id\":7,\"species\":\"guppy\",\"sex\":\"male\",\"genome\":{\"tail\":100}}}";
@@ -231,7 +241,7 @@ class SimTest {
         // 遊戲端說尾鰭 100 分，伺服器那份是 60 分：上架的是伺服器那份
         JsonNode real = json.readTree("{\"id\":7,\"species\":\"guppy\",\"sex\":\"male\",\"genome\":{\"tail\":60},\"health\":1}");
         sim.inspect = new SimClient.Inspect(true, true, real);
-        long id = read(send(post("/api/market/listings"), me, FISH).andExpect(status().isCreated())).get("id").asLong();
+        long id = read(send(post("/api/market/listings"), me, withRevision(FISH, 1)).andExpect(status().isCreated())).get("id").asLong();
         JsonNode listed = null;
         for (JsonNode l : read(send(get("/api/market/mine"), me, null)).get("listings")) if (l.get("id").asLong() == id) listed = l;
         assertThat(listed).isNotNull();
@@ -254,15 +264,16 @@ class SimTest {
         send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
         JsonNode real = json.readTree("{\"id\":7,\"species\":\"guppy\",\"sex\":\"male\",\"genome\":{\"tail\":60},\"health\":1}");
         sim.inspect = new SimClient.Inspect(true, true, real);
-        long listing = read(send(post("/api/market/listings"), me, FISH).andExpect(status().isCreated())).get("id").asLong();
-        long order = read(send(post("/api/market/listings/" + listing + "/buy"), buyer, "{\"packaging\":\"bag\"}").andExpect(status().isOk())).get("id").asLong();
+        long listing = read(send(post("/api/market/listings"), me, withRevision(FISH, 1)).andExpect(status().isCreated())).get("id").asLong();
+        send(put("/api/save"), buyer, saveBody(0, false)).andExpect(status().isOk());
+        long order = read(send(post("/api/market/listings/" + listing + "/buy"), buyer, "{\"packaging\":\"bag\",\"baseRevision\":1}").andExpect(status().isOk())).get("order").get("id").asLong();
 
-        // 還沒出貨：魚還在缸裡，正常上傳
-        send(put("/api/save"), me, saveBody(1, false)).andExpect(status().isOk());
+        // 還沒出貨：魚還在缸裡，正常上傳（上架費讓雲端多了一版、帳本一筆）
+        send(put("/api/save"), me, saveBody(2, false, 1)).andExpect(status().isOk());
         assertThat(sim.verifiedShipped.get(0)).isEmpty();
 
         send(post("/api/market/orders/" + order + "/ship"), me, "{\"item\":" + real + ",\"bagTemp\":25,\"bagPh\":7}").andExpect(status().isOk());
-        send(put("/api/save"), me, saveBody(2, false))
+        send(put("/api/save"), me, saveBody(3, false, 1))
                 .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("shipped_fish"));
         // 交給模擬服務比對的是編號＋身分（新遊戲同編號的別條魚不算，handlers.test.ts）
         JsonNode sold = sim.verifiedShipped.get(1).get(0);
@@ -270,9 +281,9 @@ class SimTest {
         assertThat(sold.get("id").asLong()).isEqualTo(7);
         assertThat(sold.get("genome").get("tail").asInt()).isEqualTo(60);
         assertThat(sold.has("health")).isFalse();
-        send(put("/api/save"), me, saveBody(2, true))
+        send(put("/api/save"), me, saveBody(3, true, 1))
                 .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("shipped_fish"));
-        assertThat(read(send(get("/api/save"), me, null)).get("revision").asLong()).isEqualTo(2);
+        assertThat(read(send(get("/api/save"), me, null)).get("revision").asLong()).isEqualTo(3);
     }
 
     @Test
@@ -285,8 +296,9 @@ class SimTest {
         JsonNode real = json.readTree("{\"id\":7,\"species\":\"guppy\",\"sex\":\"female\",\"genome\":{\"tail\":60},\"sire\":{\"genome\":{\"tail\":10},\"lineage\":3,\"inbreeding\":0},\"health\":1}");
         sim.inspect = new SimClient.Inspect(true, true, real);
         String fish = "{\"kind\":\"fish\",\"species\":\"guppy\",\"title\":\"孔雀魚 母\",\"price\":200,\"item\":{\"id\":7}}";
-        long listing = read(send(post("/api/market/listings"), me, fish).andExpect(status().isCreated())).get("id").asLong();
-        long order = read(send(post("/api/market/listings/" + listing + "/buy"), buyer, "{\"packaging\":\"bag\"}").andExpect(status().isOk())).get("id").asLong();
+        long listing = read(send(post("/api/market/listings"), me, withRevision(fish, 1)).andExpect(status().isCreated())).get("id").asLong();
+        send(put("/api/save"), buyer, saveBody(0, false)).andExpect(status().isOk());
+        long order = read(send(post("/api/market/listings/" + listing + "/buy"), buyer, "{\"packaging\":\"bag\",\"baseRevision\":1}").andExpect(status().isOk())).get("order").get("id").asLong();
 
         ObjectNode forged = real.deepCopy();
         ((ObjectNode) forged.get("sire").get("genome")).put("tail", 100);
@@ -310,6 +322,25 @@ class SimTest {
         sim.inspect = new SimClient.Inspect(true, true, json.readTree("{\"id\":7,\"species\":\"guppy\",\"sex\":\"male\"}"));
         send(post("/api/market/listings"), me, FISH).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("save_replaced"));
         clock.advance(Duration.ofDays(3).plusMinutes(1));
-        send(post("/api/market/listings"), me, FISH).andExpect(status().isCreated());
+        send(post("/api/market/listings"), me, withRevision(FISH, 2)).andExpect(status().isCreated());
+    }
+
+    @Test
+    void 市場扣款後伺服器補算_扣款留著_補算起點不變() throws Exception {
+        // docs/ledger.md §3.3、§3.6：帳本改存檔不動 updated_at，補算從伺服器收下存檔的時間算；補算也不會把扣款蓋掉
+        String me = player();
+        clock.advance(Duration.ofDays(3));
+        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        long uploadedAt = clock.instant().toEpochMilli();
+        sim.inspect = new SimClient.Inspect(true, true, json.readTree("{\"id\":7,\"species\":\"guppy\",\"sex\":\"male\",\"genome\":{\"tail\":60},\"health\":1}"));
+        clock.advance(Duration.ofMinutes(5));
+        send(post("/api/market/listings"), me, withRevision(FISH, 1)).andExpect(status().isCreated());
+        clock.advance(Duration.ofMinutes(5));
+        JsonNode r = read(send(post("/api/save/advance"), me, null).andExpect(status().isOk()));
+        assertThat(sim.advancedFrom).containsExactly(uploadedAt);
+        assertThat(r.get("revision").asLong()).isEqualTo(3);
+        JsonNode economy = r.get("save").get("state").get("economy");
+        assertThat(economy.get("coins").asInt()).isEqualTo(9_998);
+        assertThat(economy.get("ledgerSeq").asInt()).isEqualTo(1);
     }
 }

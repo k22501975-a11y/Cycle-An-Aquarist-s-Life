@@ -1,4 +1,5 @@
 import {
+  applyLedger,
   economy,
   findListedFish,
   FISH_SPECIES,
@@ -27,7 +28,7 @@ import {
   type PlantSpeciesId,
 } from '../sim';
 import type { Game } from '../game/game';
-import type { CloudClient, MarketListing, MarketMine, MarketOrder } from '../net/cloud';
+import type { CloudClient, LedgerWallet, MarketListing, MarketMine, MarketOrder } from '../net/cloud';
 import type { SoundId } from '../audio/sounds';
 import { lineChart } from './charts';
 import { h } from './dom';
@@ -61,6 +62,12 @@ function speciesName(id: string): string {
   return id;
 }
 
+/** 套用伺服器記的一筆收支（docs/ledger.md）：照 delta 加減、記下雲端存檔的新版本。 */
+function applyWallet(deps: Pick<MarketDeps, 'cloud' | 'game'>, wallet: LedgerWallet): void {
+  deps.game.act((st) => applyLedger(st, wallet));
+  deps.cloud.advanceRevision(wallet.revision);
+}
+
 let syncing = false;
 /** 上次對帳時知道的、還在路上的貨（App 版用來排到貨通知）。 */
 let inTransit: { at: number; title: string; id: number }[] = [];
@@ -74,7 +81,7 @@ export function knownArrivals(): { at: number; title: string; id: number }[] {
  * 賣出的魚自動撈出來出貨、魚死了就下架、到貨的貨款入帳、沒出貨的退款；回傳有幾件貨到了等收。
  */
 export async function syncMarket(deps: MarketDeps): Promise<{ arrived: number } | null> {
-  const { cloud, game, toasts } = deps;
+  const { cloud, toasts } = deps;
   if (!cloud.session || syncing) return null;
   syncing = true;
   try {
@@ -89,7 +96,7 @@ export async function syncMarket(deps: MarketDeps): Promise<{ arrived: number } 
       if (o.status === 'cancelled') {
         const r = await cloud.marketCollect(o.id);
         if (r.ok && r.value.result === 'refund') {
-          game.act((st) => (economy(st).coins += r.value.result === 'refund' ? r.value.amount : 0));
+          applyWallet(deps, r.value.wallet);
           toasts.show(`${o.counterpart ?? '賣家'} 沒有出貨，退回 ${yuan(r.value.amount)}`, 'warn');
         }
       } else if (o.arrived) arrived++;
@@ -132,7 +139,7 @@ async function handleSales(deps: MarketDeps, sales: MarketOrder[]): Promise<void
       if (!r.ok) continue;
       const v = r.value;
       if (v.result === 'payout') {
-        game.act((st) => (economy(st).coins += v.amount));
+        applyWallet(deps, v.wallet);
         deps.sound?.('buy');
         toasts.show(`${o.title} 送到 ${o.counterpart} 手上了，入帳 ${yuan(v.amount)}（已扣 8% 成交稅）`);
       } else if (v.result === 'doa') {
@@ -284,7 +291,7 @@ export function buyPanel(deps: MarketDeps, l: MarketListing): Node {
       sheet.open('市場', () => marketPanel(deps, 'browse'));
       return;
     }
-    game.act((st) => (economy(st).coins -= total));
+    applyWallet(deps, res.value.wallet);
     deps.sound?.('buy');
     toasts.show(`買了${l.title}，付款 ${yuan(total)}。等 ${l.seller.username} 出貨，運送要遊戲裡 6～24 小時`);
     sheet.open('市場', () => marketPanel(deps, 'arrivals'));
@@ -414,10 +421,8 @@ export function listFishPanel(deps: MarketDeps, picked: Fish): Node {
     if (!fish) return toasts.show('找不到這條魚了', 'warn');
     const res = await cloud.marketList({ kind: 'fish', species: fish.species, title: listingTitle(fish), item: marketItem(fish), price });
     if (!res.ok) return toasts.show(res.message, 'warn');
-    game.act((st) => {
-      economy(st).coins -= res.value.fee;
-      fish.listing = res.value.id;
-    });
+    applyWallet(deps, res.value.wallet);
+    game.act(() => (fish.listing = res.value.id));
     toasts.show(`${listingTitle(fish)} 上架了，售價 ${yuan(price)}。魚還在缸裡，記得照顧好`);
     sheet.open('市場', () => marketPanel(deps, 'shop'));
   };
@@ -444,7 +449,7 @@ export function listPlantPanel(deps: MarketDeps, species: PlantSpeciesId): Node 
       game.act((st) => addCuttings(st, species, count));
       return toasts.show(res.message, 'warn');
     }
-    game.act((st) => (economy(st).coins -= res.value.fee));
+    applyWallet(deps, res.value.wallet);
     toasts.show(`${PLANT_SPECIES[species].name}插枝 ${count} 株上架了`);
     sheet.open('市場', () => marketPanel(deps, 'shop'));
   };
@@ -491,7 +496,7 @@ async function collect(deps: MarketDeps, o: MarketOrder, drip: boolean): Promise
   }
   const v = res.value;
   if (v.result === 'refund') {
-    game.act((st) => (economy(st).coins += v.amount));
+    applyWallet(deps, v.wallet);
     toasts.show(v.reason === 'doa' ? `打開袋子，${o.title} 已經死在路上了。款項 ${yuan(v.amount)} 全額退回` : `退回 ${yuan(v.amount)}`, 'warn');
   } else if (v.result === 'item') {
     if (v.kind === 'plant') {
