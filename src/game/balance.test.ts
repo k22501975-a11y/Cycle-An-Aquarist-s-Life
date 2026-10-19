@@ -90,15 +90,17 @@ describe('新手前幾週（K1）', () => {
     }
   });
 
-  it('完全不餵：幾天後魚會餓，點魚看得到「餓了」，生病原因寫沒吃飽', () => {
+  it('完全不餵：幾天後點魚看得到「餓了」但還沒傷身體；兩週後生病原因才寫沒吃飽（mvp.md §4.7）', () => {
     const s = newGameState(7);
     addFish(s, 'guppy', { carriesIch: false, carries: [] });
     simulate(s, 24 * 5);
     const f = alive(s)[0];
     const c = fishCondition(s, f);
     expect(c.hunger).toBe('hungry');
-    expect(c.causes[0].key).toBe('hunger');
-    expect(c.causes[0].label).toContain('沒吃飽');
+    expect(c.causes.some((x) => x.key === 'hunger')).toBe(false);
+    simulate(s, 24 * 11);
+    const later = fishCondition(s, f).causes.find((x) => x.key === 'hunger');
+    expect(later?.label).toContain('沒吃飽');
   });
 
   it('3 條孔雀魚、每天正常餵、不用任何道具：約一週養好水（養水任務過得了）', () => {

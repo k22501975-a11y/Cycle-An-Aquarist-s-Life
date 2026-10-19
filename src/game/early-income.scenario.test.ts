@@ -14,6 +14,7 @@ import {
   HARDSCAPE,
   markDaily,
   orderBoard,
+  orderContext,
   PINCH_MEALS,
   simulate,
   trimPlant,
@@ -26,7 +27,7 @@ import {
 /**
  * 前期收入（design/mvp.md §4.4.1，#175）：照新手基準玩法（§4.6：1 株水草、一公兩母、每天一小撮一次、
  * 每天測水、測到氨或亞硝才換水），加上每天把 3 件小事做完開寶箱、交得出來的訂單就交（留種的不交；
- * 板上有中魚單時小孔雀先不賣，留著養大）。
+ * 板上有中魚單時小孔雀留夠那張單的數量養大，多的才交仔魚單）。
  * 第一筆收入要在第 14 天以內，第 10～60 天之間任兩筆收入隔不超過 7 個遊戲天。
  */
 
@@ -63,9 +64,10 @@ function baseline(seed: number, days = 60): Array<{ day: number; from: string; c
     // 訂單：插枝單先修剪；交得出來就交
     const board = orderBoard(s);
     if (board.orders.some((o) => o.kind === 'cutting')) for (const p of s.plants) addCuttings(s, p.species, trimPlant(s, p.id));
-    const growing = board.orders.some((o) => o.kind === 'fish' && o.size === 'juvenile');
+    // 小孔雀留夠中魚單要的數量，多的才交仔魚單
+    const keep = Math.max(0, ...board.orders.filter((o) => o.kind === 'fish' && o.size === 'juvenile').map((o) => o.count));
     for (const o of [...board.orders]) {
-      if (o.kind === 'fry' && growing) continue;
+      if (o.kind === 'fry' && orderContext(s).fry - o.count < keep) continue;
       const coins = fulfillOrder(tanks, o.id, breeders);
       if (coins > 0) income.push({ day: d, from: o.kind, coins });
     }

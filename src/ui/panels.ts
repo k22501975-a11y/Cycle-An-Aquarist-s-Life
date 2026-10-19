@@ -1,4 +1,5 @@
 import type { SoundId } from '../audio/sounds';
+import { FEATURES } from '../features';
 import { substrateName, tankSubstrateLook } from '../render/substrate';
 import { kitColor, type KitParam } from '../render/ops-fx';
 import {
@@ -48,7 +49,10 @@ import {
   canClaimStarterPack,
   claimStarterPack,
   buyTank,
+  addHolidayTablet,
   buyTankRefusal,
+  HOLIDAY_TABLET_DAYS,
+  installFeeder,
   LOCKED_SPECIES,
   speciesUnlocked,
   tankLock,
@@ -859,7 +863,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         '新缸還沒養好水就放太多魚，會氨中毒。',
         '孔雀魚和櫻花蝦會自己繁殖，但成魚會吃仔魚和仔蝦，水草種密一點才躲得掉。斑馬魚會輕微咬孔雀魚公魚的長尾巴。',
         '鬥魚會到水面吸空氣，不怕缺氧；但兩尾公鬥魚不能同缸，公鬥魚也會去咬孔雀魚公魚的長尾巴，約三成的鬥魚會獵蝦。水晶蝦很嬌貴：要偏酸的軟水、水溫 24°C 以下，26°C 以上很危險，夏天要開冷氣。',
-        '鳳尾短鯛會自己帶小孩：要有石頭或沉木當洞穴、水溫 25°C 以上。護幼中的母魚會趕走靠近的魚，缸小的話其他魚會很緊張。',
+        FEATURES.apisto ? '鳳尾短鯛會自己帶小孩：要有石頭或沉木當洞穴、水溫 25°C 以上。護幼中的母魚會趕走靠近的魚，缸小的話其他魚會很緊張。' : null,
         `孔雀魚（pH ${FISH_SPECIES.guppy.phSurvive.min}–${FISH_SPECIES.guppy.phSurvive.max} 都能慢慢適應）照品系賣。同品系配對生出來的大多一樣；不同品系混養會生出各種組合，也可能冒出藏在基因裡的白子。`,
         '鰭型品系：燕尾、大耳是隱性，要兩邊都帶才長得出來；緞帶、大C 的公魚交接器太長不能配，要用母魚配一般公魚；劍尾只會傳給兒子。',
       ]),
@@ -874,7 +878,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       ),
       h('h3', {}, '其他魚蝦'),
       cardGrid(
-        ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).filter((id) => id !== 'guppy').map((id) => {
+        ...(Object.keys(FISH_SPECIES) as FishSpeciesId[]).filter((id) => id !== 'guppy' && (id !== 'apisto' || FEATURES.apisto)).map((id) => {
           const sp = FISH_SPECIES[id];
           const chips = [`${sp.temp.min}–${sp.temp.max}°C`, `pH ${sp.phSurvive.min}–${sp.phSurvive.max}`, sp.minGroup ? `群游 ${sp.minGroup}+` : ''].filter(Boolean);
           // 短鯛成對賣：一公一母才會產卵護幼；鬥魚公母分開賣
@@ -1027,6 +1031,32 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         item(FANS.clip.name, 'fan:clip', !!eq.fan, () => purchase(ctx, price('fan:clip'), (st) => (st.equipment.fan = { spec: FANS.clip, on: true }), `裝上${FANS.clip.name}`), `降溫約 ${FANS.clip.coolingC}°C，水蒸發快`, 'gear/fan.webp'),
         item(CHILLERS.small.name, 'chiller:small', !!eq.chiller, () => purchase(ctx, price('chiller:small'), (st) => (st.equipment.chiller = { spec: CHILLERS.small, targetC: 26, on: true, cooling: false }), `裝上${CHILLERS.small.name}`), '水溫壓在設定值，很耗電', 'gear/chiller.webp'),
         item('控溫器', 'controller:basic', !!eq.controller, () => purchase(ctx, price('controller:basic'), (st) => (st.equipment.controller = { maxC: 30, tripped: false }), '裝上控溫器'), '超溫就切斷加熱棒'),
+      ),
+      // 出遠門用品（mvp.md §4.7）：關掉遊戲時間照常走，沒人餵魚會餓
+      h('h3', {}, '出遠門'),
+      cardGrid(
+        shopCard({
+          art: 'gear/vacation-tablets.webp',
+          name: '假期飼料錠',
+          price: (economy(game.state).holidayTablets ?? 0) > 0 ? null : price('care:holiday'),
+          unit: '/顆',
+          chips: [`撐約 ${HOLIDAY_TABLET_DAYS} 天`, '有一點髒水'],
+          note: (economy(game.state).holidayTablets ?? 0) > 0 ? `手上有 ${economy(game.state).holidayTablets} 顆送的` : '沉在缸底慢慢溶解，出門前放一顆',
+          actions: [
+            button('放一顆', () => {
+              const e = economy(game.state);
+              if ((e.holidayTablets ?? 0) > 0) {
+                game.act((st) => {
+                  economy(st).holidayTablets = (economy(st).holidayTablets ?? 1) - 1;
+                  addHolidayTablet(st);
+                });
+                toasts.show(`放了一顆假期飼料錠，約 ${HOLIDAY_TABLET_DAYS} 天慢慢溶完`);
+                sheet.refresh();
+              } else purchase(ctx, price('care:holiday'), (st) => addHolidayTablet(st), `放了一顆假期飼料錠，約 ${HOLIDAY_TABLET_DAYS} 天慢慢溶完`);
+            }, 'small'),
+          ],
+        }),
+        item('自動餵食器', 'feeder:auto', !!eq.feeder, () => purchase(ctx, price('feeder:auto'), (st) => installFeeder(st, 1), '裝上自動餵食器，每天早上 9 點投一小撮'), '每天定時投一小撮，吃電池', 'gear/auto-feeder.webp'),
       ),
     );
   } else {

@@ -36,6 +36,8 @@ export interface Goal {
   done: string;
   coins: number;
   unlock?: Unlock;
+  /** 額外送的東西。 */
+  gift?: 'holiday_tablet';
   check: (tanks: TankState[], g: GoalState) => boolean;
 }
 
@@ -81,9 +83,10 @@ export const GOALS: Goal[] = [
   {
     id: 'raise5',
     title: '養大 5 條自己繁殖的魚（長到轉色期）',
-    done: '小魚開始轉色了！轉色期看得出公母和花色，接下來就能挑出好的留種，也能賣錢了。',
+    done: '小魚開始轉色了！轉色期看得出公母和花色，接下來就能挑出好的留種，也能賣錢了。小魚餓不了幾天，送你一顆假期飼料錠，出遠門前記得放。',
     coins: 80,
     unlock: 'selection',
+    gift: 'holiday_tablet',
     check: (tanks) => allFish(tanks, true).filter((f) => bred(f) && !isShrimpSpecies(f.species) && STAGES.indexOf(growthStage(f)) >= 2).length >= 5,
   },
   {
@@ -222,6 +225,7 @@ export function checkGoals(tanks: TankState[], tutorialDone = true): Goal[] {
     g.done.push(goal.id);
     economy(tanks[0]).coins += goal.coins;
     if (goal.unlock && !g.unlocked.includes(goal.unlock)) g.unlocked.push(goal.unlock);
+    if (goal.gift === 'holiday_tablet') economy(tanks[0]).holidayTablets = (economy(tanks[0]).holidayTablets ?? 0) + 1;
     done.push(goal);
   }
   return done;
