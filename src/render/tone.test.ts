@@ -35,4 +35,48 @@ describe('邊緣光', () => {
     expect(data[(3 * w + 1) * 4 + 2]).toBe(100);
     expect(data[(0 * w + 1) * 4 + 3]).toBe(0);
   });
+
+  it('每欄掃一次的結果跟逐點往上找一樣', () => {
+    const w = 7;
+    const h = 9;
+    const make = () => {
+      const d = new Uint8ClampedArray(w * h * 4);
+      for (let i = 0; i < w * h; i++) {
+        d[i * 4] = (i * 37) % 256;
+        d[i * 4 + 1] = (i * 91) % 256;
+        d[i * 4 + 2] = (i * 53) % 256;
+        d[i * 4 + 3] = [0, 40, 100, 200, 255][(i * 7 + (i >> 3)) % 5];
+      }
+      return d;
+    };
+    // 舊版的寫法：每個像素往上找第一個透明的
+    const naive = (data: Uint8ClampedArray, width: number, strength: number) => {
+      const alphaAt = (x: number, y: number) => (x < 0 || y < 0 ? 0 : data[(y * w + x) * 4 + 3]);
+      const lit = new Float32Array(w * h);
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < w; x++) {
+          if (alphaAt(x, y) < 128) continue;
+          for (let d = 1; d <= width; d++)
+            if (alphaAt(x, y - d) < 64) {
+              lit[y * w + x] = 1 - (d - 1) / width;
+              break;
+            }
+        }
+      for (let i = 0; i < lit.length; i++) {
+        const k = lit[i] * strength;
+        if (k <= 0) continue;
+        const p = i * 4;
+        data[p] = Math.round(data[p] + (210 - data[p]) * k);
+        data[p + 1] = Math.round(data[p + 1] + (245 - data[p + 1]) * k);
+        data[p + 2] = Math.round(data[p + 2] + (255 - data[p + 2]) * k);
+      }
+    };
+    for (const width of [1, 2, 4]) {
+      const a = make();
+      const b = make();
+      rimLight(a, w, h, width, 0.45);
+      naive(b, width, 0.45);
+      expect([...a]).toEqual([...b]);
+    }
+  });
 });

@@ -124,7 +124,13 @@ export class Guide {
         : null;
     const shop =
       page.shop && this.openShop
-        ? h('button.btn.small.primary.go-shop', { onclick: () => (this.pages = [], this.renderBubble(), this.openShop!(page.shop!)) }, artImg('shop', 'btn-art'), '帶我去商店')
+        ? h('button.btn.small.primary.go-shop', {
+              onclick: () => {
+                this.pages = [];
+                this.renderBubble();
+                this.openShop!(page.shop!);
+              },
+            }, artImg('shop', 'btn-art'), '帶我去商店')
         : null;
     if (shop) next.classList.remove('primary');
     this.bubble.replaceChildren(

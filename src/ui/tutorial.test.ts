@@ -96,9 +96,10 @@ describe('養水任務進度', () => {
     expect(cycleProgress(s)).toContain('再測一次');
   });
 
-  it('養水任務有等待提示，其他任務沒有', () => {
-    expect(QUESTS.find((q) => q.id === 'cycled')?.hint).toContain('3～7 天');
-    expect(QUESTS.find((q) => q.id === 'plant')?.hint).toBeUndefined();
+  it('養水任務的老闆說明有講要等多久、怎麼加快', () => {
+    const lines = QUESTS.find((q) => q.id === 'cycled')!.lines.join('');
+    expect(lines).toContain('3～7 天');
+    expect(lines).toContain('硝化菌液');
   });
 });
 

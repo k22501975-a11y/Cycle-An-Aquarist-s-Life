@@ -38,27 +38,22 @@ export function toneImage(data: Uint8ClampedArray, sat: number, bright: number):
  * width 是邊緣光的厚度（像素），strength 0–1。
  */
 export function rimLight(data: Uint8ClampedArray, w: number, h: number, width: number, strength: number): void {
-  const alphaAt = (x: number, y: number) => (x < 0 || y < 0 || x >= w || y >= h ? 0 : data[(y * w + x) * 4 + 3]);
-  const lit = new Float32Array(w * h);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const a = alphaAt(x, y);
-      if (a < 128) continue;
-      // 往上找第一個透明的像素：越靠近邊緣越亮
-      for (let d = 1; d <= width; d++) {
-        if (alphaAt(x, y - d) < 64) {
-          lit[y * w + x] = 1 - (d - 1) / width;
-          break;
+  // 每欄由上往下掃一次，記住最近一個透明像素：O(w×h)
+  for (let x = 0; x < w; x++) {
+    let clear = -1; // 圖外面算透明
+    for (let y = 0; y < h; y++) {
+      const p = (y * w + x) * 4;
+      const a = data[p + 3];
+      const d = y - clear;
+      if (a >= 128 && d <= width) {
+        const k = (1 - (d - 1) / width) * strength;
+        if (k > 0) {
+          data[p] = Math.round(data[p] + (210 - data[p]) * k);
+          data[p + 1] = Math.round(data[p + 1] + (245 - data[p + 1]) * k);
+          data[p + 2] = Math.round(data[p + 2] + (255 - data[p + 2]) * k);
         }
       }
+      if (a < 64) clear = y;
     }
-  }
-  for (let i = 0; i < lit.length; i++) {
-    const k = lit[i] * strength;
-    if (k <= 0) continue;
-    const p = i * 4;
-    data[p] = Math.round(data[p] + (210 - data[p]) * k);
-    data[p + 1] = Math.round(data[p + 1] + (245 - data[p + 1]) * k);
-    data[p + 2] = Math.round(data[p + 2] + (255 - data[p + 2]) * k);
   }
 }

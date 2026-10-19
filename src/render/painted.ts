@@ -1,5 +1,5 @@
 import { isShrimpSpecies } from '../sim';
-import { Assets, BlurFilter, ColorMatrixFilter, Container, Mesh, MeshPlane, Texture } from 'pixi.js';
+import { Assets, BlurFilter, ColorMatrixFilter, Container, type DestroyOptions, Mesh, MeshPlane, Texture } from 'pixi.js';
 import type { FishSpeciesId, GrowthStage } from '../sim';
 import type { FishForm } from './fish-art';
 import { canvasTexture, makeCanvas } from './paint';
@@ -180,6 +180,30 @@ export const FIN_PARTS: Record<string, { file: string; anchor: [number, number] 
 const textures = new Map<string, Texture>();
 const scenery = new Map<string, Texture>();
 const toned = new Map<string, Texture>();
+/** 調色快取最多留幾張；超過時把最久沒用、也沒有魚在用的圖釋放掉（GPU 記憶體）。 */
+export const TONED_MAX = 64;
+const tonedRefs = new Map<Texture, number>();
+
+function retainToned(t: Texture | null): void {
+  if (t) tonedRefs.set(t, (tonedRefs.get(t) ?? 0) + 1);
+}
+
+function releaseToned(t: Texture | null): void {
+  if (!t) return;
+  const n = (tonedRefs.get(t) ?? 0) - 1;
+  if (n > 0) tonedRefs.set(t, n);
+  else tonedRefs.delete(t);
+}
+
+function trimToned(): void {
+  // Map 依加入順序排：前面的就是最久沒用的
+  for (const [k, t] of toned) {
+    if (toned.size <= TONED_MAX) return;
+    if (tonedRefs.has(t)) continue;
+    toned.delete(k);
+    t.destroy(true);
+  }
+}
 
 /** 開遊戲前載入素材。個別檔案失敗只會讓那張圖退回程式繪製，不會擋住遊戲。 */
 export async function loadPaintedArt(base = import.meta.env.BASE_URL): Promise<number> {
@@ -257,7 +281,12 @@ export function tonedTexture(key: string, sat: number, bright: number, eating = 
   if (!base) return base;
   const cacheKey = `${key}${eating ? '#eating' : ''}@${toneKey(sat, bright)}`;
   const hit = toned.get(cacheKey);
-  if (hit) return hit;
+  if (hit) {
+    // 移到最後面：剛用過
+    toned.delete(cacheKey);
+    toned.set(cacheKey, hit);
+    return hit;
+  }
   const img = base.source.resource as CanvasImageSource & { width: number; height: number };
   const { canvas, ctx } = makeCanvas(img.width, img.height);
   ctx.drawImage(img, 0, 0);
@@ -268,6 +297,7 @@ export function tonedTexture(key: string, sat: number, bright: number, eating = 
   ctx.putImageData(data, 0, 0);
   const tex = canvasTexture(canvas);
   toned.set(cacheKey, tex);
+  trimToned();
   return tex;
 }
 
@@ -301,6 +331,9 @@ export class PaintedRig extends Container {
   private readonly key: string;
   private restTexture: Texture;
   private eatingTexture: Texture | null;
+  /** 正在用的調色圖（快取用引用計數判斷能不能釋放）。 */
+  private tonedRest: Texture | null = null;
+  private tonedEating: Texture | null = null;
   /** 張嘴的圖疊在上面淡入淡出（不是直接換圖，換圖看起來像兩張圖在閃）。 */
   private mouthMesh: Mesh | null = null;
   private mouthOpen = 0;
@@ -366,9 +399,26 @@ export class PaintedRig extends Container {
     const tone = `${sat}:${bright}`;
     if (tone === this.tone) return;
     this.tone = tone;
-    this.restTexture = tonedTexture(this.key, sat, bright) ?? this.restTexture;
-    this.eatingTexture = textures.has(`${this.key}#eating`) ? tonedTexture(this.key, sat, bright, true) : null;
+    const rest = tonedTexture(this.key, sat, bright);
+    const eating = textures.has(`${this.key}#eating`) ? tonedTexture(this.key, sat, bright, true) : null;
+    retainToned(rest);
+    retainToned(eating);
+    releaseToned(this.tonedRest);
+    releaseToned(this.tonedEating);
+    this.tonedRest = rest;
+    this.tonedEating = eating;
+    this.restTexture = rest ?? this.restTexture;
+    this.eatingTexture = eating;
+    if (this.mesh.texture !== this.restTexture) this.mesh.texture = this.restTexture;
     this.setMouthOpen(this.mouthOpen);
+  }
+
+  override destroy(options?: DestroyOptions): void {
+    releaseToned(this.tonedRest);
+    releaseToned(this.tonedEating);
+    this.tonedRest = null;
+    this.tonedEating = null;
+    super.destroy(options);
   }
 
   get heightPx(): number {
