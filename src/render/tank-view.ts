@@ -1,9 +1,9 @@
 import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
-import { isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
+import { isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, personalitySpec, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedArtVersion, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { SETUP_SECONDS, setupLook, setupStepAt, type SetupStep } from './setup-show';
-import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, hungerLook, sickLook, spawnSwimmer, stepTurn, swimTilt, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
+import { DEATH_SECONDS, POKE_SECONDS, STARTLE_SECONDS, deathPose, hungerLook, sickLook, spawnSwimmer, stepTurn, swimTilt, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { floorAt, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { dirtSpots, floorY, frontLip, sandSurface, tankSubstrateLook, SUBSTRATE_PALETTES, type SubstrateLook } from './substrate';
 import { celebrateFrame, CELEBRATE_SECONDS, sparkleAlpha, sparkleBurst, type Sparkle } from './celebrate';
@@ -126,6 +126,8 @@ export interface TankViewEvents {
   onScapeDrop?: (target: ScapeTarget, x: number) => void;
   /** 開缸演出進到下一步（放音效、說明字）。 */
   onSetupStep?: (step: SetupStep) => void;
+  /** 玩家撒的這一把飼料，第一口被這尾魚吃到（F6：看得出誰貪吃）。 */
+  onFirstBite?: (fishId: number) => void;
 }
 
 /** 魚畫得比真實比例大一些（遊戲裡要看得清楚品系花紋）。 */
@@ -227,6 +229,10 @@ export class TankView {
   /** 這次按下後拖動過，放開時不算點選。 */
   private dragged = false;
   private ripples: Array<{ x: number; t: number }> = [];
+  /** 手指點水裡空白處（F6）：好奇的魚游過來看，點的地方泛一圈水波。 */
+  private poke: { x: number; y: number; age: number; seq: number } | null = null;
+  /** 玩家剛撒飼料，還沒有魚吃到第一口。 */
+  private firstBitePending = false;
   private crumbs: Crumb[] = [];
   /** 黏缸壁錠貼在玻璃上的位置；t 記一開始有幾顆碎屑，越吃越小。 */
   private tablet: { x: number; y: number; t: number } | null = null;
@@ -464,6 +470,9 @@ export class TankView {
       }
     }
     this.events.onSelectFish?.(null);
+    // 點到水裡空白處：好奇的魚會游過來看
+    const w = this.waterBounds;
+    if (y > w.surface && y < floorAt(this.bounds, x) - 6) this.poke = { x, y, age: 0, seq: (this.poke?.seq ?? 0) + 1 };
   }
 
   /** 每個畫面呼叫一次。realDt 為現實經過的秒數（動畫用）。 */
@@ -1193,6 +1202,7 @@ export class TankView {
         for (const p of pellets) applyFoodLook(p, kind);
         this.ripples.push({ x: dropX, t: 0 }, { x: dropX - width * 0.02, t: -0.18 }, { x: dropX + width * 0.025, t: -0.35 });
         this.dropT = 0;
+        this.firstBitePending = true;
       }
       for (const p of pellets) {
         const k = (p as Pellet & { kind?: FoodLook }).kind ?? kind;
@@ -1217,6 +1227,10 @@ export class TankView {
       const p = this.food.splice(pick.food, 1)[0];
       if (pick.eater !== null) {
         views[pick.eater].biteT = 0;
+        if (this.firstBitePending) {
+          this.firstBitePending = false;
+          this.events.onFirstBite?.(views[pick.eater].swimmer.id);
+        }
         // 魚咬到飼料冒一兩顆小氣泡
         if (!isShrimpSpecies(views[pick.eater].swimmer.species)) {
           for (let i = 0, n = 1 + Math.floor(this.rand() * 2); i < n; i++) {
@@ -1244,6 +1258,16 @@ export class TankView {
       if (w.t < 0) continue;
       const { r: rr, alpha } = ripple(w.t, 46 * this.hs);
       fx.ellipse(w.x, surface + 3, rr, rr * 0.22).stroke({ color: 0xffffff, alpha, width: Math.max(1, 2 * this.hs) });
+    }
+    // 手指點的地方：兩圈淡淡的水波往外散
+    if (this.poke && this.poke.age < 0.9) {
+      for (const lag of [0, 0.25]) {
+        const t = this.poke.age - lag;
+        if (t < 0) continue;
+        const k = t / 0.65;
+        if (k >= 1) continue;
+        fx.circle(this.poke.x, this.poke.y, (8 + 30 * k) * this.hs).stroke({ color: 0xffffff, alpha: 0.55 * (1 - k), width: Math.max(1, 1.6 * this.hs) });
+      }
     }
     this.crumbs = this.crumbs.filter((c) => (c.t += dt) < 0.6);
     for (const c of this.crumbs) {
@@ -1527,7 +1551,8 @@ export class TankView {
     const all = [...this.fish.values()].map((v) => v.swimmer);
     const alive = new Set(state.fish.filter((f) => f.alive).map((f) => f.id));
     const living = all.filter((s) => alive.has(s.id));
-    const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food, frenzy: this.food.length ? frenzyLevel(this.dropT) : 0 };
+    if (this.poke && (this.poke.age += dt) > POKE_SECONDS) this.poke = null;
+    const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food, frenzy: this.food.length ? frenzyLevel(this.dropT) : 0, poke: this.poke ?? undefined };
     for (const fish of state.fish) {
       const view = this.fish.get(fish.id)!;
       const { swimmer, rig } = view;
@@ -1537,11 +1562,13 @@ export class TankView {
       // 身體大小（上一格的景深）：讓整條魚留在缸裡
       const halfLen = this.lengthPx(fish) * (0.72 + 0.33 * view.z) * 0.5;
       const body = { halfLen, halfH: halfLen * ('heightPx' in rig ? rig.heightPx / Math.max(1, rig.lengthPx) : 0.35) };
-      updateSwimmer(swimmer, living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX, body, begging: hungerLook(fish.hunger).begging }, ctx, dt, () => this.rand());
+      const mood = isShrimpSpecies(fish.species) ? undefined : personalitySpec(fish);
+      updateSwimmer(swimmer, living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX, body, begging: hungerLook(fish.hunger).begging, mood }, ctx, dt, () => this.rand());
 
       // 景深：魚慢慢在前後之間游動；遠的小一點、模糊偏藍，畫在造景後面。
       if (!isShrimpSpecies(fish.species) && fish.alive) {
-        if (this.rand() < dt * 0.04) view.zTarget = this.rand();
+        // 愛炫耀的常游到前面來展示（F6）
+        if (this.rand() < dt * 0.04) view.zTarget = mood && mood.display > 0.5 ? 0.55 + this.rand() * 0.45 : this.rand();
         view.z += (view.zTarget - view.z) * Math.min(1, dt * 0.25);
       }
       const back = view.back ? view.z < BACK_LEAVE : view.z < BACK_ENTER;

@@ -734,3 +734,32 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .item-pic .kit-thermo { height: 30px; margin-bottom: 8px; }
 .item-pic .wc-mini.level { width: 30px; height: 34px; }
 .item-pic .wc-mini.level i { background: rgba(255, 255, 255, 0.08); }
+
+/* 魚的個性（F6）：點魚卡標題下一顆小標籤，詳細面板多一行說明 */
+.persona-chip { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 1px 7px 1px 5px; border-radius: 999px; font-size: 11px; letter-spacing: 0.06em; color: #fff; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.16); vertical-align: 1px; }
+.persona-chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--c, #ccc); box-shadow: 0 0 6px var(--c, #ccc); }
+.persona-chip.shy { --c: #8fd3a8; }
+.persona-chip.greedy { --c: #f2a65a; }
+.persona-chip.showy { --c: #f5d76e; }
+.persona-chip.curious { --c: #7cc8ff; }
+.persona-chip.lazy { --c: #b8a6e8; }
+.persona-line { display: flex; align-items: center; gap: 8px; }
+.persona-line .persona-chip { margin-left: 0; }
+.persona-line span:last-child { color: var(--muted); font-size: 13px; }
+
+/* 第一口被誰吃到：魚頭上浮一行小字，慢慢往上飄走 */
+.bite-tag { position: absolute; z-index: 6; transform: translate(-50%, -150%); padding: 4px 10px; border-radius: 999px; font-size: 12px; color: #fff; white-space: nowrap; pointer-events: none; background: rgba(20, 34, 40, 0.72); border: 1px solid rgba(242, 166, 90, 0.6); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35); animation: bite-tag 2.4s ease-out forwards; }
+@keyframes bite-tag {
+  0% { opacity: 0; transform: translate(-50%, -110%) scale(0.85); }
+  12% { opacity: 1; transform: translate(-50%, -150%) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -230%); }
+}
+.bite-tag.below { animation-name: bite-tag-below; }
+@keyframes bite-tag-below {
+  0% { opacity: 0; transform: translate(-50%, 110%) scale(0.85); }
+  12% { opacity: 1; transform: translate(-50%, 160%) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, 220%); }
+}
+@media (prefers-reduced-motion: reduce) { .bite-tag { animation-duration: 0.01s; animation-fill-mode: none; } }

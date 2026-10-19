@@ -159,6 +159,7 @@ import type { MomentId } from './moments';
 import { READING_TONES, todos } from './status';
 import { overloadWarning } from './tutorial';
 import { ownerAsk } from './owner-ask';
+import { personaLine } from './persona';
 
 export interface PanelContext {
   game: Game;
@@ -451,6 +452,7 @@ export function fishPanel({ game, sheet, toasts, fishPic }: PanelContext, fishId
     {},
     pic ? h('div.fish-hero', {}, h('img', { src: pic, alt: '', draggable: 'false' })) : null,
     h('p', {}, `${fishName(fish)} · 體長約 ${fish.lengthCm.toFixed(1)} cm · ${ageLabel(fish.ageDays)}`),
+    personaLine(fish),
     h('p', {}, growthLine(game.state, fish)),
     h('p', {}, habitLine(game.state, fish)),
     broodLine(game.state, fish),

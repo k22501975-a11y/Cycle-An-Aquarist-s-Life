@@ -30,6 +30,7 @@ import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, use
 import { h } from './ui/dom';
 import { ICONS } from './ui/icons';
 import { describeEvent, fishName, fishStrain } from './ui/labels';
+import { personaChip } from './ui/persona';
 import {
   debugPanel,
   feedPanel,
@@ -377,7 +378,7 @@ async function start(): Promise<void> {
       close,
       ...(pic ? [h('img.sel-pic', { src: pic, alt: '', draggable: 'false' })] : []),
       h('div.card-title', {}, title, h(`span.hunger-chip.${cond.hunger}`, {}, HUNGER_LABEL[cond.hunger])),
-      h('div.card-sub', {}, sub),
+      h('div.card-sub', {}, sub, personaChip(fish)),
       bar('健康', fish.health, fish.health > 0.6 ? 'ok' : fish.health > 0.3 ? 'warn' : 'bad'),
       bar('壓力', fish.stress, fish.stress < 0.4 ? 'warn' : 'bad'),
       bar('飽足', 1 - cond.hungerValue, hungry ? (cond.hunger === 'starving' ? 'bad' : 'warn') : 'ok'),
@@ -398,6 +399,21 @@ async function start(): Promise<void> {
     onSelectPlant: (id) => sheet.open('水草', () => plantPanel(ctx, id), { live: true }),
     onScapeSelect: (target) => scapeBar.select(target),
     onScapeDrop: (target, x) => scapeBar.drop(target, x),
+    // 手指餵食（F6）：撒下去的第一口被誰吃到，在那尾魚頭上浮一行小字，看得出誰貪吃
+    onFirstBite: (id) => {
+      const fish = game.state.fish.find((f) => f.id === id);
+      if (!fish || game.state.fish.filter((f) => f.alive && !sim.isShrimpSpecies(f.species)).length < 2) return;
+      const pos = view.fishScreenPos(id);
+      if (!pos) return;
+      // 魚在水面搶食，頭上的空間常被狀態列蓋住：太靠上就放在魚的下面
+      const hudBottom = hud.getBoundingClientRect().bottom - stage.getBoundingClientRect().top;
+      const below = pos.y < hudBottom + 56;
+      const tag = h(`div.bite-tag${below ? '.below' : ''}`, { 'aria-hidden': 'true' }, `${sim.personalitySpec(fish).label}的 ${fishName(fish)} 搶到第一口`);
+      tag.style.left = `${Math.round(Math.max(90, Math.min(stage.clientWidth - 90, pos.x)))}px`;
+      tag.style.top = `${Math.round(pos.y)}px`;
+      stage.append(tag);
+      window.setTimeout(() => tag.remove(), 2400);
+    },
     // 開缸演出（F1-b）：每一步一個音效和一行說明，最後是「你的第一個缸」
     onSetupStep: (step) => {
       if (step === 'done') {

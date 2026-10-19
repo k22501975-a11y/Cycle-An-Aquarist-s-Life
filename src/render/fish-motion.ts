@@ -54,6 +54,25 @@ export interface MotionContext {
   food: Array<{ x: number; y: number }>;
   /** 剛撒飼料的搶食熱度 0–1：魚不太餓也會衝上去搶。 */
   frenzy?: number;
+  /** 手指剛點過的水裡一點（F6）：好奇的魚會游過來看；seq 每點一次換一個，決定這次誰會來。 */
+  poke?: { x: number; y: number; age: number; seq: number };
+}
+
+/** 魚的個性帶來的小行為（sim/personality.ts 的係數）。 */
+export interface FishMood {
+  feedRush: number;
+  activity: number;
+  hide: number;
+  approach: number;
+}
+
+/** 手指點水面後魚過來看的秒數。 */
+export const POKE_SECONDS = 4;
+
+/** 這次手指點下去，這尾魚會不會游過來（同一次點擊結果固定，不會一幀來一幀不來）。 */
+export function comesToPoke(id: number, seq: number, approach: number): boolean {
+  const x = Math.sin(id * 12.9898 + seq * 78.233) * 43758.5453;
+  return x - Math.floor(x) < approach;
 }
 
 export interface FishCondition {
@@ -70,6 +89,8 @@ export interface FishCondition {
   begging?: number;
   /** 畫面上身體的一半長、一半高（像素）：整條魚留在缸裡，不會半個身體出了缸壁或埋進底沙。 */
   body?: { halfLen: number; halfH: number };
+  /** 個性（F6）：搶食快慢、活潑程度、愛不愛躲、會不會游來看手指。 */
+  mood?: FishMood;
 }
 
 /** 靠近母魚的外人（不是自己的小孩、不是蝦）。 */
@@ -111,7 +132,8 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   }
 
   const sym = new Set(cond.symptoms);
-  let speed = p.speed * scale;
+  const mood = cond.mood;
+  let speed = p.speed * scale * (mood?.activity ?? 1);
   s.size = cond.body;
   s.eating = false;
 
@@ -144,6 +166,8 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   let targetDepth = p.depth;
   if (sym.has('hiding')) targetDepth = 0.9;
   if (sym.has('gasping')) targetDepth = 0;
+  // 愛躲的（膽小、懶散）待低一點，靠近底下的水草和石頭
+  else if (mood && !p.crawler && !sym.has('hiding')) targetDepth += (1 - targetDepth) * mood.hide * 0.35;
   // 同一群的魚各有一點偏好的上下位置，不會全擠在同一個水層疊成一團（#147）
   else if (p.cohesion > 0) targetDepth = Math.min(1, Math.max(0, targetDepth + (((s.id * 0.618) % 1) - 0.5) * 0.35));
   const targetY = bounds.surface + 12 * scale + targetDepth * (bounds.bottom - bounds.surface - 24 * scale);
@@ -253,9 +277,29 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
       // 往上衝搶水面的飼料：搶食越熱往上拉得越用力
       if (!p.crawler) ay += ((best.y - s.y) / d) * 2.5 * (1 + 1.5 * frenzy);
       if (pull < 1) s.vx *= Math.pow(0.05, dt * (1 - pull));
-      speed *= 1.6 + 0.9 * frenzy;
+      // 貪吃的衝最快，膽小的慢吞吞（F6）；乘回 activity 的倒數，搶食快慢只看 feedRush
+      speed *= (1.6 + 0.9 * frenzy) * (mood ? mood.feedRush / mood.activity : 1);
       chasing = !p.crawler;
     }
+  }
+
+  // 手指點水面（F6）：好奇的魚游過來看看，到了就在旁邊慢慢晃
+  const poke = ctx.poke;
+  if (!chasing && poke && mood && !p.crawler && poke.age < POKE_SECONDS && cond.follow === undefined && cond.nestX === undefined && !sym.has('hiding') && comesToPoke(s.id, poke.seq, mood.approach)) {
+    const dx = poke.x - s.x;
+    const dy = poke.y - s.y;
+    const d = Math.hypot(dx, dy) + 1;
+    const near = Math.max(22 * scale, (cond.body?.halfLen ?? 0) * 1.6);
+    if (d > near) {
+      ax += (dx / d) * 2.2;
+      ay += (dy / d) * 2.2;
+      speed *= 2;
+    } else {
+      s.vx *= Math.pow(0.1, dt);
+      s.vy *= Math.pow(0.1, dt);
+      speed *= 0.4;
+    }
+    chasing = true;
   }
 
   // 分離最後才加：追飼料、停著吃會蓋掉前面的方向，但不能蓋掉個人空間（停著吃時推得輕一點，大家擠在同一顆飼料邊也看得出幾條）
