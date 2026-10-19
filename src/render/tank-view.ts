@@ -121,6 +121,8 @@ interface Ray {
 export interface TankViewEvents {
   onSelectFish?: (id: number | null) => void;
   onSelectPlant?: (id: number) => void;
+  /** 點到缸裡的螺（每日小事「找到螺」）。 */
+  onTapSnail?: () => void;
   /** 造景模式：點選、放開拖曳的物件（x 是 0–1 的橫向位置）。 */
   onScapeSelect?: (target: ScapeTarget | null) => void;
   onScapeDrop?: (target: ScapeTarget, x: number) => void;
@@ -241,6 +243,8 @@ export class TankView {
   private readonly moltLayer = new Container();
   private readonly moltSprites = new Map<string, Sprite>();
   private readonly snails = new SnailView();
+  /** 每日小事「點一尾魚」還沒做：最早養的那尾魚身上一圈提示光。 */
+  private hintFish = false;
   private lastFoodMg = 0;
   private bubbles: Bubble[] = [];
   /** 公鬥魚的泡巢：魚 id → 泡巢的水平位置和大小（0–1，吐越久越大）。 */
@@ -335,6 +339,12 @@ export class TankView {
 
   selectFish(id: number | null): void {
     this.selectedFish = id;
+  }
+
+  /** 每日小事的提示（#188）：還沒做的「看魚」讓一尾魚發光、「找螺」讓螺發光，做完就熄。 */
+  setDailyHints(hints: { fish: boolean; snail: boolean }): void {
+    this.hintFish = hints.fish;
+    this.snails.hint = hints.snail;
   }
 
   /** 某條魚在畫面上的位置（像素，相對畫布左上角）；找不到就回傳 null。 */
@@ -454,6 +464,10 @@ export class TankView {
     }
     if (best !== null) {
       this.events.onSelectFish?.(best);
+      return;
+    }
+    if (this.snails.hitTest(x, y, 22 * this.hs)) {
+      this.events.onTapSnail?.();
       return;
     }
     for (const [id, view] of this.plants) {
@@ -1528,6 +1542,8 @@ export class TankView {
     const alive = new Set(state.fish.filter((f) => f.alive).map((f) => f.id));
     const living = all.filter((s) => alive.has(s.id));
     const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food, frenzy: this.food.length ? frenzyLevel(this.dropT) : 0 };
+    // 每日小事「點一尾魚」：挑最早養的那尾活魚發光（蝦太小不挑）
+    const hintId = this.hintFish ? (state.fish.find((f) => f.alive && !isShrimpSpecies(f.species))?.id ?? null) : null;
     for (const fish of state.fish) {
       const view = this.fish.get(fish.id)!;
       const { swimmer, rig } = view;
@@ -1635,16 +1651,18 @@ export class TankView {
         }
         view.eggsDrawn = berried;
       }
-      // 選取的魚：身後一圈柔和的金色光暈
+      // 選取的魚：身後一圈柔和的金色光暈；每日小事要點的那尾：一閃一閃的淡藍光（#188）
       const selected = this.selectedFish === fish.id;
-      view.glow.visible = selected;
-      rig.setRim(selected ? 0xffe9b0 : null, 0.75 + 0.25 * Math.sin(this.time * 3), this.quality.softGlow);
-      if (selected) {
-        const r = this.lengthPx(fish) * depth * 1.5;
+      const hinted = !selected && this.selectedFish === null && fish.id === hintId;
+      view.glow.visible = selected || hinted;
+      const beat = hinted ? 0.5 + 0.5 * Math.sin(this.time * 4) : 0.75 + 0.25 * Math.sin(this.time * 3);
+      rig.setRim(selected ? 0xffe9b0 : hinted ? 0xbff3ff : null, beat, this.quality.softGlow);
+      if (selected || hinted) {
+        const r = this.lengthPx(fish) * depth * (hinted ? 1.7 + 0.2 * beat : 1.5);
         view.glow.width = r;
         view.glow.height = r * 0.75;
-        view.glow.tint = 0xffe2a0;
-        view.glow.alpha = 0.55 + 0.15 * Math.sin(this.time * 3);
+        view.glow.tint = hinted ? 0xbff3ff : 0xffe2a0;
+        view.glow.alpha = hinted ? 0.35 + 0.35 * beat : 0.55 + 0.15 * Math.sin(this.time * 3);
       }
     }
   }

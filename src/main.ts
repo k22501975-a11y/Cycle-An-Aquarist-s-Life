@@ -60,6 +60,7 @@ import { recordsPanel } from './ui/records';
 import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt, ordersPanel } from './ui/orders-panel';
 import { flyCoins } from './ui/coin-fly';
 import { morningCard } from './ui/morning-card';
+import { dailyList } from './ui/daily-list';
 import { morningReport, snapshot, type ReportItem } from './ui/morning-report';
 import { loadCodexSeen, saveCodexSeen, unlockCodex } from './ui/codex';
 import { codexPanel } from './ui/codex-panel';
@@ -401,6 +402,12 @@ async function start(): Promise<void> {
   const view = new TankView(app, {
     onSelectFish: (id) => select(id),
     onSelectPlant: (id) => sheet.open('水草', () => plantPanel(ctx, id), { live: true }),
+    // 點到缸裡的螺：每日小事「找到螺」算完成，順手打開螺的管理（#188）
+    onTapSnail: () => {
+      sim.markDaily(game.tanks, 'snail');
+      checkDaily();
+      sheet.open('螺', () => snailPanel(ctx));
+    },
     onScapeSelect: (target) => scapeBar.select(target),
     onScapeDrop: (target, x) => scapeBar.drop(target, x),
     // 開缸演出（F1-b）：每一步一個音效和一行說明，最後是「你的第一個缸」
@@ -887,18 +894,67 @@ async function start(): Promise<void> {
         playSetup();
       }),
     );
-  // 每日 3 件小事（F3）：換天出新題、做完一件跳通知，三件都做完可以開寶箱（正式的小卡和寶箱演出由美術與 UI 做）
+  // 每日 3 件小事（F3、#188）：左上角一張清單，換天出新題、做完一件打勾跳通知，三件都做完可以開寶箱（正式的樣子和寶箱演出由美術與 UI 做）
   let dailyDay = sim.dailyTasks(game.tanks)?.day;
   /** 上次跳「開寶箱」通知的時間（通知消失沒按的話，過一陣子再跳一次）。 */
   let dailyOffered = -Infinity;
+  const claimChest = () => {
+    const coins = game.actAll((tanks) => sim.claimDaily(tanks));
+    if (coins) {
+      audio.play('quest');
+      toasts.show(`寶箱裡有 ${coins} 魚幣`);
+    }
+    renderDaily();
+  };
+  /** 點清單上的一件小事：帶到該做的地方（找螺、看魚是在缸裡發亮的那隻上點一下）。 */
+  const goDaily = (id: sim.DailyTaskId) => {
+    switch (id) {
+      case 'test':
+        testBtn.click();
+        break;
+      case 'feed':
+        sheet.open('餵食', () => feedPanel(ctx));
+        break;
+      case 'water':
+        sheet.open('換水', () => waterChangePanel(ctx));
+        break;
+      case 'trim':
+        sheet.open('修剪水草', () => trimListPanel(ctx));
+        break;
+      case 'scape':
+        sheet.close();
+        enterScape();
+        toasts.show('拖一塊石頭、沉木或一叢水草換個位置');
+        break;
+      case 'snail':
+        toasts.show('缸裡發亮的就是螺，點牠一下');
+        break;
+      case 'observe':
+        toasts.show('點一尾發亮的魚，看看牠今天怎麼樣');
+        break;
+    }
+  };
+  const dailyCard = h('div.daily-card.glass');
+  stage.append(dailyCard);
+  const dailyChanged = memo();
+  const renderDaily = () => {
+    const d = sim.dailyTasks(game.tanks);
+    // 找螺、看魚：目標在缸裡發亮，做完就熄（#188）
+    const open = (id: sim.DailyTaskId) => !!d && d.tasks.some((t) => t.id === id && !t.done);
+    view.setDailyHints({ fish: open('observe'), snail: open('snail') });
+    if (!dailyChanged(JSON.stringify(d ? [d.day, d.tasks, d.claimed] : null))) return;
+    if (!d || d.tasks.length === 0) dailyCard.replaceChildren();
+    else dailyCard.replaceChildren(dailyList(d, goDaily, claimChest));
+    measure();
+  };
   const checkDaily = () => {
     const fresh = sim.updateDaily(game.tanks);
+    renderDaily();
     const d = sim.dailyTasks(game.tanks);
     if (!d) return;
     if (d.day !== dailyDay) {
       dailyDay = d.day;
       dailyOffered = -Infinity;
-      if (d.tasks.length) toasts.show(`今天的小事：${d.tasks.map((t) => sim.DAILY_TEXT[t.id]).join('、')}`);
     }
     const done = d.tasks.filter((t) => t.done).length;
     for (const id of fresh) toasts.show(`✓ ${sim.DAILY_TEXT[id]}（今天的小事 ${done}/${d.tasks.length}）`);
@@ -906,13 +962,7 @@ async function start(): Promise<void> {
       dailyOffered = performance.now();
       toasts.show('今天的小事都做完了！', 'info', {
         label: '開寶箱',
-        run: () => {
-          const coins = game.actAll((tanks) => sim.claimDaily(tanks));
-          if (coins) {
-            audio.play('quest');
-            toasts.show(`寶箱裡有 ${coins} 魚幣`);
-          }
-        },
+        run: claimChest,
       });
     }
   };
@@ -932,8 +982,12 @@ async function start(): Promise<void> {
     // 通知讓出任務卡的寬度
     document.body.style.setProperty('--pill-w', guide.pillVisible ? `${guide.pill.offsetWidth + 14}px` : '0px');
     const pillH = guide.pillVisible ? guide.pill.offsetHeight + 8 : 0;
+    // 今日小事清單排在任務卡下面
+    dailyCard.style.top = `${Math.round(top + 10 + pillH)}px`;
+    const dailyH = dailyCard.childElementCount > 0 && !scaping && !visiting ? dailyCard.offsetHeight + 8 : 0;
+    dailyCard.hidden = scaping || !!visiting;
     const dockTop = dock.getBoundingClientRect().top - stageRect.top;
-    cardArea = { x: 0, y: top + 10 + pillH, w: stageRect.width, h: Math.max(0, dockTop - top - 10 - pillH - 34) };
+    cardArea = { x: 0, y: top + 10 + pillH + dailyH, w: stageRect.width, h: Math.max(0, dockTop - top - 10 - pillH - dailyH - 34) };
     placeSelCard();
     stage.style.setProperty('--dock-top', `${Math.round(stageRect.bottom - dockTop - stageRect.top)}px`);
     document.body.style.setProperty('--dock-top', `${Math.round(stageRect.bottom - dockTop - stageRect.top)}px`);
@@ -1113,11 +1167,14 @@ async function start(): Promise<void> {
       // 半夜出狀況：快轉的話切回正常速度，醒來先處理
       if (r.crisis && game.clock.timeScale > sim.DEFAULT_TIME_SCALE) game.clock.timeScale = sim.DEFAULT_TIME_SCALE;
       const report = morningReport(before, game.tanks, r.hours, r.crisis);
+      // 新的一天的小事先出好，報告卡最上面列出來（#188）
+      sim.updateDaily(game.tanks);
+      const daily = sim.dailyTasks(game.tanks);
       speed.render();
       save();
       analytics.track('sleep', { hours: r.hours, stopped: r.crisis !== null, items: report.items.length });
       shade.classList.add('dawn');
-      const card = morningCard(report, { picture: reportPicture, go: goReport }, () => {
+      const card = morningCard(report, { picture: reportPicture, go: goReport, daily: daily ? { state: daily, go: goDaily } : undefined }, () => {
         shade.classList.remove('in');
         window.setTimeout(() => shade.remove(), 450);
         sleepingNow = false;
@@ -1136,6 +1193,7 @@ async function start(): Promise<void> {
     measure();
     renderSelCard();
     renderTodos();
+    renderDaily();
     renderCaps();
     renderTankChip();
     save();

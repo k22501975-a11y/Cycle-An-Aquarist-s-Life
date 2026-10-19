@@ -3,7 +3,6 @@ import { newGameState } from './game';
 import {
   addCuttings,
   addFish,
-  addHardscape,
   addPlant,
   claimDaily,
   dailyTasks,
@@ -11,10 +10,10 @@ import {
   FISH_SPECIES,
   feed,
   fulfillOrder,
-  HARDSCAPE,
   markDaily,
   orderBoard,
   orderContext,
+  placePlant,
   PINCH_MEALS,
   simulate,
   trimPlant,
@@ -55,7 +54,7 @@ function baseline(seed: number, days = 60): Array<{ day: number; from: string; c
     if (r.ammonia > 0 || r.nitrite > 0 || tasks.includes('water')) waterChange(s, 0.3);
     // 每日小事：剩下要動手的也做完
     if (tasks.includes('trim')) for (const p of s.plants) addCuttings(s, p.species, trimPlant(s, p.id));
-    if (tasks.includes('scape')) addHardscape(s, HARDSCAPE.lava);
+    if (tasks.includes('scape')) placePlant(s, s.plants[0].id, { x: (s.plants[0].place?.x ?? 0.5) > 0.5 ? 0.3 : 0.7 });
     if (tasks.includes('observe')) markDaily(tanks, 'observe');
     if (tasks.includes('snail')) markDaily(tanks, 'snail');
     updateDaily(tanks);

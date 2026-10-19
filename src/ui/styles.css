@@ -742,3 +742,17 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .setup-panel > .row { justify-content: flex-end; gap: 8px; position: sticky; bottom: 0; padding: 8px 0; }
 .setup-cta { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5; font-size: 18px; padding: 14px 22px; box-shadow: 0 0 24px rgba(227, 189, 109, 0.6); }
 .setup-cta[hidden] { display: none; }
+
+/* 今日小事清單（#188）：左上角任務卡下面一張，早上報告卡最上面也有。正式樣式由美術與 UI 再調 */
+.daily-card { position: absolute; left: 14px; z-index: 5; padding: 8px 12px; border-radius: 14px; min-width: 180px; max-width: 260px; }
+.daily-card:empty { display: none; }
+.daily-list { display: flex; flex-direction: column; gap: 2px; }
+.daily-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 13px; }
+.daily-count { color: var(--muted); font-size: 12px; }
+.daily-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: 0; padding: 3px 0; color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+.daily-item:hover { color: var(--accent, #f0c96a); }
+.daily-check { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.55); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; line-height: 1; }
+.daily-item.done { color: var(--muted); }
+.daily-item.done .daily-check { background: var(--ok); border-color: var(--ok); color: #0c1d1a; }
+.daily-chest { margin-top: 4px; align-self: flex-start; }
+.morning .daily-list { margin: 4px 0 8px; padding: 8px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); }

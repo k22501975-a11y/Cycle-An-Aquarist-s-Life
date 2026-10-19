@@ -1,6 +1,8 @@
 import { artUrl, ownerImg, type ArtIcon } from './art-icons';
 import { h } from './dom';
 import type { MorningReport, ReportItem, ReportKind } from './morning-report';
+import { dailyList } from './daily-list';
+import type { DailyState, DailyTaskId } from '../sim';
 
 /**
  * 「過一晚」醒來的早上報告卡（first-10-minutes.md F2）：阿德老闆一句話、一條一條的圖卡，
@@ -61,6 +63,8 @@ export interface MorningCardDeps {
   picture?: (item: ReportItem) => string | null;
   /** 點了某一條：關掉報告卡後帶去處理。 */
   go: (item: ReportItem) => void;
+  /** 今天的小事（#188）：列在最上面，點了關掉報告卡後帶去做。 */
+  daily?: { state: DailyState; go: (id: DailyTaskId) => void };
 }
 
 /** 老闆的開場白：照最要緊的那一條說。 */
@@ -99,6 +103,12 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
     h('div.morning-sky', { 'aria-hidden': 'true' }, h('span.morning-sun')),
     h('b.morning-title', {}, report.title),
     h('div.owner-say', {}, ownerImg('owner-say-avatar'), h('span', {}, morningLine(report))),
+    deps.daily && deps.daily.state.tasks.length > 0 && !report.stopped
+      ? dailyList(deps.daily.state, (id) => {
+          close();
+          deps.daily!.go(id);
+        })
+      : null,
     h('div.morning-list', {}, ...items.map(row)),
     h('button.btn.primary.morning-start', { type: 'button', onclick: close }, report.stopped ? '知道了' : '開始新的一天'),
   );

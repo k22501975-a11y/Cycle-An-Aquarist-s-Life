@@ -1,4 +1,4 @@
-import { economy } from './economy';
+import { economy, FOOD_PER_MEAL, price } from './economy';
 import { PLANT_SPECIES } from './species';
 import { needsSetup } from './setup';
 import type { TankState } from './state';
@@ -6,6 +6,7 @@ import type { TankState } from './state';
 /**
  * 每日 3 件小事（design/first-10-minutes.md F3）：每個遊戲天早上從玩家缸裡做得到的事挑 3 件，
  * 全部做完給一小筆魚幣（寶箱演出由畫面負責）。不出做不到的題目：沒有螺就不出找螺、沒有長太長的草就不出修剪。
+ * 小事不能要玩家花錢（mvp.md §4.4.2，#188）：會花錢的題目，花費要比獎勵少很多才出（DAILY_COST）。
  * 判定看出題以後玩家有沒有再做一次（任何一缸都算）；要點畫面的題目（找螺、看魚）由畫面呼叫 markDaily。
  */
 
@@ -16,9 +17,8 @@ export const DAILY_COUNT = 3;
 export const DAILY_REWARD = 30;
 /** 多久沒換水才出「換水」題（不鼓勵天天大換水）。 */
 const WATER_TASK_GAP_HOURS = 4 * 24;
-/** 錢少於這個數就不出「擺石頭」（最便宜的火山石 150）。 */
-const SCAPE_TASK_MIN_COINS = 400;
-const SCAPE_TASK_MAX_PIECES = 4;
+/** 每件小事要花的魚幣（測一次水 2 元試劑、餵一次飼料約半元，其他都免費）。三件加起來一定要比獎勵少。 */
+export const DAILY_COST: Record<DailyTaskId, number> = { test: price('use:test'), feed: FOOD_PER_MEAL, water: 0, trim: 0, snail: 0, observe: 0, scape: 0 };
 
 export interface DailyTask {
   id: DailyTaskId;
@@ -31,8 +31,8 @@ export interface DailyState {
   /** 出題的時間（遊戲小時）。 */
   issuedHours: number;
   tasks: DailyTask[];
-  /** 出題時所有缸的造景數（之後變多就算擺了）。 */
-  scapeCount: number;
+  /** 舊存檔：出題時所有缸的造景數（以前的「擺新石頭」用，現在不看了）。 */
+  scapeCount?: number;
   /** 出題時各動作最後一次的時間（之後比它晚就算做了；同一個小時先做再出題也不會被算進去）。 */
   before: Partial<Record<TimedTask, number>>;
   /** 畫面回報的動作（找到螺、點魚看）。 */
@@ -48,14 +48,15 @@ export const DAILY_TEXT: Record<DailyTaskId, string> = {
   trim: '修剪一株長太長的水草',
   snail: '找到缸裡的螺，點牠一下',
   observe: '點一尾魚，看看牠今天怎麼樣',
-  scape: '擺一塊新石頭或沉木',
+  scape: '進造景模式，移動一塊石頭、沉木或一叢水草',
 };
 
-type TimedTask = 'test' | 'feed' | 'water' | 'trim';
+type TimedTask = 'test' | 'feed' | 'water' | 'trim' | 'scape';
+const TIMED: TimedTask[] = ['test', 'feed', 'water', 'trim', 'scape'];
 
 /** 所有缸裡這個動作最後一次的時間。 */
 function lastTime(id: TimedTask, tanks: TankState[]): number | undefined {
-  const times = tanks.map((t) => (id === 'test' ? t.lastTest?.hours : id === 'feed' ? t.lastFedHours : id === 'water' ? t.lastWaterChangeHours : t.lastTrimHours));
+  const times = tanks.map((t) => (id === 'test' ? t.lastTest?.hours : id === 'feed' ? t.lastFedHours : id === 'water' ? t.lastWaterChangeHours : id === 'trim' ? t.lastTrimHours : t.lastScapeHours));
   const known = times.filter((h): h is number => h !== undefined);
   return known.length ? Math.max(...known) : undefined;
 }
@@ -76,8 +77,6 @@ function hasSnails(t: TankState): boolean {
   return s.snails.length > 0 || Object.values(s.pests).some((n) => n >= 1);
 }
 
-const scapeCount = (tanks: TankState[]) => tanks.reduce((n, t) => n + (t.equipment.hardscape ?? []).length, 0);
-
 /** 今天出得了哪些題目。 */
 export function eligibleDaily(tanks: TankState[]): DailyTaskId[] {
   const out: DailyTaskId[] = ['test'];
@@ -86,8 +85,9 @@ export function eligibleDaily(tanks: TankState[]): DailyTaskId[] {
   if (tanks.some((t) => home.hours - (t.lastWaterChangeHours ?? 0) >= WATER_TASK_GAP_HOURS)) out.push('water');
   if (tanks.some(trimmable)) out.push('trim');
   if (tanks.some(hasSnails)) out.push('snail');
-  if (economy(home).coins >= SCAPE_TASK_MIN_COINS && tanks.some((t) => (t.equipment.hardscape ?? []).length < SCAPE_TASK_MAX_PIECES)) out.push('scape');
-  return out;
+  // 移動現有的造景（不用買新的）：缸裡有石頭、沉木或水草才出
+  if (tanks.some((t) => (t.equipment.hardscape ?? []).length > 0 || t.plants.length > 0)) out.push('scape');
+  return out.filter((id) => DAILY_COST[id] < DAILY_REWARD / DAILY_COUNT);
 }
 
 /** 用天數和存檔種子挑題目（不動模擬的亂數，讀檔重算也一樣）。 */
@@ -107,14 +107,13 @@ function isDone(id: DailyTaskId, d: DailyState, tanks: TankState[]): boolean {
     case 'test':
     case 'feed':
     case 'water':
-    case 'trim': {
+    case 'trim':
+    case 'scape': {
       // 用「比出題時晚」而不是「不一樣」：收掉一缸會讓最後時間變早，不能算做了
       const now = lastTime(id, tanks);
       const before = d.before[id];
       return now !== undefined && (before === undefined || now > before);
     }
-    case 'scape':
-      return scapeCount(tanks) > d.scapeCount;
     default:
       return d.marked.includes(id);
   }
@@ -134,8 +133,7 @@ export function updateDaily(tanks: TankState[]): DailyTaskId[] {
       day,
       issuedHours: home.hours,
       tasks: pick(eligibleDaily(tanks), day, home.rng.seed).map((id) => ({ id, done: false })),
-      scapeCount: scapeCount(tanks),
-      before: Object.fromEntries((['test', 'feed', 'water', 'trim'] as const).map((id) => [id, lastTime(id, tanks)])),
+      before: Object.fromEntries(TIMED.map((id) => [id, lastTime(id, tanks)])),
       marked: [],
       claimed: false,
     };
