@@ -3,7 +3,8 @@
 PR 要合併到 `main`，必須同時符合：
 
 1. **CI「品質閘門」綠燈**（`.github/workflows/ci.yml` 最後一個工作），它要求下面全部通過：
-   - 靜態檢查：`npm run lint`（ESLint）、`npm run typecheck`（四份 tsconfig：主程式、模擬核心、模擬服務、e2e）、`npm run check:assets`（素材預算）
+   - 靜態檢查：`npm run lint`（ESLint）、`npm run typecheck`（四份 tsconfig：主程式、模擬核心、模擬服務、e2e）、`npm run check:assets`（素材預算）、`npm audit --omit=dev --audit-level=high`（遊戲本體用的套件不能有 high 以上的已知漏洞）
+   - 安全檢查：gitleaks 掃整個 git 歷史有沒有金鑰、密碼（設定在 `.gitleaks.toml`）；PR 新增或升級的套件用 dependency-review 檢查，有 high 以上漏洞就擋
    - 單元測試：`npm test`（Vitest）
    - 遊戲流程測試：打包、檢查 JS 大小、`npm run e2e`（Playwright，案例在 `e2e/`）
    - 伺服器：`./gradlew test bootJar`
@@ -15,6 +16,13 @@ PR 要合併到 `main`，必須同時符合：
 4. 由**總控**合併（2026-10-19 起，各角色不自己合併）。
 
 本機一次跑完前三關（除了流程測試）：`npm run check`。
+
+## 套件與秘密
+
+- **Dependabot**（`.github/dependabot.yml`）：每週一檢查 npm 和伺服器（Gradle）的套件、每月檢查 GitHub Actions，有更新或安全公告就開 PR，照一般流程審查、合併。
+- **相依套件圖**（`.github/workflows/dependency-graph.yml`）：GitHub 看不懂 Gradle，main 上的 `server/` 有改動時實際解析一次送上去，漏洞提醒才涵蓋伺服器。
+- **秘密掃描誤判**：確定不是秘密才可以加進 `.gitleaks.toml` 的 allowlist，並在 PR 說明原因。真的外洩時，先到該服務撤銷金鑰，再清理 repo。
+- 建議 YenWel 也到 repo 的 Settings → Advanced Security 開啟 **Secret Protection 的 Push protection**（公開 repo 免費），在推送時就擋下金鑰。
 
 ## 流程測試（Playwright）
 

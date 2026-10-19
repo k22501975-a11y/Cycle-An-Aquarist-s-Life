@@ -1,0 +1,8 @@
+# 秘密掃描（gitleaks）設定：用預設規則，只排除確定不是秘密的誤判。
+# 新增排除前先確認真的不是金鑰；說明見 docs/quality-gate.md。
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "localStorage 的鍵名（例如 cycle.notify.v1），不是 API 金鑰"
+regexes = ['''^cycle\.[a-z0-9.-]+\.v\d+$''']

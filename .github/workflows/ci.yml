@@ -11,7 +11,7 @@ permissions:
 
 # 品質閘門（docs/quality-gate.md）：下面每個工作都要通過，最後的「品質閘門」才會綠，PR 才能合併。
 jobs:
-  # 第 1 關：靜態檢查（ESLint、TypeScript 型別、素材大小預算）
+  # 第 1 關：靜態檢查（ESLint、TypeScript 型別、素材大小預算、正式相依的已知漏洞）
   static:
     name: 靜態檢查
     runs-on: ubuntu-latest
@@ -25,6 +25,31 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run check:assets
+      # 遊戲本體會帶到玩家手上的套件，有 high 以上的已知漏洞就擋（開發工具另由 Dependabot 提醒）
+      - run: npm audit --omit=dev --audit-level=high
+
+  # 安全檢查：秘密掃描（整個 git 歷史）＋ PR 新增套件的漏洞與授權檢查
+  security:
+    name: 安全檢查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 秘密掃描（gitleaks）
+        env:
+          GITLEAKS_VERSION: 8.28.0
+          GITLEAKS_SHA256: a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb
+        run: |
+          curl -sSL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "$GITLEAKS_SHA256  gitleaks.tgz" | sha256sum -c -
+          tar xzf gitleaks.tgz gitleaks
+          ./gitleaks git --no-banner --redact --exit-code 1 .
+      - name: 新增套件檢查
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
 
   # 第 2 關：單元測試（Vitest，含模擬核心的情境測試）
   unit:
@@ -149,7 +174,7 @@ jobs:
   gate:
     name: 品質閘門
     if: always()
-    needs: [static, unit, e2e, server, android]
+    needs: [static, security, unit, e2e, server, android]
     runs-on: ubuntu-latest
     steps:
       - name: 有關卡失敗或被取消
