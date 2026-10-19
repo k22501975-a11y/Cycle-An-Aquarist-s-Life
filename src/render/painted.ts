@@ -137,10 +137,6 @@ export function paintedKey(species: FishSpeciesId, form: FishForm, variant: numb
 /** 背景與造景（青龍石、沉木）：不做網格，由 scenery.ts 畫進場景的 Canvas。 */
 export const SCENERY: Record<string, string> = {
   'bg-back': 'bg/bg-tank-back.webp',
-  // 中景（畫面評測 V18：後景太空）：遠處的水草叢和青苔石，畫進後景、模糊、蓋水色
-  'mid-plants-left': 'scape/mid-plants-left.webp',
-  'mid-plants-right': 'scape/mid-plants-right.webp',
-  'mid-rocks': 'scape/mid-rocks.webp',
   'rock-1': 'scape/rock-seiryu-1.webp',
   'rock-2': 'scape/rock-seiryu-2.webp',
   'rock-3': 'scape/rock-seiryu-3.webp',
