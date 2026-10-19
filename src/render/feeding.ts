@@ -107,6 +107,14 @@ export function biteKick(t: number): number {
   return Math.sin((Math.PI * t) / BITE_SECONDS);
 }
 
+/**
+ * 咬一口時身體的動作（kick 0–1）：只往前吸一下（身長的 3%），不點頭、不壓扁，動作集中在嘴巴。
+ * 原本往前衝一成二、頭往下點、身體壓扁，連咬幾口看起來整條魚在甩（YenWel 回報）。
+ */
+export function biteMotion(kick: number): { dx: number; rot: number; sx: number; sy: number } {
+  return { dx: kick * 0.03, rot: 0, sx: 1 - 0.02 * kick, sy: 1 };
+}
+
 /** 張嘴程度：咬的動作過了一點才開始張，最用力時全開，平滑淡入淡出。 */
 export function mouthOpenness(kick: number): number {
   const t = Math.max(0, Math.min(1, (kick - 0.1) / 0.6));

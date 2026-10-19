@@ -2,11 +2,11 @@ import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointer
 import { isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedArtVersion, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
-import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, hungerLook, sickLook, spawnSwimmer, stepTurn, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
+import { DEATH_SECONDS, STARTLE_SECONDS, deathPose, hungerLook, sickLook, spawnSwimmer, stepTurn, swimTilt, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { floorAt, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { dirtSpots, floorY, frontLip, sandSurface, tankSubstrateLook, SUBSTRATE_PALETTES, type SubstrateLook } from './substrate';
 import { celebrateFrame, CELEBRATE_SECONDS, sparkleAlpha, sparkleBurst, type Sparkle } from './celebrate';
-import { applyFoodLook, BITE_SECONDS, biteKick, frenzyLevel, visiblePellets, mouthOpenness, pickEaten, pickFoodKind, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type FoodLook, type Mouth, type Pellet } from './feeding';
+import { applyFoodLook, BITE_SECONDS, biteKick, biteMotion, frenzyLevel, visiblePellets, mouthOpenness, pickEaten, pickFoodKind, ripple, RIPPLE_SECONDS, scatterPellets, stepPellet, type FoodLook, type Mouth, type Pellet } from './feeding';
 import { canvasTexture, flakeTextures, spotlightTexture, makeCanvas, mix, pelletTextures, softDotTexture, tabletTexture, wormTextures } from './paint';
 import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame, TEST_SECONDS, WATER_CHANGE_SECONDS, type KitParam } from './ops-fx';
 import { PlantMesh } from './plant-sway';
@@ -1455,7 +1455,7 @@ export class TankView {
       view.holder.position.set(swimmer.x, swimmer.y);
       // 圖層是頭朝左畫的：往右游時水平翻轉。轉身時身體先壓窄再彈回，不是瞬間翻面。
       // 蝦受驚往後彈開時頭的方向不變
-      if (fish.alive && !(swimmer.startle! > 0)) stepTurn(view.turn, swimmer.vx, dt);
+      if (fish.alive && !(swimmer.startle! > 0)) stepTurn(view.turn, swimmer.vx, dt, swimmer.eating && !isShrimpSpecies(fish.species));
       const facingLeft = view.turn.f > 0;
       const turn = turnScale(view.turn.f);
       const k = (this.lengthPx(fish) / rig.lengthPx) * depth;
@@ -1476,22 +1476,24 @@ export class TankView {
         rig.scale.y = k * turn.sy * sick.thin * hungerLook(fish.hunger).thin * (1 - 0.55 * sick.flash);
         rig.alpha = rig.look.alpha;
         rig.setDim(sick.dim);
-        const tilt = symptoms.includes('loss_of_balance') ? 1.2 : Math.max(-0.35, Math.min(0.35, Math.atan2(swimmer.vy, Math.abs(swimmer.vx) + 1) * 0.6)) + 0.5 * sick.flash;
+        const tilt = symptoms.includes('loss_of_balance') ? 1.2 : swimTilt(swimmer) + 0.5 * sick.flash;
         rig.rotation = facingLeft ? tilt : -tilt;
         const clamped = symptoms.includes('clamped_fins');
-        rig.animate(swimmer.phase, clamped ? 0.25 : 1, clamped ? 0.55 : 1, fish.finDamage);
+        // 停在飼料旁邊吃：尾巴只輕輕擺著平衡
+        const hovering = swimmer.eating && !isShrimpSpecies(fish.species);
+        rig.animate(swimmer.phase, clamped ? 0.25 : hovering ? 0.35 : 1, clamped ? 0.55 : 1, fish.finDamage);
       }
-      // 咬一口：往前一衝、頭往下點一下
+      // 咬一口：身體只往前吸一點點，動作集中在張嘴
       const len = this.lengthPx(fish) * depth;
       const dir = facingLeft ? -1 : 1;
       view.biteT += dt;
       const kick = biteKick(view.biteT);
       if (kick > 0 && !isShrimpSpecies(fish.species)) {
-        view.holder.x += dir * kick * len * 0.12;
-        rig.rotation += dir * kick * 0.18;
-        // 張口咬的瞬間身體壓扁一成再彈回
-        rig.scale.x *= 1 - 0.1 * kick;
-        rig.scale.y *= 1 + 0.05 * kick;
+        const m = biteMotion(kick);
+        view.holder.x += dir * m.dx * len;
+        rig.rotation += dir * m.rot;
+        rig.scale.x *= m.sx;
+        rig.scale.y *= m.sy;
       }
       if (rig instanceof PaintedRig) rig.setMouthOpen(isShrimpSpecies(fish.species) ? 0 : mouthOpenness(kick));
       if (isShrimpSpecies(fish.species)) this.drawShrimpLimbs(view, fish, dt);
