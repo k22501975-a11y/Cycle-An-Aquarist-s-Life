@@ -388,6 +388,7 @@ async function start(): Promise<void> {
   };
   const select = (id: number | null) => {
     selected = id;
+    if (id !== null) sim.markDaily(game.tanks, 'observe');
     view.selectFish(id);
     selCard.classList.toggle('open', id !== null);
     renderSelCard();
@@ -883,6 +884,35 @@ async function start(): Promise<void> {
         playSetup();
       }),
     );
+  // 每日 3 件小事（F3）：換天出新題、做完一件跳通知，三件都做完可以開寶箱（正式的小卡和寶箱演出由美術與 UI 做）
+  let dailyDay = sim.dailyTasks(game.tanks)?.day;
+  /** 上次跳「開寶箱」通知的時間（通知消失沒按的話，過一陣子再跳一次）。 */
+  let dailyOffered = -Infinity;
+  const checkDaily = () => {
+    const fresh = sim.updateDaily(game.tanks);
+    const d = sim.dailyTasks(game.tanks);
+    if (!d) return;
+    if (d.day !== dailyDay) {
+      dailyDay = d.day;
+      dailyOffered = -Infinity;
+      if (d.tasks.length) toasts.show(`今天的小事：${d.tasks.map((t) => sim.DAILY_TEXT[t.id]).join('、')}`);
+    }
+    const done = d.tasks.filter((t) => t.done).length;
+    for (const id of fresh) toasts.show(`✓ ${sim.DAILY_TEXT[id]}（今天的小事 ${done}/${d.tasks.length}）`);
+    if (sim.canClaimDaily(game.tanks) && performance.now() - dailyOffered > 30_000) {
+      dailyOffered = performance.now();
+      toasts.show('今天的小事都做完了！', 'info', {
+        label: '開寶箱',
+        run: () => {
+          const coins = game.actAll((tanks) => sim.claimDaily(tanks));
+          if (coins) {
+            audio.play('quest');
+            toasts.show(`寶箱裡有 ${coins} 魚幣`);
+          }
+        },
+      });
+    }
+  };
   ctx.openSetup = openSetup;
   const setupBtn = h('button.btn.primary.setup-cta', { onclick: openSetup, hidden: true }, '開缸：挑魚缸和設備');
   stage.append(setupBtn);
@@ -1213,6 +1243,7 @@ async function start(): Promise<void> {
       renderTankChip();
       guide.update(game.state, game.tanks);
       setupBtn.hidden = !sim.needsSetup(game.tanks[0]) || sheet.isOpen;
+      checkDaily();
       celebrateStrains();
       for (const entry of unlockCodex(codexSeen, game.state)) {
         saveCodexSeen(store, codexSeen);

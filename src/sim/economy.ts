@@ -3,6 +3,7 @@ import { FISH_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species
 import { phenotype, type GuppyPhenotype } from './genetics';
 import { updateOrders, type OrderBoard } from './orders';
 import type { GoalState } from './goals';
+import type { DailyState } from './daily';
 
 /**
  * 經濟（GAME_DESIGN 第 7 節、market-and-breeding.md §3.1）：
@@ -97,6 +98,8 @@ export interface Economy {
   mall?: MallBag;
   /** 新遊戲還沒開缸（還沒挑設備）；開完缸就刪掉。舊存檔沒有＝已經開過。 */
   setupPending?: boolean;
+  /** 今天的每日小事（F3）；舊存檔沒有，開完缸第一次更新時出題。 */
+  daily?: DailyState;
   /** 已經套用到伺服器帳本的第幾筆（市場的收支，docs/ledger.md）；舊存檔沒有＝0。 */
   ledgerSeq?: number;
   /** 玩過幾次對水小遊戲（前幾次強制玩，F5）。 */
