@@ -243,6 +243,26 @@ class MarketTest {
     }
 
     @Test
+    void 水草插枝_數量要合理_出貨的是上架時的數量() throws Exception {
+        // #75：以前水草上架、出貨都不檢查，可以上架 999 株，或上架 5 株只出 1 株
+        Player amy = seasoned("amy");
+        Player ben = player("ben");
+        String plant = "{\"kind\":\"plant\",\"species\":\"java_moss\",\"title\":\"莫絲插枝\",\"price\":100,\"item\":%s}";
+        send(post("/api/market/listings"), amy, plant.formatted("{\"species\":\"java_moss\",\"count\":999}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("bad_item"));
+        send(post("/api/market/listings"), amy, plant.formatted("{\"species\":\"java_moss\",\"count\":1.5}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("bad_item"));
+        send(post("/api/market/listings"), amy, plant.formatted("{\"species\":\"anubias\",\"count\":3}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("bad_item"));
+        long id = read(send(post("/api/market/listings"), amy, plant.formatted("{\"species\":\"java_moss\",\"count\":3}")).andExpect(status().isCreated())).get("id").asLong();
+        long order = buy(ben, id, "bag");
+        send(post("/api/market/orders/" + order + "/ship"), amy, "{\"item\":{\"species\":\"java_moss\",\"count\":1},\"bagTemp\":25,\"bagPh\":7}").andExpect(status().isOk());
+        clock.advance(Duration.ofHours(4));
+        JsonNode got = read(send(post("/api/market/orders/" + order + "/collect"), ben, null).andExpect(status().isOk()));
+        assertThat(got.get("item").get("count").asInt()).isEqualTo(3);
+    }
+
+    @Test
     void 賣家的魚死了_取消訂單() throws Exception {
         Player amy = seasoned("amy");
         Player ben = player("ben");
