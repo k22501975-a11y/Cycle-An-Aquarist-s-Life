@@ -1,10 +1,11 @@
 import { isJuvenile, isLightOn, recordEvent, type Fish, type TankState } from './state';
 import { FISH_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
-import { phenotype, phenotypeValue } from './genetics';
+import { phenotype, type GuppyPhenotype } from './genetics';
 
 /**
  * 經濟（GAME_DESIGN 第 7 節、market-and-breeding.md §3.1）：
- * 魚幣以台幣計價、價格貼近台灣水族館；電費每週結算；水族店（NPC）用店價三成收購普通的成魚和插枝，每天有上限。
+ * 魚幣以台幣計價、價格貼近台灣水族館；電費每週結算；水族店（NPC）收購成魚和插枝，每天有上限。
+ * 單機版沒有玩家市場，店家是唯一出口：收購價約店價五成，孔雀魚依稀有度分級（design/mvp.md §4.3）。
  */
 
 export const STARTING_COINS = 2000;
@@ -13,7 +14,9 @@ export const KWH_PRICE = 3;
 /** 電費多久結算一次（遊戲天數）。 */
 export const BILL_DAYS = 7;
 /** NPC 收購價是店價的幾成。 */
-export const BUYBACK_SHARE = 0.3;
+export const BUYBACK_SHARE = 0.5;
+/** 還沒長大的中魚只收成魚的幾成（鼓勵養大再賣）。 */
+export const JUVENILE_SHARE = 0.3;
 /** 每個遊戲日最多賣給水族店幾次。 */
 export const DAILY_SELL_LIMIT = 10;
 /** 一餐飼料的錢（一罐 100 元約可以餵 200 餐）。 */
@@ -180,17 +183,36 @@ export function buybackRefusal(fish: Fish): string | null {
   return null;
 }
 
-/** 成魚店價三成；還沒長大的中魚只算一半。 */
+export type GuppyRarity = 'common' | 'strain' | 'rare' | 'prized';
+export const GUPPY_RARITY_LABELS: Record<GuppyRarity, string> = { common: '普通', strain: '品系', rare: '稀有', prized: '極稀有' };
+
+/**
+ * 孔雀魚的收購倍率（相對店價 60 元）：野生型或混種 0.3、5 個品系 0.6、白子或黃金 1、
+ * 每多一種鰭型再乘上去，大C 至少 3.5。選育出好魚的收入是隨便生的 5～10 倍。
+ */
+/** 五個常見品系的收購倍率（市場建議價以它為 1）。 */
+export const STRAIN_TIER = 0.6;
+
+export function guppyBuybackTier(p: GuppyPhenotype): number {
+  const strain = p.albino || p.gold ? 1 : p.snake || p.grass || p.tuxedo || p.red ? STRAIN_TIER : 0.3;
+  const fins = (p.ribbon ? 1.8 : 1) * (p.swallow ? 1.8 : 1) * (p.dumbo ? 1.6 : 1) * (p.sword === 3 ? 1.6 : p.sword ? 1.3 : 1) * (p.tailShape === 'halfmoon' ? 1.3 : 1);
+  return p.bigC ? Math.max(3.5, strain * fins * 2) : strain * fins;
+}
+
+export function guppyRarity(p: GuppyPhenotype): GuppyRarity {
+  const t = guppyBuybackTier(p);
+  return t >= 3 ? 'prized' : t >= 1 ? 'rare' : t >= 0.5 ? 'strain' : 'common';
+}
+
+/** 收購價：孔雀魚看稀有度和尾鰭分數，其他魚店價五成；還沒長大的中魚只收三成。 */
 export function fishBuybackPrice(fish: Fish): number {
-  // 孔雀魚看品系和尾鰭：尾鰭 50 分是一般價，80 分多三成
+  // 尾鰭 50 分是一般價，80 分多三成
   const base = fish.genome
-    ? phenotypeValue(phenotype(fish.genome)) * (0.5 + fish.genome.tail / 100)
-    : fish.species === 'betta' && fish.sex === 'female'
-      ? BETTA_FEMALE_PRICE
-      : FISH_PRICES[fish.species];
+    ? FISH_PRICES.guppy * guppyBuybackTier(phenotype(fish.genome)) * (0.5 + fish.genome.tail / 100)
+    : (fish.species === 'betta' && fish.sex === 'female' ? BETTA_FEMALE_PRICE : FISH_PRICES[fish.species]) * BUYBACK_SHARE;
   // 發色好的魚（長期餵好飼料）賣得貴一點
   const color = 1 + 0.25 * (fish.colorBoost ?? 0);
-  return Math.max(1, Math.round(base * color * BUYBACK_SHARE * (isJuvenile(fish) ? 0.5 : 1)));
+  return Math.max(1, Math.round(base * color * (isJuvenile(fish) ? JUVENILE_SHARE : 1)));
 }
 
 export function plantBuybackPrice(species: PlantSpeciesId): number {

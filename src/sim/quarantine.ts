@@ -1,11 +1,16 @@
 import { temperatureFactor } from './chemistry';
 import { hasVisible, progressInfections, spreadInfections } from './processes/disease';
+import { giveBirth } from './processes/population';
+import { growFish } from './growth';
+import { FISH_SPECIES } from './species';
 import { addFish, type AddFishOptions } from './actions';
 import { recordEvent, type Fish, type TankState } from './state';
 import type { FishSpeciesId } from './species';
 
 /** 檢疫盒固定的水溫。 */
 export const QUARANTINE_TEMP_C = 26;
+/** 檢疫盒當產卵盒時放幾條小魚還不算擠。 */
+export const BOX_CAPACITY = 25;
 /** 建議的觀察天數（expeditions-and-quarantine.md §1.3：魚、蝦 3 天）。 */
 export const QUARANTINE_DAYS = 3;
 
@@ -46,6 +51,20 @@ export function releaseQuarantine(state: TankState, ids?: number[]): number {
   return moving.length;
 }
 
+/**
+ * 把缸裡的魚撈進檢疫盒。快生的母魚放進來就是產卵盒：盒子掛在缸裡，仔魚生下來會掉到隔間，
+ * 不會被成魚吃掉；長大一點再放回主缸或分到別缸（design/mvp.md §4.3）。
+ */
+export function moveToQuarantine(state: TankState, fishId: number): boolean {
+  const q = state.quarantine;
+  const fish = state.fish.find((f) => f.id === fishId && f.alive);
+  if (!q || !fish) return false;
+  state.fish = state.fish.filter((f) => f !== fish);
+  q.fish.push(fish);
+  q.since[fish.id] = state.hours;
+  return true;
+}
+
 export type QuarantineMedicine = 'antibiotic' | 'dewormer' | 'ichMedication';
 
 /** 在檢疫盒下藥（藥浴）：不影響主缸。 */
@@ -65,6 +84,21 @@ export function updateQuarantine(state: TankState, dt: number): void {
   for (const fish of living) {
     fish.ageDays = (fish.ageDays ?? 0) + (dt / 24) * Math.sqrt(tf);
     fish.hunger = 0.2;
+    // 盒子掛在主缸裡，仔魚吃的是同一缸水，照常長大；盒子小，放超過 BOX_CAPACITY 條就擠
+    if (fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm) growFish(state, fish, tf, living.length / BOX_CAPACITY, dt);
+    const breeding = FISH_SPECIES[fish.species].breeding;
+    if (fish.pregnancy > 0 && breeding) {
+      fish.pregnancy += (dt / 24 / breeding.gestationDays) * Math.sqrt(tf);
+      if (fish.pregnancy >= 1) {
+        fish.pregnancy = 0;
+        const fry = giveBirth(state, fish, state.fish.length + q.fish.length);
+        state.fish = state.fish.filter((f) => !fry.includes(f));
+        for (const f of fry) {
+          q.fish.push(f);
+          q.since[f.id] = state.hours;
+        }
+      }
+    }
     fish.stress += (0.1 - fish.stress) * (1 - Math.exp(-0.1 * dt));
 
     let damage = 0;

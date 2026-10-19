@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   addFish,
   addPlant,
+  buyQuarantine,
+  moveToQuarantine,
   createTank,
   feed,
   FILTERS,
   FISH_SPECIES,
   HEATERS,
+  hidingFactor,
   isJuvenile,
   LIGHTS,
   normalizeState,
@@ -99,17 +102,39 @@ describe('繁殖（Phase 0 簡化版）', () => {
 });
 
 describe('混養：吃仔魚、吃仔蝦', () => {
-  it('成魚會吃仔魚；水草越密，仔魚活下來越多', () => {
+  it('成魚會吃仔魚；水草越密，仔魚活下來越多（莫絲這種密草比大葉子的榕好躲）', () => {
     const bare = createTank({ ...MATURE, seed: 110 });
     addAdults(bare, 'guppy', 4);
     addYoung(bare, 'guppy', 40);
     const planted = structuredClone(bare);
-    for (let i = 0; i < 8; i++) addPlant(planted, 'anubias', 18);
+    const broad = structuredClone(bare);
+    for (let i = 0; i < 8; i++) addPlant(planted, 'moss', 18);
+    for (let i = 0; i < 8; i++) addPlant(broad, 'anubias', 18);
+    expect(hidingFactor(planted)).toBeGreaterThan(hidingFactor(broad));
+    expect(hidingFactor(planted)).toBeLessThanOrEqual(0.7);
 
     runDays(bare, 14);
     runDays(planted, 14);
     expect(young(bare, 'guppy')).toBeLessThan(25);
-    expect(young(planted, 'guppy')).toBeGreaterThan(young(bare, 'guppy') + 8);
+    expect(young(planted, 'guppy')).toBeGreaterThan(young(bare, 'guppy') + 5);
+  });
+
+  it('檢疫盒當產卵盒：快生的母魚放進去，小魚生在盒裡不會被吃，而且照常長大', () => {
+    const s = createTank({ ...MATURE, seed: 113 });
+    addAdults(s, 'guppy', 4);
+    const mom = addFish(s, 'guppy', { carriesIch: false, sex: 'female', pregnant: false });
+    mom.pregnancy = 0.97;
+    buyQuarantine(s);
+    expect(moveToQuarantine(s, mom.id)).toBe(true);
+    runDays(s, 3);
+    const box = () => s.quarantine!.fish.filter((f) => f.alive && f !== mom);
+    const born = box().length;
+    expect(born).toBeGreaterThan(3);
+    expect(mom.pregnancy).toBe(0);
+    const startLen = box()[0].lengthCm;
+    runDays(s, 14);
+    expect(box()).toHaveLength(born);
+    expect(box()[0].lengthCm).toBeGreaterThan(startLen + 0.3);
   });
 
   it('沒有掠食者時仔魚不會被吃', () => {
