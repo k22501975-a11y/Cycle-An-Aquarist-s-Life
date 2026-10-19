@@ -94,12 +94,14 @@ export interface Economy {
   questRewards?: string[];
   /** 店家訂單板（M21）；舊存檔沒有，第一次更新時掛上。 */
   orders?: OrderBoard;
-  /** 用儲值點數買的商城道具（背包）；舊存檔沒有。 */
+  /** 用儲值點數買的商城道具（背包）：只是伺服器庫存的副本（docs/ledger.md §4），打開商城、用道具後照伺服器的數字覆寫；舊存檔沒有。 */
   mall?: MallBag;
   /** 新遊戲還沒開缸（還沒挑設備）；開完缸就刪掉。舊存檔沒有＝已經開過。 */
   setupPending?: boolean;
   /** 今天的每日小事（F3）；舊存檔沒有，開完缸第一次更新時出題。 */
   daily?: DailyState;
+  /** 已經套用到伺服器帳本的第幾筆（市場的收支，docs/ledger.md）；舊存檔沒有＝0。 */
+  ledgerSeq?: number;
   /** 玩過幾次對水小遊戲（前幾次強制玩，F5）。 */
   dripsDone?: number;
 }
@@ -109,8 +111,6 @@ export interface MallBag {
   cure: number;
   /** 熟成套缸幾組（還沒擺出來）。 */
   tankset: number;
-  /** 已經放進背包的伺服器道具編號（同一個不會領兩次）。 */
-  claimed: number[];
 }
 
 /** 保底起步包：整缸死光又沒錢時，水族店老闆送 3 條孔雀魚（GAME_DESIGN 第 14 節）。 */
@@ -136,6 +136,18 @@ export function claimStarterPack(state: TankState, addGuppy: (state: TankState, 
 
 export function economy(state: TankState): Economy {
   return (state.economy ??= { coins: STARTING_COINS, kwh: 0, lastBillHours: state.hours, sold: { day: -1, count: 0 }, cuttings: {} });
+}
+
+/**
+ * 套用一筆伺服器帳本的收支（市場的扣款、入帳，docs/ledger.md §3.3）：照 delta 加減，不用伺服器回傳的餘額覆蓋，
+ * 不然這中間本機花掉的錢會被加回來。已經套用過的（ledgerSeq 不比現在大）不再加。回傳有沒有套用。
+ */
+export function applyLedger(state: TankState, entry: { delta: number; ledgerSeq: number }): boolean {
+  const e = economy(state);
+  if (entry.ledgerSeq <= (e.ledgerSeq ?? 0)) return false;
+  e.coins += entry.delta;
+  e.ledgerSeq = entry.ledgerSeq;
+  return true;
 }
 
 export function price(key: string): number {

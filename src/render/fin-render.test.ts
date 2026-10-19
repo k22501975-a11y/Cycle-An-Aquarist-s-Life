@@ -1,6 +1,6 @@
 import { BrowserAdapter, Container, DOMAdapter, Texture, type Renderer } from 'pixi.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { drawFinOverlay, liveFinGradients, type FinLook } from './fin-render';
+import { drawFinOverlay, liveFinGradients, sharedGradientCount, type FinLook } from './fin-render';
 
 /** 只有 drawFinOverlay 用到的欄位：身體範圍、長度、可以掛子物件。 */
 function fakeRig(): Parameters<typeof drawFinOverlay>[0] {
@@ -27,6 +27,19 @@ describe('大C 薄紗鰭的漸層不會漏記憶體（#151 審查）', () => {
     const before = liveFinGradients();
     for (let i = 0; i < 5; i++) drawFinOverlay(fakeRig(), { ...bigC, alpha: 0.8 + i * 0.01 }, renderer);
     expect(liveFinGradients()).toBe(before);
+  });
+
+  it('同一個顏色的鰭，大小不同也共用漸層貼圖，不會越畫越多', () => {
+    const renderer = { generateTexture: () => Texture.WHITE } as unknown as Renderer;
+    const look = { ...bigC, color: 0x33cc77 };
+    drawFinOverlay(fakeRig(), look, renderer);
+    const after = sharedGradientCount();
+    for (let i = 0; i < 5; i++) {
+      const rig = fakeRig();
+      Object.assign(rig, { lengthPx: 120 + i * 20 });
+      drawFinOverlay(rig, look, renderer);
+    }
+    expect(sharedGradientCount()).toBe(after);
   });
 
   it('沒烘的時候掛著 Graphics，Graphics 拆掉時漸層一起釋放', () => {

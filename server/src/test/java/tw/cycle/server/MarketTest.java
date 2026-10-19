@@ -12,6 +12,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.springframework.mock.web.MockServletContext;
 import java.util.random.RandomGenerator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -83,7 +86,16 @@ class MarketTest {
         random.duringShip = null;
     }
 
+    /** 會動到錢的市場請求（上架、買、收貨）自動帶上現在的雲端存檔版本（docs/ledger.md §3.3）。 */
+    private static final Pattern MONEY = Pattern.compile("^/api/market/(listings|listings/\\d+/buy|orders/\\d+/collect)$");
+
     private ResultActions send(MockHttpServletRequestBuilder req, Player p, String body) throws Exception {
+        String path = req.buildRequest(new MockServletContext()).getRequestURI();
+        if (p != null && "POST".equals(req.buildRequest(new MockServletContext()).getMethod()) && MONEY.matcher(path).matches()) {
+            ObjectNode b = body == null ? json.createObjectNode() : (ObjectNode) json.readTree(body);
+            if (!b.has("baseRevision")) b.put("baseRevision", revision(p));
+            body = json.writeValueAsString(b);
+        }
         if (p != null) req.header("Authorization", "Bearer " + p.token());
         if (body != null) req.contentType(MediaType.APPLICATION_JSON).content(body);
         return mvc.perform(req);
@@ -96,7 +108,25 @@ class MarketTest {
     private Player player(String prefix) throws Exception {
         String name = prefix + SEQ.incrementAndGet();
         JsonNode res = read(send(post("/api/auth/register"), null, "{\"username\":\"" + name + "\",\"password\":\"guppy-1234\"}").andExpect(status().isCreated()));
-        return new Player(name, res.get("token").asText());
+        Player p = new Player(name, res.get("token").asText());
+        upload(p, 0, 10_000, 0).andExpect(status().isOk());
+        return p;
+    }
+
+    /** 上傳一份只有錢的雲端存檔。 */
+    private ResultActions upload(Player p, long baseRevision, int coins, int ledgerSeq) throws Exception {
+        String save = "{\"version\":3,\"savedAt\":0,\"state\":{\"economy\":{\"coins\":" + coins + ",\"ledgerSeq\":" + ledgerSeq + "}},\"tanks\":[{\"economy\":{\"coins\":" + coins + "}}]}";
+        return send(put("/api/save"), p, "{\"baseRevision\":" + baseRevision + ",\"force\":false,\"save\":" + save + "}");
+    }
+
+    private long revision(Player p) throws Exception {
+        return read(send(get("/api/save"), p, null).andExpect(status().isOk())).get("revision").asLong();
+    }
+
+    /** 雲端存檔裡的錢和帳本序號。 */
+    private int[] wallet(Player p) throws Exception {
+        JsonNode e = read(send(get("/api/save"), p, null)).get("save").get("state").get("economy");
+        return new int[] {e.get("coins").asInt(), e.get("ledgerSeq").asInt()};
     }
 
     /** 註冊後過了 3 天（才能上架）。 */
@@ -132,7 +162,7 @@ class MarketTest {
     }
 
     private long buy(Player p, long listing, String packaging) throws Exception {
-        return read(send(post("/api/market/listings/" + listing + "/buy"), p, "{\"packaging\":\"" + packaging + "\"}").andExpect(status().isOk())).get("id").asLong();
+        return read(send(post("/api/market/listings/" + listing + "/buy"), p, "{\"packaging\":\"" + packaging + "\"}").andExpect(status().isOk())).get("order").get("id").asLong();
     }
 
     private void ship(Player p, long order, double health) throws Exception {
@@ -346,5 +376,82 @@ class MarketTest {
         list(amy, 123);
         JsonNode data = read(send(get("/api/me/export"), amy, null).andExpect(status().isOk()));
         assertThat(data.get("marketListings").get(0).get("price").asInt()).isEqualTo(123);
+    }
+
+    // ---- 帳本（docs/ledger.md，#77） ----
+
+    @Test
+    void 錢由伺服器扣和入帳_直接改雲端存檔() throws Exception {
+        Player amy = seasoned("amy");
+        Player ben = player("ben");
+        long id = list(amy, 300);
+        // 上架費 3 元
+        assertThat(wallet(amy)).containsExactly(9_997, 1);
+        long rev = revision(ben);
+        JsonNode bought = read(send(post("/api/market/listings/" + id + "/buy"), ben, "{\"packaging\":\"oxygen\",\"baseRevision\":" + rev + "}").andExpect(status().isOk()));
+        // 300 元＋充氧袋 30 元
+        assertThat(bought.get("wallet").get("delta").asInt()).isEqualTo(-330);
+        assertThat(bought.get("wallet").get("ledgerSeq").asInt()).isEqualTo(1);
+        assertThat(bought.get("wallet").get("revision").asLong()).isEqualTo(rev + 1);
+        assertThat(wallet(ben)).containsExactly(9_670, 1);
+        // 其他缸的錢包副本也一樣
+        assertThat(read(send(get("/api/save"), ben, null)).get("save").get("tanks").get(0).get("economy").get("coins").asInt()).isEqualTo(9_670);
+
+        ship(amy, bought.get("order").get("id").asLong(), 1);
+        clock.advance(Duration.ofHours(4));
+        long order = bought.get("order").get("id").asLong();
+        JsonNode paid = read(send(post("/api/market/orders/" + order + "/collect"), amy, null).andExpect(status().isOk()));
+        assertThat(paid.get("wallet").get("delta").asInt()).isEqualTo(276);
+        assertThat(wallet(amy)).containsExactly(10_273, 2);
+        // 重送收款（回應沒收到）：回同一筆，不會入帳兩次
+        JsonNode again = read(send(post("/api/market/orders/" + order + "/collect"), amy, null).andExpect(status().isOk()));
+        assertThat(again.get("wallet").get("ledgerSeq").asInt()).isEqualTo(2);
+        assertThat(wallet(amy)).containsExactly(10_273, 2);
+    }
+
+    @Test
+    void 錢不夠就不成交_掛單還在() throws Exception {
+        Player amy = seasoned("amy");
+        Player ben = player("ben");
+        upload(ben, revision(ben), 100, 0).andExpect(status().isOk());
+        long id = list(amy, 300);
+        send(post("/api/market/listings/" + id + "/buy"), ben, "{\"packaging\":\"bag\"}")
+                .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("not_enough_coins"));
+        assertThat(wallet(ben)).containsExactly(100, 0);
+        // 交易整筆回滾：別人還買得到
+        buy(player("cat"), id, "bag");
+    }
+
+    @Test
+    void 雲端版本不對或沒有雲端存檔就不能動到錢() throws Exception {
+        Player amy = seasoned("amy");
+        Player ben = player("ben");
+        long id = list(amy, 300);
+        send(post("/api/market/listings/" + id + "/buy"), ben, "{\"packaging\":\"bag\",\"baseRevision\":0}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("conflict"));
+        String name = "nosave" + SEQ.incrementAndGet();
+        JsonNode res = read(send(post("/api/auth/register"), null, "{\"username\":\"" + name + "\",\"password\":\"guppy-1234\"}"));
+        Player cat = new Player(name, res.get("token").asText());
+        send(post("/api/market/listings/" + id + "/buy"), cat, "{\"packaging\":\"bag\",\"baseRevision\":0}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("need_upload"));
+        // 都沒成交
+        buy(ben, id, "bag");
+    }
+
+    @Test
+    void 沒套用扣款的存檔不收_強制覆蓋也不收() throws Exception {
+        Player amy = seasoned("amy");
+        Player ben = player("ben");
+        buy(ben, list(amy, 300), "bag");
+        long rev = revision(ben);
+        // 改程式不扣錢：ledgerSeq 還是 0
+        upload(ben, rev, 10_000, 0).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("ledger_behind"));
+        String old = "{\"version\":3,\"savedAt\":0,\"state\":{\"economy\":{\"coins\":10000}}}";
+        send(put("/api/save"), ben, "{\"baseRevision\":0,\"force\":true,\"save\":" + old + "}")
+                .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("ledger_behind"));
+        upload(ben, rev, 10_000, 5).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("ledger_ahead"));
+        // 套用過的存檔（本機之後又花了錢）照收
+        upload(ben, rev, 9_500, 1).andExpect(status().isOk());
+        assertThat(wallet(ben)).containsExactly(9_500, 1);
     }
 }
