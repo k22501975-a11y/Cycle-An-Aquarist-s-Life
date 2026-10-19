@@ -86,10 +86,10 @@ describe('對水小遊戲（F5）', () => {
     expect(rushed.stress).toBeGreaterThan(calm.stress);
   });
 
-  it('前 3 次一定要玩，之後可以一鍵慢慢過水', () => {
+  it('第一次一定要玩，之後預設一鍵慢慢過水（mvp.md §4.4.3）', () => {
     const s = tank();
-    expect(dripTutorialLeft(s)).toBe(3);
-    for (let i = 0; i < 3; i++) recordDrip(s);
+    expect(dripTutorialLeft(s)).toBe(1);
+    recordDrip(s);
     expect(dripTutorialLeft(s)).toBe(0);
   });
 });

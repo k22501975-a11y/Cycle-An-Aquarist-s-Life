@@ -1,5 +1,5 @@
 import type { SoundId } from '../audio/sounds';
-import { BAG_ML, bagMl, bagWater, DRIP_READY_GAP, dripGap, dripGrade, dripOutcome, dripReady, safeRate, startDrip, stepDrip, type DripGrade, type DripOutcome, type TankState, type WaterHabit } from '../sim';
+import { BAG_ML, bagMl, bagWater, DRIP_READY_GAP, dripAdviceSeconds, dripGap, dripGrade, dripOutcome, dripMinutes, dripReady, safeRate, startDrip, stepDrip, type DripGrade, type DripOutcome, type TankState, type WaterHabit } from '../sim';
 import { ownerImg } from './art-icons';
 import { h } from './dom';
 
@@ -26,6 +26,12 @@ export interface DripGameOptions {
 /** 滴管按住時每秒開大多少、放開時每秒關小多少。 */
 const OPEN_PER_S = 0.7;
 const CLOSE_PER_S = 1.4;
+/**
+ * 壓縮時間（mvp.md §4.4.3）：照建議按住要滴的秒數壓到約 40 秒（第一次 ≤ 45、之後 ≤ 60）；
+ * 再慢也最多 90 秒，到時間自動滴完。小時鐘照遊戲時間顯示「已滴 N 分鐘」。
+ */
+const TARGET_S = 40;
+const CAP_S = 90;
 /** 一格最多算幾秒、每一小步幾秒。 */
 const MAX_FRAME_S = 2;
 const STEP_S = 0.05;
@@ -46,6 +52,11 @@ const GRADE_TEXT: Record<DripGrade, string> = {
 export function openDripGame(opts: DripGameOptions): Promise<DripOutcome | null> {
   return new Promise((resolve) => {
     const session = startDrip(opts.state, opts.from);
+    // 照建議要滴幾秒（模擬秒），超過 TARGET_S 就整段加速；小時鐘把它對到建議的分鐘數
+    const advice = dripAdviceSeconds(session.from, session.to);
+    const speed = Math.max(1, advice / TARGET_S);
+    const adviceMin = dripMinutes(opts.state, opts.from);
+    let realS = 0;
     let rate = 0;
     let holding = false;
     let last = performance.now();
@@ -71,6 +82,7 @@ export function openDripGame(opts: DripGameOptions): Promise<DripOutcome | null>
     const rateBar = h('div.drip-rate', {}, rateFill, safeMark);
     const phVal = h('b');
     const tempVal = h('b');
+    const clockVal = h('b');
     const say = h('span');
     const holdBtn = h('button.drip-hold', { type: 'button' }, h('span.drip-hold-icon', { 'aria-hidden': 'true' }), '按住滴水');
     const releaseBtn = h('button.btn.drip-release', { type: 'button' }, '放魚');
@@ -90,7 +102,7 @@ export function openDripGame(opts: DripGameOptions): Promise<DripOutcome | null>
           {},
           h('div.drip-meter', {}, h('span', {}, '水質差距'), gapBar),
           h('div.drip-meter', {}, h('span', {}, '滴速'), rateBar),
-          h('div.drip-readings', {}, h('span', {}, 'pH ', phVal), h('span', {}, '水溫 ', tempVal)),
+          h('div.drip-readings', {}, h('span', {}, 'pH ', phVal), h('span', {}, '水溫 ', tempVal), h('span.drip-clock', {}, h('i.drip-clock-icon', { 'aria-hidden': 'true' }), clockVal)),
           holdBtn,
         ),
       ),
@@ -119,7 +131,7 @@ export function openDripGame(opts: DripGameOptions): Promise<DripOutcome | null>
       resolve(result);
     };
     cancelBtn.addEventListener('click', () => finish(null));
-    releaseBtn.addEventListener('click', () => {
+    const release = () => {
       const outcome = dripOutcome(session);
       const grade = dripGrade(outcome);
       opts.sound?.(grade === 'rushed' ? 'warn' : 'quest');
@@ -128,7 +140,8 @@ export function openDripGame(opts: DripGameOptions): Promise<DripOutcome | null>
       holdBtn.disabled = releaseBtn.disabled = cancelBtn.disabled = true;
       cancelAnimationFrame(raf);
       window.setTimeout(() => finish(outcome), grade === 'rushed' ? 1500 : 1200);
-    });
+    };
+    releaseBtn.addEventListener('click', release);
 
     const frame = (now: number) => {
       // 用現實時間算，切成 0.05 秒一小步（慢的手機一格要好幾秒也照樣滴得完、滴管照樣慢慢開大）；
@@ -139,7 +152,16 @@ export function openDripGame(opts: DripGameOptions): Promise<DripOutcome | null>
         const step = Math.min(STEP_S, dt);
         dt -= step;
         rate = nextValve(rate, holding, safeRate(session), step);
-        stepDrip(session, rate, step);
+        stepDrip(session, rate, step * speed);
+        realS += step;
+      }
+      // 90 秒上限：剩下的幫玩家慢慢滴完（差距收到綠線，緊張程度照目前為止的算）
+      if (realS >= CAP_S && !card.classList.contains('done')) {
+        if (!dripReady(session)) session.addedMl = BAG_ML * (1 / DRIP_READY_GAP - 1);
+        render();
+        release();
+        say.textContent = `時間差不多了，剩下的我幫你滴完。${say.textContent}`;
+        return;
       }
       render();
       raf = requestAnimationFrame(frame);
@@ -168,6 +190,9 @@ export function openDripGame(opts: DripGameOptions): Promise<DripOutcome | null>
       const w = bagWater(session);
       phVal.textContent = `${w.ph.toFixed(1)} → ${session.to.ph.toFixed(1)}`;
       tempVal.textContent = `${w.tempC.toFixed(1)} → ${session.to.tempC.toFixed(1)}°C`;
+      // 小時鐘跟著袋子的進度走：滴到綠線剛好是建議的分鐘數
+      const minutes = Math.round(adviceMin * Math.min(1, (1 - gap) / (1 - DRIP_READY_GAP)));
+      clockVal.textContent = `已滴 ${minutes} 分鐘`;
       releaseBtn.className = `btn drip-release${ready ? ' primary' : ''}`;
       if (card.classList.contains('done')) return;
       if (ready && !readyShown) {
