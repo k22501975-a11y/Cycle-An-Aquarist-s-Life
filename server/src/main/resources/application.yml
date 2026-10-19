@@ -1,5 +1,9 @@
 server:
   port: ${PORT:8080}
+  # 前面有反向代理（nginx、負載平衡）時，用它帶的 X-Forwarded-For 當玩家 IP（頻率限制用）
+  forward-headers-strategy: ${FORWARD_HEADERS:none}
+  tomcat:
+    max-swallow-size: 4MB
 spring:
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/cycle}
@@ -17,12 +21,21 @@ cycle:
   allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173,https://localhost}
   # 登入多久後要重新登入
   session-days: 30
-  # 一份雲端存檔最大幾 bytes
-  max-save-bytes: 4000000
+  # 一份雲端存檔最大幾 bytes。認真玩 120 天（2 缸、二十幾條魚）約 90 KB；
+  # 6 缸都養滿（每缸 300 隻上限）估約 2 MB，留一點餘裕（#79）
+  max-save-bytes: 3000000
   # 新帳號滿幾天才能在市場上架（防開小號洗錢，market-and-breeding.md §4）
   market-min-account-days: ${MARKET_MIN_ACCOUNT_DAYS:3}
   # 儲值測試模式：不收錢直接入帳（本機測試用；正式上線前要接金流並關掉）
   payments-sandbox: ${PAYMENTS_SANDBOX:false}
+  # 正式環境：缺少必要設定（資料庫密碼、模擬服務網址與密碼）就不啟動（#79）
+  production: ${CYCLE_PRODUCTION:false}
+  # 不用登入的 API 每個 IP 的次數上限（#79）
+  rate-limit:
+    register-per-hour: 5
+    login-per-ten-minutes: 30
+    events-per-minute: 120
+    push-per-minute: 20
   push:
     # 推播服務用來聯絡營運者的信箱或網址（mailto: 或 https:）
     subject: ${PUSH_SUBJECT:mailto:admin@localhost}

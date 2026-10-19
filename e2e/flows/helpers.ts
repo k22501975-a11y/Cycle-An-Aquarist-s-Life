@@ -1,5 +1,5 @@
-import { expect, type Page } from "@playwright/test";
-import { openGame } from "../fixtures";
+import { expect, type Page } from '@playwright/test';
+import { openGame } from '../fixtures';
 
 /**
  * 遊戲流程測試共用的操作：盡量照玩家的方式點按鈕；
@@ -19,13 +19,7 @@ interface Tank {
   label?: string;
 }
 export interface CycleDebug {
-  game: {
-    state: Tank;
-    tanks: Tank[];
-    clock: { timeScale: number };
-    advance(realMs: number): number;
-    act(fn: (s: Tank) => void): void;
-  };
+  game: { state: Tank; tanks: Tank[]; clock: { timeScale: number }; advance(realMs: number): number; act(fn: (s: Tank) => void): void };
   sim: {
     feed(s: Tank, mg: number): void;
     waterChange(s: Tank, fraction: number): void;
@@ -45,8 +39,8 @@ export const NO_WAIT = { noWaitAfter: true } as const;
 /** 收集 console.error（fixtures 已經會抓未捕捉的例外）。離線測試沒有伺服器，連線失敗不算。 */
 export function watchConsoleErrors(page: Page): string[] {
   const errors: string[] = [];
-  page.on("console", (m) => {
-    if (m.type() !== "error") return;
+  page.on('console', (m) => {
+    if (m.type() !== 'error') return;
     const text = m.text();
     if (/Failed to load resource|net::ERR_|GPU stall/.test(text)) return;
     errors.push(text);
@@ -68,23 +62,18 @@ export async function startClean(page: Page): Promise<void> {
 }
 
 export async function waitForCycle(page: Page): Promise<void> {
-  await page.waitForFunction(
-    () => !!(window as unknown as Partial<CycleWindow>).cycle?.game,
-    null,
-    { timeout: 30_000 },
-  );
+  await page.waitForFunction(() => !!(window as unknown as Partial<CycleWindow>).cycle?.game, null, { timeout: 30_000 });
 }
 
 /** 在頁面裡算一個關於目前這缸（s）或遊戲（g）的運算式，帶回結果。 */
 export async function gameState<T>(page: Page, expr: string): Promise<T> {
   return page.evaluate((code) => {
     const g = (window as unknown as CycleWindow).cycle.game;
-    return new Function("s", "g", `return (${code});`)(g.state, g) as never;
+    return new Function('s', 'g', `return (${code});`)(g.state, g) as never;
   }, expr);
 }
 
-export const aliveCount = (page: Page) =>
-  gameState<number>(page, "s.fish.filter((f) => f.alive).length");
+export const aliveCount = (page: Page) => gameState<number>(page, 's.fish.filter((f) => f.alive).length');
 
 /**
  * 把老闆的對話框一路點掉：點「然後呢？」「好，我來試試」「下一個任務」這顆（不點「跳過教學」，
@@ -92,24 +81,20 @@ export const aliveCount = (page: Page) =>
  */
 export async function dismissGuide(page: Page): Promise<void> {
   for (let i = 0; i < 10; i++) {
-    const btn = page
-      .locator(".owner .owner-actions button:visible:not(.go-shop)", {
-        hasNotText: "跳過教學",
-      })
-      .first();
+    const btn = page.locator('.owner .owner-actions button:visible:not(.go-shop)', { hasNotText: '跳過教學' }).first();
     if (!(await btn.count())) return;
     // 直接送 click 事件，不走滑鼠輸入：大畫面在慢的 CI 上一幀要好幾秒，真的點擊會等輸入回應等到逾時。
     // 這裡只是把對話框關掉，不是在測點擊本身。
-    await btn.dispatchEvent("click");
+    await btn.dispatchEvent('click');
     await page.waitForTimeout(150);
   }
 }
 
 /** 關掉開著的面板。關掉的面板 DOM 還在（移到畫面外），只看開著的那個；有些操作做完面板會自己關。 */
 export async function closeSheet(page: Page): Promise<void> {
-  const close = page.locator(".sheet.open .sheet-close");
-  if (await close.count()) await close.first().dispatchEvent("click");
-  await expect(page.locator(".sheet.open")).toHaveCount(0);
+  const close = page.locator('.sheet.open .sheet-close');
+  if (await close.count()) await close.first().dispatchEvent('click');
+  await expect(page.locator('.sheet.open')).toHaveCount(0);
 }
 
 /** 點下方工具列的按鈕。 */
@@ -117,16 +102,13 @@ export async function tool(page: Page, name: string): Promise<void> {
   // 老闆說完話有時會自己幫你打開商店，先關掉再點
   await dismissGuide(page);
   await closeSheet(page);
-  await page.locator("button.tool", { hasText: name }).click(NO_WAIT);
-  await expect(page.locator(".sheet.open")).toHaveCount(1);
+  await page.locator('button.tool', { hasText: name }).click(NO_WAIT);
+  await expect(page.locator('.sheet.open')).toHaveCount(1);
 }
 
 /** 在開著的面板裡點一個按鈕。 */
 export async function sheetButton(page: Page, text: string): Promise<void> {
-  await page
-    .locator(".sheet.open button", { hasText: text })
-    .first()
-    .click(NO_WAIT);
+  await page.locator('.sheet.open button', { hasText: text }).first().click(NO_WAIT);
 }
 
 /** 用時鐘旁的速度按鈕換速度（name 是選單上的字，例如「暫停時間」「正常速度」）。 */
@@ -134,8 +116,8 @@ export async function setSpeed(page: Page, name: string): Promise<void> {
   // 老闆的對話框會蓋住速度選單下半部，先點掉
   await dismissGuide(page);
   await closeSheet(page);
-  await page.locator("button.speed-btn").click(NO_WAIT);
-  await page.locator("button.speed-opt", { hasText: name }).click(NO_WAIT);
+  await page.locator('button.speed-btn').click(NO_WAIT);
+  await page.locator('button.speed-opt', { hasText: name }).click(NO_WAIT);
 }
 
 /**
@@ -144,7 +126,7 @@ export async function setSpeed(page: Page, name: string): Promise<void> {
  * （軟體繪圖只有幾 fps，PixiJS 每幀最多算 100ms，6時/秒實際只跑到三分之一）。
  */
 export async function fastForward(page: Page, hours: number): Promise<void> {
-  const target = (await gameState<number>(page, "s.hours")) + hours;
+  const target = (await gameState<number>(page, 's.hours')) + hours;
   for (let guard = 0; guard < 1000; guard++) {
     const left = await page.evaluate((until) => {
       const g = (window as unknown as CycleWindow).cycle.game;
@@ -156,14 +138,9 @@ export async function fastForward(page: Page, hours: number): Promise<void> {
       return until - g.state.hours;
     }, target);
     if (left <= 1 / 60) return;
-    await page.evaluate(
-      () =>
-        new Promise((r) =>
-          requestAnimationFrame(() => requestAnimationFrame(r)),
-        ),
-    );
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   }
-  throw new Error("快轉沒有前進");
+  throw new Error('快轉沒有前進');
 }
 
 /**
@@ -180,12 +157,12 @@ export async function seedRng(page: Page, seed: number): Promise<void> {
 /** 新手任務完成了幾個（存在 localStorage 的教學進度；7 表示全部完成）。 */
 export async function questStep(page: Page): Promise<number> {
   return page.evaluate(() => {
-    const raw = localStorage.getItem("cycle.tutorial.v1");
+    const raw = localStorage.getItem('cycle.tutorial.v1');
     return raw ? (JSON.parse(raw).step as number) : 0;
   });
 }
 
 /** 沒有當機畫面。 */
 export async function expectNoCrash(page: Page): Promise<void> {
-  await expect(page.locator(".crash")).toHaveCount(0);
+  await expect(page.locator('.crash')).toHaveCount(0);
 }

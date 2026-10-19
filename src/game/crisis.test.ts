@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, createTank, DEFAULT_TIME_SCALE, FILTERS, HEATERS, LIGHTS, TANKS, type TankState } from '../sim';
+import { addFish, createTank, infect, recordEvent, DEFAULT_TIME_SCALE, FILTERS, HEATERS, LIGHTS, TANKS, type TankState } from '../sim';
 import { Game } from './game';
 
 /** 養好水的 40L 缸＋4 條孔雀魚（評測第 4 輪的情境，#142）。 */
@@ -76,5 +76,49 @@ describe('快轉遇到危機自動切回正常速度（#142）', () => {
     game.clock.timeScale = 3600;
     game.advance(1000);
     expect(game.clock.timeScale).toBe(3600);
+  });
+
+  it('同一缸同一種病傳染開來，只打斷一次；病消失或下過藥後再發病才重新打斷（#160）', () => {
+    const s = cycledTank();
+    for (let i = 0; i < 6; i++) addFish(s, 'guppy', { carriesIch: false });
+    const game = new Game(s, 3600);
+    const crises: string[] = [];
+    game.onCrisis((c) => crises.push(c.reason));
+    game.advance(1000);
+    const sick = (n: number) =>
+      game.act((st) => {
+        const f = st.fish.filter((x) => x.alive)[n];
+        infect(f, 'columnaris');
+        f.infections![0].stage = 'visible';
+        f.infections![0].progress = 1;
+        recordEvent(st, { type: 'disease_visible', subjectId: f.id, cause: 'columnaris' });
+      });
+    // 一條接一條發病（UX 第 6 輪：5 個遊戲天被打斷 18 次）
+    for (let i = 0; i < 4; i++) {
+      sick(i);
+      game.clock.timeScale = 3600;
+      game.advance(1000);
+    }
+    expect(crises.filter((r) => r === 'disease_visible')).toEqual(['disease_visible']);
+    // 另一種病照樣打斷
+    game.act((st) => {
+      const f = st.fish.filter((x) => x.alive)[5];
+      infect(f, 'flukes');
+      f.infections!.at(-1)!.stage = 'visible';
+      f.infections!.at(-1)!.progress = 1;
+      recordEvent(st, { type: 'disease_visible', subjectId: f.id, cause: 'flukes' });
+    });
+    game.clock.timeScale = 3600;
+    game.advance(1000);
+    expect(crises.filter((r) => r === 'disease_visible')).toHaveLength(2);
+    // 下過抗生素以後，柱狀病再發病就重新算
+    game.act((st) => {
+      st.water.antibiotic = (st.water.antibiotic ?? 0) + 1;
+    });
+    game.advance(1000);
+    sick(4);
+    game.clock.timeScale = 3600;
+    game.advance(1000);
+    expect(crises.filter((r) => r === 'disease_visible')).toHaveLength(3);
   });
 });

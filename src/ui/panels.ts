@@ -94,6 +94,8 @@ import {
   splitAdvice,
   splitGroup,
   splitTank,
+  rescueFryToBox,
+  BOX_CAPACITY,
   type SplitPlan,
   daysUntilSexVisible,
   growthFactors,
@@ -565,6 +567,20 @@ export function splitPanel(ctx: PanelContext, suggested: SplitPlan): Node {
   let plan = plans[0] ?? suggested;
   const others = game.tanks.map((t, i) => ({ t, i })).filter(({ i }) => i !== game.active);
   const body = h('div.stack');
+  // 檢疫盒當育幼盒：只有一缸時仔魚也有地方躲（#144）
+  const boxOption = (n: number) =>
+    h(
+      'div.stack',
+      {},
+      button(`放進檢疫盒（${n} 條）`, () => {
+        const moved = game.act((st) => rescueFryToBox(st));
+        if (!moved) return;
+        ctx.sound?.('net');
+        toasts.show(`${moved} 條仔魚撈進檢疫盒了，長到成魚吞不下再放回主缸`);
+        sheet.close();
+      }, 'primary'),
+      (state.quarantine?.fish.length ?? 0) + n > BOX_CAPACITY ? h('p.hint', {}, `盒子放超過 ${BOX_CAPACITY} 條會擠，小魚長得慢一點`) : null,
+    );
   const render = () => {
     const group = splitGroup(state, plan);
     body.replaceChildren(
@@ -573,8 +589,9 @@ export function splitPanel(ctx: PanelContext, suggested: SplitPlan): Node {
       h('div.row.wrap', {}, ...plans.map((p) => h(`button.btn.small${p === plan ? '.primary' : ''}`, { onclick: () => ((plan = p), render()) }, SPLIT_PLAN_LABELS[p]))),
       h('p', {}, `要移的魚：${group.length} 條（${[...new Set(group.map((f) => fishName(f).replace(/ #\d+$/, '')))].join('、')}）`),
       h('h3', {}, '移到哪一缸'),
+      ...(plan === 'by_size' && state.quarantine && group.length > 0 ? [boxOption(group.length)] : []),
       others.length === 0
-        ? h('div.stack', {}, h('p.hint', {}, '沒有別的缸。先加一缸（大缸比較穩，但設備要夠），或把一部分賣掉、送朋友。'), button('去加一缸', () => sheet.open('我的水缸', () => tanksPanel(ctx))))
+        ? h('div.stack', {}, h('p.hint', {}, state.quarantine ? '沒有別的缸。仔魚可以先放檢疫盒；要長期養，再加一缸或把一部分賣掉、送朋友。' : '沒有別的缸。先加一缸（大缸比較穩，但設備要夠），或把一部分賣掉、送朋友。'), button('去加一缸', () => sheet.open('我的水缸', () => tanksPanel(ctx))))
         : h(
             'div.row.wrap',
             {},
@@ -1150,7 +1167,7 @@ export function quarantinePanel(ctx: PanelContext): Node {
     }),
     dead > 0 ? h('div.warn-text', {}, `有 ${dead} 條死在檢疫盒裡了。還好沒有放進主缸。`) : null,
     h('h3', {}, '當產卵盒用'),
-    h('p.hint', {}, '肚子鼓起來的母魚放進來，生下的小魚不會被成魚吃掉。母魚生完放回主缸；小魚長到 1.6 cm 左右，成魚就吞不下了。'),
+    h('p.hint', {}, '肚子鼓起來的母魚放進來，生下的小魚不會被成魚吃掉；已經生出來的仔魚也可以撈進來。母魚生完放回主缸；小魚長到 1.6 cm 左右，成魚就吞不下了。'),
     ...game.state.fish
       .filter((f) => f.alive && f.sex === 'female' && f.pregnancy > 0.5)
       .map((f) =>
@@ -1166,6 +1183,24 @@ export function quarantinePanel(ctx: PanelContext): Node {
           }),
         ),
       ),
+    ...(() => {
+      // 已經生出來、會被成魚吃的仔魚也能放進來（#144）
+      const fry = splitGroup(game.state, 'by_size').filter((f) => isJuvenile(f)).length;
+      if (fry === 0 || !splitAdvice(game.state).some((a) => a.reason === 'fry_with_adults')) return [];
+      return [
+        h(
+          'div.item',
+          {},
+          h('div', {}, h('b', {}, `${fry} 條仔魚`), h('div.hint', {}, '在主缸會被成魚吃掉')),
+          button('撈進盒子', () => {
+            const moved = game.act((st) => rescueFryToBox(st));
+            ctx.sound?.('net');
+            toasts.show(`${moved} 條仔魚撈進檢疫盒了，長到成魚吞不下再放回主缸`);
+            sheet.close();
+          }, 'primary'),
+        ),
+      ];
+    })(),
     h('h3', {}, '藥浴（只下在檢疫盒）'),
     h('div.row.wrap', {}, bath('ichMedication', '白點藥'), bath('antibiotic', '抗生素'), bath('dewormer', '驅蟲藥')),
     living.length > 0 || dead > 0 ? button(dead > 0 && living.length === 0 ? '撈掉死魚' : '全部移到主缸', () => release()) : null,
