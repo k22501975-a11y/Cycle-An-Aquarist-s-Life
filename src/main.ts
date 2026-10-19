@@ -480,12 +480,21 @@ async function start(): Promise<void> {
       setupPress();
     });
   }
+  // 鍵盤：Enter／空白鍵在按鈕上按下等於點一下（注水照樣要按住）
+  setupBtn4.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && !e.repeat && view.settingUp) {
+      e.preventDefault();
+      setupPress();
+    }
+  });
+  setupBtn4.addEventListener('keyup', (e) => (e.key === 'Enter' || e.key === ' ') && view.settingUp && setupRelease());
   window.addEventListener('pointerup', () => view.settingUp && setupRelease());
   window.addEventListener('pointercancel', () => view.settingUp && setupRelease());
   const playSetup = () => {
     guideHeld = true;
-    // 開缸時其他通知（今天的小事、畫質自動調整…）先排隊，「你的第一個缸」關掉再跳（#199）；開缸 4 步等玩家動手，保險時間放長
-    toasts.hold(180_000);
+    // 開缸時其他通知（今天的小事、畫質自動調整…）先排隊，「你的第一個缸」關掉再跳（#199）。
+    // 開缸 4 步等玩家動手，多久都可能，不設保險：開機做完一定會走到 whenClear 放出來（重新整理會從挑設備重來）
+    toasts.hold(0);
     view.playSetup();
     // 演出時只留缸：上方列、任務卡、工具列先藏起來（#171）
     document.body.classList.add('setting-up');
