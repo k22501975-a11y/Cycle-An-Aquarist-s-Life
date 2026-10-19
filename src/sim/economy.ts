@@ -29,7 +29,7 @@ export function chargeMeal(state: TankState, units = 1): void {
 export const FISH_PRICES: Record<FishSpeciesId, number> = { guppy: 60, zebrafish: 20, cherry_shrimp: 25, apisto: 180, betta: 250, crystal_shrimp: 120 };
 /** 鬥魚母魚短鰭、不起眼，比公魚便宜很多。 */
 export const BETTA_FEMALE_PRICE = 100;
-export const PLANT_PRICES: Record<PlantSpeciesId, number> = { anubias: 150, rotala: 60 };
+export const PLANT_PRICES: Record<PlantSpeciesId, number> = { anubias: 150, rotala: 60, eleocharis: 80, glosso: 100, hydrocotyle: 70, moss: 90 };
 
 /** 設備、底材、造景、藥品、耗材的價格，鍵是「類別:id」。 */
 export const PRICES: Record<string, number> = {
