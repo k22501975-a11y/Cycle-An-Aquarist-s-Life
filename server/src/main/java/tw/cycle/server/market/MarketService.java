@@ -262,10 +262,12 @@ public class MarketService {
         int transit = MarketRules.MIN_TRANSIT_HOURS + random.nextInt(MarketRules.MAX_TRANSIT_HOURS - MarketRules.MIN_TRANSIT_HOURS + 1);
         boolean doa = random.nextDouble() < MarketRules.doaChance(kind, (String) o.get("species"), health(item), pack, transit);
         long realMinutes = Math.round(transit * 60.0 / MarketRules.TIME_SCALE);
+        // 只有還是「已付款」才能改成出貨：中間被逾期取消（買家已退款）就不能再出貨（#75）
+        int n = db.update("update market_order set status = 'shipped', item = ?, doa = ?, arrival_stress = ?, bag_temp = ?, bag_ph = ?, shipped_at = ?, arrive_at = ? where id = ? and status = 'paid'",
+                data, doa, MarketRules.arrivalStress(pack, transit), clamp(bagTemp, 10, 40), clamp(bagPh, 4, 10), now(), now().plusMinutes(realMinutes), id);
+        if (n == 0) throw new ApiException(HttpStatus.CONFLICT, "not_paid", "這筆訂單不能出貨了");
         if (o.get("buyer_id") != null)
             push.notifyAccount(((Number) o.get("buyer_id")).longValue(), "market", "「" + o.get("title") + "」到貨了，記得對水再放進缸裡", "arrive-" + id, now().plusMinutes(realMinutes));
-        db.update("update market_order set status = 'shipped', item = ?, doa = ?, arrival_stress = ?, bag_temp = ?, bag_ph = ?, shipped_at = ?, arrive_at = ? where id = ?",
-                data, doa, MarketRules.arrivalStress(pack, transit), clamp(bagTemp, 10, 40), clamp(bagPh, 4, 10), now(), now().plusMinutes(realMinutes), id);
         return order(me, id);
     }
 

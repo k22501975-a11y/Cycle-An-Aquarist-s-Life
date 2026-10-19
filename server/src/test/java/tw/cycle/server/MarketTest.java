@@ -16,6 +16,7 @@ import java.util.random.RandomGenerator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -32,6 +33,8 @@ class MarketTest {
     /** 固定的亂數：roll 決定運輸會不會死（0 一定死、0.99 不會死）。 */
     static class FixedRandom implements RandomGenerator {
         double roll = 0.99;
+        /** 出貨算運輸時間的當下要做的事（模擬同時有另一個請求，例如逾期取消）。 */
+        Runnable duringShip;
 
         @Override
         public long nextLong() {
@@ -40,6 +43,7 @@ class MarketTest {
 
         @Override
         public int nextInt(int bound) {
+            if (duringShip != null) duringShip.run();
             return 0;
         }
 
@@ -69,12 +73,14 @@ class MarketTest {
     @Autowired ObjectMapper json;
     @Autowired MutableClock clock;
     @Autowired FixedRandom random;
+    @Autowired JdbcTemplate db;
 
     record Player(String name, String token) {}
 
     @BeforeEach
     void reset() {
         random.roll = 0.99;
+        random.duringShip = null;
     }
 
     private ResultActions send(MockHttpServletRequestBuilder req, Player p, String body) throws Exception {
@@ -217,6 +223,22 @@ class MarketTest {
         JsonNode refund = read(send(post("/api/market/orders/" + order + "/collect"), ben, null).andExpect(status().isOk()));
         assertThat(refund.get("result").asText()).isEqualTo("refund");
         assertThat(refund.get("amount").asInt()).isEqualTo(320);
+        assertThat(read(send(post("/api/market/orders/" + order + "/collect"), amy, null)).get("result").asText()).isEqualTo("cancelled");
+    }
+
+    @Test
+    void 出貨途中訂單剛好逾期被取消_不能再出貨() throws Exception {
+        // #75：出貨先讀訂單狀態、最後才寫入，中間訂單被逾期取消（買家退款）也照樣改成已出貨，賣家又拿到貨款
+        Player amy = seasoned("amy");
+        Player ben = player("ben");
+        long order = buy(ben, list(amy, 200), "bag");
+        random.duringShip = () -> db.update("update market_order set status = 'cancelled' where id = ?", order);
+        send(post("/api/market/orders/" + order + "/ship"), amy, "{\"item\":{" + SAME_FISH + ",\"health\":1},\"bagTemp\":25,\"bagPh\":7}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("not_paid"));
+        random.duringShip = null;
+        // 出貨失敗整筆回滾（模擬的取消也一起回滾），過了期限照樣是逾期取消、退款給買家
+        clock.advance(Duration.ofHours(25));
+        assertThat(read(send(post("/api/market/orders/" + order + "/collect"), ben, null)).get("result").asText()).isEqualTo("refund");
         assertThat(read(send(post("/api/market/orders/" + order + "/collect"), amy, null)).get("result").asText()).isEqualTo("cancelled");
     }
 
