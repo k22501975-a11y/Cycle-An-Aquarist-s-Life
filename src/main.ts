@@ -323,7 +323,7 @@ async function start(): Promise<void> {
   };
   const marketDeps: MarketDeps = { cloud, game, sheet, toasts, sound: ctx.sound, openCloud: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)), syncSave: () => autoUpload(cloudDeps) };
   const mallDeps: MallDeps = marketDeps;
-  ctx.useMall = (item, apply) => useMallItem(mallDeps, item, apply);
+  ctx.useMall = (item, apply, refusal) => useMallItem(mallDeps, item, apply, refusal);
   const checkGifts = async () => {
     if (!cloud.session) return;
     const res = await cloud.gifts();
