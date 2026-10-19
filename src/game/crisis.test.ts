@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, createTank, infect, recordEvent, DEFAULT_TIME_SCALE, FILTERS, HEATERS, LIGHTS, TANKS, type TankState } from '../sim';
+import { addFish, createTank, feed, infect, recordEvent, DEFAULT_TIME_SCALE, FILTERS, HEATERS, LIGHTS, TANKS, type TankState } from '../sim';
 import { Game } from './game';
 
 /** 養好水的 40L 缸＋4 條孔雀魚（評測第 4 輪的情境，#142）。 */
@@ -120,5 +120,31 @@ describe('快轉遇到危機自動切回正常速度（#142）', () => {
     game.clock.timeScale = 3600;
     game.advance(1000);
     expect(crises.filter((r) => r === 'disease_visible')).toHaveLength(3);
+  });
+
+  it('魚餓到開始消耗體力：切回正常速度提醒；同一缸餓一次只打斷一次，餵飽以後再餓才重新算（#169）', () => {
+    const game = new Game(cycledTank(), 3600 * 6);
+    const crises: string[] = [];
+    game.onCrisis((c) => crises.push(c.reason));
+    // 一直不餵：成魚約 8 天開始消耗體力
+    for (let i = 0; i < 24 * 12 && !crises.includes('starving'); i++) game.advance(1000);
+    expect(crises).toContain('starving');
+    expect(game.state.fish.every((f) => f.alive)).toBe(true);
+    // 停下來之後繼續快轉不會一直被打斷
+    game.clock.timeScale = 3600 * 6;
+    for (let i = 0; i < 8; i++) game.advance(1000);
+    expect(crises.filter((c) => c === 'starving')).toHaveLength(1);
+    // 餵飽，過幾天再停餵：會再提醒一次
+    for (let d = 0; d < 6; d++) {
+      game.act((s) => feed(s, 200));
+      game.clock.timeScale = 3600 * 6;
+      for (let i = 0; i < 4; i++) game.advance(1000);
+    }
+    expect(game.state.fish.every((f) => f.hunger < 0.5)).toBe(true);
+    for (let i = 0; i < 24 * 12 && crises.filter((c) => c === 'starving').length < 2; i++) {
+      game.clock.timeScale = 3600 * 6;
+      game.advance(1000);
+    }
+    expect(crises.filter((c) => c === 'starving')).toHaveLength(2);
   });
 });

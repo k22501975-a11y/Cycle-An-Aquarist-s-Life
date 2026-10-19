@@ -35,6 +35,11 @@ const GRAZING_BONUS = 1.3;
 const isYoung = (fish: Fish) => fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * YOUNG_LENGTH;
 const fastSpec = (fish: Fish) => (isYoung(fish) ? YOUNG_FAST : ADULT_FAST);
 
+/** 這條魚現在是不是餓到在消耗體力（餵飽以後體力還在慢慢補回來的不算）。 */
+export function isStarving(fish: Fish): boolean {
+  return fish.hunger >= fastSpec(fish).start;
+}
+
 /** 體力消耗了幾成：0 沒事，1 開始餓死（超過 1 繼續累積）。7～21 天的消瘦、褪色、不繁殖都看這個。 */
 export function starvation(state: TankState, fish: Fish): number {
   const grazing = state.plants.length > 0 || state.algae > 0.05 ? GRAZING_BONUS : 1;

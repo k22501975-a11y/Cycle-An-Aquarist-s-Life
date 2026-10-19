@@ -20,7 +20,7 @@ export * from './market';
 export * from './forecast';
 export { hardscapeBacteriaCapacity, substrateNutrientBoost } from './processes/hardscape';
 export { canCatch, DISEASE_SPECS, hasVisible, infect, STORE_DISEASE_CHANCE } from './processes/disease';
-export { computeStressors, crowdingRatio, ELDERLY_FRACTION, freeAmmonia, hoursUntilStarving, lifeFraction, likelyCauses, starvation, STRESS_CAUSE_LABELS, type StressKey } from './processes/fauna';
+export { computeStressors, crowdingRatio, ELDERLY_FRACTION, freeAmmonia, hoursUntilStarving, isStarving, lifeFraction, likelyCauses, starvation, STRESS_CAUSE_LABELS, type StressKey } from './processes/fauna';
 export { bacteriaCapacity, cycleMaturity, CYCLED_BACTERIA, isCycled } from './processes/nitrogen';
 export { currentPar } from './processes/plants';
 export { hidingFactor, MAX_FAUNA, sizeRatio } from './processes/population';

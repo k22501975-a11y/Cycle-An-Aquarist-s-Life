@@ -1,3 +1,4 @@
+import type { DeathAdviceCause } from './moments';
 import { guppyLook } from '../render/strains';
 import { isShrimpSpecies, FISH_SPECIES, growthStage, SNAILS, phenotype, PLANT_SPECIES, sexVisible, strainName, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
 
@@ -40,6 +41,17 @@ export const DEATH_CAUSE_LABELS: Record<string, string> = {
   columnaris: '柱狀病（爛嘴爛身）',
   flukes: '鰓吸蟲',
   unknown: '原因不明',
+};
+
+/**
+ * 魚第一次餓死、病死時阿德老闆直接說原因和下次怎麼做（#169）：
+ * 只看通知裡的「可能原因」玩家常常不知道下一步，餓死的人甚至不知道魚要一直餵。
+ */
+export const DEATH_ADVICE: Record<DeathAdviceCause, string> = {
+  starvation: '這條是餓死的。魚一天要吃一到兩餐，關掉遊戲時間也照樣在走。要出門好幾天，商店「設備」最下面的「出遠門」有假期飼料錠，常常不在家就裝自動餵食器。',
+  ich: '這條是白點病死的。白點蟲會在水裡傳給其他魚：先下白點藥，把水溫慢慢調高一點，整個療程撐完，白點看不到了也要再下幾天。',
+  columnaris: '這條是柱狀病（爛嘴爛身）死的，是細菌感染，水質差、魚緊迫就容易爆發。先換水，再下抗生素，病魚最好撈去檢疫盒。',
+  flukes: '這條是鰓吸蟲死的，蟲咬鰓讓魚喘不過氣。下驅蟲藥整缸一起處理，新買的魚先放檢疫盒觀察幾天再放進來。',
 };
 
 /** 母魚為什麼顧不好小孩（design: market-and-breeding.md §1.3.3）。 */
