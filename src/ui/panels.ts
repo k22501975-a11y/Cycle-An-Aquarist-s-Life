@@ -148,6 +148,7 @@ import { artImg } from './art-icons';
 import { advice, cardGrid, guppyArt, iconTabs, plantArt, priceTag, shopCard, snailArt, speciesArt } from './shop-cards';
 import type { Sheet, Toasts } from './sheet';
 import { READING_TONES, todos } from './status';
+import { overloadWarning } from './tutorial';
 
 export interface PanelContext {
   game: Game;
@@ -227,7 +228,8 @@ export function feedPanel(ctx: PanelContext): Node {
     h(
       'div.row',
       {},
-      button('一小撮', give(meal * 0.5, '一小撮')),
+      // 一小撮是新缸期的維持量：一天兩次，魚不會餓壞，殘餌也少
+      button('一小撮', give(meal * 0.75, '一小撮')),
       button('一餐', give(meal, '一餐'), 'primary'),
       button('一大把', give(meal * 3, '一大把')),
     ),
@@ -283,7 +285,7 @@ export function testKitPanel({ game }: PanelContext): Node {
   return h(
     'div.stack',
     {},
-    h('p.hint', {}, '試劑只能比對色卡，讀到的是大約的級距。結果會顯示在上方的狀態列，三天後就不準了。'),
+    h('p.hint', {}, '試劑只能比對色卡，讀到的是大約的級距。結果會顯示在上方的狀態列：超過一天會變淡（水可能已經變了），三天後就當作不知道。養水任務要看當天的讀數。'),
     h(
       'table.readings',
       {},
@@ -318,6 +320,8 @@ export function trimListPanel(ctx: PanelContext): Node {
   );
 }
 
+/** 這次開遊戲已經提醒過「新缸放太多魚」了。 */
+let overloadWarned = false;
 /** 商店放魚的方式：預設慢慢滴水對水。 */
 let shopDrip = true;
 
@@ -644,8 +648,16 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
   );
   const wallet = h('div.wallet-bar', {}, h('span', {}, '錢包'), priceTag(coins));
 
+  // 新缸一次放太多魚：老闆提醒一次（每次開遊戲最多一次），玩家還是可以照買
+  const overloadOk = (count: number) => {
+    const warning = overloadWarned ? null : overloadWarning(game.state, count);
+    if (!warning) return true;
+    overloadWarned = true;
+    return confirm(warning);
+  };
   // sexes 有給就照順序決定每隻的公母（孔雀魚品系：公、母、一公兩母），沒給就隨機
   const buyFish = (species: FishSpeciesId, count: number, strain?: number, finStrain?: (typeof GUPPY_FIN_STRAINS)[number], sexes?: ('male' | 'female')[]) => () => {
+    if (!overloadOk(count)) return;
     const quarantined = !!game.state.quarantine;
     const name = finStrain ? `${finStrain.name}孔雀魚` : strain !== undefined ? `${GUPPY_STRAINS[strain]}孔雀魚` : FISH_SPECIES[species].name;
     const each = finStrain ? finStrain.price : strain !== undefined ? GUPPY_STRAIN_PRICES[strain] : FISH_PRICES[species];
@@ -662,7 +674,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         ? `買了 ${count} 隻${name}${sexNote}，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天`
         : shopDrip
           ? `買了 ${count} 隻${name}${sexNote}，慢慢滴水對水後放進缸裡`
-          : `買了 ${count} 隻${name}${sexNote}，直接倒進缸裡${Math.abs(farmHabit(species).ph - game.state.water.ph) > 0.6 ? '，水質差很多，牠們嚇壞了' : ''}`,
+          : `買了 ${count} 隻${name}${sexNote}，直接倒進缸裡${Math.abs(farmHabit(species).ph - game.state.water.ph) > 0.6 ? '，水質差很多，魚受到驚嚇，接下來幾天容易生病' : ''}`,
       !shopDrip && Math.abs(farmHabit(species).ph - game.state.water.ph) > 0.6 ? 'warn' : 'info',
     );
   };
@@ -671,11 +683,13 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     const quarantined = !!game.state.quarantine;
     const name = `${FISH_SPECIES[species].name}${sex === 'male' ? '公魚' : '母魚'}`;
     const males = game.state.fish.filter((f) => f.alive && f.species === species && f.sex === 'male' && !isJuvenile(f)).length;
+    if (!overloadOk(1)) return;
     if (species === 'betta' && sex === 'male' && males > 0 && !quarantined && !confirm('缸裡已經有公鬥魚了，兩尾公鬥魚放在一起會打到一尾死掉。還是要買嗎？')) return;
     purchase(ctx, price, (st) => (quarantined ? addFishToQuarantine : addFish)(st, species, { sex, drip: shopDrip }), `買了一隻${name}${quarantined ? `，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天` : ''}`);
   };
   // 水草可能夾帶害蟲小螺的卵（看不到）；有檢疫盒的人會先泡過，機率低很多（design/snails.md §2）
   const buyPair = (species: FishSpeciesId) => () => {
+    if (!overloadOk(2)) return;
     const quarantined = !!game.state.quarantine;
     purchase(
       ctx,
@@ -712,7 +726,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         'div.seg.compact',
         {},
         h(`button.seg-opt${shopDrip ? '.active' : ''}`, { title: `滴水對水約 ${dripMinutes(game.state, farm)} 分鐘`, onclick: () => ((shopDrip = true), sheet.refresh?.()) }, h('b', {}, '滴水對水')),
-        h(`button.seg-opt${shopDrip ? '' : '.active'}`, { title: phGap > 0.6 ? '水質差很多：魚會受驚、容易生病' : '水質差不多', onclick: () => ((shopDrip = false), sheet.refresh?.()) }, h('b', {}, '直接倒')),
+        h(`button.seg-opt${shopDrip ? '' : '.active'}`, { title: phGap > 0.6 ? '水質差很多：魚會受驚，容易生病' : '水質差不多', onclick: () => ((shopDrip = false), sheet.refresh?.()) }, h('b', {}, '直接倒')),
       ),
     );
     const add = (label: string, run: () => void, kind = '') => button(label, run, kind ? `small.${kind}` : 'small');
