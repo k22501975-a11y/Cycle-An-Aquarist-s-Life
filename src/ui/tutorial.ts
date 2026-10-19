@@ -137,7 +137,7 @@ export function cycleProgress(s: TankState): string {
   if (r.ammonia > 0) parts.unshift(`氨 ${fmt(r.ammonia)}`);
   if (r.nitrite > 0) parts.unshift(`亞硝 ${fmt(r.nitrite)}`);
   const stale = s.hours - test.hours >= 24;
-  return `${parts.join('・')}（${stale ? '要看今天的讀數，再測一次' : '上次測水'}）`;
+  return `${parts.join('・')}（${stale ? '舊讀數，再測一次' : '上次測水'}）`;
 }
 
 function fmt(n: number): string {

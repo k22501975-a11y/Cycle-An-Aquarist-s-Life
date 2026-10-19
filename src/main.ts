@@ -167,7 +167,7 @@ async function start(): Promise<void> {
       },
     });
   };
-  const ctx: PanelContext = { game, sheet, toasts, sound: (id) => audio.play(id), undoable, moment };
+  const ctx: PanelContext = { game, sheet, toasts, sound: (id) => audio.play(id), undoable, moment, fishPic: (fish) => view.portrait(fish) };
   // 存檔匯出成檔案（換手機、怕瀏覽器清掉資料時用）
   const exportSave = () =>
     void saveTextFile(`cycle-save-day${Math.floor(game.state.hours / 24) + 1}.json`, serializeSave(game.tanks[0], game.clock.timeScale, Date.now(), undefined, extraTanks())).catch(() =>
@@ -342,7 +342,9 @@ async function start(): Promise<void> {
   const renderSelCard = () => {
     const fish = game.state.fish.find((f) => f.id === selected);
     const cond = fish?.alive ? sim.fishCondition(game.state, fish) : null;
-    if (!selChanged(fish ? `${fish.id}:${fish.alive}:${Math.round(fish.health * 50)}:${Math.round(fish.stress * 50)}:${fishName(fish)}:${cond?.hunger}:${cond?.causes[0]?.key}` : '-')) return;
+    // 肖像有快取，同一個外觀拿到的是同一個字串；長大換外觀時卡片跟著換圖
+    const pic = fish?.alive ? view.portrait(fish) : null;
+    if (!selChanged(fish ? `${fish.id}:${pic?.length}:${fish.alive}:${Math.round(fish.health * 50)}:${Math.round(fish.stress * 50)}:${fishName(fish)}:${cond?.hunger}:${cond?.causes[0]?.key}` : '-')) return;
     selCard.classList.toggle('empty', !fish);
     if (!fish) {
       selCard.replaceChildren(h('div.card-title', {}, '觀察'), h('p.hint', {}, '點缸裡的魚，看看牠的狀況。'));
@@ -367,6 +369,7 @@ async function start(): Promise<void> {
       : null;
     selCard.replaceChildren(
       close,
+      ...(pic ? [h('img.sel-pic', { src: pic, alt: '', draggable: 'false' })] : []),
       h('div.card-title', {}, title, h(`span.hunger-chip.${cond.hunger}`, {}, HUNGER_LABEL[cond.hunger])),
       h('div.card-sub', {}, sub),
       bar('健康', fish.health, fish.health > 0.6 ? 'ok' : fish.health > 0.3 ? 'warn' : 'bad'),
@@ -882,6 +885,7 @@ async function start(): Promise<void> {
     audio.play('fanfare');
     celebration.show({
       art: guppyArt(sim.lookIndex(p), fin),
+      src: view.portrait(top.fish) ?? undefined,
       title: `${tankPrefix(top.tank)}選育成功：${top.name}！`,
       sub: `自家繁殖第 ${top.fish.generation} 代・${sim.GUPPY_RARITY_LABELS[top.rarity]}・店家收購約 ${sim.fishBuybackPrice(top.fish)} 元`,
       owner: strainOwnerLine(top.rarity),
@@ -927,7 +931,7 @@ async function start(): Promise<void> {
     analytics.track('quest_done', { step });
     if (id === 'cycled')
       moment('cycled', {
-        art: 'ui/icon-bacteria.webp',
+        art: 'gear/bottle-bacteria.webp',
         title: '養水完成！',
         sub: '硝化菌長好了，氨和亞硝酸鹽都是 0。現在可以慢慢多加魚',
       });
@@ -977,7 +981,8 @@ async function start(): Promise<void> {
   app.ticker.add((ticker) => {
     try {
       const t0 = performance.now();
-      tick(ticker.deltaMS);
+      // 模擬用現實經過的時間（elapsedMS 不受 Pixi 每幀 100ms 的上限影響，#113）；動畫用 deltaMS，卡頓時不會跳太大
+      tick(ticker.elapsedMS, ticker.deltaMS);
       if (fpsShown) {
         const now = performance.now();
         fpsMeter.add(ticker.deltaMS, now - t0, now);
@@ -991,11 +996,11 @@ async function start(): Promise<void> {
       crash(error);
     }
   });
-  function tick(deltaMS: number) {
+  function tick(elapsedMS: number, deltaMS: number) {
     const ticker = { deltaMS };
-    game.advance(ticker.deltaMS);
+    game.advance(elapsedMS);
     if (visiting) {
-      const n = Math.min(visitClock.advance(ticker.deltaMS), 60);
+      const n = Math.min(visitClock.advance(elapsedMS), 60);
       for (let i = 0; i < n; i++) sim.step(visiting.state);
     }
     view.update(visiting?.state ?? game.state, ticker.deltaMS / 1000);

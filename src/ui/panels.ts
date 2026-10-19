@@ -59,7 +59,6 @@ import {
   slotPrice,
   TANK_SETS,
   tankLabel,
-  tankSetPrice,
   type TankSizeId,
   chargeMeal,
   economy,
@@ -160,7 +159,7 @@ import {
 import { applySeason, type Game } from '../game/game';
 import { h } from './dom';
 import { BROOD_ISSUE_LABELS, DEATH_CAUSE_LABELS, fishName, SYMPTOM_LABELS } from './labels';
-import { artImg } from './art-icons';
+import { artImg, ownerImg } from './art-icons';
 import { advice, cardGrid, guppyArt, iconTabs, plantArt, priceTag, shopCard, snailArt, speciesArt } from './shop-cards';
 import type { Sheet, Toasts } from './sheet';
 import type { CelebrateSpec } from './celebrate';
@@ -181,6 +180,8 @@ export interface PanelContext {
   openScape?: () => void;
   /** 「第一次」的慶祝演出（只演一次）；有演出時回傳 true。 */
   moment?: (id: MomentId, spec: CelebrateSpec) => boolean;
+  /** 這條魚在缸裡的樣子（觀察面板頂端的大圖）；沒有就不放圖。 */
+  fishPic?: (fish: Fish) => string | null;
 }
 
 /** 沒有復原機制時（例如測試）就直接做並顯示通知。 */
@@ -215,11 +216,24 @@ export function feedWarning(s: TankState, kind: FoodKind): string | null {
   return `${missing.map((sp) => FISH_SPECIES[sp].name).join('、')}吃不太到${FOOD_KINDS[kind].name}飼料，記得也餵${better}的。`;
 }
 
+/** 面板沒東西可做時：一張有圖的卡，老闆說一句，直接帶去商店對應的分頁（不是一行字）。 */
+function emptyState(ctx: PanelContext, text: string, tab: ShopTab, art: string): Node {
+  const pic = h('img.empty-art', { src: `${import.meta.env.BASE_URL}art/${art}`, alt: '', draggable: 'false' });
+  pic.addEventListener('error', () => pic.remove());
+  return h(
+    'div.empty-state',
+    {},
+    pic,
+    h('div.empty-owner', {}, ownerImg('empty-avatar'), h('span', {}, text)),
+    h('button.btn.primary.go-shop', { onclick: () => ctx.sheet.open('商店', () => shopPanel(ctx, tab)) }, artImg('shop', 'btn-art'), '去商店'),
+  );
+}
+
 export function feedPanel(ctx: PanelContext): Node {
   const { game, sheet, toasts, sound } = ctx;
   const s = game.state;
   const meal = mealSize(s);
-  if (meal <= 0) return h('p', {}, '缸裡還沒有魚。');
+  if (meal <= 0) return emptyState(ctx, '缸裡還沒有魚，先去挑幾條吧。', 'fish', speciesArt('guppy'));
   const give = (mg: number, label: string) => () => {
     const { kind, grade } = feedChoice;
     game.act((st) => {
@@ -323,7 +337,7 @@ export function testKitPanel({ game }: PanelContext): Node {
 export function trimListPanel(ctx: PanelContext): Node {
   const { game, sheet } = ctx;
   const plants = game.state.plants;
-  if (plants.length === 0) return h('p', {}, '缸裡還沒有水草，可以到商店買。');
+  if (plants.length === 0) return emptyState(ctx, '缸裡還沒有水草，種一盆再來修剪。', 'plants', plantArt('anubias'));
   return h(
     'div.stack',
     {},
@@ -389,7 +403,7 @@ export function ageLabel(days: number): string {
   return `約 ${years < 10 ? (Math.floor(years * 2) / 2).toString() : Math.floor(years)} 歲`;
 }
 
-export function fishPanel({ game, sheet, toasts }: PanelContext, fishId: number): Node {
+export function fishPanel({ game, sheet, toasts, fishPic }: PanelContext, fishId: number): Node {
   const fish = game.state.fish.find((f) => f.id === fishId);
   if (!fish) return h('p', {}, '這條魚已經不在缸裡了。');
   if (!fish.alive) {
@@ -406,9 +420,11 @@ export function fishPanel({ game, sheet, toasts }: PanelContext, fishId: number)
     );
   }
   const symptoms = observeSymptoms(game.state, fish);
+  const pic = fishPic?.(fish);
   return h(
     'div.stack',
     {},
+    pic ? h('div.fish-hero', {}, h('img', { src: pic, alt: '', draggable: 'false' })) : null,
     h('p', {}, `${fishName(fish)} · 體長約 ${fish.lengthCm.toFixed(1)} cm · ${ageLabel(fish.ageDays)}`),
     h('p', {}, growthLine(game.state, fish)),
     h('p', {}, habitLine(game.state, fish)),
@@ -885,7 +901,8 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       h('h3', {}, '養水與設備'),
       cardGrid(
         shopCard({
-          icon: 'bacteria',
+          // 無框的物件圖，跟旁邊的設備同一種畫法（畫面評測 V26）
+          art: 'gear/bottle-bacteria.webp',
           name: '硝化菌液',
           price: price('care:bacteria'),
           unit: '/瓶',
@@ -1364,10 +1381,11 @@ export function tanksPanel(ctx: PanelContext): Node {
     const summary = [t.equipment.tank.name, `${living} 隻魚蝦`, `${t.water.tempC.toFixed(1)}°C`].join(' · ');
     const refusal = removeTankRefusal(game.tanks, i);
     return h(
-      `div.item${i === game.active ? '.current' : ''}`,
+      `div.item.tank-row${i === game.active ? '.current' : ''}`,
       {},
+      artImg('tanks', 'tank-row-art'),
       h(
-        'div',
+        'div.tank-row-text',
         {},
         h('b', {}, tankLabel(game.tanks, i)),
         h('div.hint', {}, summary),
@@ -1427,31 +1445,28 @@ export function tanksPanel(ctx: PanelContext): Node {
     const set = TANK_SETS[id];
     const cost = newTankCost(game.tanks, id);
     const refusal = buyTankRefusal(game.tanks, id);
-    const parts = [`套缸 ${yuan(tankSetPrice(id))}`, slot > 0 ? `缸架 ${yuan(slot)}` : ''].filter(Boolean).join(' + ');
-    return h(
-      'div.item',
-      {},
-      h(
-        'div',
-        {},
-        h('b', {}, set.tank.name),
-        h('div.hint', {}, `${set.filter.name}、${set.heater.name}、基本 LED 燈`),
-        h('div.hint', {}, `${parts} = ${yuan(cost)}`),
-        tankLock(game.tanks, id) ? h('div.hint', {}, '🔒 ' + unlockHint(tankLock(game.tanks, id)!)) : null,
-      ),
-      button('買', () => {
-        if (refusal) {
-          toasts.show(refusal === '錢不夠' ? `錢不夠：要 ${cost} 元，現在有 ${coins} 元` : refusal, 'warn');
-          return;
-        }
-        const tank = game.actAll((tanks) => buyTank(tanks, id));
-        if (!tank) return;
-        ctx.sound?.('buy');
-        game.switchTo(game.tanks.indexOf(tank));
-        toasts.show(`架好了新的${set.tank.name}（${yuan(cost)}）。新缸要先養水，硝化菌長起來才能放魚`);
-        sheet.close();
-      }),
-    );
+    const lock = tankLock(game.tanks, id);
+    const buy = () => {
+      if (refusal) {
+        toasts.show(refusal === '錢不夠' ? `錢不夠：要 ${cost} 元，現在有 ${coins} 元` : refusal, 'warn');
+        return;
+      }
+      const tank = game.actAll((tanks) => buyTank(tanks, id));
+      if (!tank) return;
+      ctx.sound?.('buy');
+      game.switchTo(game.tanks.indexOf(tank));
+      toasts.show(`架好了新的${set.tank.name}（${yuan(cost)}）。新缸要先養水，硝化菌長起來才能放魚`);
+      sheet.close();
+    };
+    return shopCard({
+      art: 'gear/tank-empty.webp',
+      name: set.tank.name,
+      price: cost,
+      chips: [`${set.tank.volumeL}L`, set.filter.name.replace(/（.*）/, ''), set.heater.name, slot > 0 ? '含缸架' : ''].filter(Boolean),
+      note: lock ? '🔒 ' + unlockHint(lock) : undefined,
+      actions: [button('買', buy, refusal ? '' : 'primary')],
+      cls: lock ? '.locked' : '',
+    });
   });
   return h(
     'div.stack',
@@ -1459,9 +1474,12 @@ export function tanksPanel(ctx: PanelContext): Node {
     h('p.wallet', {}, `錢包：${yuan(coins)}`),
     ...rows,
     h('h3', {}, '加一缸'),
-    h('p.hint', {}, '多一缸可以分開養不同的魚、隔出繁殖缸或種魚專缸。每缸都要各自養水、換水、付電費，缸越多越難顧。大缸水質比較穩，但設備要跟著夠力。'),
-    h('p.hint', {}, `原本的櫃子放得下 2 缸，之後每多一缸要加一層缸架；房間最多 6 缸。`),
-    ...offers,
+    cardGrid(...offers),
+    advice([
+      '多一缸可以分開養不同的魚、隔出繁殖缸或種魚專缸。每缸都要各自養水、換水、付電費，缸越多越難顧。',
+      '大缸水質比較穩，但設備要跟著夠力。',
+      `原本的櫃子放得下 2 缸，之後每多一缸要加一層缸架${slot > 0 ? `（這次 ${yuan(slot)}）` : ''}；房間最多 6 缸。`,
+    ]),
   );
 }
 

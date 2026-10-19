@@ -141,6 +141,8 @@ const BACK_LEAVE = 0.4;
  */
 export class TankView {
   readonly root = new Container();
+  /** 魚的肖像快取（rigSpec 的 key → 圖）。 */
+  private readonly portraits = new Map<string, string | null>();
   private readonly backdrop = new Sprite();
   private readonly backFish = new Container();
   private readonly driftwood = new Sprite();
@@ -1287,8 +1289,8 @@ export class TankView {
     return view;
   }
 
-  /** 外觀改變（長大、轉成公母、懷孕）時重組圖層。 */
-  private applyRig(view: FishView, fish: Fish): void {
+  /** 這條魚現在的外觀：用哪張圖、補畫哪些鰭。key 一樣畫出來就一樣。 */
+  private rigSpec(fish: Fish) {
     const form = this.formOf(fish);
     // 魚懷孕後期肚子才看得出來；蝦一抱卵就看得到。
     const gravid = form === 'female' && fish.pregnancy > (isShrimpSpecies(fish.species) ? 0 : 0.5);
@@ -1299,13 +1301,46 @@ export class TankView {
     const fins = fish.species === 'guppy' && form !== 'juvenile' && fish.genome && stage !== 'coloring' ? finTraitsOf(fish, painted) : null;
     const finKey = fins ? `${+fins.dumboArt}${+!!fins.traits.swallow}${+!!fins.traits.ribbon}${+!!fins.traits.dumbo}${+!!fins.traits.bigC}${fins.traits.sword ?? 0}${+!!fins.traits.halfmoon}` : '';
     const key = `${fish.species}:${form}:${gravid}:${painted ?? ''}:${finKey}`;
+    return { form, gravid, painted, fins, key, look: appearance(fish.species, form, lookVariant(fish), gravid) };
+  }
+
+  /**
+   * 這條魚的肖像（觀察卡、選育成功的慶祝卡）：用缸裡同一張圖和同樣補畫的鰭，頭朝右、不擺動，烘成一張圖。
+   * 之前卡片用的是商店的代表圖，大C 會變成半月、雜交出來的花色也對不上（畫面評測 V24、V25）。
+   */
+  portrait(fish: Fish): string | null {
+    const spec = this.rigSpec(fish);
+    const hit = this.portraits.get(spec.key);
+    if (hit !== undefined) return hit;
+    const tex = paintedTexture(spec.painted);
+    if (!tex || !spec.painted) return null;
+    const rig = new PaintedRig(spec.painted, tex, spec.look);
+    if (spec.fins) drawFinOverlay(rig, spec.fins, this.app.renderer);
+    rig.scale.x = -1;
+    const wrap = new Container();
+    wrap.addChild(rig);
+    let url: string | null = null;
+    try {
+      const canvas = this.app.renderer.extract.canvas({ target: wrap, antialias: true }) as HTMLCanvasElement;
+      url = canvas.toDataURL('image/webp', 0.9);
+    } catch {
+      url = null;
+    }
+    wrap.destroy({ children: true });
+    if (this.portraits.size >= 24) this.portraits.delete(this.portraits.keys().next().value!);
+    this.portraits.set(spec.key, url);
+    return url;
+  }
+
+  /** 外觀改變（長大、轉成公母、懷孕）時重組圖層。 */
+  private applyRig(view: FishView, fish: Fish): void {
+    const { painted, fins, key, look } = this.rigSpec(fish);
     if (key === view.rigKey) return;
     view.rigKey = key;
     // 卵和白點圖層每次換外觀都沿用：先從舊圖層拿出來，不然會跟著被銷毀，之後再畫到就當掉
     view.eggs.removeFromParent();
     view.spots.removeFromParent();
     view.rig?.destroy({ children: true });
-    const look = appearance(fish.species, form, lookVariant(fish), gravid);
     const tex = paintedTexture(painted);
     view.rig = tex && painted ? new PaintedRig(painted, tex, look) : new FishRig(fish.species, look);
     view.tone = '';
