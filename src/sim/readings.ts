@@ -1,5 +1,5 @@
 import { FISH_SPECIES } from './species';
-import { ELDERLY_FRACTION, freeAmmonia, immunity, lifeFraction } from './processes/fauna';
+import { ELDERLY_FRACTION, freeAmmonia, immunity, lifeFraction, likelyCauses } from './processes/fauna';
 import { hasVisible } from './processes/disease';
 import type { Fish, TankState } from './state';
 
@@ -48,7 +48,8 @@ export type Symptom =
   | 'pregnant'
   | 'elderly'
   | 'white_patches'
-  | 'gill_flare';
+  | 'gill_flare'
+  | 'begging';
 
 /**
  * 玩家能「看到」的症狀。分成早期行為異常、中期外觀變化、晚期瀕死，
@@ -67,6 +68,7 @@ export function observeSymptoms(state: TankState, fish: Fish): Symptom[] {
   if (fish.ich.stage === 'visible') out.push('white_spots');
   if (fish.health < 0.5) out.push('lethargic');
   if (fish.health < 0.15) out.push('loss_of_balance');
+  if (fish.hunger > HUNGRY && fish.stress <= 0.6) out.push('begging');
   if (fish.starvingHours > 48) out.push('thin');
   if (fish.finDamage > 0.15) out.push('torn_fins');
   if (fish.pregnancy > 0.5) out.push('pregnant');
@@ -74,6 +76,33 @@ export function observeSymptoms(state: TankState, fish: Fish): Symptom[] {
   if (hasVisible(fish, 'columnaris')) out.push('white_patches');
   if (hasVisible(fish, 'flukes')) out.push('gill_flare');
   return out;
+}
+
+/** 飢餓值超過這個就算「餓了」：會在水面巡游討食，壓力開始上升。 */
+export const HUNGRY = 0.55;
+
+export type HungerLevel = 'full' | 'fed' | 'hungry' | 'starving';
+
+/** 飢餓的四個等級，給點魚的資訊、肚子扁不扁的畫法用。 */
+export function hungerLevel(fish: Fish): HungerLevel {
+  if (fish.hunger >= 1) return 'starving';
+  if (fish.hunger > HUNGRY) return 'hungry';
+  if (fish.hunger > 0.25) return 'fed';
+  return 'full';
+}
+
+/**
+ * 玩家看得到的魚況（點魚的資訊卡、老闆提醒用）：飢餓程度、健康、生病的可能原因。
+ * hunger、health 是 0～1（1 是最餓／最健康）；causes 由主要到次要。
+ */
+export function fishCondition(state: TankState, fish: Fish) {
+  return {
+    hunger: hungerLevel(fish),
+    hungerValue: fish.hunger,
+    health: fish.health,
+    stress: fish.stress,
+    causes: fish.alive ? likelyCauses(state, fish) : [],
+  };
 }
 
 /** 開發與除錯用：魚的內部狀態（玩家看不到）。 */

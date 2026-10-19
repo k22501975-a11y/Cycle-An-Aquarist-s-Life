@@ -16,6 +16,8 @@ const RULES = {
   artExts: new Set(['.webp']),
   /** dist/assets 的 JS 全部 gzip 後合計上限（首次載入要下載的程式碼） */
   jsGzipMax: 450 * KB,
+  /** 主程式（入口 index-*.js）gzip 後上限：開機一定要下載的部分 */
+  mainJsGzipMax: 300 * KB,
 };
 
 function walk(dir) {
@@ -47,7 +49,17 @@ if (process.argv.includes('--dist')) {
     errors.push('找不到 dist/assets，請先 npm run build');
   } else {
     const js = walk(join('dist', 'assets')).filter((f) => extname(f.path) === '.js');
-    const gz = js.reduce((s, f) => s + gzipSync(readFileSync(f.path)).length, 0);
+    const sizes = js.map((f) => ({ path: f.path, gz: gzipSync(readFileSync(f.path)).length }));
+    const gz = sizes.reduce((s, f) => s + f.gz, 0);
+    // 入口檔名從 dist/index.html 的 <script type="module" src> 找（其他 chunk 也可能叫 index-*.js）
+    const entry = /<script[^>]*type="module"[^>]*src="[^"]*\/(assets\/[^"]+\.js)"/.exec(readFileSync(join('dist', 'index.html'), 'utf8'))?.[1];
+    const main = sizes.find((f) => entry && f.path === join('dist', entry));
+    if (!main) {
+      errors.push('在 dist/index.html 找不到主程式的 <script>');
+    } else {
+      console.log(`主程式：${main.path} gzip 後 ${Math.round(main.gz / KB)} KB（上限 ${RULES.mainJsGzipMax / KB} KB）`);
+      if (main.gz > RULES.mainJsGzipMax) errors.push(`主程式 gzip 後 ${Math.round(main.gz / KB)} KB，超過 ${RULES.mainJsGzipMax / KB} KB 上限`);
+    }
     console.log(`程式碼：${js.length} 個 JS，gzip 後合計 ${Math.round(gz / KB)} KB（上限 ${RULES.jsGzipMax / KB} KB）`);
     if (gz > RULES.jsGzipMax) errors.push(`JS gzip 後 ${Math.round(gz / KB)} KB，超過 ${RULES.jsGzipMax / KB} KB 上限`);
   }

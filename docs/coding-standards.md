@@ -67,7 +67,8 @@ server/     Spring Boot 3 + Java 21 + PostgreSQL
 
 ## 8. 安全與敏感資訊
 
-- 不把金鑰、密碼、簽章檔 commit 進 repo；用 GitHub Secrets 或環境變數。唯一例外是測試版專用的公開金鑰 `android/app/beta-test.keystore`（見 `docs/release.md`），它不能拿來上架。
+- 不把金鑰、密碼、簽章檔 commit 進 repo（CI 的 gitleaks 會擋）；用 GitHub Secrets 或環境變數。唯一例外是公開放在 repo 的測試用簽章金鑰 `android/app/beta-test.keystore`（見 `docs/release.md`），它不能拿來上架。
+- 新增正式相依前先看維護狀況和授權；`npm audit --omit=dev` 有 high 以上漏洞的套件不能進來。
 - 伺服器端不信任客戶端送來的數值（錢、魚的基因、時間），以伺服器重算為準。
 - 從 innerHTML 插入的內容只能是程式內建的 SVG 圖示，不能放玩家輸入（名字、好友留言要用 `textContent`）。
 
