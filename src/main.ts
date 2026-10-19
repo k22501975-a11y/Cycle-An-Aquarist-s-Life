@@ -3,10 +3,11 @@ import { AudioEngine } from './audio/engine';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
 import { eventSound } from './audio/sounds';
 import { applySeason, blankGameState, Game } from './game/game';
+import { crisisText } from './game/crisis';
 import { setupPanel } from './ui/setup-panel';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
 import { menuTile, ownerImg } from './ui/art-icons';
-import { SpeedControl } from './ui/speed-control';
+import { cloudTimeScale, SpeedControl } from './ui/speed-control';
 import { installCrashGuard } from './ui/crash';
 import { Analytics } from './net/analytics';
 import { isNativeApp, saveTextFile } from './ui/native';
@@ -297,7 +298,7 @@ async function start(): Promise<void> {
     const list = planNotices(forecastAlerts, notifier.prefs, forecastAt, game.clock.timeScale > 0 ? sim.DEFAULT_TIME_SCALE : 0);
     // App 收不到伺服器的通知，到貨時間自己排（網頁版由伺服器送）
     if (notifier.platform?.kind === 'native' && notifier.prefs.categories.market)
-      list.push(...knownArrivals().map((a) => ({ at: a.at, category: 'market' as const, title: '水族人生', body: `「${a.title}」到貨了，記得對水再放進缸裡`, tag: `arrive-${a.id}` })));
+      list.push(...knownArrivals().map((a) => ({ at: a.at, category: 'market' as const, title: "Aquarist's Life", body: `「${a.title}」到貨了，記得對水再放進缸裡`, tag: `arrive-${a.id}` })));
     return list.sort((a, b) => a.at - b.at).slice(0, 20);
   };
   const planPush = async () => {
@@ -459,7 +460,7 @@ async function start(): Promise<void> {
 
   // ---- 狀態列：時間、水質膠囊（沒測過顯示「?」）、待辦、選單 ----
   const clockValue = h('span.value');
-  const clock = h('div.time', {}, h('span.label', {}, '水族人生'), clockValue);
+  const clock = h('div.time', {}, h('span.label', {}, "Aquarist's Life"), clockValue);
   // 時鐘旁的速度按鈕：暫停、正常、快轉（雲端模式只能暫停或正常）
   const speed = new SpeedControl({
     get: () => game.clock.timeScale,
@@ -886,6 +887,21 @@ async function start(): Promise<void> {
     const msg = describeEvent(game.tanks[tank] ?? game.state, e);
     if (msg) toasts.show(tankPrefix(tank) + msg.text, msg.tone);
   });
+  // 快轉時出狀況：遊戲已經切回正常速度，提示玩家並給「去處理」（#142）
+  const GEAR_CRISES = new Set(['heater_broke', 'heater_stuck', 'heater_exposed', 'controller_cut', 'power_out', 'too_hot', 'too_cold']);
+  game.onCrisis((c) => {
+    speed.render();
+    const fix = GEAR_CRISES.has(c.reason)
+      ? {
+          label: '去處理',
+          run: () => {
+            game.switchTo(c.tank);
+            sheet.open('設備與維護', () => maintenancePanel(ctx));
+          },
+        }
+      : undefined;
+    toasts.show(tankPrefix(c.tank) + crisisText(c), 'warn', fix);
+  });
   // 選育成功：自家繁殖的公魚第一次長出沒見過的品系
   const strains = new StrainTracker(store);
   const celebrateStrains = () => {
@@ -1011,6 +1027,8 @@ async function start(): Promise<void> {
   });
   function tick(elapsedMS: number, deltaMS: number) {
     const ticker = { deltaMS };
+    // 雲端模式最多 ×7：每幀檢查，登入、讀檔、匯入、從雲端下載後都會套到（#112）
+    game.clock.timeScale = cloudTimeScale(game.clock.timeScale, !!cloud.session);
     game.advance(elapsedMS);
     if (visiting) {
       const n = Math.min(visitClock.advance(elapsedMS), 60);

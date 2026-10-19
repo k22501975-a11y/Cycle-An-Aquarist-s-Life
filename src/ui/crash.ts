@@ -27,7 +27,7 @@ export function installCrashGuard(hooks: { save: () => void; exportSave: () => v
       h(
         'div.crash-card.glass',
         {},
-        h('h2', {}, '水族人生出了點問題'),
+        h('h2', {}, '遊戲出了點問題'),
         h('p', {}, '畫面停下來了，但你的魚還在：存檔已經先存好，重新載入就能繼續玩。如果一直發生，請把錯誤訊息複製給我們。'),
         h('pre.crash-msg', {}, message.slice(0, 600)),
         h('div.row', {}, h('button.btn.primary', { onclick: () => location.reload() }, '重新載入'), h('button.btn', { onclick: () => hooks.exportSave() }, '匯出存檔'), copy),

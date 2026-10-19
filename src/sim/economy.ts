@@ -97,6 +97,8 @@ export interface Economy {
   mall?: MallBag;
   /** 新遊戲還沒開缸（還沒挑設備）；開完缸就刪掉。舊存檔沒有＝已經開過。 */
   setupPending?: boolean;
+  /** 玩過幾次對水小遊戲（前幾次強制玩，F5）。 */
+  dripsDone?: number;
 }
 
 export interface MallBag {
