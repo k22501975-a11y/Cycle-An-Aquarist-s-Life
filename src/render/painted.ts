@@ -288,7 +288,9 @@ export class PaintedRig extends Container {
   private readonly key: string;
   private restTexture: Texture;
   private eatingTexture: Texture | null;
-  private mouthOpen = false;
+  /** 張嘴的圖疊在上面淡入淡出（不是直接換圖，換圖看起來像兩張圖在閃）。 */
+  private mouthMesh: Mesh | null = null;
+  private mouthOpen = 0;
   private tone = '0:1';
   private rim: Mesh | null = null;
   private rimFill: ColorMatrixFilter | null = null;
@@ -318,11 +320,32 @@ export class PaintedRig extends Container {
     this.alpha = look.alpha;
   }
 
-  /** 咬下去的那幾格換成張嘴的圖（只有原圖有這張時；改色的衍生圖照舊）。 */
-  setMouthOpen(open: boolean): void {
-    this.mouthOpen = open;
-    const tex = open ? this.eatingTexture : this.restTexture;
-    if (tex && this.mesh.texture !== tex) this.mesh.texture = tex;
+  /**
+   * 張嘴的程度 0–1：張嘴的圖疊在原圖上面、跟著咬的動作淡入淡出（只有原圖有這張時）。
+   * 兩張圖共用同一個網格，所以身體擺動完全一致，不會像兩張圖在交替。
+   */
+  setMouthOpen(open: number | boolean): void {
+    const a = typeof open === 'boolean' ? (open ? 1 : 0) : Math.max(0, Math.min(1, open));
+    this.mouthOpen = a;
+    const tex = this.eatingTexture;
+    if (!tex || a <= 0.01) {
+      if (this.mouthMesh) this.mouthMesh.visible = false;
+      this.mesh.alpha = 1;
+      return;
+    }
+    if (!this.mouthMesh) {
+      this.mouthMesh = new Mesh({ geometry: this.mesh.geometry, texture: tex });
+      this.mouthMesh.scale.copyFrom(this.mesh.scale);
+      this.mouthMesh.position.copyFrom(this.mesh.position);
+      this.addChildAt(this.mouthMesh, this.getChildIndex(this.mesh) + 1);
+    }
+    if (this.mouthMesh.texture !== tex) this.mouthMesh.texture = tex;
+    this.mouthMesh.tint = this.mesh.tint;
+    this.mouthMesh.visible = true;
+    this.mouthMesh.alpha = a;
+    // 快全開時才把閉嘴的圖淡掉，嘴巴的缺口才看得到；中間只有一瞬間兩張都半透明
+    const k = Math.max(0, Math.min(1, (a - 0.6) / 0.4));
+    this.mesh.alpha = 1 - k * k * (3 - 2 * k);
   }
 
   /** 色調（飽和度、亮度）：換成快取裡調好色的圖，不用濾鏡。 */
@@ -408,5 +431,6 @@ export class PaintedRig extends Container {
   /** 死掉或生病時整條魚變灰。 */
   setDim(color: number | null): void {
     this.mesh.tint = color ?? 0xffffff;
+    if (this.mouthMesh) this.mouthMesh.tint = this.mesh.tint;
   }
 }

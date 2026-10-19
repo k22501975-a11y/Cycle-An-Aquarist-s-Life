@@ -29,3 +29,33 @@ describe('轉身壓扁回彈', () => {
     expect(turnScale(-1.1).sx).toBeLessThan(-1);
   });
 });
+
+describe('追飼料時不左右狂翻', () => {
+  it('速度方向來回快速變號（在飼料上方晃）時不會跟著翻面', () => {
+    const s: TurnState = { f: 1, v: 0 };
+    let flips = 0, last = Math.sign(s.f);
+    for (let i = 0; i < 120; i++) {
+      // 每 0.1 秒換一次方向
+      stepTurn(s, Math.floor(i / 6) % 2 ? 12 : -12, 1 / 60);
+      if (Math.sign(s.f) !== last) { flips++; last = Math.sign(s.f); }
+    }
+    expect(flips).toBe(0);
+  });
+
+  it('真的掉頭游時會轉，但剛轉完不會馬上轉回來', () => {
+    const s: TurnState = { f: 1, v: 0 };
+    for (let i = 0; i < 30; i++) stepTurn(s, 10, 1 / 60);
+    expect(s.f).toBeLessThan(0);
+    for (let i = 0; i < 18; i++) stepTurn(s, -10, 1 / 60);
+    expect(s.f).toBeLessThan(0);
+    for (let i = 0; i < 60; i++) stepTurn(s, -10, 1 / 60);
+    expect(s.f).toBeGreaterThan(0);
+  });
+
+  it('受驚逃跑（游很快）時冷卻中也能轉', () => {
+    const s: TurnState = { f: 1, v: 0 };
+    for (let i = 0; i < 30; i++) stepTurn(s, 10, 1 / 60);
+    for (let i = 0; i < 24; i++) stepTurn(s, -80, 1 / 60);
+    expect(s.f).toBeGreaterThan(0);
+  });
+});

@@ -1,3 +1,4 @@
+import { artImg, sheetArt } from './art-icons';
 import { h } from './dom';
 
 /**
@@ -8,6 +9,7 @@ export class Sheet {
   private readonly backdrop = h('div.sheet-backdrop', { onclick: () => this.close() });
   private readonly panel = h('div.sheet');
   private readonly title = h('h2.sheet-title');
+  private readonly icon = h('span.sheet-icon');
   private readonly body = h('div.sheet-body');
   private render: (() => Node) | null = null;
   /** 會隨遊戲時間變化的面板（測試劑、觀察魚）才定時重繪；有輸入框的面板不重繪，以免打斷操作。 */
@@ -16,7 +18,7 @@ export class Sheet {
 
   constructor(host: HTMLElement) {
     const closeBtn = h('button.sheet-close', { onclick: () => this.close(), 'aria-label': '關閉' }, '✕');
-    this.panel.append(h('div.sheet-head', {}, this.title, closeBtn), this.body);
+    this.panel.append(h('div.sheet-head', {}, this.icon, this.title, closeBtn), this.body);
     host.append(this.backdrop, this.panel);
   }
 
@@ -30,6 +32,9 @@ export class Sheet {
 
   open(title: string, render: () => Node, options: { live?: boolean } = {}): void {
     this.title.textContent = title;
+    const art = sheetArt(title);
+    this.icon.replaceChildren(...(art ? [artImg(art, 'sheet-art')] : []));
+    this.icon.hidden = !art;
     this.render = render;
     this.live = options.live ?? false;
     this.refresh();

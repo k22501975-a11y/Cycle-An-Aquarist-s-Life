@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addFish, addPlant, createTank, feed, FILTERS, HEATERS, TANKS, useTestKit, waterChange } from '../sim';
-import { advanceQuest, currentQuest, loadProgress, newProgress, pendingTip, QUESTS, saveProgress } from './tutorial';
+import { advanceQuest, currentQuest, cycleProgress, loadProgress, newProgress, pendingTip, QUESTS, saveProgress } from './tutorial';
 
 function tank() {
   return createTank({ tank: TANKS.std40, filter: FILTERS.sponge, heater: { spec: HEATERS.h50, targetC: 25 }, seed: 5 });
@@ -74,5 +74,24 @@ describe('情境提示', () => {
     const s2 = tank();
     s2.equipment.heater!.stuckOn = true;
     expect(pendingTip(newProgress(), s2)?.id).toBe('heater');
+  });
+});
+
+describe('養水任務進度', () => {
+  it('照上次測水顯示硝酸鹽還差多少', () => {
+    const s = tank();
+    expect(cycleProgress(s)).toBe('還沒測過水');
+    s.hours = 10;
+    s.lastTest = { hours: 10, reading: { ammonia: 0, nitrite: 0, nitrate: 0, ph: 7.2, kh: 4 } };
+    expect(cycleProgress(s)).toBe('硝酸鹽 0／5（上次測水）');
+    s.lastTest = { hours: 10, reading: { ammonia: 0.5, nitrite: 0.25, nitrate: 2, ph: 7.2, kh: 4 } };
+    expect(cycleProgress(s)).toBe('亞硝 0.25・氨 0.5・硝酸鹽 2／5（上次測水）');
+    s.hours = 40;
+    expect(cycleProgress(s)).toContain('再測一次');
+  });
+
+  it('養水任務有等待提示，其他任務沒有', () => {
+    expect(QUESTS.find((q) => q.id === 'cycled')?.hint).toContain('3～7 天');
+    expect(QUESTS.find((q) => q.id === 'plant')?.hint).toBeUndefined();
   });
 });

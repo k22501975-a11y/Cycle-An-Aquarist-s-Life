@@ -47,6 +47,7 @@ export const PRICES: Record<string, number> = {
   'chiller:small': 8500,
   'controller:basic': 650,
   'quarantine:box': 700,
+  'care:bacteria': 30,
   'substrate:sand': 200,
   'substrate:soil': 450,
   'substrate:coral': 300,

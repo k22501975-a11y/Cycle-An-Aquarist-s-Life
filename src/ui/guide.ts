@@ -2,12 +2,8 @@ import type { SoundId } from '../audio/sounds';
 import type { KeyValueStore } from '../game/save';
 import type { TankState } from '../sim';
 import { h } from './dom';
+import { ownerImg } from './art-icons';
 import { advanceQuest, currentQuest, loadProgress, newProgress, OWNER_NAME, pendingTip, QUESTS, saveProgress, type TutorialProgress } from './tutorial';
-
-/** 阿德老闆的頭像：和按鈕圖示同一套奶油色細線條。 */
-const AVATAR = `<svg viewBox="0 0 48 48" width="100%" height="100%" aria-hidden="true" fill="none" stroke="#f3ead8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-<circle cx="24" cy="18" r="9"/><path d="M15 15 Q24 6 33 15" stroke="#e3bd6d"/><circle cx="20.5" cy="18.5" r="0.9" fill="#f3ead8"/><circle cx="27.5" cy="18.5" r="0.9" fill="#f3ead8"/>
-<path d="M20.5 22.5 Q24 25 27.5 22.5"/><path d="M9 44 Q10 31 24 30 Q38 31 39 44"/><path d="M18 31 L18 44 M30 31 L30 44 M18 38 L30 38" stroke="#e3bd6d"/></svg>`;
 
 interface Page {
   text: string;
@@ -19,6 +15,8 @@ interface Page {
  */
 export class Guide {
   readonly pill = h('button.quest-pill.glass');
+  private readonly progressEl = h('span.quest-progress');
+  private shownProgress = '';
   private readonly bubble = h('div.owner.glass');
   private progress: TutorialProgress;
   private pages: Page[] = [];
@@ -44,6 +42,7 @@ export class Guide {
 
   /** 每半秒檢查一次：任務完成了沒、有沒有該提醒的狀況。對話框開著時先不打斷。 */
   update(state: TankState): void {
+    this.renderProgress(state);
     if (this.bubble.classList.contains('open')) return;
     const done = advanceQuest(this.progress, state);
     if (done) {
@@ -99,8 +98,8 @@ export class Guide {
       this.renderPill();
       return;
     }
-    const avatar = h('div.owner-avatar');
-    avatar.innerHTML = AVATAR;
+    // 阿德老闆的插畫頭像；圖載不到就退回線條小人
+    const avatar = h('div.owner-avatar.has-art', {}, ownerPortrait());
     const q = currentQuest(this.progress);
     const next = h('button.btn.small.primary', { onclick: () => (this.pages.shift(), this.renderBubble()) }, page.label ?? '好');
     const skip =
@@ -125,8 +124,25 @@ export class Guide {
     const q = currentQuest(this.progress);
     this.pill.classList.toggle('show', q !== null);
     if (q) {
-      this.pill.replaceChildren(h('span.quest-step', {}, `任務 ${this.progress.step + 1}/${QUESTS.length}`), h('span.quest-title', {}, q.title));
+      this.shownProgress = '';
+      this.pill.replaceChildren(
+        ownerPortrait('quest-avatar'),
+        h('span.quest-step', {}, `任務 ${this.progress.step + 1}/${QUESTS.length}`),
+        h('span.quest-title', {}, q.title),
+        this.progressEl,
+        q.hint ? h('span.quest-hint', {}, q.hint) : '',
+      );
     }
+    this.onLayout();
+  }
+
+  /** 任務卡上的進度（硝酸鹽 0／5 之類），變了才改 DOM。 */
+  private renderProgress(state: TankState): void {
+    const text = currentQuest(this.progress)?.progress?.(state) ?? '';
+    if (text === this.shownProgress) return;
+    this.shownProgress = text;
+    this.progressEl.textContent = text;
+    this.progressEl.hidden = !text;
     this.onLayout();
   }
 
@@ -134,4 +150,9 @@ export class Guide {
     saveProgress(this.store, this.progress);
     this.renderPill();
   }
+}
+
+/** 阿德老闆頭像（插畫）。 */
+function ownerPortrait(cls = 'owner-art'): HTMLElement {
+  return ownerImg(cls);
 }

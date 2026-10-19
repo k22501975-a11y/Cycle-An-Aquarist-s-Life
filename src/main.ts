@@ -2,8 +2,10 @@ import { Application } from 'pixi.js';
 import { AudioEngine } from './audio/engine';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
 import { eventSound } from './audio/sounds';
-import { applySeason, Game, newGameState, SPEED_OPTIONS } from './game/game';
+import { applySeason, Game, newGameState } from './game/game';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
+import { menuTile } from './ui/art-icons';
+import { SpeedControl } from './ui/speed-control';
 import { installCrashGuard } from './ui/crash';
 import { Analytics } from './net/analytics';
 import { isNativeApp, saveTextFile } from './ui/native';
@@ -416,6 +418,15 @@ async function start(): Promise<void> {
   // ---- 狀態列：時間、水質膠囊（沒測過顯示「?」）、待辦、選單 ----
   const clockValue = h('span.value');
   const clock = h('div.time', {}, h('span.label', {}, '水族人生'), clockValue);
+  // 時鐘旁的速度按鈕：暫停、正常、快轉（雲端模式只能暫停或正常）
+  const speed = new SpeedControl({
+    get: () => game.clock.timeScale,
+    set: (scale) => {
+      game.clock.timeScale = scale;
+      save();
+    },
+    cloud: () => !!cloud.session,
+  });
   const coinsValue = h('b');
   const coinsBtn = h('button.coins', { 'aria-label': '錢包', title: '錢包：點一下打開商店', onclick: () => sheet.open('商店', () => shopPanel(ctx)) }, h('i.coin'), coinsValue);
   const renderCoins = () => {
@@ -628,30 +639,7 @@ async function start(): Promise<void> {
       h('p.hint', {}, '燈號除了顏色也用形狀區分：圓形正常、三角形注意、菱形危險。'),
       h('h3', {}, '時間'),
       h('p.hint', {}, '遊戲時間是現實的 7 倍：現實 1 天＝遊戲 1 週，現實 1 小時＝遊戲 7 小時。關掉網頁時時間照常前進，下次打開會補算（最多兩週）。'),
-      h(
-        'details.dev',
-        {},
-        h('summary', {}, '開發用：加快時間'),
-        h(
-          'div.tabs',
-          {},
-          // 登入雲端後遊戲時鐘由伺服器統一（L2）：只能暫停，不能加快
-          ...SPEED_OPTIONS.filter((opt) => !cloud.session || opt.scale <= sim.DEFAULT_TIME_SCALE).map((opt) =>
-            h(
-              `button.tab${game.clock.timeScale === opt.scale ? '.active' : ''}`,
-              {
-                onclick: () => {
-                  game.clock.timeScale = opt.scale;
-                  save();
-                  sheet.refresh();
-                },
-              },
-              opt.label,
-            ),
-          ),
-        ),
-        cloud.session ? h('p.hint', {}, '登入雲端後時間由伺服器統一，不能加快。') : null,
-      ),
+      h('p.hint', {}, '暫停和快轉在主畫面時鐘旁邊的速度按鈕。'),
       h('h3', {}, '存檔'),
       h('div.row', {}, h('button.btn', { onclick: exportSave }, '匯出存檔'), h('button.btn', { onclick: importSave }, '從檔案匯入')),
       h('p.hint', {}, '遊戲每 10 秒自動存檔，每 30 分鐘自動備份一次；存檔壞掉時會自動用備份還原。換手機時可以匯出成檔案帶過去。'),
@@ -670,33 +658,37 @@ async function start(): Promise<void> {
     h(
       'div.stack',
       {},
-      h('button.btn', { onclick: () => sheet.open('我的水缸', () => tanksPanel(ctx)) }, '我的水缸：切換、加一缸'),
-      h('button.btn', { onclick: () => sheet.open('好友', () => friendsPanel(friendsDeps)) }, '好友：參觀、按讚、送禮'),
-      h('button.btn', { onclick: () => sheet.open('市場', () => marketPanel(marketDeps)) }, '市場：買賣魚蝦和水草'),
-      h('button.btn', { onclick: () => sheet.open('商城', () => mallPanel(mallDeps)) }, '商城：儲值點數、特效藥、熟成套缸'),
-      h('button.btn', { onclick: () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen)) }, '圖鑑：魚蝦、水草、設備、疾病'),
-      h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) }, '水質趨勢與事件紀錄'),
-      h('button.btn', { onclick: () => (sheet.close(), guide.restart()) }, '重新看阿德老闆的教學'),
-      h('button.btn', { onclick: () => sheet.open('設定', settings) }, '設定：聲音、顯示、時間、存檔'),
       h(
-        'button.btn',
-        {
-          onclick: () => {
-            if (!confirm('確定要放棄目前的水缸，重新開始嗎？')) return;
-            clearSave(store);
-            game.load(newGameState());
-            save();
-            sheet.close();
-            select(null);
-            toasts.show('開了一個新缸');
-          },
-        },
+        'div.menu-grid',
+        {},
+        menuTile('tanks', '我的水缸', '切換、加一缸', () => sheet.open('我的水缸', () => tanksPanel(ctx))),
+        menuTile('friends', '好友', '參觀、按讚、送禮', () => sheet.open('好友', () => friendsPanel(friendsDeps))),
+        menuTile('market', '市場', '買賣魚蝦和水草', () => sheet.open('市場', () => marketPanel(marketDeps))),
+        menuTile('mall', '商城', '點數、特效藥、套缸', () => sheet.open('商城', () => mallPanel(mallDeps))),
+        menuTile('codex', '圖鑑', '魚蝦、水草、疾病', () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen))),
+        menuTile('records', '紀錄', '水質趨勢、事件', () => sheet.open('紀錄', () => recordsPanel(ctx))),
+        menuTile('guide', '教學', '再聽阿德老闆說一次', () => (sheet.close(), guide.restart())),
+        menuTile('settings', '設定', '聲音、顯示、存檔', () => sheet.open('設定', settings)),
+      ),
+      menuTile(
+        'newgame',
         '新遊戲',
+        '放棄目前的水缸，從頭開始',
+        () => {
+          if (!confirm('確定要放棄目前的水缸，重新開始嗎？')) return;
+          clearSave(store);
+          game.load(newGameState());
+          save();
+          sheet.close();
+          select(null);
+          toasts.show('開了一個新缸');
+        },
+        '.danger',
       ),
     );
   const menuBtn = h('button.hud-btn', { onclick: () => sheet.open('選單', menu), 'aria-label': '選單' }, icon(ICONS.menu));
   hud.classList.add('glass');
-  hud.append(clock, coinsBtn, tankBtn, h('span.hud-sep'), caps, todoBtn, menuBtn);
+  hud.append(clock, speed.el, coinsBtn, tankBtn, h('span.hud-sep'), caps, todoBtn, menuBtn);
 
   // ---- 下方櫃台：待辦卡｜圓形工具列｜選取卡 ----
   const tools = h('div.tools.glass');
@@ -911,6 +903,7 @@ async function start(): Promise<void> {
     view.update(visiting?.state ?? game.state, ticker.deltaMS / 1000);
 
     clockValue.textContent = `${clockLabel(game.state.hours)}${game.clock.timeScale === 0 ? '・暫停' : ''}`;
+    speed.render();
     netBtn.classList.toggle('alert', game.state.fish.some((f) => !f.alive));
 
     // 每半秒更新一次卡片與數值
