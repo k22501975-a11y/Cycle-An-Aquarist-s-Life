@@ -1,5 +1,5 @@
 import type { KeyValueStore } from '../game/save';
-import { cycleMaturity, isCycled, observeSymptoms, sexVisible, type TankState } from '../sim';
+import { cycleMaturity, isCycled, newTankFishLimit, observeSymptoms, sexVisible, type TankState } from '../sim';
 
 /**
  * 新手引導任務（GAME_DESIGN 定案）：水族館老闆一步步帶玩家開缸、放魚、餵食、換水、養水。
@@ -121,11 +121,6 @@ export function pairProgress(s: TankState): string {
   const females = adults.length - males;
   if (males === 0 || females === 0) return `公 ${males}・母 ${females}（要有公有母）`;
   return `公 ${males}・母 ${females}`;
-}
-
-/** 新缸（還沒養好）一次最多放幾條還不容易出事：約每 13 公升一條，至少 3 條。 */
-export function newTankFishLimit(s: TankState): number {
-  return Math.max(3, Math.round(s.equipment.tank.volumeL / 13));
 }
 
 /**

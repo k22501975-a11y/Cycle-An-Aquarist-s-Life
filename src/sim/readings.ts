@@ -109,3 +109,11 @@ export function fishCondition(state: TankState, fish: Fish) {
 export function inspectFish(fish: Fish) {
   return { ...fish, immunity: immunity(fish, FISH_SPECIES[fish.species]) };
 }
+
+/** 新缸一次放多少魚還不容易出事：約每幾公升一條。 */
+export const NEW_TANK_LITERS_PER_FISH = 13;
+
+/** 新缸（還沒養好）一次最多放幾條還不容易出事：約每 13 公升一條，至少 3 條。 */
+export function newTankFishLimit(s: TankState): number {
+  return Math.max(3, Math.round(s.equipment.tank.volumeL / NEW_TANK_LITERS_PER_FISH));
+}
