@@ -78,7 +78,9 @@ export function drawFinOverlay(rig: FishRig | PaintedRig, fins: FinLook, rendere
   const deep = mix(fins.color, 0x000000, 0.25);
   const paint = (g: Graphics, list: FinShape[]) => {
     for (const sh of list) {
-      if (sh.kind === 'fill') {
+      if (sh.inner) {
+        g.poly(sh.points).fill({ color: fins.color, alpha: fins.alpha * 0.16 });
+      } else if (sh.kind === 'fill') {
         // 底色深一點、上面再疊一層亮的，看起來是薄薄一片透光的鰭
         g.poly(sh.points).fill({ color: deep, alpha: fins.alpha * 0.5 });
         g.poly(sh.points).fill({ color: mix(fins.color, 0xffffff, 0.15), alpha: fins.alpha * 0.6 });

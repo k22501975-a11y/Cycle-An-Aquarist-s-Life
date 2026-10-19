@@ -54,7 +54,7 @@ VITE_API_URL=http://localhost:8080 npm run dev
 | GET | `/api/me` | `{username}` |
 | GET | `/api/save` | `{revision, savedAt, save}`；沒有存檔回 404 `code: none` |
 | PUT | `/api/save` | `{baseRevision, force, save}` → `{revision, savedAt, notice?}`；別的裝置先上傳過回 409 `code: conflict`；有開模擬時，跟上一份比對不過回 422（`time_ahead` 遊戲時間比伺服器快、`identity_changed` 魚的身分被改、`gift_removed`）。`force` 時對不上也收，但幾天內不能上架魚，`notice` 會說明 |
-| POST | `/api/save/advance` | 伺服器用自己的時鐘把雲端存檔補算到現在，存成新的一版 → `{revision, savedAt, save, hours, capped, deaths, births}`；沒開模擬回 503 `no_sim` |
+| POST | `/api/save/advance` | 伺服器用自己的時鐘把雲端存檔補算到現在，存成新的一版 → `{revision, savedAt, save, hours, capped, deaths, births}`；起點是伺服器收下雲端那份的時間，不看存檔裡的 savedAt；距離上次寫入不到一分鐘不補算，直接回雲端那份（`hours` 0）；沒開模擬回 503 `no_sim` |
 | GET | `/api/me/export` | 伺服器上跟這個帳號有關的所有資料（個資法的查詢、複製權） |
 | DELETE | `/api/account` | `{password}`；刪除帳號和所有相關資料，密碼錯回 403 `code: bad_password` |
 | POST | `/api/events` | 不用登入。`{clientId, events: [{name, props}]}` → `{accepted}`；匿名數據分析，一次最多 50 筆、每個代號每天 500 筆，180 天後自動刪除 |

@@ -8,6 +8,8 @@ import { h } from './dom';
 export interface CelebrateSpec {
   /** public/art 底下的圖。 */
   art: string;
+  /** 直接給圖（例如缸裡那條魚的肖像）；有給就不用 art。 */
+  src?: string;
   title: string;
   sub: string;
   /** 阿德老闆的一句話（有頭像）。 */
@@ -26,7 +28,7 @@ export class Celebration {
 
   show(spec: CelebrateSpec): void {
     this.close();
-    const img = h('img.celebrate-art', { src: ART + spec.art, alt: '', draggable: 'false' });
+    const img = h(spec.art.startsWith('ui/icon-') ? 'img.celebrate-art.is-icon' : 'img.celebrate-art', { src: spec.src ?? ART + spec.art, alt: '', draggable: 'false' });
     img.addEventListener('error', () => img.remove());
     const confetti = h(
       'div.confetti',
