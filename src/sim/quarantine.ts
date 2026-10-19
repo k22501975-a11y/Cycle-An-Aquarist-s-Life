@@ -4,7 +4,7 @@ import { giveBirth } from './processes/population';
 import { growFish } from './growth';
 import { FISH_SPECIES } from './species';
 import { addFish, type AddFishOptions } from './actions';
-import { recordEvent, type Fish, type TankState } from './state';
+import { isJuvenile, recordEvent, type Fish, type TankState } from './state';
 import type { FishSpeciesId } from './species';
 
 /** 檢疫盒固定的水溫。 */
@@ -27,6 +27,29 @@ export function addFishToQuarantine(state: TankState, species: FishSpeciesId, op
   q.fish.push(fish);
   q.since[fish.id] = state.hours;
   return fish;
+}
+
+/**
+ * 主缸裡的成魚嘴巴最大吞得下多長的魚（cm）；沒有會吃小魚的成魚是 0。
+ * 盒裡的仔魚要長得比這個大，放回主缸才不會被吃（#174）。
+ */
+export function swallowCm(state: TankState): number {
+  return state.fish.filter((f) => f.alive && !isJuvenile(f) && FISH_SPECIES[f.species].mouthRatio > 0).reduce((m, f) => Math.max(m, f.lengthCm * FISH_SPECIES[f.species].mouthRatio), 0);
+}
+
+/** 盒裡的這尾還太小：放回主缸會被成魚吞掉。 */
+export function tooSmallForTank(state: TankState, fish: Fish): boolean {
+  return isJuvenile(fish) && fish.lengthCm <= swallowCm(state);
+}
+
+/**
+ * 可以移到主缸的：活著、沒發病、長得夠大；店裡買來的新魚還要觀察滿 QUARANTINE_DAYS 天。
+ * 盒裡生的、從主缸撈進來的仔魚不用觀察（本來就是這缸的），只看大小。
+ */
+export function readyForTank(state: TankState, fish: Fish): boolean {
+  if (!fish.alive || fish.ich.stage === 'visible' || hasVisible(fish) || fish.health < 0.5) return false;
+  if (tooSmallForTank(state, fish)) return false;
+  return (fish.generation ?? 0) >= 1 || quarantineDays(state, fish) >= QUARANTINE_DAYS;
 }
 
 /** 在檢疫盒裡待了幾天。 */

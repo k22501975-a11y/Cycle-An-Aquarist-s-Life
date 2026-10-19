@@ -86,8 +86,13 @@ export function updatePopulation(state: TankState, dt: number): void {
 
   const hiding = hidingFactor(state);
   const eaten = predation(state, living, hiding, dt);
-  // 被吃掉的幼體直接從缸裡消失。
-  if (eaten.size > 0) state.fish = state.fish.filter((f) => !eaten.has(f));
+  // 被吃掉的幼體直接從缸裡消失；記一筆事件（同一種一筆），早上報告和通知才知道（#176）
+  if (eaten.size > 0) {
+    state.fish = state.fish.filter((f) => !eaten.has(f));
+    const bySpecies = new Map<string, number>();
+    for (const f of eaten) bySpecies.set(f.species, (bySpecies.get(f.species) ?? 0) + 1);
+    for (const [species, count] of bySpecies) recordEvent(state, { type: 'fry_eaten', cause: species, count });
+  }
   const survivors = living.filter((f) => !eaten.has(f));
   finNipping(state, survivors, hiding, dt);
   const hunted = bettaAggression(state, survivors, hiding, dt);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addBottledBacteria, addFish, addPlant, createTank, FILTERS, HEATERS, LIGHTS, TANKS, type TankState } from '../sim';
+import { addBottledBacteria, addFish, addPlant, createTank, FILTERS, HEATERS, LIGHTS, recordEvent, TANKS, type TankState } from '../sim';
 import { morningReport, snapshot } from '../ui/morning-report';
 import { Game, hoursUntilMorning, newGameState } from './game';
 
@@ -83,5 +83,19 @@ describe('「過一晚」（first-10-minutes.md F2）', () => {
     expect(game.sleeping).toBe(false);
     // 死魚是危機：停下來，報告寫原因、點了去撈
     expect(report.items[0]).toMatchObject({ kind: 'crisis', action: 'remove_dead' });
+  });
+
+  it('晚上有小魚被吃：報告寫被吃了幾尾、不寫平安，點了去檢疫盒（#176）', () => {
+    const game = new Game(cycledTank());
+    const before = snapshot(game.tanks);
+    game.act((st) => {
+      recordEvent(st, { type: 'fry_eaten', cause: 'guppy', count: 3 });
+      recordEvent(st, { type: 'fry_eaten', cause: 'guppy', count: 2 });
+    });
+    const report = morningReport(before, game.tanks, 12, null);
+    const item = report.items.find((x) => x.kind === 'eaten');
+    expect(item?.text).toContain('5 尾小魚被大魚吃掉');
+    expect(item?.action).toBe('fry_box');
+    expect(report.items.some((x) => x.kind === 'quiet')).toBe(false);
   });
 });

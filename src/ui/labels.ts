@@ -113,6 +113,10 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
     case 'brood_left':
       if (fish?.species === 'betta') return { text: `${fish ? fishName(fish) : '公鬥魚'} 顧的 ${e.count ?? 0} 尾小鬥魚會自己游了。把公魚撈走，不然牠會開始吃小魚；小魚要餵很細的飼料`, tone: 'warn' };
       return { text: `${fish ? fishName(fish) : '短鯛母魚'} 帶大的 ${e.count ?? 0} 尾小魚離巢了，可以分缸了`, tone: 'info' };
+    case 'fry_eaten': {
+      const shrimp = isShrimpSpecies((e.cause ?? 'guppy') as Fish['species']);
+      return { text: `${e.count ?? 1} ${shrimp ? '隻小蝦' : '尾小魚'}被大魚吃掉了。種密一點的水草（莫絲、矮珍珠）讓牠們躲，或撈進檢疫盒`, tone: 'warn' };
+    }
     case 'betta_chase_female':
       return { text: `公鬥魚在顧泡巢，一直追咬 ${fish ? fishName(fish) : '母魚'}。快把母魚撈到別缸`, tone: 'bad' };
     case 'betta_fight':

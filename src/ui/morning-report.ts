@@ -10,6 +10,7 @@ import {
   orderBoard,
   pestCount,
   tankLabel,
+  type FishSpeciesId,
   type SimEvent,
   type TankState,
 } from '../sim';
@@ -31,12 +32,14 @@ export type ReportAction =
   | 'fish' // 看那條魚（subjectId）
   | 'orders' // 訂單板
   | 'snails' // 螺
-  | 'trim'; // 修剪水草
+  | 'trim' // 修剪水草
+  | 'fry_box'; // 檢疫盒（把仔魚撈進去）
 
 export type ReportKind =
   | 'crisis'
   | 'death'
   | 'birth'
+  | 'eaten'
   | 'grown'
   | 'cycle'
   | 'cycled'
@@ -152,6 +155,19 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       const mother = allFish(t).find((f) => f.id === births[0].subjectId);
       const shrimp = !!mother && isShrimpSpecies(mother.species);
       push({ kind: 'birth', tone: 'good', text: `昨晚${shrimp ? '孵出' : '生了'} ${born} ${shrimp ? '隻小蝦' : '尾小魚'}，水草越密越好躲`, action: 'fish', subjectId: births[0].subjectId, count: born });
+    }
+    // 被吃掉的仔魚（#176）：有就不能寫「一夜平安」，並教玩家怎麼救
+    const eaten = events.filter((x) => x.type === 'fry_eaten').reduce((n, e) => n + (e.count ?? 0), 0);
+    if (eaten > 0) {
+      const shrimp = events.filter((x) => x.type === 'fry_eaten').every((e) => isShrimpSpecies((e.cause ?? 'guppy') as FishSpeciesId));
+      const box = !!t.quarantine;
+      push({
+        kind: 'eaten',
+        tone: 'warn',
+        text: `昨晚有 ${eaten} ${shrimp ? '隻小蝦' : '尾小魚'}被大魚吃掉了。種密一點的水草讓牠們躲${box ? '，或撈進檢疫盒' : '；商店的檢疫盒也能當產卵盒'}`,
+        action: 'fry_box',
+        count: eaten,
+      });
     }
     if (!snap) return;
     // 長大
