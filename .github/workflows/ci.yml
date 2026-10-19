@@ -140,8 +140,10 @@ jobs:
     steps:
       - name: 有關卡失敗或被取消
         if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        env:
+          RESULTS: ${{ toJSON(needs) }}
         run: |
-          echo '${{ toJSON(needs) }}'
+          echo "$RESULTS"
           echo "有關卡沒過，不能合併"
           exit 1
       - run: echo "全部通過"
