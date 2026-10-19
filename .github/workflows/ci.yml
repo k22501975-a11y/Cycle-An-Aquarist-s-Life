@@ -54,7 +54,7 @@ jobs:
         run: echo "::warning title=新增套件檢查略過::Dependency graph 開好後，把 Actions 變數 DEPENDENCY_REVIEW 設成 enabled（docs/quality-gate.md）"
       - name: 新增套件檢查
         if: github.event_name == 'pull_request' && vars.DEPENDENCY_REVIEW == 'enabled'
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
 
