@@ -42,9 +42,13 @@ export class Sheet {
     this.panel.classList.add('open');
   }
 
+  /** 重畫；內容跟畫面上的一模一樣就不換，免得按鈕在按下和放開之間被換掉而點不到（#144）。 */
   refresh(): void {
     if (!this.render) return;
-    this.body.replaceChildren(this.render());
+    const next = this.render();
+    const current = this.body.firstChild;
+    if (current && this.body.childNodes.length === 1 && next.isEqualNode(current)) return;
+    this.body.replaceChildren(next);
   }
 
   close(): void {

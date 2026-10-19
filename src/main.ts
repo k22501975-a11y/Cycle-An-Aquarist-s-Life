@@ -6,7 +6,7 @@ import { applySeason, Game, newGameState } from './game/game';
 import { crisisText } from './game/crisis';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
 import { menuTile, ownerImg } from './ui/art-icons';
-import { SpeedControl } from './ui/speed-control';
+import { cloudTimeScale, SpeedControl } from './ui/speed-control';
 import { installCrashGuard } from './ui/crash';
 import { Analytics } from './net/analytics';
 import { isNativeApp, saveTextFile } from './ui/native';
@@ -1014,6 +1014,8 @@ async function start(): Promise<void> {
   });
   function tick(elapsedMS: number, deltaMS: number) {
     const ticker = { deltaMS };
+    // 雲端模式最多 ×7：每幀檢查，登入、讀檔、匯入、從雲端下載後都會套到（#112）
+    game.clock.timeScale = cloudTimeScale(game.clock.timeScale, !!cloud.session);
     game.advance(elapsedMS);
     if (visiting) {
       const n = Math.min(visitClock.advance(elapsedMS), 60);
