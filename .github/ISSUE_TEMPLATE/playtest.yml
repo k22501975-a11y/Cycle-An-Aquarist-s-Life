@@ -1,0 +1,37 @@
+name: 評測問題
+description: 遊戲性、畫面與美術、玩家體驗與平衡評測發現的問題
+title: "[評測] "
+labels: ["type:playtest"]
+body:
+  - type: dropdown
+    id: critic
+    attributes:
+      label: 評測類別
+      options: [遊戲性, 畫面與美術, 玩家體驗與平衡]
+    validations: { required: true }
+  - type: dropdown
+    id: severity
+    attributes:
+      label: 嚴重度
+      options: [critical, major, minor]
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: 評測版本（main commit）
+    validations: { required: true }
+  - type: textarea
+    id: problem
+    attributes:
+      label: 問題
+      description: 玩家看到什麼、在第幾分鐘、為什麼會流失或卡住；附截圖
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 改善建議
+  - type: input
+    id: report
+    attributes:
+      label: 評測報告
+      description: reports/playtest/ 裡的檔名

@@ -1,0 +1,34 @@
+name: 同步標籤
+
+# 標籤清單在 .github/labels.json（說明見 docs/quality-gate.md），改了就把標籤同步到 GitHub（只新增或更新，不刪除手動建的標籤）。
+on:
+  push:
+    branches: [main]
+    paths: [.github/labels.json]
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const wanted = JSON.parse(fs.readFileSync('.github/labels.json', 'utf8'));
+            const existing = await github.paginate(github.rest.issues.listLabelsForRepo, { ...context.repo, per_page: 100 });
+            const byName = new Map(existing.map((l) => [l.name, l]));
+            for (const l of wanted) {
+              const cur = byName.get(l.name);
+              if (!cur) {
+                await github.rest.issues.createLabel({ ...context.repo, ...l });
+                core.info(`新增 ${l.name}`);
+              } else if (cur.color !== l.color || (cur.description ?? '') !== l.description) {
+                await github.rest.issues.updateLabel({ ...context.repo, ...l });
+                core.info(`更新 ${l.name}`);
+              }
+            }

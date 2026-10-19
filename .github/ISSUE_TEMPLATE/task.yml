@@ -1,0 +1,19 @@
+name: 工程工作
+description: 重構、工具、文件、素材接入、CI 等不直接改玩法的工作
+title: "[工作] "
+labels: ["type:task"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: 要做什麼
+    validations: { required: true }
+  - type: textarea
+    id: done
+    attributes:
+      label: 完成定義
+    validations: { required: true }
+  - type: input
+    id: deps
+    attributes:
+      label: 依賴

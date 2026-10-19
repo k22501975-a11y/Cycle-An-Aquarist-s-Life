@@ -5,8 +5,26 @@ on:
     branches: [main]
   pull_request:
 
+# 品質閘門（docs/quality-gate.md）：下面每個工作都要通過，最後的「品質閘門」才會綠，PR 才能合併。
 jobs:
-  build:
+  # 第 1 關：靜態檢查（ESLint、TypeScript 型別、素材大小預算）
+  static:
+    name: 靜態檢查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run check:assets
+
+  # 第 2 關：單元測試（Vitest，含模擬核心的情境測試）
+  unit:
+    name: 單元測試
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,8 +34,41 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+
+  # 第 3 關：打包並跑遊戲流程測試（Playwright，案例在 e2e/）
+  e2e:
+    name: 遊戲流程測試
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - run: npm run build
+      - run: node scripts/check-assets.mjs --dist
       - run: npm run build:sim
+      - id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - run: npm run e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
 
   server:
     runs-on: ubuntu-latest
@@ -78,3 +129,21 @@ jobs:
           name: cycle-release-aab
           path: android/app/build/outputs/bundle/release/*.aab
           if-no-files-found: ignore
+
+  # 分支保護只要求這一個檢查：上面全部通過才會綠。
+  # 被條件略過（skipped）的工作視為通過；失敗或取消就擋下。
+  gate:
+    name: 品質閘門
+    if: always()
+    needs: [static, unit, e2e, server, android]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 有關卡失敗或被取消
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS"
+          echo "有關卡沒過，不能合併"
+          exit 1
+      - run: echo "全部通過"
