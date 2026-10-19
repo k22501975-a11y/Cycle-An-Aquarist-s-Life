@@ -3,7 +3,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 /** Android App（Capacitor）：把 vite build 的 dist/ 包進 WebView，橫向全螢幕。 */
 const config: CapacitorConfig = {
   appId: 'tw.cycle.aquarist',
-  appName: '水族人生',
+  appName: "Aquarist's Life",
   webDir: 'dist',
   backgroundColor: '#0b2230',
   android: {
