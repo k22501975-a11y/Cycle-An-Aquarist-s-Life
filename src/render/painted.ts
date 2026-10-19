@@ -33,18 +33,19 @@ interface PaintedSpec {
   eating?: string;
 }
 
-const GUPPY_MALE_BODY = { x: 0.14, y: 0.02, rx: 0.2, ry: 0.11 };
+/** 公魚花紋圖的身體範圍：各張圖身體在圖裡的高度不一樣（上面留了背鰭的空間），y 照圖量過（#101：原本統一 0.02，大C 的鰭和白點都浮在背上方）。 */
+const maleBody = (y: number) => ({ x: 0.14, y, rx: 0.2, ry: 0.12 });
 const GUPPY_FEMALE_BODY = { x: 0.1, y: 0.02, rx: 0.3, ry: 0.22 };
 const SHRIMP_BODY = { x: 0.08, y: -0.02, rx: 0.25, ry: 0.12 };
 const ZEBRA_BODY = { x: 0.1, y: 0.0, rx: 0.3, ry: 0.11 };
 const FRY_BODY = { x: 0.12, y: 0.0, rx: 0.25, ry: 0.1 };
 
 export const PAINTED: Record<string, PaintedSpec> = {
-  'guppy-male-bluegrass': { file: 'fish/guppy-male-bluegrass.webp', tail: 0.34, swing: 0.13, body: GUPPY_MALE_BODY, eating: 'fish/guppy-male-bluegrass-eating.webp' },
-  'guppy-male-cobra': { file: 'fish/guppy-male-cobra.webp', tail: 0.3, swing: 0.13, body: GUPPY_MALE_BODY },
-  'guppy-male-albino-red': { file: 'fish/guppy-male-albino-red.webp', tail: 0.32, swing: 0.13, body: GUPPY_MALE_BODY },
-  'guppy-male-tuxedo': { file: 'fish/guppy-male-tuxedo.webp', tail: 0.32, swing: 0.13, body: GUPPY_MALE_BODY },
-  'guppy-male-redcobra': { file: 'fish/guppy-male-redcobra.webp', tail: 0.32, swing: 0.13, body: GUPPY_MALE_BODY },
+  'guppy-male-bluegrass': { file: 'fish/guppy-male-bluegrass.webp', tail: 0.34, swing: 0.13, body: maleBody(0.14), eating: 'fish/guppy-male-bluegrass-eating.webp' },
+  'guppy-male-cobra': { file: 'fish/guppy-male-cobra.webp', tail: 0.3, swing: 0.13, body: maleBody(0.16) },
+  'guppy-male-albino-red': { file: 'fish/guppy-male-albino-red.webp', tail: 0.32, swing: 0.13, body: maleBody(0.155) },
+  'guppy-male-tuxedo': { file: 'fish/guppy-male-tuxedo.webp', tail: 0.32, swing: 0.13, body: maleBody(-0.01) },
+  'guppy-male-redcobra': { file: 'fish/guppy-male-redcobra.webp', tail: 0.32, swing: 0.13, body: maleBody(0.17) },
   ...finArt(),
   'guppy-fry': { file: 'fish/guppy-fry.webp', tail: 0.24, swing: 0.12, body: FRY_BODY },
   'zebrafish-male': { file: 'fish/zebrafish-male.webp', tail: 0.2, swing: 0.1, body: ZEBRA_BODY },

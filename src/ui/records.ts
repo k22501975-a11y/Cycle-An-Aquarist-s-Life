@@ -3,6 +3,7 @@ import { lineChart } from './charts';
 import { h } from './dom';
 import { describeEvent } from './labels';
 import type { PanelContext } from './panels';
+import { iconTabs } from './shop-cards';
 import { clockLabel } from './status';
 
 /** 趨勢圖看最近幾天。 */
@@ -72,12 +73,13 @@ function eventLog(state: TankState): Node {
 
 export function recordsPanel(ctx: PanelContext, tab: 'water' | 'events' = 'water'): Node {
   const { game, sheet } = ctx;
-  const tabs = h(
-    'div.tabs',
-    {},
-    ...(['water', 'events'] as const).map((t) =>
-      h(`button.tab${t === tab ? '.active' : ''}`, { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx, t)) }, { water: '水質趨勢', events: '事件紀錄' }[t]),
-    ),
+  const tabs = iconTabs(
+    [
+      { id: 'water' as const, label: '水質趨勢', icon: 'testkit' as const },
+      { id: 'events' as const, label: '事件紀錄', icon: 'records' as const },
+    ],
+    tab,
+    (t) => sheet.open('紀錄', () => recordsPanel(ctx, t)),
   );
   return h('div.stack', {}, tabs, tab === 'water' ? waterRecords(game.state) : eventLog(game.state));
 }
