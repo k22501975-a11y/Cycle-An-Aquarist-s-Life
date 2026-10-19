@@ -4,9 +4,9 @@ import { hardscapeBacteriaCapacity } from './hardscape';
 
 /** 半飽和常數（mg/L）：受質濃度在此時細菌以一半速度工作。 */
 const HALF_SATURATION = 0.2;
-/** 最大比生長率（每小時）。硝化菌繁殖很慢，所以新缸要養好幾週。 */
-const AOB_GROWTH = 0.03;
-const NOB_GROWTH = 0.03;
+/** 最大比生長率（每小時）。少量魚、正常餵食時新缸約 3～7 天養好（YenWel 2026-10-19 定案）；一次放太多魚還是會氨爆。 */
+const AOB_GROWTH = 0.12;
+const NOB_GROWTH = 0.1;
 /** 自然死亡率（每小時）。沒有食物時族群會慢慢縮小。 */
 const DECAY = 0.003;
 /** 缸壁、底砂也能長一點細菌（每公升水的容量）。 */

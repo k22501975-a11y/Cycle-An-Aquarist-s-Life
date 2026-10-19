@@ -306,7 +306,7 @@ export interface CreateTankOptions {
 }
 
 /** 剛細菌接種前的最小族群（空氣、水中本來就有少量硝化菌）。 */
-export const BACTERIA_SEED = 0.001;
+export const BACTERIA_SEED = 0.02;
 
 /** 溫度紀錄保留兩週。 */
 export const TEMP_LOG_HOURS = 14 * 24;
