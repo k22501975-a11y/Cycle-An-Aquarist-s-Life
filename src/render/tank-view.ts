@@ -773,9 +773,12 @@ export class TankView {
   scapeHintPos(): { x: number; y: number } | null {
     const edit = this.scape.editing;
     if (!edit) return null;
-    let r: Rect | null = null;
-    const rock = this.scape.firstInLayer(edit.layer);
-    if (rock !== null) r = this.scape.hardscapeRect(rock);
+    // 選著的（剛買來要擺的）優先，其次這層第一個
+    let r: Rect | null = this.selectedScapeRect();
+    const rock = r ? null : this.scape.firstInLayer(edit.layer);
+    if (r) {
+      // 已經有了
+    } else if (rock !== null) r = this.scape.hardscapeRect(rock);
     else {
       for (const view of this.plants.values()) {
         if (view.holder.parent !== this.scape.plants[edit.layer]) continue;

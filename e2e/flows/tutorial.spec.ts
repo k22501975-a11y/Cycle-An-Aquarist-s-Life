@@ -61,7 +61,25 @@ test('新手任務 1～10：照老闆的引導從新存檔玩得完，魚不會�
   await tool(page, '商店');
   await page.locator('.sheet.open button.icon-tab', { hasText: '水草' }).click();
   await sheetButton(page, '種一株');
-  await closeSheet(page);
+  // P4：買了先拿在手上，商店收起來、進造景模式，拖到想種的位置
+  await expect(page.locator('.scape-bar')).toBeVisible();
+  const coach = page.locator('.scape-coach');
+  await expect(coach).toBeVisible();
+  const plantX = () => gameState<number>(page, '(window.cycle.sim.plantPlacement(s.plants[0])).x');
+  const x0 = await plantX();
+  // 手指比劃的位置就是剛買的那株（畫面座標要加上缸的位置）
+  const at = await page.evaluate(() => {
+    const q = (window as unknown as { cycle: { view: { scapeHintPos(): { x: number; y: number } } } }).cycle.view.scapeHintPos();
+    const r = document.getElementById('stage')!.getBoundingClientRect();
+    return { x: q.x + r.x, y: q.y + r.y };
+  });
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.mouse.move(at.x - 60, at.y, { steps: 6 });
+  await page.mouse.move(at.x - 120, at.y, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(plantX).not.toBeCloseTo(x0, 2);
+  await page.locator('.scape-bar button', { hasText: '完成' }).click(NO_WAIT);
   await expect.poll(() => questNow(page)).toBe(2);
 
   // 3 測水

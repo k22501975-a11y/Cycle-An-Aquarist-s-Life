@@ -532,9 +532,10 @@ async function start(): Promise<void> {
     scapeCoach.el.remove();
     scapeCoach = null;
   };
-  const startCoach = () => {
-    if (scapeCoach || loadMoments(store).has('first_scape_drag')) return;
-    const el = h('div.scape-coach', { 'aria-hidden': 'true' }, h('span.scape-coach-hand'), h('span.scape-coach-text', {}, '按住，左右拖拖看'));
+  const startCoach = (text?: string) => {
+    // 剛買來要擺的（text）每次都比劃；一般進造景模式只有第一次
+    if (scapeCoach || (!text && loadMoments(store).has('first_scape_drag'))) return;
+    const el = h('div.scape-coach', { 'aria-hidden': 'true' }, h('span.scape-coach-hand'), h('span.scape-coach-text', {}, text ?? '按住，左右拖拖看'));
     stage.append(el);
     const coach = { el, raf: 0 };
     const follow = () => {
@@ -570,6 +571,13 @@ async function start(): Promise<void> {
     requestAnimationFrame(() => measure());
   };
   ctx.openScape = enterScape;
+  // 剛買的石頭、水草（P4）：不是馬上種好，而是拿在手上，拖到缸裡想擺的位置放開
+  ctx.placeNew = (target) => {
+    enterScape();
+    stopCoach();
+    scapeBar.focus(target);
+    startCoach(target.kind === 'plant' ? '拖到想種的位置，放開就種下' : '拖到想擺的位置');
+  };
   // 手指餵食（P5）：按「餵食」進餵食模式，點水面哪裡飼料就從哪裡撒下去，魚過去搶；種類、等級收進「進階」
   let feedingMode = false;
   let fedThisRound = 0;

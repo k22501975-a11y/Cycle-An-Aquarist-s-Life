@@ -202,6 +202,8 @@ export interface PanelContext {
   undoable?: (run: () => void, text: string, tone?: 'warn' | 'info') => void;
   /** 進入造景模式（拖曳擺放石頭、沉木、水草）。 */
   openScape?: () => void;
+  /** 剛買的石頭、水草拿在手上（P4）：收起商店、進造景模式選著它，讓玩家拖到想擺的位置。 */
+  placeNew?: (target: { kind: 'plant'; id: number } | { kind: 'hardscape'; index: number }) => void;
   /** 「第一次」的慶祝演出（只演一次）；有演出時回傳 true。 */
   moment?: (id: MomentId, spec: CelebrateSpec) => boolean;
   /** 這條魚在缸裡的樣子（觀察面板頂端的大圖）；沒有就不放圖。 */
@@ -904,16 +906,20 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       `買了一對${FISH_SPECIES[species].name}（一公一母）${quarantined ? `，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天` : ''}`,
     );
   };
-  const buyPlant = (species: PlantSpeciesId) => () =>
-    purchase(
+  // 買了不是馬上種好（P4）：拿在手上，拖到缸裡想種的位置
+  const buyPlant = (species: PlantSpeciesId) => () => {
+    let id = -1;
+    const ok = purchase(
       ctx,
       PLANT_PRICES[species],
       (st) => {
-        addPlant(st, species);
+        id = addPlant(st, species).id;
         hitchhike(st, st.quarantine ? 0.08 : 0.25);
       },
-      `種下一株${PLANT_SPECIES[species].name}`,
+      `買了一株${PLANT_SPECIES[species].name}`,
     );
+    if (ok && id >= 0) ctx.placeNew?.({ kind: 'plant', id });
+  };
   const buySnail = (kind: SnailKind, color?: AppleColor) => () =>
     purchase(ctx, SNAILS[kind].price, (st) => addSnail(st, kind, color), `放了一隻${color ? APPLE_COLOR_LABELS[color] : ''}${SNAILS[kind].name}`);
 
@@ -1125,7 +1131,9 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
             actions: [
               x.kind === 'rock' ? button('白醋', () => toasts.show(x.fizzes ? `${x.name}冒出小氣泡：含碳酸鈣，會讓水變硬` : `${x.name}沒有反應：不會影響水質`, x.fizzes ? 'warn' : 'info'), 'small') : null,
               count > 0 ? button('拿出', () => game.act((st) => removeHardscape(st, x.id)), 'small') : null,
-              button('買一組', () => purchase(ctx, price(key), (st) => addHardscape(st, x), `放了一組${x.name}`), 'small'),
+              button('買一組', () => {
+                if (purchase(ctx, price(key), (st) => addHardscape(st, x), `買了一組${x.name}`)) ctx.placeNew?.({ kind: 'hardscape', index: (game.state.equipment.hardscape ?? []).length - 1 });
+              }, 'small'),
             ].filter((b): b is HTMLButtonElement => !!b),
           });
         }),
