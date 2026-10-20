@@ -110,9 +110,15 @@ export class Toasts {
       );
     }
     this.host.append(el);
-    const stay = action ? 8000 : 4500;
-    setTimeout(() => el.classList.add('fade'), stay);
-    setTimeout(() => el.remove(), stay + 700);
-    while (this.host.children.length > 4) this.host.firstElementChild?.remove();
+    if (action) {
+      // 有「去處理」的提示要等玩家點掉或處理掉才收（U3，#166）：原本 8 秒就消失，看到時已經不見了
+      el.classList.add('sticky');
+      el.append(h('button.toast-close', { 'aria-label': '關閉', onclick: () => el.remove() }, '✕'));
+    } else {
+      setTimeout(() => el.classList.add('fade'), 4500);
+      setTimeout(() => el.remove(), 5200);
+    }
+    // 太多就先收掉最舊的一般通知，要處理的留著
+    while (this.host.children.length > 4) (this.host.querySelector('.toast:not(.sticky)') ?? this.host.firstElementChild)?.remove();
   }
 }

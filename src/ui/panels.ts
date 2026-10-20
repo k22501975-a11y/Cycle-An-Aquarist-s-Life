@@ -209,7 +209,8 @@ export interface PanelContext {
   /** 打開開缸（挑設備）面板。 */
   openSetup?: () => void;
   /** 拿到錢的演出：金幣從 from 飛進錢包（F8）。 */
-  reward?: (from: DOMRect | null, amount: number) => void;
+  /** 拿到錢：金幣飛進錢包；tier 是特效大小（小事寶箱、賣魚 small，交單 medium，V5）。 */
+  reward?: (from: DOMRect | null, amount: number, tier?: 'small' | 'medium') => void;
   /** 剛放進缸的魚（對水小遊戲對得完美時，魚一進缸就聚光展開尾巴）。 */
   welcome?: (fishIds: number[], perfect: boolean) => void;
   /** 用商城道具：先跟伺服器扣一個，成功才 apply；回傳 null 是成功，不然是原因。 */

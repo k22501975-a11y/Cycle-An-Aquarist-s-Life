@@ -3,6 +3,7 @@ import type { KeyValueStore } from '../game/save';
 import { checkGoals, nextGoals, UNLOCK_LABELS, type Goal, type TankState } from '../sim';
 import { h } from './dom';
 import { artImg, ownerImg } from './art-icons';
+import { kickOwnerQueue, onOwnerAskClosed, onOwnerAskOpened, ownerAskOpen } from './owner-ask';
 import { advanceQuest, currentQuest, loadProgress, newProgress, OWNER_NAME, pendingTip, QUESTS, questShopTab, saveProgress, type QuestShopTab, type TutorialProgress } from './tutorial';
 
 interface Page {
@@ -53,7 +54,15 @@ export class Guide {
     // 對話框掛在 body：面板（商店等）開著時也在最上層，按鈕按得到
     host.append(this.pill);
     document.body.append(this.bubble);
+    // 一次只出一個老闆對話框（G9）：問句跳出來時先收起，問句收掉再接著說
+    onOwnerAskOpened(() => this.bubble.classList.remove('open'));
+    onOwnerAskClosed(() => this.pages.length > 0 && this.renderBubble());
     this.renderPill();
+  }
+
+  /** 老闆正在說（或還有話要說）。 */
+  get talking(): boolean {
+    return this.pages.length > 0;
   }
 
   get pillVisible(): boolean {
@@ -69,7 +78,8 @@ export class Guide {
   update(state: TankState, tanks: TankState[] = [state]): void {
     this.tanks = tanks;
     this.renderProgress(state);
-    if (this.bubble.classList.contains('open')) return;
+    // 還有話沒說完（包括讓位給老闆問句、還在等的）就先不出新的
+    if (this.pages.length > 0) return;
     const done = advanceQuest(this.progress, state);
     if (done) {
       this.save();
@@ -159,8 +169,11 @@ export class Guide {
       this.bubble.classList.remove('open');
       this.onDone?.();
       this.renderPill();
+      kickOwnerQueue();
       return;
     }
+    // 老闆的問句或提醒開著：一次只出一個對話框（G9），等它收起來再出（onOwnerAskClosed）
+    if (ownerAskOpen()) return;
     // 阿德老闆的插畫頭像；圖載不到就退回線條小人
     const avatar = h('div.owner-avatar.has-art', {}, ownerPortrait());
     const q = currentQuest(this.progress);
