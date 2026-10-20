@@ -1,4 +1,4 @@
-import { buybackRefusal, economy, FISH_PRICES, guppyBuybackTier, noteRaisedGone, PLANT_PRICES } from './economy';
+import { buybackRefusal, economy, FISH_PRICES, guppyBuybackTier, noteEarned, noteRaisedGone, PLANT_PRICES, sellableCuttings } from './economy';
 import { phenotype, type FinTrait, type GuppyPhenotype } from './genetics';
 import { nextRandom, type RngState } from './random';
 import { PESTS, type PestKind } from './snails';
@@ -137,7 +137,8 @@ export function matchingFish(state: TankState, o: ShopOrder, keep: readonly numb
 
 /** 所有缸加起來湊得到幾份（魚從每一缸挑，插枝看手上）。 */
 export function orderSupply(tanks: TankState[], o: ShopOrder, keep: readonly number[] = []): number {
-  if (o.kind === 'cutting') return economy(tanks[0]).cuttings[o.plant!] ?? 0;
+  // 寶箱來的插枝不能交單換錢（polish-to-9.md §4）
+  if (o.kind === 'cutting') return sellableCuttings(tanks[0], o.plant!);
   if (o.kind === 'snail') return tanks.reduce((n, t) => n + snailsIn(t, o.snail!), 0);
   return tanks.reduce((n, t) => n + matchingFish(t, o, keep).length, 0);
 }
@@ -191,6 +192,7 @@ export function fulfillOrder(tanks: TankState[], orderId: number, keep: readonly
   }
   const coins = o.count * o.unitPrice;
   economy(state).coins += coins;
+  noteEarned(state);
   board.orders = board.orders.filter((x) => x !== o);
   board.done += 1;
   board.earned += coins;
@@ -271,9 +273,9 @@ export function orderContext(state: TankState): OrderContext {
   const sellable = bred.some((f) => f.lengthCm >= FISH_SPECIES[f.species].adultLengthCm * 0.5);
   const stage: OrderStage = sellable ? 'breeding' : bred.length > 0 ? 'brood' : 'start';
   const cuttings: OrderContext['cuttings'] = {};
-  const hand = economy(state).cuttings;
   for (const plant of Object.keys(PLANT_PRICES) as PlantSpeciesId[]) {
-    const n = (hand[plant] ?? 0) + trimmable(state, plant);
+    // 寶箱來的插枝不能交單，不照它出插枝單
+    const n = sellableCuttings(state, plant) + trimmable(state, plant);
     if (n > 0) cuttings[plant] = n;
   }
   const snails: OrderContext['snails'] = {};

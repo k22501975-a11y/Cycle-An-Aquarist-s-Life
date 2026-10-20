@@ -3,8 +3,23 @@ import { blankGameState, newGameState } from '../game/game';
 import { doDailyTask, everythingTank, richTank } from '../game/daily-player';
 import {
   addHardscape,
-  BIG_CHEST_COINS,
   BIG_CHEST_DAYS,
+  BIG_CHEST_PLANTS,
+  CHEST_CAP_DAY,
+  CHEST_COINS_CAP,
+  CHEST_DRY_DAYS,
+  noteEarned,
+  chestCuttingsOf,
+  orderSupply,
+  PLANT_SPECIES,
+  plantBuybackPrice,
+  sellableCuttings,
+  sellCuttings,
+  takeCutting,
+  takeCuttingsForGift,
+  takeCuttingsForSale,
+  addCuttings,
+  type PlantSpeciesId,
   BILL_DAYS,
   CHEST_COINS_MAX,
   CHEST_COINS_MIN,
@@ -23,11 +38,8 @@ import {
   economy,
   eligibleDaily,
   feed,
-  FOOD_PER_MEAL,
   HARDSCAPE,
   markDaily,
-  PLANT_PRICES,
-  price,
   rollChest,
   simulate,
   updateDaily,
@@ -237,8 +249,9 @@ describe('寶箱獎勵池（polish-to-9.md U5）', () => {
     const kinds = new Set<string>();
     for (let d = 0; d < 40 && kinds.size < 5; d++) {
       s.hours = (20 + d) * 24 + 8;
-      // 斷開連續天數，只看一般寶箱
+      // 斷開連續天數，只看一般寶箱；每天都有別的收入，不觸發保底
       e.dailyStreak = undefined;
+      e.lastEarnedDay = 20 + d;
       updateDaily(tanks);
       dailyTasks(tanks)!.tasks = [{ id: 'observe', done: false }];
       markDaily(tanks, 'observe');
@@ -268,9 +281,10 @@ describe('寶箱獎勵池（polish-to-9.md U5）', () => {
     expect(e.freeMeals).toBe(50);
   });
 
-  it(`連續 ${BIG_CHEST_DAYS} 天做完小事，第 ${BIG_CHEST_DAYS} 天是大寶箱（${BIG_CHEST_COINS} 魚幣＋一件造景物）；斷一天重算`, () => {
+  it(`連續 ${BIG_CHEST_DAYS} 天做完小事，第 ${BIG_CHEST_DAYS} 天是大寶箱（不給魚幣：一件造景物＋一株比較貴的水草）；斷一天重算`, () => {
     const s = richTank();
     const tanks = [s];
+    const e = economy(s);
     const open = (day: number) => {
       s.hours = day * 24 + 8;
       updateDaily(tanks);
@@ -280,37 +294,119 @@ describe('寶箱獎勵池（polish-to-9.md U5）', () => {
       return claimDaily(tanks)!;
     };
     const days = [20, 21, 22, 23, 24, 25, 26];
-    const got = days.map(open);
-    expect(got.slice(0, -1).every((g) => !g.big)).toBe(true);
-    const big = got[got.length - 1];
+    const got = days.slice(0, -1).map(open);
+    expect(got.every((g) => !g.big)).toBe(true);
+    const coins = e.coins;
+    const plants = e.cuttings;
+    const before = Object.values(plants).reduce((a, x) => a + (x ?? 0), 0);
+    const big = open(26);
     expect(big.big).toBe(true);
-    expect(big.coins).toBe(BIG_CHEST_COINS);
+    expect(big.coins).toBe(0);
+    expect(e.coins).toBe(coins);
     expect(big.item).toBe('hardscape');
+    expect(BIG_CHEST_PLANTS).toContain(big.plantId);
+    expect(Object.values(e.cuttings).reduce((a, x) => a + (x ?? 0), 0)).toBe(before + 1);
+    // 大寶箱的水草是陽性草或莫絲，比一般寶箱的陰性草插枝貴
+    for (const id of BIG_CHEST_PLANTS) expect(PLANT_SPECIES[id].lightType === 'high' || id === 'moss').toBe(true);
     // 大寶箱之後重新算；斷了一天也重新算
     for (const d of [27, 28, 29, 30, 31, 32]) expect(open(d).big).toBe(false);
     expect(open(34).big).toBe(false);
   });
 
-  it('經濟驗收（§4.3）：寶箱 60 天的期望價值，對照訂單收入的 20%', () => {
-    // 一般寶箱的期望價值（照商店價折合魚幣）
+  it(`寶箱魚幣到第 ${CHEST_CAP_DAY} 天累計不超過 ${CHEST_COINS_CAP}：快到上限只給剩下的，用完改給飼料`, () => {
+    const s = richTank();
+    const tanks = [s];
+    const e = economy(s);
+    e.chestCoins = CHEST_COINS_CAP - 5;
+    for (let d = 10; d < 50; d++) {
+      s.hours = d * 24 + 8;
+      e.dailyStreak = undefined;
+      updateDaily(tanks);
+      dailyTasks(tanks)!.tasks = [{ id: 'observe', done: false }];
+      markDaily(tanks, 'observe');
+      updateDaily(tanks);
+      const got = claimDaily(tanks)!;
+      expect(got.coins).toBeLessThanOrEqual(5);
+      if (got.coins === 0) expect(got.item).toBeDefined();
+    }
+    // 沒有別的收入，保底一定會開到魚幣：只給剩下的 5 元
+    expect(e.chestCoins).toBe(CHEST_COINS_CAP);
+  });
+
+  it(`寶箱保底：${CHEST_DRY_DAYS} 天沒賺到魚幣，一般寶箱一定開出魚幣；有在賺錢就照機率`, () => {
+    const s = richTank();
+    const tanks = [s];
+    const e = economy(s);
+    const open = (day: number) => {
+      s.hours = day * 24 + 8;
+      e.dailyStreak = undefined;
+      updateDaily(tanks);
+      dailyTasks(tanks)!.tasks = [{ id: 'observe', done: false }];
+      markDaily(tanks, 'observe');
+      updateDaily(tanks);
+      return claimDaily(tanks)!;
+    };
+    // 開 10 天（最多 300 元，不碰上限）
+    for (let d = 20; d < 30; d++) {
+      e.lastEarnedDay = d - CHEST_DRY_DAYS;
+      const got = open(d);
+      expect(got.coins).toBeGreaterThanOrEqual(CHEST_COINS_MIN);
+      expect(e.lastEarnedDay).toBe(d);
+    }
+    // 賣魚、交單也算賺到錢
+    s.hours = 50 * 24 + 8;
+    noteEarned(s);
+    expect(e.lastEarnedDay).toBe(50);
+  });
+
+  it('寶箱來的插枝只能種，不能賣回店家、交單、上架或送人換錢', () => {
+    const s = richTank();
+    const tanks = [s];
+    const e = economy(s);
+    e.cuttings = {};
+    // 開到一株水草為止
+    let got: ReturnType<typeof claimDaily> = null;
+    for (let d = 10; d < 80 && got?.item !== 'plant'; d++) {
+      s.hours = d * 24 + 8;
+      e.dailyStreak = undefined;
+      e.lastEarnedDay = d;
+      updateDaily(tanks);
+      dailyTasks(tanks)!.tasks = [{ id: 'observe', done: false }];
+      markDaily(tanks, 'observe');
+      updateDaily(tanks);
+      got = claimDaily(tanks);
+    }
+    const sp = got!.itemId as PlantSpeciesId;
+    expect(e.cuttings[sp]).toBe(1);
+    expect(sellableCuttings(s, sp)).toBe(0);
+    const coins = e.coins;
+    expect(sellCuttings(s, sp)).toBe(0);
+    expect(takeCuttingsForSale(s, sp, 1)).toBe(false);
+    expect(takeCuttingsForGift(s, sp, 1)).toBe(false);
+    expect(orderSupply(tanks, { id: 1, kind: 'cutting', plant: sp, count: 1 } as never)).toBe(0);
+    expect(e.coins).toBe(coins);
+    expect(e.cuttings[sp]).toBe(1);
+    // 自己剪下來的照樣能賣，寶箱那株留在手上
+    addCuttings(s, sp, 2);
+    expect(sellCuttings(s, sp)).toBe(2 * plantBuybackPrice(sp));
+    expect(e.cuttings[sp]).toBe(1);
+    // 種下去就沒有了
+    expect(takeCutting(s, sp)).toBe(true);
+    expect(chestCuttingsOf(s, sp)).toBe(0);
+  });
+
+  it('經濟驗收（§4.3）：寶箱 60 天的期望魚幣在上限 400 以內', () => {
     const coinsEv = (CHEST_COINS_MIN + CHEST_COINS_MAX) / 2;
-    const rockEv = (price('hardscape:lava') + price('hardscape:slate')) / 2;
-    const hardscapeEv = (rockEv + price('hardscape:driftwood')) / 2;
-    const plantEv = CHEST_PLANTS.reduce((a, id) => a + PLANT_PRICES[id] / 2, 0) / CHEST_PLANTS.length;
-    const value: Record<ChestItem, number> = { coins: coinsEv, food: CHEST_FOOD_MEALS * FOOD_PER_MEAL, bacteria: price('care:bacteria'), hardscape: hardscapeEv, plant: plantEv };
-    const ev = CHEST_POOL.reduce((a, p) => a + p.weight * value[p.item], 0);
-    // 抽樣平均跟算出來的期望值對得上
-    let sum = 0;
-    for (let i = 0; i < 20000; i++) sum += rollChest(i, i * 104729 + 7, false).value;
-    expect(Math.abs(sum / 20000 - ev) / ev).toBeLessThan(0.03);
-    // 每天都開、每 7 天一個大寶箱：60 天
+    const coinWeight = CHEST_POOL.find((p) => p.item === 'coins')!.weight;
+    // 抽樣：一般寶箱抽到魚幣的比例
+    let hits = 0;
+    for (let i = 0; i < 20000; i++) if (rollChest(i, i * 104729 + 7, false).coins > 0) hits++;
+    expect(Math.abs(hits / 20000 - coinWeight)).toBeLessThan(0.015);
+    // 每天都開、每 7 天一個大寶箱（大寶箱不給魚幣）：60 天約 52 個一般寶箱 × 25% × 25 元 ≈ 328 元
     const bigs = Math.floor(60 / BIG_CHEST_DAYS);
-    const total60 = (60 - bigs) * ev + bigs * (BIG_CHEST_COINS + hardscapeEv);
-    const coins60 = (60 - bigs) * 0.4 * coinsEv + bigs * BIG_CHEST_COINS;
-    // 記下來給企劃看：期望值約每箱 86 元、60 天約 8,200 元（其中現金約 2,500 元）。
-    // §4.3 認真玩家「賣魚＋訂單」第 60 天目標 800，20% 是 160 元：寶箱遠遠超過，獎勵池或 20% 規則要企劃重新拍板（不在這裡調數字）。
-    expect(ev).toBeCloseTo(85.75, 2);
-    expect(Math.round(total60)).toBe(8159);
-    expect(Math.round(coins60)).toBe(2536);
+    const coins60 = (60 - bigs) * coinWeight * coinsEv;
+    expect(Math.round(coins60)).toBe(325);
+    expect(coins60).toBeLessThanOrEqual(CHEST_COINS_CAP);
+    for (let i = 0; i < 50; i++) expect(rollChest(i, 99, true).coins).toBe(0);
   });
 });

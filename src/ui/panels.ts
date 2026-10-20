@@ -74,6 +74,8 @@ import {
   plantBuybackPrice,
   price,
   sellCuttings,
+  sellableCuttings,
+  chestCuttingsOf,
   sellFish,
   sellsLeftToday,
   spend,
@@ -1059,12 +1061,15 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
           note: bottles > 0 ? `手上有 ${bottles} 瓶寶箱開到的` : '幫新缸加一小批硝化菌，要有魚或氨才長得起來',
           actions: [
             button('倒一瓶', () => {
-              // 先倒寶箱開到的（不用錢）
-              if (bottles > 0) {
-                game.act((st) => {
-                  economy(st).bacteriaBottles = bottles - 1;
-                  addBottledBacteria(st);
-                });
+              // 先倒寶箱開到的（不用錢）；按下去當下才讀手上的瓶數，面板開著時數字變了也不會算錯
+              const free = game.act((st) => {
+                const e = economy(st);
+                if ((e.bacteriaBottles ?? 0) <= 0) return false;
+                e.bacteriaBottles = e.bacteriaBottles! - 1;
+                addBottledBacteria(st);
+                return true;
+              });
+              if (free) {
                 toasts.show('倒了一瓶硝化菌液，過一兩天測測看');
                 sheet.refresh();
               } else purchase(ctx, price('care:bacteria'), (st) => void addBottledBacteria(st), '倒了一瓶硝化菌液，過一兩天測測看');
@@ -1181,8 +1186,8 @@ function sellContent(ctx: PanelContext): Node {
   const groups = (Object.keys(FISH_SPECIES) as FishSpeciesId[])
     .map((id) => ({ id, fish: s.fish.filter((f) => f.species === id && !buybackRefusal(f)) }))
     .filter((g) => g.fish.length > 0);
-  const cuttings = economy(s).cuttings;
-  const cuttingIds = (Object.keys(cuttings) as PlantSpeciesId[]).filter((id) => (cuttings[id] ?? 0) > 0);
+  // 寶箱來的插枝不收（polish-to-9.md §4），只列賣得掉的
+  const cuttingIds = (Object.keys(economy(s).cuttings) as PlantSpeciesId[]).filter((id) => sellableCuttings(s, id) > 0);
   const priceRange = (fish: Fish[]) => {
     const p = fish.map(fishBuybackPrice);
     const lo = Math.min(...p);
@@ -1237,7 +1242,7 @@ function sellContent(ctx: PanelContext): Node {
       h(
         'div.item',
         {},
-        h('div', {}, h('b', {}, `${PLANT_SPECIES[id].name}插枝`), h('div.hint', {}, `${cuttings[id]} 株 · 每株 ${plantBuybackPrice(id)} 元`)),
+        h('div', {}, h('b', {}, `${PLANT_SPECIES[id].name}插枝`), h('div.hint', {}, `${sellableCuttings(s, id)} 株 · 每株 ${plantBuybackPrice(id)} 元${chestCuttingsOf(s, id) > 0 ? `（寶箱送的 ${chestCuttingsOf(s, id)} 株不收）` : ''}`)),
         button('全部賣掉', () => {
           const got = game.act((st) => sellCuttings(st, id));
           if (got > 0) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { doAllDaily, everythingTank } from './daily-player';
-import { claimDaily, DAILY_CATEGORY, DAILY_GAP_DAYS, DAILY_IDS, dailyTasks, economy, simulate, type DailyTaskId } from '../sim';
+import { CHEST_CAP_DAY, CHEST_COINS_CAP, claimDaily, DAILY_CATEGORY, DAILY_GAP_DAYS, DAILY_IDS, dailyTasks, economy, simulate, type DailyTaskId } from '../sim';
 
 /** 每日小事題庫驗收（polish-to-9.md U6）：劇本跑 30 天，統計每題出現次數，同題間隔 ≥ 3 天。 */
 describe('每日小事題庫劇本（U6）', () => {
@@ -28,4 +28,28 @@ describe('每日小事題庫劇本（U6）', () => {
       expect(DAILY_IDS.length).toBeGreaterThanOrEqual(20);
     }
   }, 60_000);
+
+  it(`寶箱魚幣（polish-to-9.md §4）：seed 1～3 每天開寶箱到第 ${CHEST_CAP_DAY} 天，魚幣累計的中位數 ≤ ${CHEST_COINS_CAP}`, () => {
+    const totals: number[] = [];
+    for (const seed of [1, 2, 3]) {
+      const s = everythingTank(seed);
+      const tanks = [s];
+      let coins = 0;
+      // 算到遊戲裡的第 60 天（含）
+      while (Math.floor((s.hours + 24) / 24) <= CHEST_CAP_DAY) {
+        const d = Math.floor(s.hours / 24);
+        simulate(s, 24);
+        s.snails!.clutches.push({ id: 100 + d, hour: s.hours, eggs: 80, color: 'gold' });
+        s.snails!.pests.bladder = Math.max(s.snails!.pests.bladder, 20);
+        doAllDaily(tanks);
+        coins += claimDaily(tanks)?.coins ?? 0;
+      }
+      expect(economy(s).chestCoins ?? 0).toBe(coins);
+      totals.push(coins);
+    }
+    const median = [...totals].sort((a, b) => a - b)[1];
+    console.log(`寶箱魚幣到第 ${CHEST_CAP_DAY} 天：seed 1～3 = ${totals.join('、')}，中位數 ${median}`);
+    expect(median).toBeLessThanOrEqual(CHEST_COINS_CAP);
+    for (const c of totals) expect(c).toBeLessThanOrEqual(CHEST_COINS_CAP);
+  }, 120_000);
 });

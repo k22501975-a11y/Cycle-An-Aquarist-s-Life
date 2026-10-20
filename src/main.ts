@@ -1050,7 +1050,8 @@ async function start(): Promise<void> {
     audio.play('fanfare');
     flyCoins(dailyHolder.getBoundingClientRect(), coinsBtn, got.coins);
     // 寶箱獎勵池（U5）：開到東西要說放在哪裡
-    const where = got.item === 'hardscape' ? '，到商店「設備」免費擺進缸' : got.item === 'plant' ? '，到商店「水草」免費種下' : got.item === 'bacteria' ? '，到商店「設備」免費倒' : got.item === 'food' ? '，週末結算時先用它' : '';
+    // 大寶箱是一件造景物加一株水草
+    const where = got.plantId ? '，到商店「設備」免費擺進缸、「水草」免費種下' : got.item === 'hardscape' ? '，到商店「設備」免費擺進缸' : got.item === 'plant' ? '，到商店「水草」免費種下' : got.item === 'bacteria' ? '，到商店「設備」免費倒' : got.item === 'food' ? '，週末結算時先用它' : '';
     toasts.show(`${got.big ? `連續 ${sim.BIG_CHEST_DAYS} 天做完小事，大寶箱！` : ''}寶箱裡有：${got.text}${where}`);
     renderDaily();
   };

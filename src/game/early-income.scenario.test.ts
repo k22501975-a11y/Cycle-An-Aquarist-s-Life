@@ -5,6 +5,7 @@ import {
   addCuttings,
   addFish,
   addPlant,
+  CHEST_COINS_CAP,
   claimDaily,
   dailyTasks,
   economy,
@@ -26,14 +27,14 @@ import {
  * 前期收入（design/mvp.md §4.4.1，#175）：照新手基準玩法（§4.6：1 株水草、一公兩母、每天一小撮一次、
  * 每天測水、測到氨或亞硝才換水），加上每天把 3 件小事做完開寶箱、交得出來的訂單就交（留種的不交；
  * 板上有中魚單時小孔雀留夠那張單的數量養大，多的才交仔魚單）。
- * 第一筆收入要在第 14 天以內，第 10～60 天之間任兩筆收入隔不超過 7 個遊戲天。
+ * 第一筆收入要在第 14 天以內，第 10～60 天之間任兩筆收入隔不超過 7 個遊戲天。收入只算魚幣，寶箱開到的東西不算。
  */
 
 const alive = (s: TankState) => s.fish.filter((f) => f.alive);
 const meal = (s: TankState) => alive(s).reduce((a, f) => a + FISH_SPECIES[f.species].dailyFoodMg, 0) / 2;
 
-/** 回傳每一筆收入在第幾天、從哪來。 */
-function baseline(seed: number, days = 60): Array<{ day: number; from: string; coins: number; kind?: string }> {
+/** 回傳每一筆魚幣收入在第幾天、從哪來，和每天寶箱開到哪種東西。 */
+function baseline(seed: number, days = 60): { income: Array<{ day: number; from: string; coins: number }>; chests: Array<{ day: number; kind: string }>; chestCoins: number } {
   const s = newGameState(seed);
   const tanks = [s];
   s.environment.roomTempC = 25;
@@ -42,7 +43,8 @@ function baseline(seed: number, days = 60): Array<{ day: number; from: string; c
   addPlant(s, 'anubias');
   for (const sex of ['male', 'female', 'female'] as const) addFish(s, 'guppy', { carriesIch: false, carries: [], sex });
   const breeders = s.fish.map((f) => f.id);
-  const income: Array<{ day: number; from: string; coins: number; kind?: string }> = [];
+  const income: Array<{ day: number; from: string; coins: number }> = [];
+  const chests: Array<{ day: number; kind: string }> = [];
   for (let d = 1; d <= days; d++) {
     simulate(s, 24);
     updateDaily(tanks);
@@ -55,9 +57,10 @@ function baseline(seed: number, days = 60): Array<{ day: number; from: string; c
     updateDaily(tanks);
     for (const t of dailyTasks(tanks)?.tasks ?? []) if (!t.done) doDailyTask(tanks, t.id);
     updateDaily(tanks);
-    // 寶箱開到東西也算一筆收入（折合商店價）
+    // 收入只算魚幣：寶箱開到的東西不能換錢（polish-to-9.md §4），不算收入，只記下開到哪種
     const chest = claimDaily(tanks);
-    if (chest) income.push({ day: d, from: 'daily', coins: chest.value, kind: chest.item ?? 'coins' });
+    if (chest) chests.push({ day: d, kind: chest.item ?? 'coins' });
+    if (chest && chest.coins > 0) income.push({ day: d, from: 'daily', coins: chest.coins });
     // 訂單：插枝單先修剪；交得出來就交
     const board = orderBoard(s);
     if (board.orders.some((o) => o.kind === 'cutting')) for (const p of s.plants) addCuttings(s, p.species, trimPlant(s, p.id));
@@ -70,13 +73,13 @@ function baseline(seed: number, days = 60): Array<{ day: number; from: string; c
     }
   }
   expect(economy(s).coins).toBeGreaterThan(0);
-  return income;
+  return { income, chests, chestCoins: economy(s).chestCoins ?? 0 };
 }
 
 describe('前期收入劇本（mvp.md §4.4.1）', () => {
   for (const seed of [1, 2, 3]) {
     it(`seed ${seed}：第一筆收入 ≤ 第 14 天，第 10～60 天任兩筆收入間隔 ≤ 7 天`, () => {
-      const income = baseline(seed);
+      const { income, chests, chestCoins } = baseline(seed);
       expect(income.length).toBeGreaterThan(0);
       expect(income[0].day).toBeLessThanOrEqual(14);
       const days = [...new Set(income.map((x) => x.day))].filter((d) => d >= 10 && d <= 60);
@@ -85,7 +88,9 @@ describe('前期收入劇本（mvp.md §4.4.1）', () => {
       // 訂單也要有收入（不能全靠每日小事）
       expect(income.some((x) => x.from !== 'daily' && x.day <= 45)).toBe(true);
       // 寶箱獎勵池（polish-to-9.md U5）：14 天內至少開出 3 種不同獎勵
-      expect(new Set(income.filter((x) => x.from === 'daily' && x.day <= 14).map((x) => x.kind)).size).toBeGreaterThanOrEqual(3);
+      expect(new Set(chests.filter((x) => x.day <= 14).map((x) => x.kind)).size).toBeGreaterThanOrEqual(3);
+      // 寶箱魚幣到第 60 天累計 ≤ 400（§4 修訂）
+      expect(chestCoins).toBeLessThanOrEqual(CHEST_COINS_CAP);
     }, 60_000);
   }
 });

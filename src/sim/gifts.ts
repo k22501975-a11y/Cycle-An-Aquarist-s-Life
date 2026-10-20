@@ -1,4 +1,4 @@
-import { addCuttings, economy } from './economy';
+import { addCuttings, economy, sellableCuttings } from './economy';
 import { bacteriaCapacity, filterBacteriaShare } from './processes/nitrogen';
 import type { PlantSpeciesId } from './species';
 import { PLANT_SPECIES } from './species';
@@ -55,7 +55,8 @@ export function isPlantSpecies(id: string): id is PlantSpeciesId {
 /** 從手上的插枝拿出 count 株要送人；不夠就不拿、回傳 false。 */
 export function takeCuttingsForGift(state: TankState, species: PlantSpeciesId, count: number): boolean {
   const e = economy(state);
-  if ((e.cuttings[species] ?? 0) < count || count <= 0) return false;
+  // 寶箱來的插枝不能送人（朋友收到就能賣，等於換成魚幣，polish-to-9.md §4）
+  if (sellableCuttings(state, species) < count || count <= 0) return false;
   e.cuttings[species]! -= count;
   return true;
 }

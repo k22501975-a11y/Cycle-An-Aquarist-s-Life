@@ -122,6 +122,12 @@ export interface Economy {
   bacteriaBottles?: number;
   /** 寶箱開出來的飼料還能餵幾餐（週末結算飼料錢時先扣這個）。 */
   freeMeals?: number;
+  /** 寶箱累計開出多少魚幣（第 60 天前上限 400，polish-to-9.md §4）。 */
+  chestCoins?: number;
+  /** 最後一次賺到魚幣（賣魚、賣插枝、交單、市場入帳、寶箱魚幣）是第幾個遊戲天；寶箱保底用。舊存檔沒有＝第 0 天。 */
+  lastEarnedDay?: number;
+  /** 手上的插枝裡有幾株是寶箱來的：只能種，不能賣回店家、交單、上架或送人換錢（polish-to-9.md §4）。 */
+  chestCuttings?: Partial<Record<PlantSpeciesId, number>>;
   /** 已經套用到伺服器帳本的第幾筆（市場的收支，docs/ledger.md）；舊存檔沒有＝0。 */
   ledgerSeq?: number;
   /** 玩過幾次對水小遊戲（前幾次強制玩，F5）。 */
@@ -168,8 +174,14 @@ export function applyLedger(state: TankState, entry: { delta: number; ledgerSeq:
   const e = economy(state);
   if (entry.ledgerSeq <= (e.ledgerSeq ?? 0)) return false;
   e.coins += entry.delta;
+  if (entry.delta > 0) noteEarned(state);
   e.ledgerSeq = entry.ledgerSeq;
   return true;
+}
+
+/** 記下今天賺到魚幣了（寶箱保底看多久沒賺錢，daily.ts）。 */
+export function noteEarned(state: TankState): void {
+  economy(state).lastEarnedDay = Math.floor(state.hours / 24);
 }
 
 export function price(key: string): number {
@@ -302,6 +314,7 @@ export function sellFish(state: TankState, fishId: number): number {
   state.fish = state.fish.filter((f) => f !== fish);
   const e = economy(state);
   e.coins += coins;
+  noteEarned(state);
   e.fishSold = (e.fishSold ?? 0) + 1;
   return coins;
 }
@@ -316,14 +329,26 @@ export function noteRaisedGone(state: TankState, fish: Fish): void {
   e.raisedGone = (e.raisedGone ?? 0) + 1;
 }
 
-/** 把手上的插枝全部賣掉（算一次），回傳拿到多少錢。 */
+/** 手上這種插枝有幾株是寶箱來的（不會比手上的多）。 */
+export function chestCuttingsOf(state: TankState, species: PlantSpeciesId): number {
+  const e = economy(state);
+  return Math.min(e.chestCuttings?.[species] ?? 0, e.cuttings[species] ?? 0);
+}
+
+/** 手上這種插枝可以換錢的株數（賣給店家、交單、上架、送人）：寶箱來的不算（polish-to-9.md §4）。 */
+export function sellableCuttings(state: TankState, species: PlantSpeciesId): number {
+  return Math.max(0, (economy(state).cuttings[species] ?? 0) - chestCuttingsOf(state, species));
+}
+
+/** 把手上的插枝全部賣掉（算一次），回傳拿到多少錢。寶箱來的不收，留在手上可以種。 */
 export function sellCuttings(state: TankState, species: PlantSpeciesId): number {
   const e = economy(state);
-  const n = e.cuttings[species] ?? 0;
+  const n = sellableCuttings(state, species);
   if (n <= 0 || !countSale(state)) return 0;
   const coins = n * plantBuybackPrice(species);
-  e.cuttings[species] = 0;
+  e.cuttings[species] = (e.cuttings[species] ?? 0) - n;
   e.coins += coins;
+  noteEarned(state);
   noteAct(state, 'cutting');
   return coins;
 }
@@ -337,6 +362,9 @@ export function addCuttings(state: TankState, species: PlantSpeciesId, count: nu
 export function takeCutting(state: TankState, species: PlantSpeciesId): boolean {
   const e = economy(state);
   if ((e.cuttings[species] ?? 0) <= 0) return false;
+  // 先種寶箱來的（種下去就是缸裡的草了）
+  const chest = chestCuttingsOf(state, species);
+  if (chest > 0) e.chestCuttings![species] = chest - 1;
   e.cuttings[species]! -= 1;
   noteAct(state, 'cutting');
   return true;
