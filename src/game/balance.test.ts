@@ -9,6 +9,7 @@ import {
   canClaimStarterPack,
   claimStarterPack,
   createTank,
+  cycleConfirmed,
   economy,
   feed,
   FILTERS,
@@ -24,7 +25,6 @@ import {
   waterChange,
   type TankState,
 } from '../sim';
-import { QUESTS } from '../ui/tutorial';
 
 /** 平衡測試：用「玩家會怎麼玩」的腳本跑模擬，確認難度合理（commercial-gap K1～K3）。 */
 
@@ -69,8 +69,7 @@ describe('新手前幾週（K1）', () => {
     }
   });
 
-  it('照教學玩（一公兩母、一天兩次一小撮、每天測水、有氨亞硝就換水）：養水任務 4～7 天內過得了（mvp.md §4.6）', () => {
-    const cycled = QUESTS.find((q) => q.id === 'cycled')!;
+  it('照教學玩（一公兩母、一天兩次一小撮、每天測水、有氨亞硝就換水）：養水目標 4～7 天內過得了（mvp.md §4.6）', () => {
     for (const seed of [1, 2, 3]) {
       const s = newGameState(seed);
       for (const sex of ['male', 'female', 'female'] as const) addFish(s, 'guppy', { carriesIch: false, carries: [], sex });
@@ -82,7 +81,7 @@ describe('新手前幾週（K1）', () => {
           simulate(s, 12);
         }
         const r = useTestKit(s);
-        if (cycled.check(s)) doneDay = d;
+        if (cycleConfirmed(s)) doneDay = d;
         else if (r.ammonia > 0 || r.nitrite > 0) waterChange(s, 0.3);
       }
       expect(doneDay).toBeGreaterThanOrEqual(4);

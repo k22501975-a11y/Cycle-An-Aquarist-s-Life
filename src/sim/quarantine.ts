@@ -20,9 +20,13 @@ export function buyQuarantine(state: TankState): void {
 
 /** 買魚放進檢疫盒（沒有檢疫盒就直接放主缸）。 */
 export function addFishToQuarantine(state: TankState, species: FishSpeciesId, options: AddFishOptions = {}): Fish {
+  // 魚放進檢疫盒，主缸的養水期不會因此延長（addFish 會延，這裡還原）
+  const delay = state.cycleDelay;
   const fish = addFish(state, species, options);
   const q = state.quarantine;
   if (!q) return fish;
+  if (delay) state.cycleDelay = delay;
+  else delete state.cycleDelay;
   state.fish = state.fish.filter((f) => f !== fish);
   q.fish.push(fish);
   q.since[fish.id] = state.hours;

@@ -1,7 +1,7 @@
 import { dripShock, type DripOutcome } from './drip';
 import { farmHabit, releaseShock } from './acclimation';
 import { co2Equilibrium, oxygenSaturation } from './chemistry';
-import { filterBacteriaShare } from './processes/nitrogen';
+import { delayCycleForNewFish, filterBacteriaShare } from './processes/nitrogen';
 import { infect, STORE_DISEASE_CHANCE } from './processes/disease';
 import { lookIndex, phenotype, storeGenome, type FinTrait } from './genetics';
 import { createFish } from './processes/population';
@@ -192,6 +192,8 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
   // 新手期照樣擲骰（亂數順序不變），只是不帶病
   const carried = options.carries === undefined && state.hours < NEWBIE_HEALTHY_DAYS * 24 ? [] : rolled;
   for (const kind of carried) infect(fish, kind);
+  // 還在養水、氨不歸零時放魚：魚撐得住，但養水期多 1 天（polish-to-9.md §4）
+  delayCycleForNewFish(state);
   state.fish.push(fish);
   return fish;
 }

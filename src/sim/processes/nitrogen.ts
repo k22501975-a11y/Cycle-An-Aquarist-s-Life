@@ -35,14 +35,39 @@ export function filterBacteriaShare(state: TankState): number {
 /** 兩種硝化菌都長到這個量，才算「養好了」（少量魚、正常餵食約 5～8 天）。 */
 export const CYCLED_BACTERIA = 0.3;
 
-/** 硝化菌長起來的程度（0～1）：取比較慢的那種。 */
-export function cycleMaturity(state: TankState): number {
+/** 還在養水、水裡有氨時放新魚，養水期多這麼多小時（design/polish-to-9.md §4：多 1 天）。 */
+export const CYCLE_DELAY_PER_BATCH_H = 24;
+/** 「氨不歸零」的門檻（mg/L），跟 isCycled 一樣（亞硝也用同一個）。 */
+const AMMONIA_PRESENT = 0.1;
+/** 延長期間硝化菌進度最多顯示到這裡，看得出還沒好。 */
+const DELAYED_MATURITY_CAP = 0.95;
+
+/** 兩種硝化菌長到「養好」的程度（0～1），不管有沒有被延長。 */
+function bacteriaMaturity(state: TankState): number {
   return Math.min(1, Math.min(state.bacteria.aob, state.bacteria.nob) / CYCLED_BACTERIA);
+}
+
+/** 硝化菌長起來的程度（0～1）：取比較慢的那種；放新魚延長養水期時，多等的那段停在 95%。 */
+export function cycleMaturity(state: TankState): number {
+  const m = bacteriaMaturity(state);
+  return (state.cycleDelay?.leftH ?? 0) > 0 ? Math.min(m, DELAYED_MATURITY_CAP) : m;
+}
+
+/**
+ * 店裡的魚放進還在養水、氨不歸零的缸：魚撐得住（fauna 的氨耐受），但新增的廢物讓養水期多約 1 天。
+ * 回傳這次有沒有延長（畫面用來讓老闆提醒）。同一個小時放進來的算同一批，只延長一次。
+ */
+export function delayCycleForNewFish(state: TankState): boolean {
+  if (cycleMaturity(state) >= 1 || state.water.tan < AMMONIA_PRESENT) return false;
+  const d = state.cycleDelay;
+  if (d && d.addedHours === state.hours) return false;
+  state.cycleDelay = { leftH: (d?.leftH ?? 0) + CYCLE_DELAY_PER_BATCH_H, addedHours: state.hours };
+  return true;
 }
 
 /** 缸子養好了：硝化菌夠多，而且氨和亞硝酸鹽真的被處理掉了。 */
 export function isCycled(state: TankState): boolean {
-  return cycleMaturity(state) >= 1 && state.water.tan < 0.1 && state.water.no2 < 0.1;
+  return cycleMaturity(state) >= 1 && state.water.tan < AMMONIA_PRESENT && state.water.no2 < AMMONIA_PRESENT;
 }
 
 export function updateNitrogen(state: TankState, dt: number): void {
@@ -78,6 +103,10 @@ export function updateNitrogen(state: TankState, dt: number): void {
   const no2Growth = water.no2 / (GROWTH_HALF_SATURATION + water.no2);
   bacteria.aob = grow(bacteria.aob, AOB_GROWTH * tanGrowth * activity, capacity, dt);
   bacteria.nob = grow(bacteria.nob, NOB_GROWTH * no2Growth * activity, capacity, dt);
+
+  // 養水期延長：本來已經算養好（菌夠、氨和亞硝都退了）以後才開始倒數，多等的時間不會跟等亞硝退掉重疊
+  const delay = state.cycleDelay;
+  if (delay && delay.leftH > 0 && bacteriaMaturity(state) >= 1 && water.tan < AMMONIA_PRESENT && water.no2 < AMMONIA_PRESENT) delay.leftH = Math.max(0, delay.leftH - dt);
 }
 
 function grow(population: number, growthRate: number, capacity: number, dt: number): number {
