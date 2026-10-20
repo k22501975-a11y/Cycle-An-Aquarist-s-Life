@@ -9,8 +9,6 @@ type Cycle = { cycle: { sim: Sim; game: { clock: { timeScale: number }; act: (f:
 
 /** #144：只有一缸時，仔魚救援的待辦點進去可以把仔魚撈進檢疫盒，不再是死路。 */
 test('只有一缸：仔魚可以撈進檢疫盒', async ({ page }) => {
-  // 開遊戲加跳過開缸演出就要半分鐘以上；CI 和新手任務那條（6 分鐘）一起跑時機器很忙，60 秒不夠
-  test.setTimeout(180_000);
   await openGame(page);
   // 老闆的教學和情境提示會在任意時間跳出來蓋住面板下半部，這個測試不測教學，先藏起來
   await page.addStyleTag({ content: '.owner { display: none !important; }' });
@@ -45,7 +43,6 @@ type NurseryCycle = {
 
 /** #187：待辦「母魚快生了」直接附「去買育幼盒 150 元」，按了買盒子並把母魚放進去。 */
 test('母魚快生了：待辦一鍵買育幼盒並放進去', async ({ page }) => {
-  test.setTimeout(180_000);
   await openGame(page);
   await page.addStyleTag({ content: '.owner { display: none !important; }' });
   await page.evaluate(() => {
