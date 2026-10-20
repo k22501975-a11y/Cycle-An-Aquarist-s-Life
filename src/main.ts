@@ -31,7 +31,8 @@ import * as sim from './sim';
 import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, useTestKit } from './sim';
 import { h } from './ui/dom';
 import { ICONS } from './ui/icons';
-import { DEATH_ADVICE, describeEvent, firstDeathOwnerLine, fishName, fishStrain } from './ui/labels';
+import { DEATH_ADVICE, describeEvent, firstDeathOwnerLine, fishName, fishStrain, pluralEventText } from './ui/labels';
+import { mergeEventToasts, type EventToast } from './ui/notify-gate';
 import { personaChip } from './ui/persona';
 import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
 import {
@@ -585,7 +586,7 @@ async function start(): Promise<void> {
     const lower = lowerQuality(uiPrefs.quality);
     if (!lower) return;
     setQuality(lower);
-    toasts.show(`畫面有點卡，畫質自動調成「${QUALITY_LABELS[lower]}」。可以在設定裡改回來`, 'info');
+    toasts.show(`畫面有點卡，畫質調成「${QUALITY_LABELS[lower]}」`, 'info');
   });
   app.stage.addChild(view.root);
   // 開發用幀率顯示：設定裡打開，或網址加 ?fps
@@ -1085,9 +1086,10 @@ async function start(): Promise<void> {
     if (d.day !== dailyDay) {
       dailyDay = d.day;
       // 過一晚時早上報告卡會列出來，不另外跳通知
-      if (d.tasks.length && !sleepingNow) toasts.show(`今天的小事：${d.tasks.map((t) => sim.DAILY_TEXT[t.id]).join('、')}`);
+      // 今天的題目左上角的小卡就看得到，不另外跳通知（通知太亂）
     }
-    for (const id of fresh) toasts.show(dailyDoneText(d, id));
+    // 一件一件做完只在小卡上打勾；三件都做完才跳一則
+    if (fresh.length && sim.canClaimDaily(game.tanks)) toasts.show(dailyDoneText(d, fresh[fresh.length - 1]));
     if (fresh.length && sim.canClaimDaily(game.tanks)) audio.play('quest');
     renderDaily();
   };
@@ -1147,6 +1149,8 @@ async function start(): Promise<void> {
   };
   /** 每缸上次提醒「小魚被吃」是第幾個遊戲天。 */
   const fryEatenToast = new Map<number, number>();
+  /** 這一幀冒出來、還沒跳的事件通知（flushEventToasts 同類合併）。 */
+  const eventToasts: EventToast[] = [];
   game.onEvent((e, tank) => {
     // 阿德老闆送育幼盒（#187）：過一晚時等報告卡關掉再帶
     if (e.type === 'nursery_gift') {
@@ -1197,8 +1201,18 @@ async function start(): Promise<void> {
       return;
     }
     const msg = describeEvent(game.tanks[tank] ?? game.state, e);
-    if (msg) toasts.show(tankPrefix(tank) + msg.text, msg.tone);
+    // 先收起來，這一幀跑完再同類合併成一則（快轉時一幀會冒出好幾筆同樣的事）
+    if (msg) eventToasts.push({ key: `${tank}:${e.type}`, text: tankPrefix(tank) + msg.text, tone: msg.tone });
   });
+  const flushEventToasts = () => {
+    if (eventToasts.length === 0) return;
+    const merged = mergeEventToasts(eventToasts.splice(0), (key, n) => {
+      const tank = Number(key.split(':')[0]);
+      const text = pluralEventText(key.slice(key.indexOf(':') + 1), n);
+      return text && tankPrefix(tank) + text;
+    });
+    for (const m of merged) toasts.show(m.text, m.tone);
+  };
   // 快轉時出狀況：遊戲已經切回正常速度，提示玩家並給「去處理」（#142）
   const GEAR_CRISES = new Set(['heater_broke', 'heater_stuck', 'heater_exposed', 'controller_cut', 'power_out', 'too_hot', 'too_cold']);
   // ---- 過一晚（F2）的狀態：sleepingNow 是夜幕到報告卡關掉，inSleepCall 只有 game.sleep() 那一下 ----
@@ -1381,9 +1395,10 @@ async function start(): Promise<void> {
     offline.byTank.forEach((events, tank) => {
       for (const e of events) {
         const msg = describeEvent(game.tanks[tank] ?? game.state, e);
-        if (msg) toasts.show(tankPrefix(tank) + msg.text, msg.tone);
+        if (msg) eventToasts.push({ key: `${tank}:${e.type}`, text: tankPrefix(tank) + msg.text, tone: msg.tone });
       }
     });
+    flushEventToasts();
   }
   if (window.matchMedia('(orientation: portrait)').matches) toasts.show('把手機轉成橫向，水缸會更大');
   setInterval(save, 10_000);
@@ -1430,9 +1445,10 @@ async function start(): Promise<void> {
       away.byTank.forEach((events, tank) =>
         events.forEach((e) => {
           const msg = describeEvent(game.tanks[tank] ?? game.state, e);
-          if (msg) toasts.show(tankPrefix(tank) + msg.text, msg.tone);
+          if (msg) eventToasts.push({ key: `${tank}:${e.type}`, text: tankPrefix(tank) + msg.text, tone: msg.tone });
         }),
       );
+      flushEventToasts();
     }
   });
   window.addEventListener('pagehide', save);
@@ -1477,6 +1493,7 @@ async function start(): Promise<void> {
     // 雲端模式最多 ×7：每幀檢查，登入、讀檔、匯入、從雲端下載後都會套到（#112）
     game.clock.timeScale = cloudTimeScale(game.clock.timeScale, !!cloud.session);
     game.advance(elapsedMS);
+    flushEventToasts();
     if (visiting) {
       const n = Math.min(visitClock.advance(elapsedMS), 60);
       for (let i = 0; i < n; i++) sim.step(visiting.state);
