@@ -83,9 +83,6 @@ describe('早上報告寫玩家自己做的事的結果（polish-to-9 §6 P6）'
     const before = snapshot(game.tanks);
     const r = game.sleep();
     const report = morningReport(before, game.tanks, r.hours, r.crisis);
-    console.log(
-      [`${report.title}（睡了 ${r.hours.toFixed(1)} 小時）`, ...report.items.map((i) => `[${i.kind}/${i.tone}] ${i.text}`), `TAN ${game.state.water.tan.toFixed(3)} mg/L、NO2 ${game.state.water.no2.toFixed(3)}、measuredProblem=${measuredProblem(game.state)}`].join('\n'),
-    );
     expect(kinds(report).some((k) => k === 'plant_grew' || k === 'fish_relaxed')).toBe(true);
     expect(kinds(report)).not.toContain('quiet');
   });
