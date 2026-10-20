@@ -1,6 +1,7 @@
 import type { KeyValueStore } from '../game/save';
 import { dismissOrder, FIN_NAMES, fulfillOrder, markDaily, ORDER_STRAINS, orderBoard, orderRefusal, orderSupply, orderTitle, orderUnit, tankStarted, type OrderStrain, type ShopOrder, type TankState } from '../sim';
 import { artUrl, ownerImg } from './art-icons';
+import { ownerMood } from './owner-mood';
 import { h } from './dom';
 import type { PanelContext } from './panels';
 import { fryArt, guppyArt, plantArt, speciesArt } from './shop-cards';
@@ -153,7 +154,7 @@ export function ordersPanel(ctx: PanelContext): Node {
   return h(
     'div.stack',
     {},
-    h('div.owner-say', {}, ownerImg('owner-say-avatar'), h('span', {}, say)),
+    h('div.owner-say', {}, ownerImg('owner-say-avatar', ownerMood(say)), h('span', {}, say)),
     board.done > 0 ? h('div.order-stats', {}, h('span', {}, `已交 ${board.done} 張`), h('span', {}, h('i.coin'), ` ${board.earned}`)) : null,
     h('div.card-grid.order-grid', {}, ...board.orders.map((o) => orderCard(ctx, o, refresh))),
   );

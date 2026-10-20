@@ -1,4 +1,5 @@
 import { artUrl, ownerImg, type ArtIcon } from './art-icons';
+import { ownerMood } from './owner-mood';
 import { h } from './dom';
 import type { MorningReport, ReportItem, ReportKind } from './morning-report';
 
@@ -133,7 +134,7 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
     { role: 'dialog', 'aria-label': report.title },
     h('div.morning-sky', { 'aria-hidden': 'true' }, h('span.morning-sun')),
     h('b.morning-title', {}, report.title),
-    h('div.owner-say', {}, ownerImg('owner-say-avatar'), h('span', {}, morningLine(report))),
+    h('div.owner-say', {}, ownerImg('owner-say-avatar', ownerMood(morningLine(report))), h('span', {}, morningLine(report))),
     h('div.morning-list', {}, ...items.map(row)),
     deps.daily && deps.daily.tasks.length > 0
       ? h(

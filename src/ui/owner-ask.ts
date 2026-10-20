@@ -1,5 +1,6 @@
 import { ownerImg } from './art-icons';
 import { h } from './dom';
+import { ownerMood } from './owner-mood';
 import { OWNER_NAME } from './tutorial';
 
 /**
@@ -75,7 +76,7 @@ function bubble<T>(text: string, buttons: Array<{ label: string; value: T; prima
         kickOwnerQueue();
       };
       el.append(
-        h('div.owner-avatar.has-art', {}, ownerImg('owner-art')),
+        h('div.owner-avatar.has-art', {}, ownerImg('owner-art', ownerMood(body))),
         h(
           'div.owner-body',
           {},
