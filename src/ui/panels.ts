@@ -81,6 +81,7 @@ import {
   buyQuarantine,
   HARDSCAPE,
   removeHardscape,
+  placeFromBag,
   replaceSubstrate,
   SUBSTRATES,
   doseAntibiotic,
@@ -1034,6 +1035,8 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     // 設備商品圖（art/gear/）；沒有圖的（控溫器）用設備圖示
     const item = (label: string, key: string, owned: boolean, buy: () => void, note = '', art?: string) =>
       shopCard({ art, icon: art ? undefined : 'gear', name: label, price: price(key), badge: owned ? '使用中' : undefined, note, actions: owned ? [] : [button('買', buy, 'small')], cls: owned ? '.owned' : '' });
+    const bottles = economy(game.state).bacteriaBottles ?? 0;
+    const bag = economy(game.state).hardscapeBag ?? [];
     const HARDSCAPE_ART: Record<string, string> = { seiryu: 'scape/rock-seiryu-1.webp', lava: 'gear/rock-lava.webp', slate: 'gear/rock-slate.webp', driftwood: 'scape/wood-spider-1.webp' };
     content = h(
       'div.stack',
@@ -1050,11 +1053,23 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
           // 無框的物件圖，跟旁邊的設備同一種畫法（畫面評測 V26）
           art: 'gear/bottle-bacteria.webp',
           name: '硝化菌液',
-          price: price('care:bacteria'),
+          price: bottles > 0 ? null : price('care:bacteria'),
           unit: '/瓶',
           chips: ['養水 1～3 天'],
-          note: '幫新缸加一小批硝化菌，要有魚或氨才長得起來',
-          actions: [button('倒一瓶', () => purchase(ctx, price('care:bacteria'), (st) => void addBottledBacteria(st), '倒了一瓶硝化菌液，過一兩天測測看'), 'small')],
+          note: bottles > 0 ? `手上有 ${bottles} 瓶寶箱開到的` : '幫新缸加一小批硝化菌，要有魚或氨才長得起來',
+          actions: [
+            button('倒一瓶', () => {
+              // 先倒寶箱開到的（不用錢）
+              if (bottles > 0) {
+                game.act((st) => {
+                  economy(st).bacteriaBottles = bottles - 1;
+                  addBottledBacteria(st);
+                });
+                toasts.show('倒了一瓶硝化菌液，過一兩天測測看');
+                sheet.refresh();
+              } else purchase(ctx, price('care:bacteria'), (st) => void addBottledBacteria(st), '倒了一瓶硝化菌液，過一兩天測測看');
+            }, 'small'),
+          ],
         }),
         ...Object.values(FILTERS).map((f) =>
           item(f.name, `filter:${f.id}`, eq.filter?.spec.id === f.id, () => {
@@ -1093,17 +1108,25 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       cardGrid(
         ...Object.values(HARDSCAPE).map((x) => {
           const count = (eq.hardscape ?? []).filter((y) => y.id === x.id).length;
+          const inHand = bag.filter((id) => id === x.id).length;
           const key = `hardscape:${x.id}`;
           return shopCard({
             art: HARDSCAPE_ART[x.id],
             name: x.name,
             price: price(key),
             unit: '/組',
-            badge: count > 0 ? `缸裡 ${count} 組` : undefined,
-            note: HARDSCAPE_NOTES[x.id],
+            badge: count > 0 ? `缸裡 ${count} 組` : inHand > 0 ? `手上 ${inHand}` : undefined,
+            note: inHand > 0 ? `手上有 ${inHand} 組寶箱開到的，免費放進缸` : HARDSCAPE_NOTES[x.id],
             actions: [
               x.kind === 'rock' ? button('白醋', () => toasts.show(x.fizzes ? `${x.name}冒出小氣泡：含碳酸鈣，會讓水變硬` : `${x.name}沒有反應：不會影響水質`, x.fizzes ? 'warn' : 'info'), 'small') : null,
               count > 0 ? button('拿出', () => game.act((st) => removeHardscape(st, x.id)), 'small') : null,
+              inHand > 0
+                ? button('放手上的', () => {
+                    game.act((st) => placeFromBag(st, x.id));
+                    toasts.show(`放了一組${x.name}（寶箱開到的）`);
+                    sheet.refresh();
+                  }, 'small.primary')
+                : null,
               button('買一組', () => purchase(ctx, price(key), (st) => addHardscape(st, x), `放了一組${x.name}`), 'small'),
             ].filter((b): b is HTMLButtonElement => !!b),
           });
@@ -1432,6 +1455,8 @@ export function quarantinePanel(ctx: PanelContext): Node {
 
 export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: PanelContext): Node {
   const s = game.state;
+  // 每日小事「看看過濾器和加熱棒」
+  markDaily(game.tanks, 'gear');
   const eq = s.equipment;
   // 每一列前面放那樣設備的商品圖（跟商店、圖鑑同一張），一眼看得出是哪個
   const pic = (art: string) => {

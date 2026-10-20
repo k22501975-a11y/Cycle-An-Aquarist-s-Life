@@ -1,10 +1,10 @@
-import { isJuvenile, isLightOn, recordEvent, type Fish, type TankState } from './state';
+import { isJuvenile, isLightOn, noteAct, recordEvent, type Fish, type TankState } from './state';
 import { growthStage } from './growth';
 import { FISH_SPECIES, isShrimpSpecies, type FishSpeciesId, type PlantSpeciesId } from './species';
 import { phenotype, type GuppyPhenotype } from './genetics';
 import { updateOrders, type OrderBoard } from './orders';
 import type { GoalState } from './goals';
-import type { DailyState } from './daily';
+import type { DailyState, DailyTaskId } from './daily';
 
 /**
  * 經濟（GAME_DESIGN 第 7 節、market-and-breeding.md §3.1）：
@@ -112,6 +112,16 @@ export interface Economy {
   powerPending?: boolean;
   /** 今天的每日小事（F3）；舊存檔沒有，開完缸第一次更新時出題。 */
   daily?: DailyState;
+  /** 前兩天出過的小事（同一題 3 天內不重複出，U6）。 */
+  dailyRecent?: Array<{ day: number; ids: DailyTaskId[] }>;
+  /** 連續幾天開了小事寶箱、最後一次是第幾天（連續 7 天送大寶箱，U5）。 */
+  dailyStreak?: { count: number; lastDay: number };
+  /** 寶箱開出來、還沒擺進缸的石頭和沉木（HARDSCAPE 的 id）：到商店「設備」免費放進缸。 */
+  hardscapeBag?: string[];
+  /** 寶箱開出來、還沒倒的硝化菌液（瓶）。 */
+  bacteriaBottles?: number;
+  /** 寶箱開出來的飼料還能餵幾餐（週末結算飼料錢時先扣這個）。 */
+  freeMeals?: number;
   /** 已經套用到伺服器帳本的第幾筆（市場的收支，docs/ledger.md）；舊存檔沒有＝0。 */
   ledgerSeq?: number;
   /** 玩過幾次對水小遊戲（前幾次強制玩，F5）。 */
@@ -200,7 +210,10 @@ export function updateEconomy(state: TankState, dt: number): void {
   e.kwh += (powerWatts(state) / 1000) * dt;
   if (state.hours - e.lastBillHours >= BILL_DAYS * 24) {
     const power = Math.round(e.kwh * KWH_PRICE);
-    const food = Math.round((e.meals ?? 0) * FOOD_PER_MEAL);
+    // 寶箱送的飼料先用掉，不收錢
+    const free = Math.min(e.meals ?? 0, e.freeMeals ?? 0);
+    if (free > 0) e.freeMeals = (e.freeMeals ?? 0) - free;
+    const food = Math.round(((e.meals ?? 0) - free) * FOOD_PER_MEAL);
     e.coins -= power + food;
     recordEvent(state, { type: 'power_bill', count: power, cause: String(food) });
     e.kwh = 0;
@@ -311,6 +324,7 @@ export function sellCuttings(state: TankState, species: PlantSpeciesId): number 
   const coins = n * plantBuybackPrice(species);
   e.cuttings[species] = 0;
   e.coins += coins;
+  noteAct(state, 'cutting');
   return coins;
 }
 
@@ -324,6 +338,7 @@ export function takeCutting(state: TankState, species: PlantSpeciesId): boolean 
   const e = economy(state);
   if ((e.cuttings[species] ?? 0) <= 0) return false;
   e.cuttings[species]! -= 1;
+  noteAct(state, 'cutting');
   return true;
 }
 

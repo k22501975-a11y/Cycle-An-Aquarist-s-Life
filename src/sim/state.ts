@@ -46,6 +46,8 @@ export interface TankState {
   lastTrimHours?: number;
   /** 最近一次在造景模式移動石頭、沉木或水草的時間（每日小事用）。 */
   lastScapeHours?: number;
+  /** 其他動作最後一次的時間（每日小事判定用，DailyAct）。舊存檔沒有。 */
+  dailyActs?: Partial<Record<DailyAct, number>>;
   /** 蝦脫下來的殼（畫面上留在缸底一兩天）：哪隻蝦、什麼時候、脫完的體長。 */
   molts?: Array<{ id: number; hour: number; lengthCm: number }>;
   /** 魚幣、電費、手上的插枝。舊存檔沒有，第一次用到時給起始資金。 */
@@ -385,6 +387,17 @@ export function createTank(options: CreateTankOptions): TankState {
     algae: 0,
     events: [],
   };
+}
+
+/**
+ * 每日小事要看的動作（daily.ts）：補水、用缸水洗濾材、造景模式的各種擺法、處理插枝、摘螺卵、撈螺、放進育幼盒。
+ * 測水、餵食、換水、修剪、移動造景另外有 last*Hours。
+ */
+export type DailyAct = 'topup' | 'rinse' | 'scapeMove' | 'scapePlant' | 'scapeFlip' | 'scapeLayer' | 'scapeScale' | 'scapePlace' | 'cutting' | 'clutch' | 'pests' | 'deadSnail' | 'nursery';
+
+/** 記下玩家做了某個動作（每日小事用）。 */
+export function noteAct(state: TankState, act: DailyAct): void {
+  (state.dailyActs ??= {})[act] = state.hours;
 }
 
 export function recordEvent(state: TankState, event: Omit<SimEvent, 'hours'>): void {

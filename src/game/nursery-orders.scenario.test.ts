@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from './game';
+import { doDailyTask } from './daily-player';
 import {
   addCuttings,
   addFish,
@@ -11,7 +12,6 @@ import {
   feed,
   fulfillOrder,
   isJuvenile,
-  markDaily,
   moveDueToNursery,
   orderBoard,
   orderContext,
@@ -61,9 +61,8 @@ function run(seed: number, noBox = false, days = 37): { first: number; earned: R
     const r = useTestKit(s);
     const tasks = dailyTasks(tanks)?.tasks.map((t) => t.id) ?? [];
     if (r.ammonia > 0 || r.nitrite > 0 || tasks.includes('water')) waterChange(s, 0.3);
-    if (tasks.includes('trim')) for (const p of s.plants) addCuttings(s, p.species, trimPlant(s, p.id));
-    if (tasks.includes('observe')) markDaily(tanks, 'observe');
-    if (tasks.includes('snail')) markDaily(tanks, 'snail');
+    updateDaily(tanks);
+    for (const t of dailyTasks(tanks)?.tasks ?? []) if (!t.done) doDailyTask(tanks, t.id);
     updateDaily(tanks);
     claimDaily(tanks);
     // 分缸提示說成魚會吃小魚：撈進育幼盒

@@ -1,6 +1,6 @@
 import { temperatureFactor } from './chemistry';
 import { nextRandom } from './random';
-import { recordEvent, type TankState } from './state';
+import { noteAct, recordEvent, type TankState } from './state';
 
 /**
  * 螺（design/snails.md）：清潔隊也是麻煩。
@@ -279,6 +279,7 @@ export function removeClutches(state: TankState): number {
   if (!s) return 0;
   const n = s.clutches.length;
   s.clutches = [];
+  if (n > 0) noteAct(state, 'clutch');
   return n;
 }
 
@@ -293,6 +294,7 @@ export function catchPests(state: TankState, lightsOn: boolean): number {
     s.pests[k] -= n;
     caught += n;
   }
+  noteAct(state, 'pests');
   return caught;
 }
 
@@ -301,6 +303,7 @@ export function setTrap(state: TankState): boolean {
   const s = snailState(state);
   if (s.trapHour !== undefined) return false;
   s.trapHour = state.hours;
+  noteAct(state, 'pests');
   return true;
 }
 
@@ -342,6 +345,7 @@ export function removeDeadSnails(state: TankState): number {
   if (!s) return 0;
   const dead = s.snails.filter((x) => !x.alive).length;
   s.snails = s.snails.filter((x) => x.alive);
+  if (dead > 0) noteAct(state, 'deadSnail');
   return dead;
 }
 

@@ -12,7 +12,7 @@ import { FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } 
 import type { FilterSpec, HardscapeSpec, SubstrateSpec } from './equipment';
 import { onHardscapeAdded, onHardscapeRemoved } from './aquascape';
 import { testWater, type TestKitReading } from './readings';
-import { NEWBIE_HEALTHY_DAYS, recordEvent, TEST_LOG_MAX, type DiseaseKind, type Fish, type Plant, type TankState } from './state';
+import { NEWBIE_HEALTHY_DAYS, noteAct, recordEvent, TEST_LOG_MAX, type DiseaseKind, type Fish, type Plant, type TankState } from './state';
 
 /** 投餵飼料（mg）。沒指定就是標準的漂浮薄片；吃不完的會腐敗。 */
 export function feed(state: TankState, mg: number, kind: FoodKind = DEFAULT_FOOD.kind, grade: FoodGrade = DEFAULT_FOOD.grade): void {
@@ -30,8 +30,8 @@ export interface WaterChangeOptions {
  * 會稀釋氨、亞硝酸鹽、硝酸鹽與藥物，補回 KH；新水溫度與缸水差太多會讓魚緊迫。
  */
 export function waterChange(state: TankState, fraction: number, options: WaterChangeOptions = {}): void {
-  // 換水時順便補滿水位
-  topUp(state, options.tempC);
+  // 換水時順便補滿水位（不算每日小事的「補水」）
+  fillUp(state, options.tempC);
   const f = Math.min(1, Math.max(0, fraction));
   const { water, environment } = state;
   const tap = environment.tap;
@@ -64,6 +64,12 @@ export function waterChange(state: TankState, fraction: number, options: WaterCh
  * 回傳補了幾公升。
  */
 export function topUp(state: TankState, tempC?: number): number {
+  const add = fillUp(state, tempC);
+  if (add > 0) noteAct(state, 'topup');
+  return add;
+}
+
+function fillUp(state: TankState, tempC?: number): number {
   const { water, environment, equipment } = state;
   const volume = equipment.tank.volumeL;
   const level = water.levelL ?? volume;
@@ -106,6 +112,7 @@ export function useTestKit(state: TankState): TestKitReading {
 export function rinseFilterMedia(state: TankState, withWater: 'tap' | 'tank'): void {
   const share = filterBacteriaShare(state);
   const survival = withWater === 'tap' ? 0.05 : 0.9;
+  if (withWater === 'tank') noteAct(state, 'rinse');
   const keep = 1 - share * (1 - survival);
   state.bacteria.aob *= keep;
   state.bacteria.nob *= keep;

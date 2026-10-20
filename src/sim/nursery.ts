@@ -1,7 +1,7 @@
 import { economy } from './economy';
 import { isParentalSpawner } from './parental';
 import { FISH_SPECIES, isShrimpSpecies, type FishSpeciesId } from './species';
-import { isJuvenile, recordEvent, type Fish, type TankState } from './state';
+import { isJuvenile, noteAct, recordEvent, type Fish, type TankState } from './state';
 
 /**
  * 育幼盒（design/mvp.md §4.4.2，#187）：掛在主缸裡的小網盒，不佔缸位、用的是主缸的水。
@@ -60,6 +60,7 @@ export function moveToNursery(state: TankState, fishId: number): boolean {
   fish.nursery = true;
   // 撈魚是一次小緊迫
   fish.stress = Math.max(fish.stress, 0.2);
+  if (!isJuvenile(fish)) noteAct(state, 'nursery');
   return true;
 }
 

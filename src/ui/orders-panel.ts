@@ -1,5 +1,5 @@
 import type { KeyValueStore } from '../game/save';
-import { dismissOrder, FIN_NAMES, fulfillOrder, ORDER_STRAINS, orderBoard, orderRefusal, orderSupply, orderTitle, orderUnit, tankStarted, type OrderStrain, type ShopOrder, type TankState } from '../sim';
+import { dismissOrder, FIN_NAMES, fulfillOrder, markDaily, ORDER_STRAINS, orderBoard, orderRefusal, orderSupply, orderTitle, orderUnit, tankStarted, type OrderStrain, type ShopOrder, type TankState } from '../sim';
 import { artUrl, ownerImg } from './art-icons';
 import { h } from './dom';
 import type { PanelContext } from './panels';
@@ -144,6 +144,8 @@ function orderCard(ctx: PanelContext, o: ShopOrder, refresh: () => void): HTMLEl
 /** 訂單板：老闆一句話＋每張單一張圖卡。 */
 export function ordersPanel(ctx: PanelContext): Node {
   const { game, sheet } = ctx;
+  // 每日小事「看一眼店裡的訂單」
+  markDaily(game.tanks, 'orders');
   const board = orderBoard(game.state);
   const refresh = () => sheet.open('客人的訂單', () => ordersPanel(ctx));
   const anyReady = board.orders.some((o) => orderSupply(game.tanks, o) >= o.count);

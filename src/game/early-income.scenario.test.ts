@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from './game';
+import { doDailyTask } from './daily-player';
 import {
   addCuttings,
   addFish,
@@ -10,10 +11,8 @@ import {
   FISH_SPECIES,
   feed,
   fulfillOrder,
-  markDaily,
   orderBoard,
   orderContext,
-  placePlant,
   PINCH_MEALS,
   simulate,
   trimPlant,
@@ -34,7 +33,7 @@ const alive = (s: TankState) => s.fish.filter((f) => f.alive);
 const meal = (s: TankState) => alive(s).reduce((a, f) => a + FISH_SPECIES[f.species].dailyFoodMg, 0) / 2;
 
 /** 回傳每一筆收入在第幾天、從哪來。 */
-function baseline(seed: number, days = 60): Array<{ day: number; from: string; coins: number }> {
+function baseline(seed: number, days = 60): Array<{ day: number; from: string; coins: number; kind?: string }> {
   const s = newGameState(seed);
   const tanks = [s];
   s.environment.roomTempC = 25;
@@ -43,7 +42,7 @@ function baseline(seed: number, days = 60): Array<{ day: number; from: string; c
   addPlant(s, 'anubias');
   for (const sex of ['male', 'female', 'female'] as const) addFish(s, 'guppy', { carriesIch: false, carries: [], sex });
   const breeders = s.fish.map((f) => f.id);
-  const income: Array<{ day: number; from: string; coins: number }> = [];
+  const income: Array<{ day: number; from: string; coins: number; kind?: string }> = [];
   for (let d = 1; d <= days; d++) {
     simulate(s, 24);
     updateDaily(tanks);
@@ -52,14 +51,13 @@ function baseline(seed: number, days = 60): Array<{ day: number; from: string; c
     const r = useTestKit(s);
     const tasks = dailyTasks(tanks)?.tasks.map((t) => t.id) ?? [];
     if (r.ammonia > 0 || r.nitrite > 0 || tasks.includes('water')) waterChange(s, 0.3);
-    // 每日小事：剩下要動手的也做完
-    if (tasks.includes('trim')) for (const p of s.plants) addCuttings(s, p.species, trimPlant(s, p.id));
-    if (tasks.includes('scape')) placePlant(s, s.plants[0].id, { x: (s.plants[0].place?.x ?? 0.5) > 0.5 ? 0.3 : 0.7 });
-    if (tasks.includes('observe')) markDaily(tanks, 'observe');
-    if (tasks.includes('snail')) markDaily(tanks, 'snail');
+    // 每日小事：剩下要動手的也做完（寶箱開到的石頭、插枝也照小卡擺進缸、種回去）
     updateDaily(tanks);
+    for (const t of dailyTasks(tanks)?.tasks ?? []) if (!t.done) doDailyTask(tanks, t.id);
+    updateDaily(tanks);
+    // 寶箱開到東西也算一筆收入（折合商店價）
     const chest = claimDaily(tanks);
-    if (chest > 0) income.push({ day: d, from: 'daily', coins: chest });
+    if (chest) income.push({ day: d, from: 'daily', coins: chest.value, kind: chest.item ?? 'coins' });
     // 訂單：插枝單先修剪；交得出來就交
     const board = orderBoard(s);
     if (board.orders.some((o) => o.kind === 'cutting')) for (const p of s.plants) addCuttings(s, p.species, trimPlant(s, p.id));
@@ -86,6 +84,8 @@ describe('前期收入劇本（mvp.md §4.4.1）', () => {
       expect(60 - days[days.length - 1]).toBeLessThanOrEqual(7);
       // 訂單也要有收入（不能全靠每日小事）
       expect(income.some((x) => x.from !== 'daily' && x.day <= 45)).toBe(true);
+      // 寶箱獎勵池（polish-to-9.md U5）：14 天內至少開出 3 種不同獎勵
+      expect(new Set(income.filter((x) => x.from === 'daily' && x.day <= 14).map((x) => x.kind)).size).toBeGreaterThanOrEqual(3);
     }, 60_000);
   }
 });
