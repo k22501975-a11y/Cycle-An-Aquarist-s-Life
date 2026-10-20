@@ -127,7 +127,7 @@ async function start(): Promise<void> {
   /** 「第一次」的演出：慶祝卡＋撥弦琶音，每件事只演一次。 */
   const moment = (id: MomentId, spec: CelebrateSpec): boolean => {
     if (!firstTime(store, id)) return false;
-    audio.play('fanfare');
+    audio.play('fanfare', false);
     celebration.show(spec);
     return true;
   };
@@ -1017,7 +1017,7 @@ async function start(): Promise<void> {
   // 水缸撐滿整個畫面；告訴畫面狀態列與按鈕列蓋住多少，魚就不會游到它們後面。
   const tankLabel = h('div.tank-label');
   stage.append(tankLabel);
-  const guide = new Guide(stage, store, (id) => audio.play(id), () => requestAnimationFrame(() => measure()));
+  const guide = new Guide(stage, store, (id) => audio.play(id, false), () => requestAnimationFrame(() => measure()));
   // 老闆一次只說一件事（G9）：新手引導在說、慶祝卡（也有老闆的話）在演時，事件帶出來的老闆對話先排隊
   setOwnerBlocker(() => guide.talking || celebration.isOpen);
   guide.openShop = (tab) => openShop(tab);
@@ -1145,7 +1145,7 @@ async function start(): Promise<void> {
     const t = game.tanks[tank] ?? game.state;
     const mom = sim.dueMothers(t)[0];
     const name = mom ? fishName(mom) : '那尾母魚';
-    audio.play('quest');
+    audio.play('quest', false);
     const yes = await ownerGuide(`${name}肚子很鼓，快生了！我送你一個育幼盒，已經掛在缸邊。把她放進去，生下的小魚掉進隔間，大魚就吃不到。之後要更多再到商店買。`, '放進去');
     if (!yes) {
       toasts.show('育幼盒在「設備與維護」裡，待辦也有按鈕可以放');
@@ -1196,7 +1196,7 @@ async function start(): Promise<void> {
       const shrimp = !!mom && sim.isShrimpSpecies(mom.species);
       if (tank === game.active && e.subjectId !== undefined) view.celebrate(e.subjectId);
       const first = firstTime(store, 'first_fry');
-      if (first) audio.play('fanfare');
+      if (first) audio.play('fanfare', false);
       celebration.show({
         art: fryArt(mom?.species ?? 'guppy'),
         title: `${tankPrefix(tank)}${shrimp ? '孵出' : '生了'} ${e.count} ${shrimp ? '隻小蝦' : '尾小魚'}！`,
@@ -1247,7 +1247,7 @@ async function start(): Promise<void> {
     const p = sim.phenotype(top.fish.genome!);
     const fin = p.bigC ? 'bigC' : p.swallow ? 'swallow' : p.ribbon ? 'ribbon' : p.tailShape === 'halfmoon' ? 'halfmoon' : undefined;
     if (top.tank === game.active) view.celebrate(top.fish.id);
-    audio.play('fanfare');
+    audio.play('fanfare', false);
     celebration.show({
       art: guppyArt(sim.lookIndex(p), fin),
       src: view.portrait(top.fish) ?? undefined,
