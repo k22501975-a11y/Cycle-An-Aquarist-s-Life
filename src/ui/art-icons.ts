@@ -41,7 +41,7 @@ export function artImg(name: ArtIcon, cls = 'art-icon'): HTMLImageElement {
 }
 
 /** 已經有圖的老闆表情（public/art/ui/owner-<表情>.webp）；沒有的用平常的頭像。 */
-const OWNER_MOOD_ART: ReadonlySet<OwnerMood> = new Set<OwnerMood>([]);
+const OWNER_MOOD_ART: ReadonlySet<OwnerMood> = new Set<OwnerMood>(['happy', 'worried', 'surprised', 'proud']);
 
 /** 阿德老闆的頭像（插畫，第 11 批），mood 是表情（V1，看他說的話，owner-mood.ts）；載入失敗退回選單用的小圖示。 */
 export function ownerImg(cls: string, mood: OwnerMood = 'calm'): HTMLImageElement {
