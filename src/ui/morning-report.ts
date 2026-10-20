@@ -15,7 +15,7 @@ import {
   type SimEvent,
   type TankState,
 } from '../sim';
-import { DEATH_CAUSE_LABELS, describeEvent, fryEatenText } from './labels';
+import { deathText, describeEvent, fryEatenText } from './labels';
 
 /**
  * 「過一晚」的早上報告（first-10-minutes.md F2）：睡前拍一張快照，醒來跟現在比，
@@ -125,7 +125,10 @@ const TONE_ORDER: Record<ReportItem['tone'], number> = { bad: 0, warn: 1, good: 
 export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: number, crisis: Crisis | null): MorningReport {
   const items: ReportItem[] = [];
   if (crisis) {
-    items.push({ kind: 'crisis', tank: crisis.tank, tone: 'bad', text: crisisText(crisis).replace(/，已經從快轉切回正常速度$/, '，先停下來處理'), action: crisisAction(crisis) });
+    // 半夜死魚停下來的：危機那條就是死亡那條，一樣寫死因、數值、怎麼避免（U4）
+    const died = crisis.event?.type === 'fish_died' ? crisis.event : null;
+    const text = died ? deathLine(tanks[crisis.tank] ?? tanks[0], died) : crisisText(crisis).replace(/，已經從快轉切回正常速度$/, '，先停下來處理');
+    items.push({ kind: 'crisis', tank: crisis.tank, tone: 'bad', text, action: crisisAction(crisis), subjectId: died?.subjectId });
   }
   tanks.forEach((t, index) => {
     const snap = before.tanks.find((s) => s.tank === t);
@@ -133,12 +136,10 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     const push = (item: Omit<ReportItem, 'tank'>) => items.push({ ...item, tank: index, text: where + item.text });
     const events = snap ? t.events.slice(snap.events ? t.events.lastIndexOf(snap.events) + 1 : 0) : [];
 
-    // 死亡：每條都列出原因（死亡必須有原因可循）
+    // 死亡：每條都寫死因、當時的數值、下次怎麼避免（U4：死亡必須有原因可循）
     for (const e of events.filter((x) => x.type === 'fish_died')) {
       if (crisis?.event === e) continue;
-      const fish = allFish(t).find((f) => f.id === e.subjectId);
-      const name = fish ? FISH_SPECIES[fish.species].name : '一條魚';
-      push({ kind: 'death', tone: 'bad', text: `${name}死了，可能原因：${DEATH_CAUSE_LABELS[e.cause ?? 'unknown'] ?? e.cause}`, action: 'remove_dead', subjectId: e.subjectId });
+      push({ kind: 'death', tone: 'bad', text: deathLine(t, e), action: 'remove_dead', subjectId: e.subjectId });
     }
     // 生病、設備
     for (const e of events) {
@@ -207,6 +208,12 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   items.sort((a, b) => (a.kind === 'crisis' ? -1 : b.kind === 'crisis' ? 1 : TONE_ORDER[a.tone] - TONE_ORDER[b.tone]));
   const day = Math.floor(tanks[0].hours / 24) + 1;
   return { title: crisis ? '半夜出狀況了' : `早安，第 ${day} 天`, hours: sleptHours, stopped: !!crisis, items };
+}
+
+/** 一條死魚的報告文字（魚撈掉了就叫「一條魚」）。 */
+function deathLine(t: TankState, e: SimEvent): string {
+  const fish = allFish(t).find((f) => f.id === e.subjectId);
+  return deathText(fish ? FISH_SPECIES[fish.species].name : '一條魚', e, fish);
 }
 
 const pct = (x: number) => `${Math.round(Math.min(1, x) * 100)}%`;
