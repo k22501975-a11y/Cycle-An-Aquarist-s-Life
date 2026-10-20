@@ -15,7 +15,7 @@ import {
   type SimEvent,
   type TankState,
 } from '../sim';
-import { deathText, describeEvent, fryEatenText } from './labels';
+import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 
 /**
  * 「過一晚」的早上報告（first-10-minutes.md F2）：睡前拍一張快照，醒來跟現在比，
@@ -141,12 +141,18 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       if (crisis?.event === e) continue;
       push({ kind: 'death', tone: 'bad', text: deathLine(t, e), action: 'remove_dead', subjectId: e.subjectId });
     }
-    // 生病、設備
+    // 生病：同一種病合成一行（「3 條魚有白點」），不再一條魚一行（polish-to-9.md G3）。
+    // 半夜叫醒的那條也算進來，危機那行只說「有魚生病了」，原因寫在這裡
+    for (const sick of groupSick(events)) {
+      const e = sick[0];
+      const n = new Set(sick.map((x) => x.subjectId)).size;
+      const text = n <= 1 ? (describeEvent(t, e)?.text ?? '有魚生病了') : sickText(sick, n);
+      push({ kind: 'disease', tone: 'warn', text, action: 'treat', subjectId: e.subjectId, count: n > 1 ? n : undefined });
+    }
+    // 設備
     for (const e of events) {
       if (crisis?.event === e) continue;
-      if (e.type === 'ich_visible' || e.type === 'disease_visible') {
-        push({ kind: 'disease', tone: 'warn', text: describeEvent(t, e)?.text ?? '有魚生病了', action: 'treat', subjectId: e.subjectId });
-      } else if (['heater_broke', 'heater_stuck', 'heater_exposed', 'power_out', 'controller_cut'].includes(e.type)) {
+      if (['heater_broke', 'heater_stuck', 'heater_exposed', 'power_out', 'controller_cut'].includes(e.type)) {
         push({ kind: 'equipment', tone: 'bad', text: describeEvent(t, e)?.text ?? '設備出狀況了', action: 'equipment' });
       } else if (e.type === 'plant_died') {
         push({ kind: 'plant_died', tone: 'warn', text: '有一株水草溶光了', action: 'trim' });
@@ -214,6 +220,29 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
 function deathLine(t: TankState, e: SimEvent): string {
   const fish = allFish(t).find((f) => f.id === e.subjectId);
   return deathText(fish ? FISH_SPECIES[fish.species].name : '一條魚', e, fish);
+}
+
+/** 昨晚的發病事件，依病分組（白點一組、柱狀病一組、鰓吸蟲一組），照第一次出現的順序。 */
+function groupSick(events: SimEvent[]): SimEvent[][] {
+  const groups = new Map<string, SimEvent[]>();
+  for (const e of events) {
+    const key = e.type === 'ich_visible' ? 'ich' : e.type === 'disease_visible' ? (e.cause ?? 'disease') : null;
+    if (!key) continue;
+    const g = groups.get(key);
+    if (g) g.push(e);
+    else groups.set(key, [e]);
+  }
+  return [...groups.values()];
+}
+
+/** 好幾條魚發同一種病時的一行字。白點把這一波的原因都寫出來。 */
+function sickText(sick: SimEvent[], n: number): string {
+  const e = sick[0];
+  if (e.type === 'ich_visible') {
+    const causes = [...new Set(sick.map(ichCauseText).filter((x) => x))].map((x) => x.replace('。原因：', ''));
+    return `${n} 條魚有白點${causes.length ? `。原因：${causes.join('；')}` : ''}`;
+  }
+  return e.cause === 'columnaris' ? `${n} 條魚嘴巴和身上長出白色棉絮狀的斑：柱狀病，快下抗生素` : `${n} 條魚鰓蓋張開、呼吸很急：水質正常的話是鰓吸蟲，下驅蟲藥`;
 }
 
 const pct = (x: number) => `${Math.round(Math.min(1, x) * 100)}%`;

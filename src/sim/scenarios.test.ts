@@ -374,6 +374,22 @@ describe('疾病', () => {
     expect(s.events.some((e) => e.type === 'ich_visible')).toBe(true);
   });
 
+  it('白點病要有誘因才會爆發：缸裡留著蟲，沒有溫差、新魚、太擠就不會上身；溫差 ≥3°C 會（polish-to-9.md §4）', () => {
+    const calm = createTank({ ...STARTER, seed: 24, matureMedia: true });
+    stock(calm, 'guppy', 8);
+    calm.water.ichPathogen = 2;
+    calm.water.ichCysts = 5;
+    const swing = structuredClone(calm);
+    runDays(calm, 14);
+    expect(calm.fish.some((f) => f.ich.stage !== 'none')).toBe(false);
+    expect(calm.events.some((e) => e.type === 'ich_visible')).toBe(false);
+    // 加熱棒一天調高一天調低：24 小時內溫差超過 3°C
+    runDays(swing, 14, { onDay: (st, d) => setHeaterTarget(st, d % 2 === 0 ? 29 : 24) });
+    const spots = swing.events.filter((e) => e.type === 'ich_visible');
+    expect(spots.length).toBeGreaterThan(0);
+    expect(spots.every((e) => e.cause === 'temp_swing')).toBe(true);
+  });
+
   it('下藥加上提高水溫能控制白點病；不治療的缸持續惡化', () => {
     const untreated = createTank({ ...STARTER, seed: 21, matureMedia: true });
     stock(untreated, 'guppy', 8);
