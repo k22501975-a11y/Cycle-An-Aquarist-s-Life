@@ -212,7 +212,9 @@ export function householdTodos(tanks: TankState[], active: number): Todo[] {
     const urgent = todos(t, tanks.filter((x) => x !== t)).filter((x) => x.tone !== 'ok' && !SHARED_TODO.test(x.text));
     if (urgent.length === 0) return;
     const more = urgent.length > 1 ? `（還有 ${urgent.length - 1} 件）` : '';
-    extra.push({ ...urgent[0], text: `${tankLabel(tanks, i)}：${urgent[0].text}${more}`, tank: i });
+    // 只帶「去哪處理」：育幼盒、分缸、螺這些按鈕會作用在目前這缸，別缸的不能直接按（點了先切到那缸再處理）
+    const { tone, go, subjectId } = urgent[0];
+    extra.push({ text: `${tankLabel(tanks, i)}：${urgent[0].text}${more}`, tone, go: go ?? (urgent[0].nursery ? 'nursery' : urgent[0].snails ? 'snails' : undefined), subjectId, tank: i });
   });
   if (extra.length === 0) return out;
   const merged = [...out.filter((x) => x.text !== '一切正常'), ...extra];
