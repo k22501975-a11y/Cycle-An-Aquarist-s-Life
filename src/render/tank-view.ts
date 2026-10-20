@@ -101,6 +101,8 @@ interface FishView {
   turn: TurnState;
   /** 蝦的小螯與腹足（程式畫的細線）。 */
   limbs: Graphics | null;
+  /** 剛出生（V3）：在媽媽身邊等 wait 秒才出現，一尾接一尾冒出來，t 是出現後過了幾秒。 */
+  born?: { mother: number; wait: number; t: number };
   /** 目前套用的發色加成（分四段，變了才換濾鏡）。 */
   /** 目前套用的色調（發色加成、轉色、老魚褪色），變了才重建濾鏡。 */
   tone: string;
@@ -1570,6 +1572,41 @@ export class TankView {
     return view;
   }
 
+  /** 剛出生的仔魚是誰生的：幾個小時內有「生了」的事件、媽媽還在畫面上。讀檔補算時很久以前生的就直接出現。 */
+  private motherOf(state: TankState, fish: Fish): number | null {
+    if (!fish.alive || (fish.ageDays ?? 99) > 0.15) return null;
+    for (let i = state.events.length - 1; i >= 0; i--) {
+      const e = state.events[i];
+      if (state.hours - e.hours > 4) break;
+      if (e.type === 'fry_born' && e.subjectId !== undefined && this.fish.has(e.subjectId)) return e.subjectId;
+    }
+    return null;
+  }
+
+  /** 出生的演出：還沒輪到就藏在媽媽身邊，輪到了從小冒出來（稍微彈一下）。 */
+  private stepBirth(view: FishView, dt: number): void {
+    const born = view.born!;
+    const mom = this.fish.get(born.mother);
+    if (born.wait > 0) {
+      born.wait -= dt;
+      if (mom) {
+        // 從媽媽肚子後面一點的地方出來
+        const back = Math.sign(mom.turn.f || 1) * (mom.swimmer.size?.halfLen ?? 10) * 0.25;
+        view.swimmer.x = mom.swimmer.x + back;
+        view.swimmer.y = mom.swimmer.y + (mom.swimmer.size?.halfH ?? 4) * 0.4;
+        view.swimmer.vx = mom.swimmer.vx * 0.3 + (this.rand() - 0.5) * 20;
+        view.swimmer.vy = (this.rand() - 0.3) * 15;
+      }
+      return;
+    }
+    view.holder.visible = true;
+    born.t += dt;
+    const k = Math.min(1, born.t / BIRTH_POP);
+    // 先長到 1.15 倍再縮回 1，看起來是「啵」一下冒出來
+    view.holder.scale.set(k < 1 ? Math.sin((k * Math.PI) / 2) * (1 + 0.15 * Math.sin(k * Math.PI)) : 1);
+    if (k >= 1) view.born = undefined;
+  }
+
   /** 這條魚現在的外觀：用哪張圖、補畫哪些鰭。key 一樣畫出來就一樣。 */
   private rigSpec(fish: Fish) {
     const form = this.formOf(fish);
@@ -1690,12 +1727,21 @@ export class TankView {
 
   private syncFish(state: TankState, dt: number): void {
     const present = new Set<number>();
+    // 剛生的（V3）：這一格新出現的仔魚照順序一尾一尾從媽媽身邊冒出來
+    const bornNow = new Map<number, number>();
     for (const fish of state.fish) {
       present.add(fish.id);
       let view = this.fish.get(fish.id);
       if (!view) {
         view = this.createView(fish);
         this.fish.set(fish.id, view);
+        const mother = this.motherOf(state, fish);
+        if (mother !== null) {
+          const i = bornNow.get(mother) ?? 0;
+          bornNow.set(mother, i + 1);
+          view.born = { mother, wait: BIRTH_FIRST + i * BIRTH_GAP, t: 0 };
+          view.holder.visible = false;
+        }
       }
       this.applyRig(view, fish);
     }
@@ -1726,6 +1772,7 @@ export class TankView {
       const body = { halfLen, halfH: halfLen * ('heightPx' in rig ? rig.heightPx / Math.max(1, rig.lengthPx) : 0.35) };
       const caged = boxed.has(fish.id);
       const mood = isShrimpSpecies(fish.species) ? undefined : personalitySpec(fish);
+      if (view.born) this.stepBirth(view, dt);
       updateSwimmer(swimmer, caged ? inBox : living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX, body, begging: hungerLook(fish.hunger).begging, mood }, ctx, dt, () => this.rand());
 
       if (caged) {
@@ -2028,6 +2075,11 @@ export class TankView {
     }
   }
 }
+
+/** 出生演出：第一尾等多久、之後每尾隔多久、冒出來花幾秒（V3）。 */
+const BIRTH_FIRST = 0.3;
+const BIRTH_GAP = 0.45;
+const BIRTH_POP = 0.45;
 
 /** 魚圖的基本調色：飽和度加多少、亮度乘多少。 */
 const ART_SAT = 0.2;
