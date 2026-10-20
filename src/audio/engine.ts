@@ -135,7 +135,7 @@ export class AudioEngine {
     this.haptics.buzz(id);
   }
 
-  /** 播音效；haptic 是玩家自己的動作才給（模擬事件只出聲）。 */
+  /** 播音效；haptic 是玩家自己的動作才給。模擬觸發的（生小魚、新品系、第一次的演出、老闆開口）一律傳 false，只出聲不震。 */
   play(id: SoundId, haptic = true): void {
     // 震動不用等音訊解鎖，靜音時也照樣震
     if (haptic) this.haptics.buzz(id);

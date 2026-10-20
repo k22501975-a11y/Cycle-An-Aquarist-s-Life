@@ -13,10 +13,11 @@ import { Analytics } from './net/analytics';
 import { isNativeApp, saveTextFile } from './ui/native';
 import { CloudClient } from './net/cloud';
 import { FEATURES } from './features';
-import { autoUpload, checkCloudOnStart, cloudPanel, type CloudPanelDeps } from './ui/cloud-panel';
-import { friendsPanel, giftPanel, type FriendsDeps } from './ui/friends-panel';
-import { knownArrivals, marketPanel, syncMarket, type MarketDeps } from './ui/market-panel';
-import { mallPanel, syncMall, useMallItem, type MallDeps } from './ui/mall-panel';
+// 雲端、好友、市場、商城在 MVP 是藏起來的（features.ts）：只引入型別，程式用到時才載入，不算進主程式
+import type { CloudPanelDeps } from './ui/cloud-panel';
+import type { FriendsDeps } from './ui/friends-panel';
+import type { MarketDeps } from './ui/market-panel';
+import type { MallDeps } from './ui/mall-panel';
 import { CATEGORY_LABELS, nativePlatform, Notifier, planNotices, webPushPlatform, type PlannedNotice } from './net/push';
 import { Forecaster } from './game/forecaster';
 import { canPromptInstall, isInstalled, isIos, promptInstall, setupPwa } from './ui/pwa';
@@ -31,7 +32,8 @@ import * as sim from './sim';
 import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, useTestKit } from './sim';
 import { h } from './ui/dom';
 import { ICONS } from './ui/icons';
-import { DEATH_ADVICE, describeEvent, FIRST_PESTS_LINE, firstDeathOwnerLine, fishName, fishStrain } from './ui/labels';
+import { DEATH_ADVICE, describeEvent, FIRST_PESTS_LINE, firstDeathOwnerLine, fishName, fishStrain, pluralEventText } from './ui/labels';
+import { mergeEventToasts, type EventToast } from './ui/notify-gate';
 import { personaChip } from './ui/persona';
 import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
 import {
@@ -127,7 +129,7 @@ async function start(): Promise<void> {
   /** 「第一次」的演出：慶祝卡＋撥弦琶音，每件事只演一次。 */
   const moment = (id: MomentId, spec: CelebrateSpec): boolean => {
     if (!firstTime(store, id)) return false;
-    audio.play('fanfare');
+    audio.play('fanfare', false);
     celebration.show(spec);
     return true;
   };
@@ -235,6 +237,33 @@ async function start(): Promise<void> {
     },
   };
   debugHandle.cloud = cloud;
+  // 這幾個介面拆成另外的檔案，用到才載入（主程式 gzip 有 300 KB 上限，見 scripts/check-assets.mjs）
+  // 網頁版離線時第一次打開會載不到：提示一聲就停在這裡，不讓它變成當機畫面
+  const lazyUi =
+    <T,>(load: () => Promise<T>) =>
+    () =>
+      load().catch(() => {
+        toasts.show('載入失敗，連上網路後重新整理再試一次', 'warn');
+        return new Promise<T>(() => {});
+      });
+  const cloudUi = lazyUi(() => import('./ui/cloud-panel'));
+  const friendsUi = lazyUi(() => import('./ui/friends-panel'));
+  const mallUi = lazyUi(() => import('./ui/mall-panel'));
+  const loadMarket = lazyUi(() => import('./ui/market-panel'));
+  /** 市場載入過才會有在路上的貨（App 版排到貨通知用）。 */
+  let marketMod: Awaited<ReturnType<typeof loadMarket>> | null = null;
+  const marketUi = async () => (marketMod ??= await loadMarket());
+  const openCloud = () => void cloudUi().then((m) => sheet.open('雲端存檔', () => m.cloudPanel(cloudDeps)));
+  const openFriends = () => void friendsUi().then((m) => sheet.open('好友', () => m.friendsPanel(friendsDeps)));
+  // 背景同步：雲端沒開或沒登入時這些本來就什麼都不做（伺服器網址沒設時每個請求都直接回 unavailable），先檢查就不用載入
+  const autoUpload = async () => (cloud.available && cloud.session ? (await cloudUi()).autoUpload(cloudDeps) : false);
+  const checkCloudOnStart = async () => {
+    if (cloud.available && cloud.session) await (await cloudUi()).checkCloudOnStart(cloudDeps);
+  };
+  const syncMarket = async () => (cloud.available && cloud.session ? (await marketUi()).syncMarket(marketDeps) : null);
+  const syncMall = async () => {
+    if (cloud.available && cloud.session) await (await mallUi()).syncMall(mallDeps);
+  };
   // 匿名數據分析：玩家同意才會送（設定 › 隱私）
   const analytics = new Analytics(import.meta.env.VITE_API_URL, store);
 
@@ -267,7 +296,7 @@ async function start(): Promise<void> {
             toasts.show(`幫 ${v.name} 的缸按了讚`);
           },
         }, '按讚'),
-        h('button.btn', { onclick: () => sheet.open(`送禮給 ${v.name}`, () => giftPanel(friendsDeps, v.name, 20)) }, '送禮'),
+        h('button.btn', { onclick: () => void friendsUi().then((m) => sheet.open(`送禮給 ${v.name}`, () => m.giftPanel(friendsDeps, v.name, 20))) }, '送禮'),
         h('button.btn.primary', { onclick: leaveVisit }, '回家'),
       ),
     );
@@ -296,7 +325,7 @@ async function start(): Promise<void> {
     stage.append(visitBar);
     requestAnimationFrame(() => measure());
   };
-  const friendsDeps: FriendsDeps = { cloud, game, sheet, toasts, visit: (name) => void visit(name), openCloud: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) };
+  const friendsDeps: FriendsDeps = { cloud, game, sheet, toasts, visit: (name) => void visit(name), openCloud };
   // 推播：關掉遊戲前預測接下來會發生的事，交給伺服器（網頁）或手機（App）到時間提醒
   const notifier = new Notifier(store, isNativeApp() ? nativePlatform() : webPushPlatform(cloud, store));
   const forecaster = new Forecaster();
@@ -313,7 +342,7 @@ async function start(): Promise<void> {
     const list = planNotices(forecastAlerts, notifier.prefs, forecastAt, game.clock.timeScale > 0 ? sim.DEFAULT_TIME_SCALE : 0);
     // App 收不到伺服器的通知，到貨時間自己排（網頁版由伺服器送）
     if (notifier.platform?.kind === 'native' && notifier.prefs.categories.market)
-      list.push(...knownArrivals().map((a) => ({ at: a.at, category: 'market' as const, title: "Aquarist's Life", body: `「${a.title}」到貨了，記得對水再放進缸裡`, tag: `arrive-${a.id}` })));
+      list.push(...(marketMod?.knownArrivals() ?? []).map((a) => ({ at: a.at, category: 'market' as const, title: "Aquarist's Life", body: `「${a.title}」到貨了，記得對水再放進缸裡`, tag: `arrive-${a.id}` })));
     return list.sort((a, b) => a.at - b.at).slice(0, 20);
   };
   const planPush = async () => {
@@ -325,14 +354,14 @@ async function start(): Promise<void> {
     }
     await notifier.plan(plannedNotices());
   };
-  const marketDeps: MarketDeps = { cloud, game, sheet, toasts, sound: ctx.sound, openCloud: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)), syncSave: () => autoUpload(cloudDeps) };
+  const marketDeps: MarketDeps = { cloud, game, sheet, toasts, sound: ctx.sound, openCloud, syncSave: autoUpload };
   const mallDeps: MallDeps = marketDeps;
-  ctx.useMall = (item, apply, refusal) => useMallItem(mallDeps, item, apply, refusal);
+  ctx.useMall = async (item, apply, refusal) => (await mallUi()).useMallItem(mallDeps, item, apply, refusal);
   const checkGifts = async () => {
     if (!cloud.session) return;
     const res = await cloud.gifts();
     if (res.ok && res.value.length > 0)
-      toasts.show(`${res.value[0].from}${res.value.length > 1 ? ` 等朋友` : ''}送你禮物`, 'info', { label: '看看', run: () => sheet.open('好友', () => friendsPanel(friendsDeps)) });
+      toasts.show(`${res.value[0].from}${res.value.length > 1 ? ` 等朋友` : ''}送你禮物`, 'info', { label: '看看', run: openFriends });
   };
   // 可安裝的 App：有新版時提示重新整理（先存檔）
   setupPwa((apply) => toasts.show('有新版本了', 'info', { label: '更新', run: () => (save(), apply()) }));
@@ -590,7 +619,7 @@ async function start(): Promise<void> {
     const lower = lowerQuality(uiPrefs.quality);
     if (!lower) return;
     setQuality(lower);
-    toasts.show(`畫面有點卡，畫質自動調成「${QUALITY_LABELS[lower]}」。可以在設定裡改回來`, 'info');
+    toasts.show(`畫面有點卡，畫質調成「${QUALITY_LABELS[lower]}」`, 'info');
   });
   app.stage.addChild(view.root);
   // 開發用幀率顯示：設定裡打開，或網址加 ?fps
@@ -867,7 +896,7 @@ async function start(): Promise<void> {
       h('div.row', {}, h('button.btn', { onclick: exportSave }, '匯出存檔'), h('button.btn', { onclick: importSave }, '從檔案匯入')),
       h('p.hint', {}, '遊戲每 10 秒自動存檔，每 30 分鐘自動備份一次；存檔壞掉時會自動用備份還原。換手機時可以匯出成檔案帶過去。'),
       ...(FEATURES.cloudSave
-        ? [h('h3', {}, '雲端存檔'), h('button.btn', { onclick: () => sheet.open('雲端存檔', () => cloudPanel(cloudDeps)) }, cloud.session ? `雲端存檔（${cloud.session.username}）` : '登入雲端存檔')]
+        ? [h('h3', {}, '雲端存檔'), h('button.btn', { onclick: openCloud }, cloud.session ? `雲端存檔（${cloud.session.username}）` : '登入雲端存檔')]
         : []),
       h('h3', {}, '通知'),
       ...notifySection(),
@@ -887,9 +916,9 @@ async function start(): Promise<void> {
         'div.menu-grid',
         {},
         menuTile('tanks', '我的水缸', '切換、加一缸', () => sheet.open('我的水缸', () => tanksPanel(ctx))),
-        FEATURES.friends ? menuTile('friends', '好友', '參觀、按讚、送禮', () => sheet.open('好友', () => friendsPanel(friendsDeps))) : null,
-        FEATURES.market ? menuTile('market', '市場', '買賣魚蝦和水草', () => sheet.open('市場', () => marketPanel(marketDeps))) : null,
-        FEATURES.mall ? menuTile('mall', '商城', '點數、特效藥、套缸', () => sheet.open('商城', () => mallPanel(mallDeps))) : null,
+        FEATURES.friends ? menuTile('friends', '好友', '參觀、按讚、送禮', openFriends) : null,
+        FEATURES.market ? menuTile('market', '市場', '買賣魚蝦和水草', () => void marketUi().then((m) => sheet.open('市場', () => m.marketPanel(marketDeps)))) : null,
+        FEATURES.mall ? menuTile('mall', '商城', '點數、特效藥、套缸', () => void mallUi().then((m) => sheet.open('商城', () => m.mallPanel(mallDeps)))) : null,
         menuTile('codex', '圖鑑', '魚蝦、水草、疾病', () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen))),
         menuTile('records', '紀錄', '水質趨勢、事件', () => sheet.open('紀錄', () => recordsPanel(ctx))),
         menuTile('guide', '教學', '再聽阿德老闆說一次', () => (sheet.close(), guide.restart())),
@@ -1022,7 +1051,7 @@ async function start(): Promise<void> {
   // 水缸撐滿整個畫面；告訴畫面狀態列與按鈕列蓋住多少，魚就不會游到它們後面。
   const tankLabel = h('div.tank-label');
   stage.append(tankLabel);
-  const guide = new Guide(stage, store, (id) => audio.play(id), () => requestAnimationFrame(() => measure()));
+  const guide = new Guide(stage, store, (id) => audio.play(id, false), () => requestAnimationFrame(() => measure()));
   // 老闆一次只說一件事（G9）：新手引導在說、慶祝卡（也有老闆的話）在演時，事件帶出來的老闆對話先排隊
   setOwnerBlocker(() => guide.talking || celebration.isOpen);
   guide.openShop = (tab) => openShop(tab);
@@ -1125,9 +1154,10 @@ async function start(): Promise<void> {
     if (d.day !== dailyDay) {
       dailyDay = d.day;
       // 過一晚時早上報告卡會列出來，不另外跳通知
-      if (d.tasks.length && !sleepingNow) toasts.show(`今天的小事：${d.tasks.map((t) => sim.DAILY_TEXT[t.id]).join('、')}`);
+      // 今天的題目左上角的小卡就看得到，不另外跳通知（通知太亂）
     }
-    for (const id of fresh) toasts.show(dailyDoneText(d, id));
+    // 一件一件做完只在小卡上打勾；三件都做完才跳一則
+    if (fresh.length && sim.canClaimDaily(game.tanks)) toasts.show(dailyDoneText(d, fresh[fresh.length - 1]));
     if (fresh.length && sim.canClaimDaily(game.tanks)) audio.play('quest');
     renderDaily();
   };
@@ -1178,7 +1208,7 @@ async function start(): Promise<void> {
     const t = game.tanks[tank] ?? game.state;
     const mom = sim.dueMothers(t)[0];
     const name = mom ? fishName(mom) : '那尾母魚';
-    audio.play('quest');
+    audio.play('quest', false);
     const yes = await ownerGuide(`${name}肚子很鼓，快生了！我送你一個育幼盒，已經掛在缸邊。把她放進去，生下的小魚掉進隔間，大魚就吃不到。之後要更多再到商店買。`, '放進去');
     if (!yes) {
       toasts.show('育幼盒在「設備與維護」裡，待辦也有按鈕可以放');
@@ -1189,6 +1219,8 @@ async function start(): Promise<void> {
   };
   /** 每缸上次提醒「小魚被吃」是第幾個遊戲天。 */
   const fryEatenToast = new Map<number, number>();
+  /** 這一幀冒出來、還沒跳的事件通知（flushEventToasts 同類合併）。 */
+  const eventToasts: EventToast[] = [];
   game.onEvent((e, tank) => {
     // 阿德老闆送育幼盒（#187）：過一晚時等報告卡關掉再帶
     if (e.type === 'nursery_gift') {
@@ -1234,7 +1266,7 @@ async function start(): Promise<void> {
       const shrimp = !!mom && sim.isShrimpSpecies(mom.species);
       if (tank === game.active && e.subjectId !== undefined) view.celebrate(e.subjectId);
       const first = firstTime(store, 'first_fry');
-      if (first) audio.play('fanfare');
+      if (first) audio.play('fanfare', false);
       celebration.show({
         art: fryArt(mom?.species ?? 'guppy'),
         title: `${tankPrefix(tank)}${shrimp ? '孵出' : '生了'} ${e.count} ${shrimp ? '隻小蝦' : '尾小魚'}！`,
@@ -1246,8 +1278,18 @@ async function start(): Promise<void> {
       return;
     }
     const msg = describeEvent(game.tanks[tank] ?? game.state, e);
-    if (msg) toasts.show(tankPrefix(tank) + msg.text, msg.tone);
+    // 先收起來，這一幀跑完再同類合併成一則（快轉時一幀會冒出好幾筆同樣的事）
+    if (msg) eventToasts.push({ key: `${tank}:${e.type}`, text: tankPrefix(tank) + msg.text, tone: msg.tone });
   });
+  const flushEventToasts = () => {
+    if (eventToasts.length === 0) return;
+    const merged = mergeEventToasts(eventToasts.splice(0), (key, n) => {
+      const tank = Number(key.split(':')[0]);
+      const text = pluralEventText(key.slice(key.indexOf(':') + 1), n);
+      return text && tankPrefix(tank) + text;
+    });
+    for (const m of merged) toasts.show(m.text, m.tone);
+  };
   // 快轉時出狀況：遊戲已經切回正常速度，提示玩家並給「去處理」（#142）
   const GEAR_CRISES = new Set(['heater_broke', 'heater_stuck', 'heater_exposed', 'controller_cut', 'power_out', 'too_hot', 'too_cold']);
   // ---- 過一晚（F2）的狀態：sleepingNow 是夜幕到報告卡關掉，inSleepCall 只有 game.sleep() 那一下 ----
@@ -1285,7 +1327,7 @@ async function start(): Promise<void> {
     const p = sim.phenotype(top.fish.genome!);
     const fin = p.bigC ? 'bigC' : p.swallow ? 'swallow' : p.ribbon ? 'ribbon' : p.tailShape === 'halfmoon' ? 'halfmoon' : undefined;
     if (top.tank === game.active) view.celebrate(top.fish.id);
-    audio.play('fanfare');
+    audio.play('fanfare', false);
     celebration.show({
       art: guppyArt(sim.lookIndex(p), fin),
       src: view.portrait(top.fish) ?? undefined,
@@ -1436,21 +1478,22 @@ async function start(): Promise<void> {
     offline.byTank.forEach((events, tank) => {
       for (const e of events) {
         const msg = describeEvent(game.tanks[tank] ?? game.state, e);
-        if (msg) toasts.show(tankPrefix(tank) + msg.text, msg.tone);
+        if (msg) eventToasts.push({ key: `${tank}:${e.type}`, text: tankPrefix(tank) + msg.text, tone: msg.tone });
       }
     });
+    flushEventToasts();
   }
   if (window.matchMedia('(orientation: portrait)').matches) toasts.show('把手機轉成橫向，水缸會更大');
   setInterval(save, 10_000);
   // 雲端：開遊戲時看看別的裝置有沒有玩過；之後每 10 分鐘和切到背景時自動上傳
-  void checkCloudOnStart(cloudDeps).then(checkGifts).then(() => syncMarket(marketDeps)).then(() => syncMall(mallDeps));
+  void checkCloudOnStart().then(checkGifts).then(syncMarket).then(syncMall);
   // 市場：賣出的魚自動出貨、貨款入帳、到貨提醒
-  setInterval(() => void syncMarket(marketDeps), 60_000);
+  setInterval(() => void syncMarket(), 60_000);
   // 推播預測：開著遊戲時每 3 分鐘重算一次，關掉時直接用
   void notifier.refresh().then(() => notifier.clear()).then(() => refreshForecast());
   setInterval(() => void refreshForecast(), 3 * 60_000);
   window.addEventListener('pagehide', () => void planPush());
-  setInterval(() => void autoUpload(cloudDeps), 10 * 60_000);
+  setInterval(() => void autoUpload(), 10 * 60_000);
   analytics.track('session_start', sessionProps());
   guide.questDone = (step, id) => {
     analytics.track('quest_done', { step });
@@ -1473,7 +1516,7 @@ async function start(): Promise<void> {
       app.ticker.stop();
       hiddenAt = Date.now();
       save();
-      void autoUpload(cloudDeps);
+      void autoUpload();
       void analytics.flush(true);
       // 先送上次的預測，再用現在的狀態重算一次（頁面還活著的話會換掉）
       void planPush().then(() => refreshForecast()).then(() => planPush());
@@ -1485,9 +1528,10 @@ async function start(): Promise<void> {
       away.byTank.forEach((events, tank) =>
         events.forEach((e) => {
           const msg = describeEvent(game.tanks[tank] ?? game.state, e);
-          if (msg) toasts.show(tankPrefix(tank) + msg.text, msg.tone);
+          if (msg) eventToasts.push({ key: `${tank}:${e.type}`, text: tankPrefix(tank) + msg.text, tone: msg.tone });
         }),
       );
+      flushEventToasts();
     }
   });
   window.addEventListener('pagehide', save);
@@ -1532,6 +1576,7 @@ async function start(): Promise<void> {
     // 雲端模式最多 ×7：每幀檢查，登入、讀檔、匯入、從雲端下載後都會套到（#112）
     game.clock.timeScale = cloudTimeScale(game.clock.timeScale, !!cloud.session);
     game.advance(elapsedMS);
+    flushEventToasts();
     if (visiting) {
       const n = Math.min(visitClock.advance(elapsedMS), 60);
       for (let i = 0; i < n; i++) sim.step(visiting.state);
