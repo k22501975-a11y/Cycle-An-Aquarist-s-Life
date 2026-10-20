@@ -152,7 +152,7 @@ export function updateQuarantine(state: TankState, dt: number): void {
     if (fish.health <= 0) {
       fish.health = 0;
       fish.alive = false;
-      recordEvent(state, { type: 'fish_died', subjectId: fish.id, cause: cause || 'unknown' });
+      recordEvent(state, { type: 'fish_died', subjectId: fish.id, cause: cause || 'unknown', value: QUARANTINE_TEMP_C });
     }
   }
   spreadInfections(state, living, dt, 2);

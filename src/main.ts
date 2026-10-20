@@ -31,7 +31,7 @@ import * as sim from './sim';
 import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, useTestKit } from './sim';
 import { h } from './ui/dom';
 import { ICONS } from './ui/icons';
-import { DEATH_ADVICE, describeEvent, fishName, fishStrain } from './ui/labels';
+import { DEATH_ADVICE, describeEvent, firstDeathOwnerLine, fishName, fishStrain } from './ui/labels';
 import { personaChip } from './ui/persona';
 import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
 import {
@@ -1121,6 +1121,8 @@ async function start(): Promise<void> {
   const tankPrefix = (tank: number) => (game.tanks.length > 1 && tank !== game.active ? `${sim.tankLabel(game.tanks, tank)}：` : '');
   /** 過一晚時老闆送了育幼盒：報告卡關掉後再帶玩家放母魚（記是哪一缸）。 */
   let nurseryGiftTank: number | null = null;
+  /** 過一晚時第一次死魚：報告卡關掉後阿德老闆再來安慰（U4）。 */
+  let firstDeathLine: string | null = null;
   /** 第一次有母魚快生了，老闆送育幼盒，一個步驟帶玩家把她放進去（mvp.md §4.4.2 第 2 點）。 */
   const nurseryGuide = async (tank: number) => {
     const t = game.tanks[tank] ?? game.state;
@@ -1142,6 +1144,15 @@ async function start(): Promise<void> {
     if (e.type === 'nursery_gift') {
       if (game.sleeping || sleepingNow) nurseryGiftTank = tank;
       else void nurseryGuide(tank);
+    }
+    // 第一次死魚（不管什麼死法）：阿德老闆安慰一次、說怎麼避免（U4）；過一晚的話等報告卡關掉再說
+    if (e.type === 'fish_died' && firstTime(store, 'first_death')) {
+      const cause = e.cause as DeathAdviceCause | undefined;
+      if (cause && cause in DEATH_ADVICE) firstTime(store, `died_${cause}`); // 同一段說明下面不再講第二次
+      const t = game.tanks[tank] ?? game.state;
+      const line = firstDeathOwnerLine(e, [...t.fish, ...(t.quarantine?.fish ?? [])].find((f) => f.id === e.subjectId));
+      if (game.sleeping || sleepingNow) firstDeathLine = line;
+      else void ownerSay(line);
     }
     // 過一晚的時候不跳提示，早上報告會一條一條列出來
     if (game.sleeping) return;
@@ -1328,6 +1339,10 @@ async function start(): Promise<void> {
           const tank = nurseryGiftTank;
           nurseryGiftTank = null;
           void nurseryGuide(tank);
+        }
+        if (firstDeathLine !== null) {
+          void ownerSay(firstDeathLine);
+          firstDeathLine = null;
         }
       });
       shade.setAttribute('aria-hidden', 'false');

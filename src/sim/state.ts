@@ -312,6 +312,8 @@ export interface SimEvent {
   cause?: string;
   /** 數量（例如一胎生了幾尾）。 */
   count?: number;
+  /** 當下的讀數（fish_died：跟死因有關的數值，例如溶氧 mg/L、水溫 °C、斷食天數，見 deathReading）。 */
+  value?: number;
 }
 
 export interface CreateTankOptions {
