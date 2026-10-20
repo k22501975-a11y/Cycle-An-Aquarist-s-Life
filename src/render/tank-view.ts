@@ -1714,7 +1714,7 @@ export class TankView {
     const inBox = all.filter((s) => boxed.has(s.id));
     const box = nurseryRect(this.waterBounds);
     if (this.poke && (this.poke.age += dt) > POKE_SECONDS) this.poke = null;
-    const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food, frenzy: this.food.length ? frenzyLevel(this.dropT) : 0, poke: this.poke ?? undefined };
+    const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food, frenzy: this.food.length ? frenzyLevel(this.dropT) : 0, poke: this.poke ?? undefined, plants: state.plants.map((pl) => plantPlacement(pl).x * this.waterBounds.width) };
     for (const fish of state.fish) {
       const view = this.fish.get(fish.id)!;
       const { swimmer, rig } = view;
@@ -1748,7 +1748,7 @@ export class TankView {
       view.holder.position.set(swimmer.x, swimmer.y);
       // 圖層是頭朝左畫的：往右游時水平翻轉。轉身時身體先壓窄再彈回，不是瞬間翻面。
       // 蝦受驚往後彈開時頭的方向不變
-      if (fish.alive && !(swimmer.startle! > 0)) stepTurn(view.turn, swimmer.vx, dt, swimmer.eating && !isShrimpSpecies(fish.species));
+      if (fish.alive && !(swimmer.startle! > 0)) stepTurn(view.turn, swimmer.vx, dt, (swimmer.eating || swimmer.settled) && !isShrimpSpecies(fish.species));
       const facingLeft = view.turn.f > 0;
       const turn = turnScale(view.turn.f);
       const k = (this.lengthPx(fish) / rig.lengthPx) * depth;
@@ -1775,13 +1775,15 @@ export class TankView {
         rig.rotation = facingLeft ? tilt : -tilt;
         const clamped = symptoms.includes('clamped_fins');
         // 停在飼料旁邊吃：尾巴只輕輕擺著平衡
-        const hovering = swimmer.eating && !isShrimpSpecies(fish.species);
+        const hovering = (swimmer.eating || swimmer.settled) && !isShrimpSpecies(fish.species);
         rig.animate(swimmer.phase, clamped ? 0.25 : hovering ? 0.35 : 1, clamped ? 0.55 : 1, fish.finDamage);
       }
       // 咬一口：身體只往前吸一點點，動作集中在張嘴
       const len = this.lengthPx(fish) * depth;
       const dir = facingLeft ? -1 : 1;
       view.biteT += dt;
+      // 待機時在水面啄一下（V1）
+      if (swimmer.peck) view.biteT = 0;
       const kick = biteKick(view.biteT);
       if (kick > 0 && !isShrimpSpecies(fish.species)) {
         const m = biteMotion(kick);
