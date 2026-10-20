@@ -231,6 +231,5 @@ export function applySetup(state: TankState, draft: SetupDraft): string | null {
   eq.light = { spec: LIGHTS[choice.light], startHour: 10, photoperiodHours: 8 };
   eq.airPump = choice.air === 'none' ? null : { spec: AIR_PUMPS[choice.air], on: true };
   eq.substrate = { spec: SUBSTRATES[choice.substrate], sinceHours: state.hours, buffer: 1 };
-  state.newTank = { setupHours: state.hours };
   return null;
 }

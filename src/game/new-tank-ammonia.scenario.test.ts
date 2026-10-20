@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from './game';
-import { addBottledBacteria, addFish, addHardscape, addPlant, FISH_SPECIES, feed, HARDSCAPE, observeSymptoms, PINCH_MEALS, simulate, useTestKit, waterChange, type TankState, type TestKitReading } from '../sim';
+import { addBottledBacteria, addFish, addHardscape, addPlant, FISH_SPECIES, feed, HARDSCAPE, newTankSyndrome, observeSymptoms, type NewTankSyndromeStatus, PINCH_MEALS, simulate, useTestKit, waterChange, type TankState, type TestKitReading } from '../sim';
 import { advanceQuest, currentQuest, newProgress } from '../ui/tutorial';
 
 /**
- * 新缸的氨（design/polish-to-9.md §6.3「P6 的新缸氨數值」）：基準玩法——40L、一公兩母、一株草、一天一小撮、
+ * 新缸的氨（design/polish-to-9.md §6.3「P6 的新缸氨數值」、§6「P6 實作確認」）：基準玩法——40L、一公兩母、一株草、一天一小撮、
  * 沒加菌液，任務叫你做什麼就做，每天早上測水、測到氨或亞硝就換三成水（跟新手節奏劇本一樣）。
  * 第 1 天早上讀 0.25、第 2～3 天最高 0.5、亞硝第 3～4 天讀 0.25、第 5 天都回到 0；
- * 換水讀數掉一格；加菌液最高 0.25、最多一天；都不換水魚會緊張（磨身、浮頭）但不會死。
+ * 換水讀數掉一格；加菌液新缸症候群不出現、一直讀 0；都不換水魚會緊張（磨身、浮頭）但不會死。
  */
 
 const alive = (s: TankState) => s.fish.filter((f) => f.alive);
@@ -28,6 +28,8 @@ interface Run {
   /** 整段期間有沒有魚看得出緊張（磨身、浮頭）。 */
   nervous: boolean;
   minHealth: number;
+  /** 第 1 天早上新缸症候群的狀態（早上報告用來說原因）。 */
+  syndrome: NewTankSyndromeStatus;
   tank: TankState;
 }
 
@@ -42,12 +44,13 @@ function play(seed: number, opts: { bacteria?: boolean; changeWater?: boolean } 
   act();
   const readings: TestKitReading[] = [];
   const drops: Run['drops'] = [];
+  let syndrome: NewTankSyndromeStatus = 'none';
   let nervous = false;
   let minHealth = 1;
   for (let d = 0; d <= 6; d++) {
     if (currentQuest(p)?.id === 'fish') {
-      for (const sex of ['male', 'female', 'female'] as const) addFish(s, 'guppy', { carriesIch: false, carries: [], sex });
       if (opts.bacteria) addBottledBacteria(s);
+      for (const sex of ['male', 'female', 'female'] as const) addFish(s, 'guppy', { carriesIch: false, carries: [], sex });
     }
     act();
     if (d === 0) readings.push(useTestKit(s));
@@ -73,13 +76,14 @@ function play(seed: number, opts: { bacteria?: boolean; changeWater?: boolean } 
     }
     const r = useTestKit(s);
     readings.push(r);
+    if (d === 0) syndrome = newTankSyndrome(s);
     act();
     if (changeWater && (r.ammonia > 0 || r.nitrite > 0)) {
       waterChange(s, 0.3);
       if (r.ammonia === 0.5) drops.push({ before: r.ammonia, after: useTestKit(s).ammonia });
     }
   }
-  return { readings, drops, nervous, minHealth, tank: s };
+  return { readings, drops, nervous, minHealth, syndrome, tank: s };
 }
 
 const deaths = (s: TankState) => s.events.filter((e) => e.type === 'fish_died');
@@ -87,7 +91,9 @@ const deaths = (s: TankState) => s.events.filter((e) => e.type === 'fish_died');
 describe('新缸的氨（polish-to-9.md §6.3 P6）', () => {
   for (const seed of [1, 2, 3]) {
     it(`seed ${seed}：基準玩法第 1 天讀 0.25、第 2～3 天最高 0.5、第 5 天回到 0，魚都活著`, () => {
-      const { readings, tank } = play(seed);
+      const { readings, syndrome, tank } = play(seed);
+      // 測到氨的原因說得出來：新缸症候群
+      expect(syndrome).toBe('active');
       const ammonia = readings.map((r) => r.ammonia);
       const nitrite = readings.map((r) => r.nitrite);
       expect(ammonia[0]).toBe(0);
@@ -115,15 +121,13 @@ describe('新缸的氨（polish-to-9.md §6.3 P6）', () => {
     }
   }, 120_000);
 
-  it('有加硝化菌液：最高只到 0.25、最多一天，比沒加的低', () => {
+  it('放魚前倒了硝化菌液：新缸症候群不出現，氨和亞硝一直讀 0', () => {
     for (const seed of [1, 2, 3]) {
-      const { readings, tank } = play(seed, { bacteria: true });
-      const ammonia = readings.map((r) => r.ammonia);
-      // 菌液的菌一倒下去就開始吃氨，新缸冒的氨大多當天就處理掉（目前第 1 天約 0.09，讀 0）
-      expect(Math.max(...ammonia)).toBeLessThanOrEqual(0.25);
-      expect(ammonia.filter((a) => a > 0).length).toBeLessThanOrEqual(1);
-      expect(Math.max(...play(seed).readings.map((r) => r.ammonia))).toBeGreaterThan(Math.max(...ammonia));
-      expect(Math.max(...readings.map((r) => r.nitrite))).toBeLessThanOrEqual(0.25);
+      const { readings, syndrome, tank } = play(seed, { bacteria: true });
+      // 看不到問題本身就是菌液的回報；早上報告說「菌液讓新缸症候群沒出現」
+      expect(syndrome).toBe('prevented_by_bacteria');
+      expect(Math.max(...readings.map((r) => r.ammonia))).toBe(0);
+      expect(Math.max(...readings.map((r) => r.nitrite))).toBe(0);
       expect(deaths(tank)).toEqual([]);
     }
   }, 120_000);

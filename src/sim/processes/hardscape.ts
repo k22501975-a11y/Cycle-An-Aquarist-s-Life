@@ -1,28 +1,6 @@
 import type { TankState } from '../state';
 
 /**
- * 新缸症候群的氨（design/polish-to-9.md §6.3「P6 的新缸氨數值」）：新開的缸剛放魚的頭幾天，底砂、濾材裡
- * 還沒有分解殘餌和糞便的微生物，新水草、造景、運輸袋帶進來的雜質也集中在這幾天分解，水裡冒出一波氨：
- * 放魚後先慢慢變多，約 1.5 天時最多，之後一天天變少，一週後幾乎沒了（整段約 59 mg，40L 約 1.5 mg/L）。
- * 魚的排泄量不變：一公兩母、一天一小撮本身很少（40L 一天才約 0.02 mg/L），光靠牠們測試劑一直讀 0；
- * 加上這一波，基準玩法第 1 天早上讀 0.25、第 2 天 0.5，硝化菌長起來後第 5 天回到 0。
- * 跟水草泥漏氨一樣以 40L 為準，換算成濃度大小缸一樣。沒放魚的新缸（無魚養水）不會有。
- */
-export const NEW_TANK_AMMONIA = { peakMgPerHour: 0.6, peakHours: 36 };
-
-/** 新開的缸放魚後過了幾小時；還沒放魚、或不是新開的缸（直接建的缸、商城套缸、舊存檔）回傳 Infinity。 */
-export function newTankAge(state: TankState): number {
-  const stocked = state.newTank?.stockedHours;
-  return stocked === undefined ? Infinity : state.hours - stocked;
-}
-
-/** 新缸這時每小時冒出多少氨（mg，以 40L 為準）：先升後降，peakHours 時最多。 */
-export function newTankAmmoniaRate(state: TankState): number {
-  const x = newTankAge(state) / NEW_TANK_AMMONIA.peakHours;
-  return Number.isFinite(x) && x > 0 ? NEW_TANK_AMMONIA.peakMgPerHour * x * Math.exp(1 - x) : 0;
-}
-
-/**
  * 造景材料悄悄改變水質（hardscape.md §2）：含碳酸鈣的石頭和珊瑚砂把 KH 拉高，
  * 水草泥吸收 KH（緩衝力會慢慢耗盡），新土前幾週漏氨，沉木的單寧酸吃掉一點 KH。
  * pH 不直接改，仍由 KH 和 CO₂ 推算，所以 pH 會跟著 KH 走。
@@ -56,10 +34,6 @@ export function updateHardscape(state: TankState, dt: number): void {
       water.tan += ((spec.ammoniaLeach.mgPerHour * (volume / 40) * Math.exp(-age / spec.ammoniaLeach.decayHours)) / volume) * dt;
     }
   }
-
-  // 新開的缸第一次有魚：新缸症候群從這時開始算
-  if (state.newTank && state.newTank.stockedHours === undefined && state.fish.some((f) => f.alive)) state.newTank.stockedHours = state.hours;
-  water.tan += ((newTankAmmoniaRate(state) * (volume / 40)) / volume) * dt;
 
   for (const item of equipment.hardscape ?? []) {
     if (item.carbonate) dissolve(item.carbonate, amount);
