@@ -1124,6 +1124,34 @@ async function start(): Promise<void> {
   guide.openShop = (tab) => openShop(tab);
   guide.openScape = () => enterScape();
   guide.note = (text) => toasts.log(text);
+  // 下一步（U1）：點任務卡帶到要做的地方
+  guide.goNext = (target) => {
+    const sick = () => game.state.fish.find((f) => f.alive && (f.ich.stage === 'visible' || sim.hasVisible(f)));
+    // 選育：先看缸裡最漂亮的公魚（觀察卡上有配對、留種的按鈕）
+    const showy = () => game.state.fish.filter((f) => f.alive && f.sex === 'male' && f.generation !== undefined).sort((a, b) => (b.generation ?? 0) - (a.generation ?? 0))[0];
+    switch (target) {
+      case 'feed':
+        return startFeeding();
+      case 'test':
+        return testBtn.click();
+      case 'orders':
+        return ordersBtn.click();
+      case 'sell':
+        return openShop('sell');
+      case 'shop_fish':
+        return openShop('fish');
+      case 'shop_tank':
+        return sheet.open('我的水缸', () => tanksPanel(ctx));
+      case 'nursery':
+        if (game.state.nurseryBox) putDueInNursery(ctx);
+        else sheet.open('育幼盒', () => nurseryPanel(ctx));
+        return;
+      case 'treat':
+        return select(sick()?.id ?? null);
+      case 'select':
+        return select(showy()?.id ?? null);
+    }
+  };
   guide.cheer = (from, coins) => ctx.reward?.(from, coins, 'small');
   let litTarget: HTMLElement | null = null;
   /** 任務要點的那顆按鈕發光；面板開著、在造景時先不亮。 */

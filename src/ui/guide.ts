@@ -1,6 +1,6 @@
 import type { SoundId } from '../audio/sounds';
 import type { KeyValueStore } from '../game/save';
-import { checkGoals, nextGoals, UNLOCK_LABELS, type Goal, type TankState } from '../sim';
+import { checkGoals, nextGoals, nextStep, UNLOCK_LABELS, type Goal, type NextStep, type NextTarget, type TankState } from '../sim';
 import { h } from './dom';
 import { artImg, ownerImg } from './art-icons';
 import { kickOwnerQueue, onOwnerAskClosed, onOwnerAskOpened, ownerAskOpen } from './owner-ask';
@@ -54,6 +54,10 @@ export class Guide {
   note: ((text: string) => void) | null = null;
   /** 任務卡上閃「做好了」時的獎勵特效（main 接上：金幣從任務卡飛出）。 */
   cheer: ((from: DOMRect, coins: number) => void) | null = null;
+  /** 點任務卡上的「下一步」（U1，教學做完後）：帶到要做的地方（main 接上）。 */
+  goNext: ((target: NextTarget) => void) | null = null;
+  /** 現在的下一步（教學做完後，目標串的第一個還沒完成的目標要做什麼）。 */
+  private step: NextStep | null = null;
   /** 情境提醒的小卡（畫面左下角）。 */
   readonly tip = h('div.owner-tip.glass', { role: 'status' });
   private tipTimer = 0;
@@ -71,7 +75,8 @@ export class Guide {
     private readonly onLayout: () => void,
   ) {
     this.progress = loadProgress(store);
-    this.pill.addEventListener('click', () => this.showQuest());
+    // 教學做完後點任務卡直接帶去做「下一步」（U1）；教學中點了再聽一次完整說明
+    this.pill.addEventListener('click', () => (this.tutorialOver && this.step && this.goNext ? this.goNext(this.step.target) : this.showQuest()));
     // 對話框掛在 body：面板（商店等）開著時也在最上層，按鈕按得到
     host.append(this.pill, this.tip);
     document.body.append(this.bubble);
@@ -89,6 +94,7 @@ export class Guide {
   /** 現在任務要點的按鈕（main 讓它發光）；任務卡正在閃「做好了」時先不亮。 */
   get target(): QuestTarget | null {
     if (this.flash || this.pages.length > 0) return null;
+    if (this.tutorialOver) return this.step ? NEXT_GLOW[this.step.target] : null;
     return currentQuest(this.progress)?.target ?? null;
   }
 
@@ -291,10 +297,21 @@ export class Guide {
       // 數得出來的目標顯示進度（#183：「養大 5 條」交單後看得出還差幾條）
       const p = goal.progress?.(this.tanks);
       const title = p ? `${goal.title}（${p[0]}/${p[1]}）` : goal.title;
-      if (this.shownGoal === goal.id + title) return;
-      this.shownGoal = goal.id + title;
-      this.pill.replaceChildren(ownerPortrait('quest-avatar'), h('span.quest-step', {}, '目標'), h('span.quest-title', { title }, title));
-    } else this.shownGoal = q || this.tanks.length === 0 ? '' : 'all-done';
+      // 下一步（U1）：照現在缸裡的狀況說具體要做什麼，點任務卡就帶過去
+      this.step = nextStep(this.tanks);
+      const key = goal.id + title + (this.step?.text ?? '');
+      if (this.shownGoal === key) return;
+      this.shownGoal = key;
+      this.pill.replaceChildren(
+        ownerPortrait('quest-avatar'),
+        h('span.quest-step', {}, '目標'),
+        h('span.quest-title', { title }, title),
+        ...(this.step ? [h('span.quest-hint', {}, `下一步：${this.step.text} ›`)] : []),
+      );
+    } else {
+      this.step = null;
+      this.shownGoal = q || this.tanks.length === 0 ? '' : 'all-done';
+    }
     if (q) {
       // 換任務時把上一個任務的進度清掉（遊戲性評測：任務 7 的卡上還寫著任務 6 的「硝化菌 100%」）
       this.shownProgress = '';
@@ -334,6 +351,19 @@ export class Guide {
     this.renderPill();
   }
 }
+
+/** 下一步要點的按鈕（發光）；沒有對應按鈕的（育幼盒、選育…）點任務卡就好。 */
+const NEXT_GLOW: Record<NextTarget, QuestTarget | null> = {
+  feed: 'feed',
+  test: 'test',
+  orders: 'orders',
+  sell: 'shop',
+  shop_fish: 'shop',
+  shop_tank: null,
+  nursery: null,
+  select: null,
+  treat: null,
+};
 
 function goalDoneText(g: Goal): string {
   const prize = [`${g.coins} 魚幣`, ...(g.unlock ? [UNLOCK_LABELS[g.unlock]] : []), ...(g.gift ? ['一顆假期飼料錠'] : [])].join('，');

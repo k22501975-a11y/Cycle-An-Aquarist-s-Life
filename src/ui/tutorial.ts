@@ -42,7 +42,7 @@ export interface Quest {
 export type QuestShopTab = 'fish' | 'snails' | 'plants' | 'gear';
 
 /** 任務要點的地方：工具列的按鈕或右上角的選單。 */
-export type QuestTarget = 'shop' | 'test' | 'feed' | 'water' | 'menu';
+export type QuestTarget = 'shop' | 'test' | 'feed' | 'water' | 'menu' | 'orders';
 
 const living = (s: TankState) => s.fish.filter((f) => f.alive);
 
