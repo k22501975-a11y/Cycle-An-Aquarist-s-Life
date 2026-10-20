@@ -4,7 +4,12 @@ import { checkGoals, nextGoals, UNLOCK_LABELS, type Goal, type TankState } from 
 import { h } from './dom';
 import { artImg, ownerImg } from './art-icons';
 import { kickOwnerQueue, onOwnerAskClosed, onOwnerAskOpened, ownerAskOpen } from './owner-ask';
-import { advanceQuest, currentQuest, loadProgress, newProgress, OWNER_NAME, pendingTip, QUESTS, questShopTab, saveProgress, type QuestShopTab, type TutorialProgress } from './tutorial';
+import { advanceQuest, currentQuest, loadProgress, newProgress, OWNER_NAME, pendingTip, QUESTS, questShopTab, saveProgress, type QuestShopTab, type QuestTarget, type TutorialProgress } from './tutorial';
+
+/** 任務卡上「做好了」閃多久。 */
+const FLASH_MS = 2600;
+/** 老闆的一句提醒在畫面邊緣留多久。 */
+const TIP_MS = 14_000;
 
 interface Page {
   text: string;
@@ -18,6 +23,12 @@ interface Page {
 /**
  * 新手引導的介面：左上角的任務小卡，以及老闆說話的對話框。
  * 教學做完（或跳過）後，小卡改顯示接下來的目標（goals.ts，M19）。
+ *
+ * P1（polish-to-9.md §6.3）：教學不再一直跳要按「下一個任務」的對話框。
+ * - 任務卡上一行提示說現在要做什麼，要點的按鈕發光（target）；做完卡上閃「✓ 種好了 +50」就自動換下一步。
+ * - 要按掉的對話框只留第一次放魚（doneDialog）；老闆完整的話進通知匣（note）。
+ * - 情境提醒（測到氨、白點…）改成畫面左下角一張小卡，不擋缸、過一陣子自己收。
+ * - 想聽老闆完整說明就點任務卡。
  */
 export class Guide {
   readonly pill = h('button.quest-pill.glass');
@@ -39,6 +50,16 @@ export class Guide {
   reward: ((questId: string, coins: number) => number) | null = null;
   /** 目標完成、發了獎勵（main 接上：存檔、更新畫面）。 */
   goalsChanged: (() => void) | null = null;
+  /** 老闆完整的話放進通知匣（main 接上）。 */
+  note: ((text: string) => void) | null = null;
+  /** 任務卡上閃「做好了」時的獎勵特效（main 接上：金幣從任務卡飛出）。 */
+  cheer: ((from: DOMRect, coins: number) => void) | null = null;
+  /** 情境提醒的小卡（畫面左下角）。 */
+  readonly tip = h('div.owner-tip.glass', { role: 'status' });
+  private tipTimer = 0;
+  /** 任務卡上正在閃的「做好了」。 */
+  private flash: { text: string; coins: number } | null = null;
+  private flashTimer = 0;
   /** 上一次 update 看到的所有缸（小卡顯示目標用）。 */
   private tanks: TankState[] = [];
   private shownGoal = '';
@@ -52,7 +73,7 @@ export class Guide {
     this.progress = loadProgress(store);
     this.pill.addEventListener('click', () => this.showQuest());
     // 對話框掛在 body：面板（商店等）開著時也在最上層，按鈕按得到
-    host.append(this.pill);
+    host.append(this.pill, this.tip);
     document.body.append(this.bubble);
     // 一次只出一個老闆對話框（G9）：問句跳出來時先收起，問句收掉再接著說
     onOwnerAskOpened(() => this.bubble.classList.remove('open'));
@@ -63,6 +84,12 @@ export class Guide {
   /** 老闆正在說（或還有話要說）。 */
   get talking(): boolean {
     return this.pages.length > 0;
+  }
+
+  /** 現在任務要點的按鈕（main 讓它發光）；任務卡正在閃「做好了」時先不亮。 */
+  get target(): QuestTarget | null {
+    if (this.flash || this.pages.length > 0) return null;
+    return currentQuest(this.progress)?.target ?? null;
   }
 
   get pillVisible(): boolean {
@@ -88,15 +115,20 @@ export class Guide {
       this.sound('quest');
       const next = currentQuest(this.progress);
       const text = paid > 0 ? `${done.done}（獎勵 ${paid} 魚幣）` : done.done;
-      this.say([{ text, label: next ? '下一個任務' : '謝謝老闆', scape: done.doneScape }, ...(next ? this.questPages() : this.goalPages('接下來可以挑戰這些目標：'))]);
+      if (done.doneDialog) {
+        this.say([{ text, label: next ? '好' : '謝謝老闆', scape: done.doneScape }]);
+        return;
+      }
+      this.note?.(text);
+      this.showFlash(done.doneShort, paid);
       return;
     }
     const goals = checkGoals(tanks, this.tutorialOver);
     if (goals.length > 0) {
       this.goalsChanged?.();
       this.sound('quest');
-      this.say([...goals.map((g) => ({ text: goalDoneText(g), label: '太好了' })), ...this.goalPages('下一個目標：')]);
-      this.renderPill();
+      for (const g of goals) this.note?.(goalDoneText(g));
+      this.showFlash(`目標達成：${goals[0].title}`, goals.reduce((sum, g) => sum + g.coins, 0));
       return;
     }
     const tip = pendingTip(this.progress, state);
@@ -104,15 +136,42 @@ export class Guide {
       this.progress.seenTips.push(tip.id);
       this.save();
       this.sound('open');
-      this.say([{ text: tip.text, label: '知道了' }]);
+      this.showTip(tip.text);
     }
+  }
+
+  /** 任務卡閃一下「✓ 做好了 +50」，接著自己換成下一步。 */
+  private showFlash(text: string, coins: number): void {
+    this.flash = { text, coins };
+    window.clearTimeout(this.flashTimer);
+    this.flashTimer = window.setTimeout(() => {
+      this.flash = null;
+      this.shownGoal = '';
+      this.renderPill();
+    }, FLASH_MS);
+    this.renderPill();
+    if (coins > 0) this.cheer?.(this.pill.getBoundingClientRect(), coins);
+  }
+
+  /** 老闆的一句提醒：畫面左下角一張小卡，不擋缸，點 ✕ 或過一陣子自己收；也進通知匣。 */
+  showTip(text: string): void {
+    const body = text.replace(new RegExp(`^${OWNER_NAME}[：:]\\s*`), '');
+    this.note?.(`${OWNER_NAME}：${body}`);
+    const close = () => {
+      window.clearTimeout(this.tipTimer);
+      this.tip.classList.remove('open');
+    };
+    this.tip.replaceChildren(ownerPortrait('tip-avatar'), h('p.tip-text', {}, body), h('button.tip-close', { 'aria-label': '收起', onclick: close }, '✕'));
+    this.tip.classList.add('open');
+    window.clearTimeout(this.tipTimer);
+    this.tipTimer = window.setTimeout(close, TIP_MS);
   }
 
   /** 開場：第一次玩的人直接看到第一個任務；任務已經做完（開缸挑完設備才開場）就不重講，下一次 update 直接說做完了。 */
   start(state?: TankState): void {
     if (this.progress.step !== 0 || this.progress.skipped) return;
     if (state && currentQuest(this.progress)?.check(state)) return;
-    this.showQuest();
+    this.renderPill();
   }
 
   restart(): void {
@@ -211,6 +270,20 @@ export class Guide {
   }
 
   private renderPill(): void {
+    if (this.flash) {
+      const { text, coins } = this.flash;
+      this.shownGoal = '';
+      this.pill.classList.add('show', 'flash');
+      this.pill.replaceChildren(
+        ownerPortrait('quest-avatar'),
+        h('span.quest-step', {}, '做好了'),
+        h('span.quest-title', { title: text }, `✓ ${text}`),
+        ...(coins > 0 ? [h('span.quest-coins', {}, h('i.coin'), `+${coins}`)] : []),
+      );
+      this.onLayout();
+      return;
+    }
+    this.pill.classList.remove('flash');
     const q = currentQuest(this.progress);
     const goal = q || this.tanks.length === 0 ? undefined : nextGoals(this.tanks, 1)[0];
     this.pill.classList.toggle('show', q !== null || goal !== undefined);
@@ -232,6 +305,7 @@ export class Guide {
         ownerPortrait('quest-avatar'),
         h('span.quest-step', {}, `任務 ${this.progress.step + 1}/${QUESTS.length}`),
         h('span.quest-title', { title: q.title }, q.short ?? q.title),
+        h('span.quest-hint', {}, q.hint),
         this.progressEl,
         this.meterEl,
       );

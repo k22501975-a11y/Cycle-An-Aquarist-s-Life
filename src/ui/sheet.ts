@@ -136,6 +136,11 @@ export class Toasts {
     this.pop(text, tone, action);
   }
 
+  /** 只記進通知匣、不跳出來（老闆完整的話；任務卡上已經閃過短句）。 */
+  log(text: string, tone: Tone = 'info'): void {
+    this.record(text, tone, undefined, true);
+  }
+
   /** 打開通知匣：都算看過了。 */
   markRead(): void {
     if (this.unread === 0) return;

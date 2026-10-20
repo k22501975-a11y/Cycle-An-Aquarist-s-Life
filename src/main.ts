@@ -438,7 +438,7 @@ async function start(): Promise<void> {
       save();
       setupPrompt.remove();
       document.body.classList.remove('setting-up');
-      moment('first_tank', { art: 'gear/tank-empty.webp', title: '你的第一個缸', sub: '水注滿、設備也開機了', owner: '先別急著放魚。倒一瓶硝化菌液，讓水先養個幾天。' });
+      moment('first_tank', { art: 'gear/tank-empty.webp', title: '你的第一個缸', sub: '水注滿、設備也開機了', owner: '接下來種一株草、放兩三條魚，硝化菌就會跟著長起來。' });
       // 「你的第一個缸」卡片關掉後老闆才開口，不然對話框會從卡片後面露出來（#171）
       celebration.whenClear(() => {
         guideHeld = false;
@@ -961,6 +961,8 @@ async function start(): Promise<void> {
     net: 'icon-net',
     orders: 'icon-orders',
   };
+  /** 任務要點的按鈕會發光（P1）。 */
+  const toolButtons: Partial<Record<keyof typeof ICONS, HTMLElement>> = {};
   const tool = (key: keyof typeof ICONS, label: string, color: string, onclick: () => void) => {
     const disc = h('span.disc', {}, icon(ICONS[key]));
     const art = TOOL_ART[key];
@@ -974,6 +976,7 @@ async function start(): Promise<void> {
       disc.append(img);
     }
     const b = h('button.tool', { onclick }, disc, h('span.lbl', {}, label));
+    toolButtons[key] = b;
     b.addEventListener('click', () => audio.play(key === 'net' ? 'net' : key === 'test' ? 'test' : 'open'));
     b.style.setProperty('--c', color);
     tools.append(b);
@@ -1059,6 +1062,18 @@ async function start(): Promise<void> {
   setOwnerBlocker(() => guide.talking || celebration.isOpen);
   guide.openShop = (tab) => openShop(tab);
   guide.openScape = () => enterScape();
+  guide.note = (text) => toasts.log(text);
+  guide.cheer = (from, coins) => ctx.reward?.(from, coins, 'small');
+  let litTarget: HTMLElement | null = null;
+  /** 任務要點的那顆按鈕發光；面板開著、在造景時先不亮。 */
+  const lightTarget = () => {
+    const t = sheet.isOpen ? null : guide.target;
+    const el = t === 'menu' ? menuBtn : t ? (toolButtons[t] ?? null) : null;
+    if (el === litTarget) return;
+    litTarget?.classList.remove('quest-target');
+    el?.classList.add('quest-target');
+    litTarget = el;
+  };
   // 開缸（F1-a）：新遊戲先挑設備，開完缸時間才開始走；關掉面板時主畫面留一個「開缸」按鈕
   // 開局 0～5 秒：阿德老闆的歡迎疊在挑設備的畫面上，點一下或 5 秒後自己收起來（mvp.md §4.4.4）；設備說明只寫在卡片上
   let welcomed = false;
@@ -1553,6 +1568,7 @@ async function start(): Promise<void> {
       renderTankChip();
       // 開缸演出和「你的第一個缸」卡片演完才讓老闆開口（「開缸」任務在演出一開始就完成，不能蓋在演出上，#171）
       if (!guideHeld) guide.update(game.state, game.tanks);
+      lightTarget();
       kickOwnerQueue();
       setupBtn.hidden = !sim.needsSetup(game.tanks[0]) || sheet.isOpen;
       checkDaily();

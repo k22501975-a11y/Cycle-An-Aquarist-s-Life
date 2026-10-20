@@ -563,7 +563,7 @@ body:has(.sheet.open) .owner.open { bottom: auto; top: calc(env(safe-area-inset-
   body:has(.sheet.open) .owner.open .owner-actions { flex-wrap: wrap; }
 }
 /* 任務小卡縮小：只放短標題和進度，不遮住左上角的缸 */
-.quest-pill { padding: 6px 12px 6px 52px; min-height: 50px; max-width: min(220px, 40vw); gap: 1px; }
+.quest-pill { padding: 6px 12px 6px 52px; min-height: 50px; max-width: min(250px, 42vw); gap: 1px; }
 .quest-avatar { left: 6px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; }
 .quest-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .quest-progress { font-size: 12px; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; max-width: 100%; }
@@ -943,3 +943,23 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .inbox-row small { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .bell-btn.ring svg { animation: bell-ring 0.6s ease-in-out; transform-origin: 50% 10%; }
 @keyframes bell-ring { 20% { transform: rotate(14deg); } 45% { transform: rotate(-12deg); } 70% { transform: rotate(6deg); } }
+
+/* P1：教學只用一行提示＋要點的按鈕發光，做完任務卡閃一下就換下一步 */
+.tool.quest-target .disc { animation: quest-glow 1.6s ease-in-out infinite; }
+.hud-btn.quest-target { animation: quest-glow 1.6s ease-in-out infinite; }
+@keyframes quest-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 214, 120, 0), inset 0 1px 0 rgba(255, 255, 255, 0.18); }
+  50% { box-shadow: 0 0 0 4px rgba(255, 214, 120, 0.55), 0 0 22px 6px rgba(255, 214, 120, 0.45); }
+}
+.quest-pill .quest-hint { color: #f3e3b8; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.quest-pill.flash { border-color: rgba(155, 232, 168, 0.7); box-shadow: 0 0 0 2px rgba(155, 232, 168, 0.35), 0 8px 24px rgba(0, 0, 0, 0.35); animation: quest-flash 0.5s ease-out; }
+.quest-pill.flash .quest-step { color: #9be8a8; }
+.quest-coins { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 700; color: var(--gold); }
+@keyframes quest-flash { 0% { transform: scale(0.94); } 60% { transform: scale(1.04); } 100% { transform: none; } }
+/* 老闆的情境提醒：左下角一張小卡，不擋缸，過一陣子自己收 */
+.owner-tip { position: absolute; z-index: 6; left: calc(env(safe-area-inset-left) + 14px); bottom: calc(var(--dock-top, 120px) + 12px); width: min(360px, 44vw); display: none; align-items: flex-start; gap: 10px; padding: 8px 34px 8px 8px; border-radius: 14px; }
+.owner-tip.open { display: flex; animation: rise 0.25s ease-out; }
+.owner-tip .tip-avatar { flex: 0 0 auto; width: 38px; height: 38px; }
+.owner-tip .tip-text { margin: 0; font-size: 12.5px; line-height: 1.45; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+.owner-tip .tip-close { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); border: 0; color: var(--muted); font-size: 12px; }
+.scaping .owner-tip, .setting-up .owner-tip { display: none !important; }

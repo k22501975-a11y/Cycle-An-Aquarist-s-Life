@@ -18,8 +18,16 @@ export interface Quest {
   meter?: (state: TankState) => number;
   /** 老闆開場說的話（分段）。 */
   lines: string[];
-  /** 完成時老闆說的話。 */
+  /** 任務卡上的一行提示：現在要做什麼（P1：教學只用一行提示，不再是要按「下一步」的對話框）。 */
+  hint: string;
+  /** 要點的按鈕（任務卡旁那顆會發光）。 */
+  target?: QuestTarget;
+  /** 完成時老闆說的話（完整的進通知匣）。 */
   done: string;
+  /** 完成時任務卡上閃一下的短句。 */
+  doneShort: string;
+  /** 完成時要老闆當面說、按掉才繼續（前 5 分鐘只有第一次放魚）。 */
+  doneDialog?: boolean;
   check: (state: TankState) => boolean;
   /** 任務卡上的進度（例如「硝化菌 40%」），看得出還差多少。 */
   progress?: (state: TankState) => string | null;
@@ -33,11 +41,16 @@ export interface Quest {
 
 export type QuestShopTab = 'fish' | 'snails' | 'plants' | 'gear';
 
+/** 任務要點的地方：工具列的按鈕或右上角的選單。 */
+export type QuestTarget = 'shop' | 'test' | 'feed' | 'water' | 'menu';
+
 const living = (s: TankState) => s.fish.filter((f) => f.alive);
 
 export const QUESTS: Quest[] = [
   {
     id: 'setup',
+    hint: '在開缸面板挑好設備，按「開缸」',
+    doneShort: '缸開好了',
     reward: 50,
     title: '開缸：挑魚缸和設備',
     short: '開缸',
@@ -51,6 +64,9 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'plant',
+    hint: '點「商店」買一株水草',
+    target: 'shop',
+    doneShort: '種好了',
     reward: 50,
     title: '種下第一株水草',
     lines: ['先到「商店」買幾株水草種下去吧。水草會吸收養分，讓新缸穩定得快一點。'],
@@ -61,6 +77,9 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'test',
+    hint: '點「測試」量一次水',
+    target: 'test',
+    doneShort: '測好了：氨和亞硝要是 0',
     reward: 50,
     title: '用測試劑測一次水',
     lines: ['魚看不見的東西才最危險。點「測試」用測試劑量一下水質。', '上面那排膠囊就是你測到的數值；沒測過的會顯示「?」，太久沒測也會變回「?」。'],
@@ -69,6 +88,10 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'fish',
+    hint: '點「商店」買 2～3 條孔雀魚',
+    target: 'shop',
+    doneShort: '魚放進去了',
+    doneDialog: true,
     reward: 50,
     title: '先放 2～3 條魚',
     lines: ['硝化菌要靠魚的排泄物（氨）才長得起來。先放少量好養的魚，例如 2～3 條孔雀魚。', '別一次放太多，新缸的細菌還處理不了那麼多廢物。'],
@@ -78,6 +101,9 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'feed',
+    hint: '點「餵食」，少少餵一點',
+    target: 'feed',
+    doneShort: '餵好了',
     reward: 50,
     title: '餵一次飼料',
     lines: ['點「餵食」。新缸期間少量就好，吃不完的飼料會爛掉變成更多氨。'],
@@ -86,6 +112,9 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'water',
+    hint: '點「換水」換掉三成的水',
+    target: 'water',
+    doneShort: '換好水了',
     reward: 50,
     title: '換一次水',
     lines: ['先試一次換水，熟悉操作：點「換水」換掉三成左右的水。新水的溫度要和缸水差不多，魚才不會受驚。', '新缸前幾天氨和亞硝酸鹽可能會冒出來，這叫「新缸症候群」。之後測到它們不是 0，就像這樣換水把毒素稀釋掉。'],
@@ -94,6 +123,9 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'scape',
+    hint: '商店「設備」買石頭或沉木',
+    target: 'shop',
+    doneShort: '有造景了',
     reward: 50,
     title: '擺一塊石頭或沉木',
     short: '擺石頭',
@@ -104,6 +136,9 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'name',
+    hint: '選單「我的水缸」幫缸取名',
+    target: 'menu',
+    doneShort: '取好名字了',
     reward: 50,
     title: '幫你的缸取個名字',
     short: '幫缸取名',
@@ -113,6 +148,9 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'cycled',
+    hint: '每天測水，有氨或亞硝就換水',
+    target: 'test',
+    doneShort: '養水完成',
     reward: 250,
     title: '養水完成：硝化菌長好、氨 0、亞硝 0',
     short: '養水完成',
@@ -133,6 +171,9 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'babies',
+    hint: '母魚肚子鼓起來就快生了',
+    doneShort: '第一窩要來了',
+    doneDialog: true,
     reward: 150,
     title: '迎接第一窩小魚',
     short: '第一窩小魚',
