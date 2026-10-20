@@ -32,6 +32,9 @@ import {
   TANKS,
   trimPlant,
   updateOrders,
+  PLANT_PRICES,
+  FISH_PRICES,
+  SNAILS,
   INCOME_GAP_DAYS,
   incomeGapOrder,
   type Fish,
@@ -289,32 +292,42 @@ describe('收入空檔保底（polish-to-9.md §4）', () => {
     board.lastChangeHours = s.hours;
     return board;
   };
+  /** 一株長到剪得下 2 株插枝的榕（自己缸裡長出來的）。 */
+  const grown = (s: TankState) => addPlant(s, 'anubias', 20);
 
-  it(`連續 ${INCOME_GAP_DAYS} 天沒有賣東西或交單，板上換一張用手上的東西就交得出來的小單；交了就重算`, () => {
+  it(`連續 ${INCOME_GAP_DAYS} 天沒有賣東西或交單，板上換一張用缸裡長出來的東西就交得出來的小單；交了就重算`, () => {
     const s = tank();
     s.hours = 20 * 24 + 8;
     const e = economy(s);
-    addCuttings(s, 'anubias', 3);
+    const plant = grown(s);
     const board = fishOnly(s);
     e.lastEarnedDay = 20 - INCOME_GAP_DAYS + 1;
     updateOrders(s);
-    expect(board.orders.some((o) => deliverableNow(s, o))).toBe(false);
+    expect(board.orders.some((o) => o.gap)).toBe(false);
     e.lastEarnedDay = 20 - INCOME_GAP_DAYS;
+    // 每個遊戲小時最多查一次
+    updateOrders(s);
+    expect(board.orders.some((o) => o.gap)).toBe(false);
+    s.hours += 1;
     updateOrders(s);
     expect(board.orders).toHaveLength(ORDER_BOARD_SIZE);
-    const gap = board.orders.find((o) => deliverableNow(s, o))!;
+    const gap = board.orders.find((o) => o.gap)!;
     expect(gap.kind).toBe('cutting');
-    expect(gap.count * gap.unitPrice).toBeGreaterThanOrEqual(40);
+    // 每株不超過店售價（一盆的三分之一）
+    expect(gap.unitPrice).toBeLessThanOrEqual(PLANT_PRICES.anubias / 3);
+    addCuttings(s, 'anubias', trimPlant(s, plant.id));
     expect(fulfillOrder([s], gap.id)).toBeGreaterThan(0);
     expect(e.lastEarnedDay).toBe(20);
   });
 
-  it('寶箱來的插枝不算交得出來的東西；什麼都沒有就不出保底單', () => {
+  it('只收自己缸裡長出來、生出來的：手上的插枝（寶箱、買來、別人送的）不算；什麼都沒有就不出保底單', () => {
     const s = tank();
     s.hours = 20 * 24 + 8;
     const e = economy(s);
     addCuttings(s, 'anubias', 2);
-    e.chestCuttings = { anubias: 2 };
+    e.chestCuttings = { anubias: 1 };
+    // 剛買的水草還沒長，剪不下來
+    addPlant(s, 'rotala');
     const board = fishOnly(s);
     e.lastEarnedDay = 0;
     expect(incomeGapOrder(s, board)).toBeNull();
@@ -322,24 +335,61 @@ describe('收入空檔保底（polish-to-9.md §4）', () => {
     expect(board.orders.map((o) => o.id)).toEqual([900, 901, 902]);
   });
 
-  it('舊存檔沒有最後收入的天數：從讀檔那天開始算，不會一更新就出保底單', () => {
-    const s = tank();
-    s.hours = 40 * 24 + 8;
-    const e = economy(s);
-    addCuttings(s, 'anubias', 3);
-    const board = fishOnly(s);
-    delete e.lastEarnedDay;
-    updateOrders(s);
-    expect(e.lastEarnedDay).toBe(40);
-    expect(board.orders.some((o) => o.gap)).toBe(false);
-  });
-
-  it('有螺或長到 1.2 cm 的小孔雀也行（擇一）', () => {
+  it('害蟲小螺、小蘋果螺或剛生的仔魚也行（擇一），每份不超過店售價', () => {
     const s = tank();
     s.hours = 20 * 24 + 8;
     snailState(s).pests.bladder = 8;
     const o = incomeGapOrder(s, orderBoard(s))!;
     expect(o.kind).toBe('snail');
     expect(deliverableNow(s, o)).toBe(true);
+    snailState(s).pests.bladder = 0;
+    snailState(s).appleYoung = 4;
+    const apple = incomeGapOrder(s, orderBoard(s))!;
+    expect(apple.snail).toBe('appleYoung');
+    expect(apple.unitPrice).toBeLessThanOrEqual(SNAILS.apple.price);
+    snailState(s).appleYoung = 0;
+    const baby = juveniles(s, 3);
+    for (const f of baby) f.lengthCm = 0.7;
+    const fry = incomeGapOrder(s, orderBoard(s))!;
+    expect(fry.kind).toBe('fry');
+    expect(fry.count).toBe(2);
+    expect(fry.unitPrice).toBeLessThanOrEqual(FISH_PRICES.guppy);
+    expect(deliverableNow(s, fry)).toBe(true);
+    // 店裡買的魚（第 0 代）生出來以前不算
+    for (const f of baby) f.generation = 0;
+    expect(incomeGapOrder(s, orderBoard(s))).toBeNull();
+  });
+
+  it(`一直不交保底單：不會卡住，每 ${INCOME_GAP_DAYS} 天換一張新的，板上同時只有一張`, () => {
+    const s = tank();
+    s.hours = 20 * 24 + 8;
+    const e = economy(s);
+    grown(s);
+    snailState(s).pests.bladder = 8;
+    fishOnly(s);
+    e.lastEarnedDay = 0;
+    const seen: number[] = [];
+    for (let h = 0; h < 30 * 24; h++) {
+      s.hours += 1;
+      updateOrders(s);
+      const gaps = orderBoard(s).orders.filter((o) => o.gap);
+      expect(gaps.length).toBeLessThanOrEqual(1);
+      if (gaps[0] && !seen.includes(gaps[0].id)) seen.push(gaps[0].id);
+    }
+    // 30 天裡每 6 天換一張：至少 5 張不同的保底單，而且隨時都有一張
+    expect(seen.length).toBeGreaterThanOrEqual(5);
+    expect(orderBoard(s).orders.some((o) => o.gap)).toBe(true);
+  });
+
+  it('舊存檔沒有最後收入的天數：從讀檔那天開始算，不會一更新就出保底單', () => {
+    const s = tank();
+    s.hours = 40 * 24 + 8;
+    const e = economy(s);
+    grown(s);
+    const board = fishOnly(s);
+    delete e.lastEarnedDay;
+    updateOrders(s);
+    expect(e.lastEarnedDay).toBe(40);
+    expect(board.orders.some((o) => o.gap)).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 import { buybackRefusal, economy, FISH_PRICES, guppyBuybackTier, noteEarned, noteRaisedGone, PLANT_PRICES, sellableCuttings } from './economy';
 import { phenotype, type FinTrait, type GuppyPhenotype } from './genetics';
 import { nextRandom, type RngState } from './random';
-import { PESTS, type PestKind } from './snails';
+import { PESTS, SNAILS, type PestKind } from './snails';
 import { FISH_SPECIES, isShrimpSpecies, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 import { isJuvenile, type Fish, type TankState } from './state';
 import { hidingFactor } from './processes/population';
@@ -79,6 +79,8 @@ export interface OrderBoard {
   /** 累計交了幾張單、拿到多少錢。 */
   done: number;
   earned: number;
+  /** 上次檢查收入空檔保底是第幾個遊戲小時（每小時最多查一次，離線補算比較快）。 */
+  gapCheckedHour?: number;
 }
 
 export function orderBoard(state: TankState): OrderBoard {
@@ -452,46 +454,62 @@ function swapInSmallOrder(state: TankState, board: OrderBoard, ctx: OrderContext
 /** 連續幾天沒有真的收入（賣魚、賣插枝、交單），訂單板就保證出一張現在交得出來的小單（polish-to-9.md §4「收入空檔」）。 */
 export const INCOME_GAP_DAYS = 6;
 
+/** 保底單收的仔魚：還沒長到 1.2 cm 也收（剛生的大約 0.7 cm），讓第一窩一生出來就有收入。 */
+export const GAP_FRY_MIN_CM = 0.5;
+/** 害蟲小螺店裡不賣，保底單每隻的價錢照一般螺單的行情。 */
+const GAP_PEST_PRICE = 8;
+
 /**
- * 收入空檔保底的小單：用玩家現在手上就有的東西（插枝、螺、小孔雀擇一，有哪種挑哪種），一張約 40～60 元。
- * 寶箱來的插枝不算（ctx.cuttings 已經扣掉）。什麼都沒有就回傳 null。
+ * 收入空檔保底的小單：用玩家缸裡自己長出來、生出來的東西（插枝、螺、仔魚擇一，有哪種挑哪種）。
+ * 只收自己缸裡來的，避免「店裡買、當天交」的套利（polish-to-9.md §4）：
+ * - 插枝只算缸裡水草現在剪得下來的（買來的水草都比修剪線小，剪得下來的一定是自己長的）；手上的插枝不算（可能是寶箱、市場或朋友送的）。可以只要 1 株。
+ * - 螺只收害蟲小螺（跟著水草進來後在缸裡繁殖的）和蘋果螺孵出來的小螺，不收店裡買的大螺。
+ * - 仔魚只收自己繁殖的，剛生的也收。
+ * 每份的價錢不超過店售價（插枝照一盆的三分之一、小蘋果螺照蘋果螺店價、仔魚照孔雀魚店價）。什麼都沒有就回傳 null。
  */
 export function incomeGapOrder(state: TankState, board: OrderBoard, ctx: OrderContext = orderContext(state)): ShopOrder | null {
   const r = () => nextRandom(board.rng);
-  const base = { id: 0, count: 0, unitPrice: 0, postedHours: state.hours };
+  const base = { id: 0, count: 0, unitPrice: 0, postedHours: state.hours, gap: true };
   const candidates: ShopOrder[] = [];
-  for (const plant of Object.keys(ctx.cuttings) as PlantSpeciesId[]) {
-    const count = Math.min(ctx.cuttings[plant] ?? 0, 2);
-    if (count > 0) candidates.push({ ...base, kind: 'cutting', plant, count, unitPrice: round5(Math.max(40 / count, PLANT_PRICES[plant] / 3)) });
+  for (const plant of Object.keys(PLANT_PRICES) as PlantSpeciesId[]) {
+    const count = Math.min(trimmable(state, plant), 2);
+    if (count > 0) candidates.push({ ...base, kind: 'cutting', plant, count, unitPrice: Math.max(1, Math.floor(PLANT_PRICES[plant] / 3)) });
   }
   for (const snail of Object.keys(ctx.snails) as OrderSnail[]) {
-    const count = Math.min(ctx.snails[snail] ?? 0, snail === 'appleYoung' ? 3 : 5);
-    if (count > 0) candidates.push({ ...base, kind: 'snail', snail, count, unitPrice: round5(40 / count) });
+    const apple = snail === 'appleYoung';
+    const count = Math.min(ctx.snails[snail] ?? 0, apple ? 3 : 5);
+    if (count > 0) candidates.push({ ...base, kind: 'snail', snail, count, unitPrice: apple ? Math.min(SNAILS.apple.price, Math.round(40 / count)) : GAP_PEST_PRICE });
   }
-  // 小孔雀：長到 1.2 cm 的才交得出來，最多拿 2 尾，其他留著養大（下次空檔還有得交）
-  const fry: ShopOrder = { ...base, kind: 'fry', species: 'guppy', minCm: FRY_ORDER_MIN_CM, count: 1, unitPrice: 0 };
+  // 仔魚：最多拿 2 尾，其他留著養大（下次空檔還有得交）
+  const fry: ShopOrder = { ...base, kind: 'fry', species: 'guppy', minCm: GAP_FRY_MIN_CM, count: 1 };
   const fryCount = Math.min(2, orderSupply([state], fry));
-  if (fryCount > 0) candidates.push({ ...fry, count: fryCount, unitPrice: Math.round(40 / fryCount) });
+  if (fryCount > 0) candidates.push({ ...fry, count: fryCount, unitPrice: Math.min(FISH_PRICES.guppy, Math.round(40 / fryCount)) });
+  // 插枝單看手上加剪得下來的：寶箱來的插枝（ctx 已經扣掉）不會讓它變成交得出來
   const ok = candidates.filter((o) => deliverableNow(state, o, ctx));
   if (ok.length === 0) return null;
   const o = ok[Math.floor(r() * ok.length)];
   o.id = board.nextId++;
-  o.gap = true;
   return o;
 }
 
 /**
- * 收入空檔保底：連續 INCOME_GAP_DAYS 天沒有真的收入，板上又沒有交得出來的保底單，就掛一張（§4.4.1「至少一張交得出的單」的加強）。
- * 一般單交得出來但玩家想留著（例如小魚要養大做中魚單）也一樣補：保底單數量少，交了不會把要留的賣光。
- * 板子滿了就換掉最舊、交不出來的那張（都交得出來就換最舊的）。寶箱魚幣不算收入。
+ * 收入空檔保底（§4.4.1「至少一張交得出的單」的加強）：從開局（舊存檔從讀檔那天）起算，連續 INCOME_GAP_DAYS 天沒有真的收入，
+ * 就掛一張交得出來的保底單。板上同時只會有一張保底單：保底單掛 INCOME_GAP_DAYS 天就下架（updateOrders），還是沒收入就照當時手上有的東西換一張新的，
+ * 交不出來了也撤下（手上什麼都沒有就先不出，不會卡著一張交不了的單）。板子滿了就換掉最舊、交不出來的那張（都交得出來就換最舊的）。
+ * 寶箱魚幣不算收入。每個遊戲小時最多檢查一次。
  */
 function ensureIncomeOrder(state: TankState, board: OrderBoard): void {
+  const hour = Math.floor(state.hours);
+  if (board.gapCheckedHour === hour) return;
+  board.gapCheckedHour = hour;
   const e = economy(state);
   const today = Math.floor(state.hours / 24);
   if (e.lastEarnedDay === undefined) e.lastEarnedDay = today;
   if (today - e.lastEarnedDay < INCOME_GAP_DAYS) return;
   const ctx = orderContext(state);
-  if (board.orders.some((o) => o.gap && deliverableNow(state, o, ctx))) return;
+  const current = board.orders.find((o) => o.gap);
+  if (current && deliverableNow(state, current, ctx)) return;
+  board.orders = board.orders.filter((x) => !x.gap);
   const o = incomeGapOrder(state, board, ctx);
   if (!o) return;
   if (board.orders.length >= ORDER_BOARD_SIZE) {
@@ -511,8 +529,8 @@ export function updateOrders(state: TankState): void {
 }
 
 function fillOrders(state: TankState, board: OrderBoard): void {
-  // 太久沒人交的單，客人就不等了（不用玩家自己撕）
-  const expired = board.orders.filter((o) => state.hours - o.postedHours >= (o.kind === 'fry' ? FRY_ORDER_EXPIRE_DAYS : ORDER_EXPIRE_DAYS) * 24);
+  // 太久沒人交的單，客人就不等了（不用玩家自己撕）；保底單掛 INCOME_GAP_DAYS 天
+  const expired = board.orders.filter((o) => state.hours - o.postedHours >= (o.gap ? INCOME_GAP_DAYS : o.kind === 'fry' ? FRY_ORDER_EXPIRE_DAYS : ORDER_EXPIRE_DAYS) * 24);
   if (expired.length > 0) board.orders = board.orders.filter((o) => !expired.includes(o));
   if (board.orders.length >= ORDER_BOARD_SIZE) {
     if (board.lastChangeHours !== undefined && state.hours - board.lastChangeHours >= ORDER_GAP_HOURS && swapInSmallOrder(state, board, orderContext(state))) board.lastChangeHours = state.hours;
