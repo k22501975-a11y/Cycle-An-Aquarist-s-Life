@@ -1435,7 +1435,7 @@ async function start(): Promise<void> {
       }
     });
   }
-  if (window.matchMedia('(orientation: portrait)').matches) toasts.show('把手機轉成橫向，水缸會更大');
+  if (window.matchMedia('(orientation: portrait)').matches) toasts.showNow('把手機轉成橫向，水缸會更大');
   setInterval(save, 10_000);
   // 雲端：開遊戲時看看別的裝置有沒有玩過；之後每 10 分鐘和切到背景時自動上傳
   void checkCloudOnStart(cloudDeps).then(checkGifts).then(() => syncMarket(marketDeps)).then(() => syncMall(mallDeps));
