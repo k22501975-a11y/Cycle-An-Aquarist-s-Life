@@ -54,7 +54,20 @@ describe('todos', () => {
     const state = tank();
     addFish(state, 'guppy');
     addFish(state, 'guppy').alive = false;
-    expect(todos(state)[0]).toEqual({ text: '撈出 1 條死魚', tone: 'bad' });
+    expect(todos(state)[0]).toEqual({ text: '撈出 1 條死魚', tone: 'bad', go: 'remove_dead' });
+  });
+
+  it('要處理的待辦都點得進去（U3）：撈死魚、測水、換水、加熱棒各自帶去對的地方', () => {
+    const state = tank();
+    addFish(state, 'guppy');
+    state.hours = 24 * 8;
+    state.equipment.heater!.broken = true;
+    const go = Object.fromEntries(todos(state).map((t) => [t.text, t.go]));
+    expect(go['還沒測過水質']).toBe('test_water');
+    expect(Object.entries(go).find(([t]) => t.startsWith('該換水了'))?.[1]).toBe('water_change');
+    expect(go['加熱棒壞了，換一支']).toBe('equipment');
+    // 紅色、黃色的待辦全部都有去處
+    expect(todos(state).filter((t) => t.tone !== 'ok').every((t) => t.go || t.split || t.snails || t.nursery)).toBe(true);
   });
 });
 

@@ -1,3 +1,4 @@
+import type { ReportAction } from './morning-report';
 import { dueMothers, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading } from '../sim';
 
 /**
@@ -87,6 +88,12 @@ export interface Todo {
   snails?: true;
   /** 母魚快生了（#187）：put 是有盒子、按了放進育幼盒；buy 是還沒有，按了買一個再放進去。 */
   nursery?: 'put' | 'buy';
+  /** 點了去哪裡處理（U3：危機待辦點了要進得去）。 */
+  go?: ReportAction;
+  /** go 是 'fish' 時看哪一條。 */
+  subjectId?: number;
+  /** 別缸的待辦：在第幾缸（點了先切過去）。 */
+  tank?: number;
 }
 
 /** 待辦卡：今天該做的事，嚴重的排前面。只用玩家看得到的資訊（症狀、死魚、設備狀態、自己做過的事）。 */
@@ -95,25 +102,29 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
   const living = state.fish.filter((f) => f.alive);
   const dead = state.fish.length - living.length;
   const eq = state.equipment;
-  if (state.environment.powerOut) out.push({ text: '停電中，設備都停了', tone: 'bad' });
-  if (dead > 0) out.push({ text: `撈出 ${dead} 條死魚`, tone: 'bad' });
-  if (eq.heater?.stuckOn) out.push({ text: '加熱棒卡住了，快拔插頭', tone: 'bad' });
-  else if (eq.heater?.broken) out.push({ text: '加熱棒壞了，換一支', tone: 'bad' });
+  if (state.environment.powerOut) out.push({ text: '停電中，設備都停了', tone: 'bad', go: 'equipment' });
+  if (dead > 0) out.push({ text: `撈出 ${dead} 條死魚`, tone: 'bad', go: 'remove_dead' });
+  if (eq.heater?.stuckOn) out.push({ text: '加熱棒卡住了，快拔插頭', tone: 'bad', go: 'equipment' });
+  else if (eq.heater?.broken) out.push({ text: '加熱棒壞了，換一支', tone: 'bad', go: 'equipment' });
   const symptoms = living.map((f) => ({ fish: f, s: observeSymptoms(state, f) }));
-  if (symptoms.some((x) => x.s.includes('white_spots'))) out.push({ text: '有魚身上出現白點', tone: 'bad' });
-  if (symptoms.some((x) => x.s.includes('gasping'))) out.push({ text: '魚在水面喘氣', tone: 'bad' });
-  if (symptoms.some((x) => x.s.includes('white_patches'))) out.push({ text: '有魚身上長出白色棉絮狀的斑', tone: 'bad' });
+  // 點了直接看第一條有這個症狀的魚（觀察面板有「為什麼？」和下藥）
+  const sick = (sym: string) => symptoms.find((x) => x.s.includes(sym as never))?.fish.id;
+  const ich = sick('white_spots');
+  if (ich !== undefined) out.push({ text: '有魚身上出現白點', tone: 'bad', go: 'fish', subjectId: ich });
+  if (sick('gasping') !== undefined) out.push({ text: '魚在水面喘氣', tone: 'bad', go: 'test_water' });
+  const patches = sick('white_patches');
+  if (patches !== undefined) out.push({ text: '有魚身上長出白色棉絮狀的斑', tone: 'bad', go: 'fish', subjectId: patches });
   // 只用玩家看得到的資訊：最近一次測水的讀數、缸裡有幾條魚
   const reading = state.lastTest && state.hours - state.lastTest.hours <= TEST_FORGET_HOURS ? state.lastTest.reading : null;
   if (reading && living.length > 0) {
-    if (reading.kh <= 1) out.push({ text: `KH 只剩 ${reading.kh}，pH 隨時會崩，多換點水`, tone: 'bad' });
-    else if (reading.kh <= 2) out.push({ text: `KH 偏低（${reading.kh}），換水把它補回來`, tone: 'warn' });
+    if (reading.kh <= 1) out.push({ text: `KH 只剩 ${reading.kh}，pH 隨時會崩，多換點水`, tone: 'bad', go: 'water_change' });
+    else if (reading.kh <= 2) out.push({ text: `KH 偏低（${reading.kh}），換水把它補回來`, tone: 'warn', go: 'water_change' });
     // 超出物種的存活範圍才危險；在範圍內只看跟魚習慣的水差多少（會慢慢適應，design/acclimation.md）
     const phMin = Math.max(...living.map((f) => FISH_SPECIES[f.species].phSurvive.min));
     const phMax = Math.min(...living.map((f) => FISH_SPECIES[f.species].phSurvive.max));
     const unused = living.filter((f) => Math.abs(reading.ph - habitOf(state, f).ph) > COMFORT_BAND.ph).length;
-    if (reading.ph < phMin) out.push({ text: `pH 太低（${reading.ph}），超出魚能撐的範圍`, tone: 'bad' });
-    else if (reading.ph > phMax) out.push({ text: `pH 太高（${reading.ph}），超出魚能撐的範圍`, tone: 'bad' });
+    if (reading.ph < phMin) out.push({ text: `pH 太低（${reading.ph}），超出魚能撐的範圍`, tone: 'bad', go: 'water_change' });
+    else if (reading.ph > phMax) out.push({ text: `pH 太高（${reading.ph}），超出魚能撐的範圍`, tone: 'bad', go: 'water_change' });
     else if (unused > 0) out.push({ text: `pH ${reading.ph} 跟 ${unused} 條魚習慣的水差很多，別一次調太多，牠們會慢慢適應`, tone: 'warn' });
   }
   // 分缸提示：太擠、成魚會吃小魚、小魚轉色後公母混著（點一下照建議分缸）
@@ -136,12 +147,12 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
   const q = state.quarantine;
   if (q) {
     const qLiving = q.fish.filter((f) => f.alive);
-    if (q.fish.length > qLiving.length) out.push({ text: '檢疫盒裡有魚死了', tone: 'warn' });
-    if (qLiving.some((f) => f.ich.stage === 'visible' || hasVisible(f))) out.push({ text: '檢疫盒裡有魚發病了，先藥浴', tone: 'warn' });
+    if (q.fish.length > qLiving.length) out.push({ text: '檢疫盒裡有魚死了', tone: 'warn', go: 'fry_box' });
+    if (qLiving.some((f) => f.ich.stage === 'visible' || hasVisible(f))) out.push({ text: '檢疫盒裡有魚發病了，先藥浴', tone: 'warn', go: 'fry_box' });
     else {
       // 仔魚看大小、新魚看觀察天數（#174）：太小的放回主缸會被吃，不提醒
       const ready = qLiving.filter((f) => readyForTank(state, f));
-      if (ready.length > 0) out.push({ text: ready.every((f) => isJuvenile(f)) ? `檢疫盒裡有 ${ready.length} 尾小魚長夠大了，可以移到主缸` : `檢疫盒的魚觀察滿 ${QUARANTINE_DAYS} 天，可以移到主缸`, tone: 'ok' });
+      if (ready.length > 0) out.push({ text: ready.every((f) => isJuvenile(f)) ? `檢疫盒裡有 ${ready.length} 尾小魚長夠大了，可以移到主缸` : `檢疫盒的魚觀察滿 ${QUARANTINE_DAYS} 天，可以移到主缸`, tone: 'ok', go: 'fry_box' });
     }
   }
 
@@ -150,20 +161,20 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
     const t = state.water.tempC;
     const hottest = Math.min(...living.map((f) => FISH_SPECIES[f.species].temp.max));
     const coldest = Math.max(...living.map((f) => FISH_SPECIES[f.species].temp.min));
-    if (t > hottest + 0.5) out.push({ text: `水溫偏高（${t.toFixed(1)}°C），開風扇或冷水機`, tone: t > hottest + 2 ? 'bad' : 'warn' });
-    else if (t < coldest - 0.5) out.push({ text: `水溫偏低（${t.toFixed(1)}°C），檢查加熱棒`, tone: t < coldest - 2 ? 'bad' : 'warn' });
+    if (t > hottest + 0.5) out.push({ text: `水溫偏高（${t.toFixed(1)}°C），開風扇或冷水機`, tone: t > hottest + 2 ? 'bad' : 'warn', go: 'equipment' });
+    else if (t < coldest - 0.5) out.push({ text: `水溫偏低（${t.toFixed(1)}°C），檢查加熱棒`, tone: t < coldest - 2 ? 'bad' : 'warn', go: 'equipment' });
   }
   const level = (state.water.levelL ?? eq.tank.volumeL) / eq.tank.volumeL;
-  if (level < 0.9) out.push({ text: `水位降到 ${Math.round(level * 100)}%，該補水了`, tone: level < 0.8 && eq.heater ? 'bad' : 'warn' });
+  if (level < 0.9) out.push({ text: `水位降到 ${Math.round(level * 100)}%，該補水了`, tone: level < 0.8 && eq.heater ? 'bad' : 'warn', go: 'equipment' });
 
   if (living.length > 0) {
     const testAge = state.lastTest ? state.hours - state.lastTest.hours : Infinity;
-    if (testAge === Infinity) out.push({ text: '還沒測過水質', tone: 'warn' });
-    else if (testAge > TEST_FORGET_HOURS) out.push({ text: `${Math.floor(testAge / 24)} 天沒測水了`, tone: 'warn' });
+    if (testAge === Infinity) out.push({ text: '還沒測過水質', tone: 'warn', go: 'test_water' });
+    else if (testAge > TEST_FORGET_HOURS) out.push({ text: `${Math.floor(testAge / 24)} 天沒測水了`, tone: 'warn', go: 'test_water' });
     const sinceChange = state.hours - (state.lastWaterChangeHours ?? 0);
-    if (sinceChange > 7 * 24) out.push({ text: `該換水了（${Math.floor(sinceChange / 24)} 天沒換）`, tone: 'warn' });
+    if (sinceChange > 7 * 24) out.push({ text: `該換水了（${Math.floor(sinceChange / 24)} 天沒換）`, tone: 'warn', go: 'water_change' });
     const hunger = living.reduce((sum, f) => sum + f.hunger, 0) / living.length;
-    if (hunger > HUNGRY) out.push({ text: '魚餓了，該餵食', tone: 'warn' });
+    if (hunger > HUNGRY) out.push({ text: '魚餓了，該餵食', tone: 'warn', go: 'feed' });
   }
 
   const pregnant = symptoms.filter((x) => x.s.includes('pregnant') && !x.fish.nursery);
@@ -176,7 +187,7 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
   if (guppies > 0) out.push({ text: `${guppies} 條母魚肚子鼓鼓的，快生了`, tone: 'ok' });
   if (shrimp > 0) out.push({ text: `${shrimp} 隻母蝦正在抱卵`, tone: 'ok' });
   if (state.plants.some((p) => p.biomassG - PLANT_SPECIES[p.species].maxBiomassG * 0.5 >= PLANT_SPECIES[p.species].cuttingMassG && p.biomassG >= PLANT_SPECIES[p.species].maxBiomassG))
-    out.push({ text: '水草長滿了，可以修剪', tone: 'ok' });
+    out.push({ text: '水草長滿了，可以修剪', tone: 'ok', go: 'trim' });
 
   if (out.length === 0) out.push({ text: living.length === 0 ? '去商店買魚和水草吧' : '一切正常', tone: 'ok' });
   const rank = { bad: 0, warn: 1, ok: 2 };
@@ -201,7 +212,7 @@ export function householdTodos(tanks: TankState[], active: number): Todo[] {
     const urgent = todos(t, tanks.filter((x) => x !== t)).filter((x) => x.tone !== 'ok' && !SHARED_TODO.test(x.text));
     if (urgent.length === 0) return;
     const more = urgent.length > 1 ? `（還有 ${urgent.length - 1} 件）` : '';
-    extra.push({ text: `${tankLabel(tanks, i)}：${urgent[0].text}${more}`, tone: urgent[0].tone });
+    extra.push({ ...urgent[0], text: `${tankLabel(tanks, i)}：${urgent[0].text}${more}`, tank: i });
   });
   if (extra.length === 0) return out;
   const merged = [...out.filter((x) => x.text !== '一切正常'), ...extra];

@@ -58,12 +58,12 @@ import { Guide } from './ui/guide';
 import { Celebration, type CelebrateSpec } from './ui/celebrate';
 import { firstTime, loadMoments, type DeathAdviceCause, type MomentId } from './ui/moments';
 import { causeAdvice, HUNGER_LABEL, illnessOf, needsAdvice } from './ui/owner-advice';
-import { ownerGuide, ownerSay } from './ui/owner-ask';
+import { kickOwnerQueue, ownerGuide, ownerSay, setOwnerBlocker } from './ui/owner-ask';
 import { fryArt, guppyArt } from './ui/shop-cards';
 import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
 import { recordsPanel } from './ui/records';
 import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt, ordersPanel } from './ui/orders-panel';
-import { flyCoins } from './ui/coin-fly';
+import { flyCoins, rewardBurst } from './ui/coin-fly';
 import { morningCard } from './ui/morning-card';
 import { morningReport, snapshot, type ReportItem } from './ui/morning-report';
 import { loadCodexSeen, saveCodexSeen, unlockCodex } from './ui/codex';
@@ -382,7 +382,7 @@ async function start(): Promise<void> {
     const hungry = cond.hunger === 'hungry' || cond.hunger === 'starving';
     // 魚不太舒服、又找得到原因：多一顆有老闆頭像的「為什麼？」，老闆用一句話說原因和怎麼做
     const ask = needsAdvice(cond) || illnessOf(fish)
-      ? h('button.btn.small.primary.ask-owner', { onclick: () => void ownerSay(causeAdvice(fishName(fish), cond.causes, fish)) }, ownerImg('ask-avatar'), '為什麼？')
+      ? h('button.btn.small.primary.ask-owner', { onclick: () => void ownerSay(causeAdvice(fishName(fish), cond.causes, fish), undefined, undefined, true) }, ownerImg('ask-avatar'), '為什麼？')
       : null;
     selCard.replaceChildren(
       close,
@@ -619,7 +619,11 @@ async function start(): Promise<void> {
   const coinsValue = h('b');
   const coinsBtn = h('button.coins', { 'aria-label': '錢包', title: '錢包：點一下打開商店', onclick: () => openShop() }, h('i.coin'), coinsValue);
   // 拿到錢時金幣飛進錢包（F8）
-  ctx.reward = (from, amount) => flyCoins(from, coinsBtn, amount);
+  // 獎勵特效分級（V5）：小事寶箱是小的（金幣＋一圈亮點），交單是中的（再加光環和金額），大的是全螢幕慶祝卡
+  ctx.reward = (from, amount, tier = 'small') => {
+    flyCoins(from, coinsBtn, amount);
+    rewardBurst(from, tier, tier === 'medium' ? `+${amount}` : undefined);
+  };
   // 對水對得完美：新魚一進缸就聚光展開尾巴（F5）
   ctx.welcome = (ids, perfect) => {
     if (perfect && ids[0] !== undefined) view.celebrate(ids[0]);
@@ -659,7 +663,10 @@ async function start(): Promise<void> {
       ? h(`button.todo-item.${t.tone}.split`, { onclick: () => sheet.open('分缸', () => splitPanel(ctx, t.split!)) }, h('img.todo-icon', { src: `${import.meta.env.BASE_URL}art/ui/icon-split.webp`, alt: '' }), t.text)
       : t.snails
         ? h(`button.todo-item.${t.tone}.split`, { onclick: () => sheet.open('螺', () => snailPanel(ctx)) }, h('img.todo-icon', { src: `${import.meta.env.BASE_URL}art/snail/snail-bladder.webp`, alt: '' }), t.text)
-        : h(`div.todo-item.${t.tone}`, {}, t.text);
+        : t.go
+          ? // 點了直接去處理（U3）：開對應的面板或看那條魚
+            h(`button.todo-item.${t.tone}.go`, { onclick: () => (sheet.close(), goReport({ tank: t.tank ?? game.active, action: t.go, subjectId: t.subjectId } as ReportItem)) }, t.text, h('span.todo-go', { 'aria-hidden': 'true' }, '›'))
+          : h(`div.todo-item.${t.tone}`, {}, t.text);
   const todoBadge = h('span.badge');
   const todoCard = h('div.card.glass.todo');
   const todosChanged = memo();
@@ -1003,6 +1010,8 @@ async function start(): Promise<void> {
   const tankLabel = h('div.tank-label');
   stage.append(tankLabel);
   const guide = new Guide(stage, store, (id) => audio.play(id), () => requestAnimationFrame(() => measure()));
+  // 老闆一次只說一件事（G9）：新手引導在說、慶祝卡（也有老闆的話）在演時，事件帶出來的老闆對話先排隊
+  setOwnerBlocker(() => guide.talking || celebration.isOpen);
   guide.openShop = (tab) => openShop(tab);
   guide.openScape = () => enterScape();
   // 開缸（F1-a）：新遊戲先挑設備，開完缸時間才開始走；關掉面板時主畫面留一個「開缸」按鈕
@@ -1044,7 +1053,7 @@ async function start(): Promise<void> {
     const coins = game.actAll((tanks) => sim.claimDaily(tanks));
     if (!coins) return;
     audio.play('fanfare');
-    flyCoins(dailyHolder.getBoundingClientRect(), coinsBtn, coins);
+    ctx.reward?.(dailyHolder.getBoundingClientRect(), coins, 'small');
     toasts.show(`寶箱裡有 ${coins} 魚幣`);
     renderDaily();
   };
@@ -1173,6 +1182,8 @@ async function start(): Promise<void> {
         title: `${tankPrefix(tank)}${shrimp ? '孵出' : '生了'} ${e.count} ${shrimp ? '隻小蝦' : '尾小魚'}！`,
         sub: `${mom ? fishName(mom) : '母魚'}當媽媽了。成魚會吃小魚，水草越密越好躲`,
         owner: !first ? undefined : shrimp ? '第一窩小蝦！多放莫絲或水草，小蝦躲得住才長得大。' : '第一胎！小魚長到轉色期才看得出公母，到時候挑尾巴大、顏色亮的留下來配對。',
+        // 第一窩是大特效（全螢幕），之後每一窩是中特效（停在上方，V5）
+        size: first ? 'big' : 'medium',
       });
       return;
     }
@@ -1337,6 +1348,8 @@ async function start(): Promise<void> {
   };
   debugHandle.sleep = goNight;
   debugHandle.celebration = celebration;
+  debugHandle.owner = { say: ownerSay, guide: ownerGuide };
+  debugHandle.reward = (tier: 'small' | 'medium', amount = 120) => ctx.reward?.(null, amount, tier);
 
   game.onChange(() => {
     sheet.refresh();
@@ -1479,6 +1492,7 @@ async function start(): Promise<void> {
       renderTankChip();
       // 開缸演出和「你的第一個缸」卡片演完才讓老闆開口（「開缸」任務在演出一開始就完成，不能蓋在演出上，#171）
       if (!guideHeld) guide.update(game.state, game.tanks);
+      kickOwnerQueue();
       setupBtn.hidden = !sim.needsSetup(game.tanks[0]) || sheet.isOpen;
       checkDaily();
       if (scaping) scapeBar.refresh();

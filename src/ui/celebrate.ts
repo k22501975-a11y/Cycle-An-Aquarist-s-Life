@@ -14,6 +14,11 @@ export interface CelebrateSpec {
   sub: string;
   /** 阿德老闆的一句話（有頭像）。 */
   owner?: string;
+  /**
+   * 特效等級（polish-to-9.md V5）：big 是「第一次」的大事（第一窩、第一張自選育訂單、選育成功…），全螢幕光芒＋滿版彩帶；
+   * medium 是一般好事（之後每一窩），直接停在上方、不擋畫面。同一時間最多一個全螢幕特效（排隊）。預設 big。
+   */
+  size?: 'big' | 'medium';
 }
 
 const ART = `${import.meta.env.BASE_URL}art/`;
@@ -21,6 +26,8 @@ const CONFETTI = ['#ffd36e', '#7ee0c3', '#ff8fa3', '#9ec9ff', '#ffffff'];
 
 export class Celebration {
   private el: HTMLElement | null = null;
+  /** 大特效的全螢幕光芒（卡片縮到上方時一起退）。 */
+  private veil: HTMLElement | null = null;
   private timer = 0;
   private dockTimer = 0;
   private spec: CelebrateSpec | null = null;
@@ -86,27 +93,62 @@ export class Celebration {
         return c;
       }),
     );
+    const big = (spec.size ?? 'big') === 'big';
     const card = h(
-      'div.celebrate.glass',
+      `div.celebrate.glass${big ? '' : '.medium'}`,
       { role: 'status', onclick: () => this.close() },
-      confetti,
+      big ? confetti : null,
       h('div.celebrate-pic', {}, h('span.celebrate-glow'), img),
       h('b.celebrate-title', {}, spec.title),
       h('span.celebrate-sub', {}, spec.sub),
       spec.owner ? h('div.celebrate-owner', {}, ownerImg('celebrate-avatar'), h('span', {}, spec.owner)) : null,
     );
+    if (big) {
+      // 全螢幕：畫面暗一點、中間一圈旋轉的光芒、彩帶從整個畫面上方灑下來
+      const rain = h(
+        'div.confetti.screen',
+        { 'aria-hidden': 'true' },
+        ...Array.from({ length: 36 }, (_, i) => {
+          const c = h('i');
+          c.style.setProperty('--x', `${(i * 29) % 100}%`);
+          c.style.setProperty('--d', `${(i % 9) * 0.1}s`);
+          c.style.setProperty('--c', CONFETTI[i % CONFETTI.length]);
+          c.style.setProperty('--r', `${(i * 47) % 360}deg`);
+          return c;
+        }),
+      );
+      this.veil = h('div.celebrate-veil', { 'aria-hidden': 'true', onclick: () => this.close() }, h('span.celebrate-rays'), rain);
+      this.host.append(this.veil);
+      const veil = this.veil;
+      requestAnimationFrame(() => veil.classList.add('in'));
+    }
     this.host.append(card);
     this.el = card;
     requestAnimationFrame(() => card.classList.add('in'));
+    if (!big) {
+      // 中特效：直接停在上方，不擋畫面，短一點
+      card.classList.add('docked');
+      this.timer = window.setTimeout(() => this.close(), spec.owner ? 6000 : 4500);
+      return;
+    }
     // 先在中間大大的跳出來，接著縮到上方讓出畫面，看得到缸裡的特寫
     // 有老闆說話的卡多留一下，讓人讀得完
-    this.dockTimer = window.setTimeout(() => card.classList.add('docked'), spec.owner ? 3800 : 1800);
+    this.dockTimer = window.setTimeout(() => (card.classList.add('docked'), this.dropVeil()), spec.owner ? 3800 : 1800);
     this.timer = window.setTimeout(() => this.close(), spec.owner ? 8000 : 7000);
+  }
+
+  private dropVeil(): void {
+    const veil = this.veil;
+    if (!veil) return;
+    this.veil = null;
+    veil.classList.remove('in');
+    window.setTimeout(() => veil.remove(), 500);
   }
 
   close(): void {
     window.clearTimeout(this.timer);
     window.clearTimeout(this.dockTimer);
+    this.dropVeil();
     const el = this.el;
     if (!el) return;
     this.el = null;
