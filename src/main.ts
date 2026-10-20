@@ -134,8 +134,9 @@ async function start(): Promise<void> {
   // 聲音：瀏覽器要等第一次點擊才能出聲
   let audioSettings = loadAudioSettings(store);
   const audio = new AudioEngine(audioSettings);
-  document.addEventListener('pointerdown', () => audio.unlock(), { capture: true });
-  document.addEventListener('keydown', () => audio.unlock(), { capture: true });
+  // 震動只跟著玩家的動作（模擬觸發的音效只出聲）
+  document.addEventListener('pointerdown', () => (audio.unlock(), audio.noteInput()), { capture: true });
+  document.addEventListener('keydown', () => (audio.unlock(), audio.noteInput()), { capture: true });
   // 一般按鈕都有輕輕的點擊聲；工具列和選單另外處理
   document.addEventListener('click', (e) => {
     const target = e.target as HTMLElement | null;

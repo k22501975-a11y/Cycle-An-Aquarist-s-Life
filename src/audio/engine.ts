@@ -125,6 +125,11 @@ export class AudioEngine {
     else void this.ctx.resume();
   }
 
+  /** 玩家按了東西：之後一小段時間內的音效才會震。 */
+  noteInput(): void {
+    this.haptics.noteInput();
+  }
+
   /** 只震不出聲（點魚、點水草這類沒有音效的動作）。 */
   buzz(id: SoundId): void {
     this.haptics.buzz(id);

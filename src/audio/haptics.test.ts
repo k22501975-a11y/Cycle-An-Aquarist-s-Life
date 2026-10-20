@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Haptics, HAPTIC_GAP_MS, HAPTIC_PATTERNS } from './haptics';
+import { Haptics, HAPTIC_GAP_MS, HAPTIC_PATTERNS, PLAYER_INPUT_WINDOW_MS } from './haptics';
 import { DEFAULT_AUDIO_SETTINGS, normalizeAudioSettings } from './settings';
 
 const recorder = () => {
@@ -17,12 +17,22 @@ describe('震動回饋（G1）', () => {
   it('關掉就不震；同一下點擊觸發兩個聲音只震一次', () => {
     const r = recorder();
     const h = new Haptics(true, r.vibrate);
+    h.noteInput(0);
     expect(h.buzz('tap', 0)).toBe(true);
     expect(h.buzz('feed', HAPTIC_GAP_MS - 1)).toBe(false);
     expect(h.buzz('feed', HAPTIC_GAP_MS + 1)).toBe(true);
     h.enabled = false;
-    expect(h.buzz('buy', 1000)).toBe(false);
+    expect(h.buzz('buy', 200)).toBe(false);
     expect(r.calls).toEqual([HAPTIC_PATTERNS.tap, HAPTIC_PATTERNS.feed]);
+  });
+
+  it('模擬觸發的音效（玩家沒按東西）不震', () => {
+    const r = recorder();
+    const h = new Haptics(true, r.vibrate);
+    expect(h.buzz('birth', 5000)).toBe(false);
+    h.noteInput(5000);
+    expect(h.buzz('quest', 5000 + PLAYER_INPUT_WINDOW_MS + 1)).toBe(false);
+    expect(r.calls).toEqual([]);
   });
 
   it('不支援震動的瀏覽器什麼都不做', () => {
@@ -30,6 +40,7 @@ describe('震動回饋（G1）', () => {
     const throwing = new Haptics(true, () => {
       throw new Error('blocked');
     });
+    throwing.noteInput(0);
     expect(throwing.buzz('tap', 0)).toBe(false);
   });
 
