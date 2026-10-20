@@ -161,7 +161,7 @@ export class Toasts {
     const direct = performance.now() - this.lastInput < DIRECT_MS;
     const popNow = direct || !!action || tone === 'bad';
     this.record(text, tone, action, !popNow);
-    if (popNow) this.pop(text, tone, action);
+    if (popNow) this.pop(text, tone, action, direct);
   }
 
   private record(text: string, tone: Tone, action: ToastAction | undefined, unread: boolean): void {
@@ -177,7 +177,7 @@ export class Toasts {
   }
 
   /** 畫面上那一格：同一句就加「×2」，不同的換掉（要處理的不會被一般通知蓋掉）。 */
-  private pop(text: string, tone: Tone, action?: ToastAction): void {
+  private pop(text: string, tone: Tone, action?: ToastAction, direct = false): void {
     const cur = this.current;
     if (cur && cur.el.isConnected) {
       if (cur.text === text) {
@@ -186,11 +186,12 @@ export class Toasts {
         cur.el.classList.remove('bump');
         void cur.el.offsetWidth;
         cur.el.classList.add('bump');
-        if (!cur.sticky) this.arm(cur.el);
+        if (!cur.sticky) this.arm(cur.el, tone);
         return;
       }
-      // 正在等玩家處理的不讓一般通知蓋掉（一般的已經在通知匣裡）
-      if (cur.sticky && !action) return;
+      // 正在等玩家處理的不讓自己冒出來的一般通知蓋掉（一般的已經在通知匣裡）；
+      // 玩家剛按的東西的回應照樣換上來，不然會像按了沒反應（要處理的那則還在通知匣，按鈕也在）
+      if (cur.sticky && !action && !direct) return;
       cur.el.remove();
     }
     const el = h(`div.toast.${tone}`, { role: 'status' }, h('i.toast-icon', { 'aria-hidden': 'true' }), h('span.toast-text', {}, text), h('b.toast-count'));
@@ -211,14 +212,16 @@ export class Toasts {
     this.current = { el, text, count: 1, sticky };
     window.clearTimeout(this.fadeTimer);
     window.clearTimeout(this.removeTimer);
-    if (!sticky) this.arm(el);
+    if (!sticky) this.arm(el, tone);
   }
 
-  private arm(el: HTMLElement): void {
+  /** 一般的停 4 秒；警告、壞消息要看清楚，停 6 秒。 */
+  private arm(el: HTMLElement, tone: Tone): void {
     window.clearTimeout(this.fadeTimer);
     window.clearTimeout(this.removeTimer);
     el.classList.remove('fade');
-    this.fadeTimer = window.setTimeout(() => el.classList.add('fade'), 3000);
-    this.removeTimer = window.setTimeout(() => el.remove(), 3600);
+    const stay = tone === 'info' ? 4000 : 6000;
+    this.fadeTimer = window.setTimeout(() => el.classList.add('fade'), stay);
+    this.removeTimer = window.setTimeout(() => el.remove(), stay + 600);
   }
 }
