@@ -9,6 +9,7 @@ import {
   buyTank,
   checkGoals,
   dismissOrder,
+  doseIchMedication,
   economy,
   feed,
   FISH_SPECIES,
@@ -87,6 +88,8 @@ export function seriousPlayer(seed: number, strain: number, takeOrders = false):
       if (heater && (heater.stuckOn || heater.broken)) t.equipment.heater = { spec: heater.spec, targetC: heater.targetC, broken: false, heating: false };
       const r = useTestKit(t);
       if (r.ammonia >= 0.25 || r.nitrite >= 0.25 || r.nitrate >= 40 || d % 7 === 0) waterChange(t, 0.3);
+      // 太擠、溫差會引發白點病（polish-to-9.md §4）：看到白點就照老闆說的下藥
+      if (alive(t).some((f) => f.ich.stage === 'visible')) doseIchMedication(t);
       // 接訂單：先交得出來的單（留種的魚不交），插枝靠修剪；小孔雀單不交，仔魚要留著挑種（mvp.md §4.4.1 第 3 點）
       if (takeOrders) {
         for (const p of t.plants) addCuttings(t, p.species, trimPlant(t, p.id));
