@@ -46,6 +46,11 @@ export interface TankState {
    * （design/polish-to-9.md §4 教學順序）。addedHours 是最近一次延長的時間，同一批魚只算一次。
    */
   cycleDelay?: { leftH: number; addedHours: number };
+  /**
+   * 新開的缸（applySetup 開的）：開缸、第一次有魚的時間（遊戲小時），新缸症候群的氨從放魚算起。
+   * 直接建的缸（測試用）、商城套缸、舊存檔沒有，當作老缸。
+   */
+  newTank?: { setupHours: number; stockedHours?: number };
   /** 最近一次餵食、剪下插枝的時間（遊戲小時；每日小事用）。舊存檔沒有。 */
   lastFedHours?: number;
   lastTrimHours?: number;
