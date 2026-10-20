@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from './game';
-import { addFish, addHardscape, addPlant, CYCLE_DELAY_PER_BATCH_H, cycleConfirmed, FISH_SPECIES, feed, HARDSCAPE, isCycled, PINCH_MEALS, simulate, useTestKit, waterChange, type TankState } from '../sim';
+import { addFish, addFishToQuarantine, addHardscape, buyQuarantine, addPlant, CYCLE_DELAY_PER_BATCH_H, cycleConfirmed, FISH_SPECIES, feed, HARDSCAPE, isCycled, PINCH_MEALS, simulate, useTestKit, waterChange, type TankState } from '../sim';
 import { advanceQuest, currentQuest, newProgress, pendingTip, QUESTS } from '../ui/tutorial';
 
 /**
@@ -127,6 +127,16 @@ describe('店裡的魚耐得住還在養水的缸（polish-to-9.md §4）', () =
   it('氨是 0 的新缸放魚不延長、不提醒（基準玩法開局）', () => {
     const s = newGameState(1);
     buyTrio(s);
+    expect(s.cycleDelay).toBeUndefined();
+    expect(pendingTip(newProgress(), s)?.id).not.toBe('cycling_fish');
+  });
+
+  it('有檢疫盒時買魚：魚放進盒裡，主缸養水期不延長、不提醒', () => {
+    const s = newGameState(1);
+    s.water.tan = 0.5;
+    buyQuarantine(s);
+    for (const sex of ['male', 'female', 'female'] as const) addFishToQuarantine(s, 'guppy', { sex });
+    expect(s.quarantine?.fish).toHaveLength(3);
     expect(s.cycleDelay).toBeUndefined();
     expect(pendingTip(newProgress(), s)?.id).not.toBe('cycling_fish');
   });
