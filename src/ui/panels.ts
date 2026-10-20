@@ -243,6 +243,11 @@ function button(label: string, onclick: () => void, kind = ''): HTMLButtonElemen
   return h(`button.btn${kind ? '.' + kind : ''}`, { onclick }, label);
 }
 
+/** 藥的按鈕：短名字＋金幣價錢（V4：按鈕不放整句）。 */
+function medButton(label: string, cost: number, onclick: () => void): HTMLButtonElement {
+  return h('button.btn.med-btn', { onclick, 'aria-label': `下${label}，${cost} 元` }, label, h('span.btn-cost', {}, h('i.coin'), String(cost)));
+}
+
 /** 上次選的飼料（同一次遊戲記住）。 */
 let feedChoice: { kind: FoodKind; grade: FoodGrade } = { ...DEFAULT_FOOD };
 
@@ -1617,23 +1622,29 @@ export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: P
           ),
         )
       : null,
-    h('h3', {}, '清潔與用藥'),
+    // 按鈕只放短字（V4）：說明放在小標題，價錢用金幣小牌
+    h('h3', {}, '洗濾材'),
     h(
       'div.row.wrap',
       {},
-      button('用缸水洗濾材', () => {
+      button('用缸水', () => {
         doUndoable({ toasts, undoable }, () => game.act((st) => rinseFilterMedia(st, 'tank')), '用換出來的缸水洗了濾材');
       }),
-      button('用自來水洗濾材', () => {
+      button('用自來水', () => {
         doUndoable({ toasts, undoable }, () => game.act((st) => rinseFilterMedia(st, 'tap')), '用自來水洗了濾材：自來水的氯會殺死硝化菌', 'warn');
       }),
-      button(`下白點藥（${price('med:ich')} 元）`, () => {
+    ),
+    h('h3', {}, '用藥'),
+    h(
+      'div.row.wrap',
+      {},
+      medButton('白點藥', price('med:ich'), () => {
         purchase({ game, sheet, toasts, undoable }, price('med:ich'), (st) => doseIchMedication(st), '下了一份白點藥（對蝦有毒）', 'warn', true);
       }),
-      button(`下抗生素（${price('med:antibiotic')} 元）`, () => {
+      medButton('抗生素', price('med:antibiotic'), () => {
         purchase({ game, sheet, toasts, undoable }, price('med:antibiotic'), (st) => doseAntibiotic(st), '下了一份抗生素（也會殺掉一些硝化菌）', 'warn', true);
       }),
-      button(`下驅蟲藥（${price('med:dewormer')} 元）`, () => {
+      medButton('驅蟲藥', price('med:dewormer'), () => {
         purchase({ game, sheet, toasts, undoable }, price('med:dewormer'), (st) => doseDewormer(st), '下了一份驅蟲藥', 'info', true);
       }),
     ),

@@ -452,6 +452,8 @@ details.danger[open] { display: flex; flex-direction: column; gap: 8px; }
 .wallet-bar { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; border-radius: 12px; background: rgba(227, 189, 109, 0.08); border: 1px solid rgba(227, 189, 109, 0.3); color: var(--gold); font-size: 13px; letter-spacing: 0.1em; }
 .price-tag { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; padding: 2px 9px 2px 4px; border-radius: 999px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(227, 189, 109, 0.4); color: var(--gold-bright); font-size: 13px; font-variant-numeric: tabular-nums; }
 .price-tag .coin, .wallet-bar .coin { width: 15px; height: 15px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff1b8, var(--gold) 55%, #9c7a2c); box-shadow: inset 0 0 0 1.5px rgba(120, 88, 30, 0.6); }
+.btn-cost { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; color: var(--gold-bright); font-size: 12px; font-variant-numeric: tabular-nums; }
+.btn-cost .coin { width: 13px; height: 13px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff1b8, var(--gold) 55%, #9c7a2c); box-shadow: inset 0 0 0 1.5px rgba(120, 88, 30, 0.6); }
 .price-tag small { color: var(--muted); font-size: 11px; }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .shop-card { display: flex; flex-direction: column; min-width: 0; border-radius: 16px; overflow: hidden; border: 1px solid rgba(227, 189, 109, 0.3); background: linear-gradient(180deg, rgba(10, 36, 46, 0.4), rgba(10, 36, 46, 0.85)); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3); }
