@@ -1,5 +1,6 @@
 import { artImg, sheetArt } from './art-icons';
 import { h } from './dom';
+import { NotifyGate } from './notify-gate';
 
 /** 全螢幕的面板（YenWel：「選單最好做全螢幕？」）：商店、設定、選單內容多，蓋滿畫面、藏起後面的缸；其他面板照舊靠邊，看得到缸。 */
 const FULLSCREEN = new Set(['商店', '設定', '選單']);
@@ -107,6 +108,8 @@ export class Toasts {
   /** 通知匣有變（main 更新鈴鐺）。 */
   onInbox: (() => void) | null = null;
   private lastInput = -Infinity;
+  /** 擋重複、純告知限頻（#212）：被擋下的不跳，只進通知匣。 */
+  private readonly gate = new NotifyGate();
   private current: { el: HTMLElement; text: string; count: number; sticky: boolean } | null = null;
   private fadeTimer = 0;
   private removeTimer = 0;
@@ -158,8 +161,9 @@ export class Toasts {
   }
 
   private route(text: string, tone: Tone = 'info', action?: ToastAction): void {
-    const direct = performance.now() - this.lastInput < DIRECT_MS;
-    const popNow = direct || !!action || tone === 'bad';
+    const now = performance.now();
+    const direct = now - this.lastInput < DIRECT_MS;
+    const popNow = this.gate.accept(text, tone, !!action, now, direct) && (direct || !!action || tone === 'bad');
     this.record(text, tone, action, !popNow);
     if (popNow) this.pop(text, tone, action, direct);
   }

@@ -143,7 +143,10 @@ import {
   FANS,
   FOOD_GRADES,
   FOOD_KINDS,
+  mealMg,
   mealPrice,
+  tapFeed,
+  type TapFeedResult,
   FILTERS,
   FISH_SPECIES,
   freeAmmonia,
@@ -231,9 +234,7 @@ function doUndoable(ctx: Pick<PanelContext, 'toasts' | 'undoable'>, run: () => v
 const alive = (s: TankState) => s.fish.filter((f) => f.alive);
 
 /** 一餐的份量：缸內所有魚每日食量的一半（建議一天兩餐）。 */
-function mealSize(s: TankState): number {
-  return alive(s).reduce((sum, f) => sum + FISH_SPECIES[f.species].dailyFoodMg, 0) / 2;
-}
+const mealSize = mealMg;
 
 function button(label: string, onclick: () => void, kind = ''): HTMLButtonElement {
   return h(`button.btn${kind ? '.' + kind : ''}`, { onclick }, label);
@@ -243,23 +244,15 @@ function button(label: string, onclick: () => void, kind = ''): HTMLButtonElemen
 let feedChoice: { kind: FoodKind; grade: FoodGrade } = { ...DEFAULT_FOOD };
 
 /** 手指餵食一下撒多少：一餐的三分之一。 */
-export const TAP_MEAL_SHARE = 1 / 3;
-
 /**
- * 手指餵食（P5）：點一下水面撒一小撮上次選的飼料（種類、等級在「進階」面板選）。
- * 回傳這次撒了多少和一餐是多少；缸裡沒魚回傳 null。
+ * 手指餵食（P5）：點一下水面撒一小撮上次選的飼料（種類、等級在「進階」面板選），份量和扣錢照核心的 tapFeed。
+ * 缸裡沒魚回傳 null。
  */
-export function feedTap(ctx: PanelContext): { mg: number; meal: number } | null {
-  const meal = mealSize(ctx.game.state);
-  if (meal <= 0) return null;
-  const mg = meal * TAP_MEAL_SHARE;
-  const { kind, grade } = feedChoice;
-  ctx.game.act((st) => {
-    chargeMeal(st, mealPrice(kind, grade) * (mg / meal));
-    feed(st, mg, kind, grade);
-  });
+export function feedTap(ctx: PanelContext): TapFeedResult | null {
+  const got = ctx.game.act((st) => tapFeed(st, feedChoice));
+  if (got.mg <= 0) return null;
   ctx.sound?.('feed');
-  return { mg, meal };
+  return got;
 }
 
 /** 缸裡有誰吃不太到這種飼料（例如只餵漂浮的，蝦吃不到）。 */

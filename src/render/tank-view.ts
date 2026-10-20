@@ -1,5 +1,5 @@
 import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
-import { isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, personalitySpec, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
+import { cloudiness, isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, personalitySpec, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { PaintedRig, paintedArtVersion, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { SetupShow, type SetupStep } from './setup-show';
@@ -1988,8 +1988,8 @@ export class TankView {
   private drawOverlay(state: TankState): void {
     const { width, height, surface, bottom } = this.bounds;
     const g = this.overlay.clear();
-    // 混濁：有機物與細菌濃度高時水變黃綠
-    const turbidity = Math.min(0.35, state.water.organicMg / 4000 + state.water.tan / 20);
+    // 混濁：有機物與細菌濃度高時水變黃綠（餵太多看得到，§6 P5）
+    const turbidity = cloudiness(state);
     if (turbidity > 0.02) g.rect(0, 0, width, height).fill({ color: 0x8a8a3a, alpha: turbidity });
     // 剛動過造景：攪起來的細沙讓水白濁，底下最濃，慢慢沉澱
     const silt = state.water.turbidity ?? 0;
