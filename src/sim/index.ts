@@ -10,6 +10,7 @@ export * from './readings';
 export * from './season';
 export * from './quarantine';
 export * from './nursery';
+export * from './next-step';
 export * from './economy';
 export * from './orders';
 export * from './goals';
