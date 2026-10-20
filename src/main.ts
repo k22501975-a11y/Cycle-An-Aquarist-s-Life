@@ -134,8 +134,9 @@ async function start(): Promise<void> {
   // 聲音：瀏覽器要等第一次點擊才能出聲
   let audioSettings = loadAudioSettings(store);
   const audio = new AudioEngine(audioSettings);
-  document.addEventListener('pointerdown', () => audio.unlock(), { capture: true });
-  document.addEventListener('keydown', () => audio.unlock(), { capture: true });
+  // 震動只跟著玩家的動作（模擬觸發的音效只出聲）
+  document.addEventListener('pointerdown', () => (audio.unlock(), audio.noteInput()), { capture: true });
+  document.addEventListener('keydown', () => (audio.unlock(), audio.noteInput()), { capture: true });
   // 一般按鈕都有輕輕的點擊聲；工具列和選單另外處理
   document.addEventListener('click', (e) => {
     const target = e.target as HTMLElement | null;
@@ -406,10 +407,11 @@ async function start(): Promise<void> {
   debugHandle.select = select;
 
   const view = new TankView(app, {
-    onSelectFish: (id) => select(id),
+    // 點到魚、螺、水草：沒有音效，手機上給一下短震動（G1）
+    onSelectFish: (id) => (id !== null && audio.buzz('tap'), select(id)),
     // 在缸裡點到螺：打開螺的面板（每日小事「找到螺點一下」也就做完了）
-    onTapSnail: () => sheet.open('螺', () => snailPanel(ctx)),
-    onSelectPlant: (id) => sheet.open('水草', () => plantPanel(ctx, id), { live: true }),
+    onTapSnail: () => (audio.buzz('tap'), sheet.open('螺', () => snailPanel(ctx))),
+    onSelectPlant: (id) => (audio.buzz('tap'), sheet.open('水草', () => plantPanel(ctx, id), { live: true })),
     onScapeSelect: (target) => scapeBar.select(target),
     onScapeDrop: (target, x) => scapeBar.drop(target, x),
     // 手指餵食（F6）：撒下去的第一口被誰吃到，在那尾魚頭上浮一行小字，看得出誰貪吃
@@ -806,6 +808,12 @@ async function start(): Promise<void> {
         h('input', { type: 'checkbox', checked: audioSettings.muted, onchange: (e: Event) => updateAudio({ muted: (e.target as HTMLInputElement).checked }) }),
         h('span', {}, '靜音'),
       ),
+      h(
+        'label.check-row',
+        {},
+        h('input', { type: 'checkbox', checked: audioSettings.haptics, onchange: (e: Event) => updateAudio({ haptics: (e.target as HTMLInputElement).checked }) }),
+        h('span', {}, '震動'),
+      ),
       h('p.hint', {}, '背景音樂是即時彈奏的慢板指彈吉他，每次都不一樣；晚上關燈後會彈得更輕。音樂和音效的音量可以分開調。'),
       h('h3', {}, '顯示'),
       h(
@@ -1159,7 +1167,8 @@ async function start(): Promise<void> {
       if (fryEatenToast.get(tank) === day) return;
       fryEatenToast.set(tank, day);
     }
-    audio.play(eventSound(e.type));
+    // 模擬事件（夜裡生小魚、死魚…）不是玩家按的，只出聲不震
+    audio.play(eventSound(e.type), false);
     if (e.type === 'fry_born' && (e.count ?? 0) > 0) {
       // 生小魚是大事：跳出慶祝卡，在看的那一缸聚光特寫母魚
       const t = game.tanks[tank] ?? game.state;
