@@ -242,7 +242,7 @@ async function start(): Promise<void> {
     <T,>(load: () => Promise<T>) =>
     () =>
       load().catch(() => {
-        toasts.show('要連上網路才能打開這個', 'warn');
+        toasts.show('載入失敗，連上網路後重新整理再試一次', 'warn');
         return new Promise<T>(() => {});
       });
   const cloudUi = lazyUi(() => import('./ui/cloud-panel'));
