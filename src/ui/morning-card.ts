@@ -78,6 +78,33 @@ export function morningLine(report: MorningReport): string {
   return '早！昨晚的狀況幫你整理好了。';
 }
 
+/**
+ * 死亡那條的「下次：…」先收起來，點「怎麼避免」才展開（報告卡一眼看得完，想知道再看）。
+ * 展開那一下不算點整條（整條是帶去處理）。
+ */
+function reportText(text: string): HTMLElement {
+  const at = text.indexOf('下次：');
+  if (at < 0) return h('span.morning-text', {}, text);
+  const avoid = h('span.morning-avoid', { hidden: true }, text.slice(at));
+  const more = h(
+    'span.morning-more',
+    {
+      role: 'button',
+      tabindex: '0',
+      'aria-expanded': 'false',
+      onclick: (e: Event) => {
+        e.stopPropagation();
+        e.preventDefault();
+        avoid.hidden = !avoid.hidden;
+        more.setAttribute('aria-expanded', String(!avoid.hidden));
+        more.textContent = avoid.hidden ? '怎麼避免 ▾' : '收起 ▴';
+      },
+    },
+    '怎麼避免 ▾',
+  );
+  return h('span.morning-text', {}, text.slice(0, at).trimEnd(), ' ', more, avoid);
+}
+
 export function morningCard(report: MorningReport, deps: MorningCardDeps, close: () => void): HTMLElement {
   const row = (item: ReportItem) => {
     const pic = deps.picture?.(item) ?? artUrl(item.kind === 'crisis' && item.action ? ACTION_ICON[item.action] : KIND_ICON[item.kind]);
@@ -93,7 +120,7 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
       `button.morning-item.${item.tone}`,
       { type: 'button', disabled: !go, onclick: go },
       h('span.morning-pic', {}, img, item.count && item.count > 1 ? h('b.morning-count', {}, `×${item.count}`) : null),
-      h('span.morning-text', {}, item.text),
+      reportText(item.text),
       item.action ? h('span.morning-go', {}, ACTION_LABEL[item.action], ' ›') : null,
     );
   };

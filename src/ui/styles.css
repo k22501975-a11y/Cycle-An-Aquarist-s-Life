@@ -976,3 +976,8 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .feed-bar .btn.small { width: auto; margin: 0; }
 .feeding #stage canvas { cursor: crosshair; }
 .feeding .owner-tip, .feeding .selcard { display: none !important; }
+
+/* 早上報告：死亡的「下次怎麼避免」收起來，點了才展開 */
+.morning-more { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 8px; font-size: 0.86em; color: var(--gold); background: rgba(255, 255, 255, 0.08); cursor: pointer; white-space: nowrap; }
+.morning-avoid { display: block; margin-top: 3px; font-size: 0.9em; color: #cfe8d6; }
+.morning-avoid[hidden] { display: none; }
