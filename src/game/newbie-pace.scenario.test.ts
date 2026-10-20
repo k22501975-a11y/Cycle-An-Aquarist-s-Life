@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from './game';
-import { addFish, addHardscape, addPlant, FISH_SPECIES, feed, HARDSCAPE, PINCH_MEALS, simulate, useTestKit, waterChange, type TankState } from '../sim';
+import { addFish, addHardscape, buyPlant, FISH_SPECIES, feed, HARDSCAPE, PINCH_MEALS, simulate, useTestKit, waterChange, type TankState } from '../sim';
 import { advanceQuest, currentQuest, newProgress, QUESTS } from '../ui/tutorial';
 
 /**
@@ -25,7 +25,8 @@ function baseline(seed: number): Record<string, number> {
   };
   for (let d = 0; d <= 12 && currentQuest(p); d++) {
     if (d === 0) {
-      addPlant(s, 'anubias');
+      // 在店裡買的（第一株一定夾帶扁卷螺，polish-to-9.md §4）
+      buyPlant(s, 'anubias');
       act(d);
       useTestKit(s);
       act(d);

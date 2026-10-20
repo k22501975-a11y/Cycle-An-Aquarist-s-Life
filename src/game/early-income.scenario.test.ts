@@ -4,7 +4,7 @@ import { doDailyTask } from './daily-player';
 import {
   addCuttings,
   addFish,
-  addPlant,
+  buyPlant,
   CHEST_COINS_CAP,
   INCOME_GAP_DAYS,
   claimDaily,
@@ -42,7 +42,8 @@ function baseline(seed: number, days = 60, opts: { skipGap?: boolean; check?: (s
   s.environment.roomTempC = 25;
   s.environment.roomSwingC = 2;
   s.water.tempC = s.water.tempAvgC = 25;
-  addPlant(s, 'anubias');
+  // 在店裡買的（第一株一定夾帶扁卷螺，polish-to-9.md §4）
+  buyPlant(s, 'anubias');
   for (const sex of ['male', 'female', 'female'] as const) addFish(s, 'guppy', { carriesIch: false, carries: [], sex });
   const breeders = s.fish.map((f) => f.id);
   const income: Array<{ day: number; from: string; coins: number }> = [];

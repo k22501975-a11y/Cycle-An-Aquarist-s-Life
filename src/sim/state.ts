@@ -212,6 +212,8 @@ export interface Fish {
   lineage?: number;
   /** 第幾代（店裡買的是 0）。 */
   generation?: number;
+  /** 在缸裡出生的時間（遊戲小時）；店裡買的、舊存檔沒有。 */
+  bornHours?: number;
   /** 近交係數 0–1：同血統互配會升高，體質和尾鰭跟著退化。 */
   inbreeding?: number;
   /** 保底起步包送的魚：不能賣回店裡。 */
@@ -305,7 +307,9 @@ export type SimEventType =
   /** 阿德老闆送了育幼盒（subjectId 是快生的那尾母魚）。 */
   | 'nursery_gift'
   /** 育幼盒裡的小魚長夠大，放回主缸了（count 尾）。 */
-  | 'nursery_released';
+  | 'nursery_released'
+  /** 缸裡的害蟲小螺第一次多到看得見（count 是隻數）。 */
+  | 'pests_seen';
 
 export interface SimEvent {
   hours: number;

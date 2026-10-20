@@ -1,4 +1,4 @@
-import { economy, PRICES, spend } from './economy';
+import { economy, PRICES, registerHousehold, spend } from './economy';
 import { tankLock, unlockHint } from './goals';
 import { FILTERS, HEATERS, LIGHTS, TANKS, type FilterSpec, type HeaterSpec, type TankSpec } from './equipment';
 import { nextRandom } from './random';
@@ -60,6 +60,7 @@ export function linkTanks(tanks: TankState[]): void {
     if (t === home) continue;
     syncRoom(home, t);
   }
+  registerHousehold(tanks);
 }
 
 /** 把房間的設定（地區、冷氣、室溫、停電）從 from 抄到 to。 */

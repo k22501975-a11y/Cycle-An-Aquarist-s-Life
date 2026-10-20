@@ -31,7 +31,7 @@ import * as sim from './sim';
 import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, useTestKit } from './sim';
 import { h } from './ui/dom';
 import { ICONS } from './ui/icons';
-import { DEATH_ADVICE, describeEvent, firstDeathOwnerLine, fishName, fishStrain } from './ui/labels';
+import { DEATH_ADVICE, describeEvent, FIRST_PESTS_LINE, firstDeathOwnerLine, fishName, fishStrain } from './ui/labels';
 import { personaChip } from './ui/persona';
 import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
 import {
@@ -1171,6 +1171,8 @@ async function start(): Promise<void> {
   let nurseryGiftTank: number | null = null;
   /** 過一晚時第一次死魚：報告卡關掉後阿德老闆再來安慰（U4）。 */
   let firstDeathLine: string | null = null;
+  /** 第一次在缸裡看到搭便車的螺（polish-to-9.md §4）：過一晚的話等報告卡關掉再說。 */
+  let firstPestsLine: string | null = null;
   /** 第一次有母魚快生了，老闆送育幼盒，一個步驟帶玩家把她放進去（mvp.md §4.4.2 第 2 點）。 */
   const nurseryGuide = async (tank: number) => {
     const t = game.tanks[tank] ?? game.state;
@@ -1200,6 +1202,11 @@ async function start(): Promise<void> {
       const t = game.tanks[tank] ?? game.state;
       const line = firstDeathOwnerLine(e, [...t.fish, ...(t.quarantine?.fish ?? [])].find((f) => f.id === e.subjectId));
       if (game.sleeping || sleepingNow) firstDeathLine = line;
+      else void ownerSay(line);
+    }
+    if (e.type === 'pests_seen' && firstTime(store, 'first_pests')) {
+      const line = FIRST_PESTS_LINE;
+      if (game.sleeping || sleepingNow) firstPestsLine = line;
       else void ownerSay(line);
     }
     // 過一晚的時候不跳提示，早上報告會一條一條列出來
@@ -1394,6 +1401,10 @@ async function start(): Promise<void> {
         if (firstDeathLine !== null) {
           void ownerSay(firstDeathLine);
           firstDeathLine = null;
+        }
+        if (firstPestsLine !== null) {
+          void ownerSay(firstPestsLine);
+          firstPestsLine = null;
         }
       });
       shade.setAttribute('aria-hidden', 'false');

@@ -17,7 +17,7 @@ import {
   catchPests,
   collectTrap,
   doseMolluscicide,
-  hitchhike,
+  buyPlant as plantFromShop,
   isLightOn,
   PESTS,
   pestCount,
@@ -892,8 +892,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       ctx,
       PLANT_PRICES[species],
       (st) => {
-        addPlant(st, species);
-        hitchhike(st, st.quarantine ? 0.08 : 0.25);
+        plantFromShop(st, species);
       },
       `種下一株${PLANT_SPECIES[species].name}`,
     );
@@ -1006,7 +1005,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       {},
       advice([
         '陰性草弱光就能長；陽性草需要強光加 CO₂。',
-        game.state.quarantine ? '新水草會先在檢疫盒泡過，比較不會夾帶小螺的卵。' : '新水草有時夾帶看不到的小螺卵，過幾週才發現缸裡多了螺。有檢疫盒的話會先泡過。',
+        game.state.quarantine ? '新水草會先在檢疫盒泡過，比較不會夾帶小螺的卵。' : '店裡的水草常夾帶看不到的扁卷螺卵（第一株幾乎一定有），過一陣子才發現缸裡多了螺。有檢疫盒的話會先泡過。',
       ]),
       cardGrid(
         ...(Object.keys(PLANT_SPECIES) as PlantSpeciesId[]).map((id) =>

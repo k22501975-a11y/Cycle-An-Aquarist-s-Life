@@ -8,6 +8,7 @@ import { createFish } from './processes/population';
 import { roomTemperature } from './processes/thermal';
 import { addFood, DEFAULT_FOOD, type FoodGrade, type FoodKind } from './food';
 import { nextRandom } from './random';
+import { plantHitchhikers } from './snails';
 import { FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 import type { FilterSpec, HardscapeSpec, SubstrateSpec } from './equipment';
 import { onHardscapeAdded, onHardscapeRemoved } from './aquascape';
@@ -213,6 +214,13 @@ export function removeDeadFish(state: TankState): number {
 export function addPlant(state: TankState, species: PlantSpeciesId, biomassG = PLANT_SPECIES[species].cuttingMassG * 2): Plant {
   const plant: Plant = { id: state.nextId++, species, biomassG, leafAlgae: 0, growthRate: 0 };
   state.plants.push(plant);
+  return plant;
+}
+
+/** 在店裡買一株水草種下：可能夾帶扁卷螺（第一次必定，見 plantHitchhikers）。不含付錢。 */
+export function buyPlant(state: TankState, species: PlantSpeciesId): Plant {
+  const plant = addPlant(state, species);
+  plantHitchhikers(state);
   return plant;
 }
 

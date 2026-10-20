@@ -4,7 +4,7 @@ import { doDailyTask } from './daily-player';
 import {
   addCuttings,
   addFish,
-  addPlant,
+  buyPlant,
   claimDaily,
   economy,
   dailyTasks,
@@ -42,7 +42,8 @@ function run(seed: number, noBox = false, days = 37): { first: number; firstRegu
   s.environment.roomTempC = 25;
   s.environment.roomSwingC = 2;
   s.water.tempC = s.water.tempAvgC = 25;
-  addPlant(s, 'anubias');
+  // 在店裡買的（第一株一定夾帶扁卷螺，polish-to-9.md §4）
+  buyPlant(s, 'anubias');
   for (const sex of ['male', 'female', 'female'] as const) addFish(s, 'guppy', { carriesIch: false, carries: [], sex });
   const breeders = s.fish.map((f) => f.id);
   if (noBox) economy(s).nurseryGifted = true;

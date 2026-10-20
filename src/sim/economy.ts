@@ -165,6 +165,21 @@ export function claimStarterPack(state: TankState, addGuppy: (state: TankState, 
   return true;
 }
 
+/** 共用同一個錢包的所有缸（linkTanks 登記，不進存檔）：訂單板這類全家共用的東西要一次看所有缸。 */
+const households = new WeakMap<Economy, TankState[]>();
+
+/** 登記共用這個錢包的缸（household.ts 的 linkTanks 每次連線時呼叫）。 */
+export function registerHousehold(tanks: TankState[]): void {
+  const wallet = tanks[0]?.economy;
+  if (wallet) households.set(wallet, [...tanks]);
+}
+
+/** 跟這缸共用錢包的所有缸（第一缸是主缸）；沒登記過（只有一缸、測試）就只有自己。 */
+export function householdTanks(state: TankState): TankState[] {
+  const list = state.economy && households.get(state.economy);
+  return list && list.includes(state) ? list : [state];
+}
+
 export function economy(state: TankState): Economy {
   return (state.economy ??= { coins: STARTING_COINS, kwh: 0, lastBillHours: state.hours, sold: { day: -1, count: 0 }, cuttings: {} });
 }

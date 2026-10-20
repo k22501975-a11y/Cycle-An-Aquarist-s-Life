@@ -231,6 +231,7 @@ export function giveBirth(state: TankState, mother: Fish, population: number): F
     // 同一胎有快有慢（約 ±20%），所以長大後要挑
     // 剛出生的魚習慣出生缸的水（design/acclimation.md §1）
     fry.acclimated = tankHabit(state);
+    fry.bornHours = state.hours;
     fry.growthRate = Math.min(1.4, Math.max(0.6, 1 + (nextRandom(state.rng) + nextRandom(state.rng) + nextRandom(state.rng) - 1.5) * 0.4));
     if (mother.genome && sire) {
       fry.genome = cross(state.rng, mother.genome, sire.genome, fry.sex, inbreeding);

@@ -330,6 +330,31 @@ describe('寶箱獎勵池（polish-to-9.md U5）', () => {
     expect(e.chestCoins).toBe(CHEST_COINS_CAP);
   });
 
+  it(`寶箱魚幣 ${CHEST_COINS_CAP} 是硬上限：到上限後抽到魚幣那一格改開一件物品`, () => {
+    const s = richTank();
+    const tanks = [s];
+    const e = economy(s);
+    e.chestCoins = CHEST_COINS_CAP;
+    let converted = 0;
+    for (let d = 10; d < CHEST_CAP_DAY; d++) {
+      s.hours = d * 24 + 8;
+      e.dailyStreak = undefined;
+      updateDaily(tanks);
+      dailyTasks(tanks)!.tasks = [{ id: 'observe', done: false }];
+      markDaily(tanks, 'observe');
+      updateDaily(tanks);
+      const raw = rollChest(d, dailyTasks(tanks)!.chestSeed ?? 0, false);
+      const coins = e.coins;
+      const got = claimDaily(tanks)!;
+      expect(got.coins).toBe(0);
+      expect(e.coins).toBe(coins);
+      expect(got.item).toBeDefined();
+      if (raw.coins > 0) converted++;
+    }
+    expect(converted).toBeGreaterThan(0);
+    expect(e.chestCoins).toBe(CHEST_COINS_CAP);
+  });
+
   it('寶箱來的插枝只能種，不能賣回店家、交單、上架或送人換錢', () => {
     const s = richTank();
     const tanks = [s];

@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   addFish,
   addSnail,
+  buyPlant,
+  PESTS_VISIBLE,
+  PLANT_HITCHHIKE_CHANCE,
   collectTrap,
   createTank,
   doseMolluscicide,
@@ -108,5 +111,34 @@ describe('螺（design/snails.md）', () => {
     setTrap(s);
     simulate(s, 50);
     expect(s.events.some((e) => e.type === 'trap_rotted')).toBe(true);
+  });
+});
+
+describe('搭便車的螺（polish-to-9.md §4「第二次確認」）', () => {
+  it('店裡買的水草：第一次必定夾帶 2～3 隻扁卷螺，之後大約 30%', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const s = createTank({ ...MATURE, seed });
+      buyPlant(s, 'anubias');
+      expect(snailState(s).pests.ramshorn).toBeGreaterThanOrEqual(2);
+      expect(snailState(s).pests.ramshorn).toBeLessThanOrEqual(3);
+    }
+    const s = createTank({ ...MATURE, seed: 7 });
+    buyPlant(s, 'anubias');
+    let hits = 0;
+    const n = 2000;
+    for (let i = 0; i < n; i++) {
+      const before = snailState(s).pests.ramshorn;
+      buyPlant(s, 'moss');
+      if (snailState(s).pests.ramshorn > before) hits++;
+    }
+    expect(Math.abs(hits / n - PLANT_HITCHHIKE_CHANCE)).toBeLessThan(0.04);
+  });
+
+  it(`螺會自己繁殖；第一次多到 ${PESTS_VISIBLE} 隻看得見時記一筆（只記一次）`, () => {
+    const s = createTank({ ...MATURE, seed: 3 });
+    buyPlant(s, 'anubias');
+    run(s, 40, 120);
+    expect(pestCount(s)).toBeGreaterThan(5);
+    expect(s.events.filter((e) => e.type === 'pests_seen')).toHaveLength(1);
   });
 });

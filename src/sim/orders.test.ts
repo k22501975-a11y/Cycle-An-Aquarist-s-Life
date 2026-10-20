@@ -32,8 +32,11 @@ import {
   TANKS,
   trimPlant,
   updateOrders,
+  GAP_FRY_MIN_DAYS,
+  GAP_PEST_COUNT,
+  SNAIL_BREEDERS,
+  linkTanks,
   PLANT_PRICES,
-  FISH_PRICES,
   SNAILS,
   INCOME_GAP_DAYS,
   incomeGapOrder,
@@ -330,34 +333,48 @@ describe('收入空檔保底（polish-to-9.md §4）', () => {
     addPlant(s, 'rotala');
     const board = fishOnly(s);
     e.lastEarnedDay = 0;
-    expect(incomeGapOrder(s, board)).toBeNull();
+    expect(incomeGapOrder([s], board)).toBeNull();
     updateOrders(s);
     expect(board.orders.map((o) => o.id)).toEqual([900, 901, 902]);
   });
 
-  it('害蟲小螺、小蘋果螺或剛生的仔魚也行（擇一），每份不超過店售價', () => {
+  it('小螺（一張最多 5 隻，留 2 隻種螺）、小蘋果螺或出生滿 7 天的仔魚也行（擇一），每份不超過店售價', () => {
     const s = tank();
     s.hours = 20 * 24 + 8;
-    snailState(s).pests.bladder = 8;
-    const o = incomeGapOrder(s, orderBoard(s))!;
+    // 只剩種螺不收
+    snailState(s).pests.ramshorn = SNAIL_BREEDERS;
+    expect(incomeGapOrder([s], orderBoard(s))).toBeNull();
+    snailState(s).pests.ramshorn = 4;
+    expect(incomeGapOrder([s], orderBoard(s))!.count).toBe(4 - SNAIL_BREEDERS);
+    snailState(s).pests.ramshorn = 8;
+    const o = incomeGapOrder([s], orderBoard(s))!;
     expect(o.kind).toBe('snail');
+    expect(o.count).toBe(GAP_PEST_COUNT);
+    expect(o.count * o.unitPrice).toBe(40);
     expect(deliverableNow(s, o)).toBe(true);
-    snailState(s).pests.bladder = 0;
+    snailState(s).pests.ramshorn = 0;
     snailState(s).appleYoung = 4;
-    const apple = incomeGapOrder(s, orderBoard(s))!;
+    const apple = incomeGapOrder([s], orderBoard(s))!;
     expect(apple.snail).toBe('appleYoung');
     expect(apple.unitPrice).toBeLessThanOrEqual(SNAILS.apple.price);
     snailState(s).appleYoung = 0;
     const baby = juveniles(s, 3);
-    for (const f of baby) f.lengthCm = 0.7;
-    const fry = incomeGapOrder(s, orderBoard(s))!;
+    // 剛出生的魚苗店家不收
+    for (const f of baby) Object.assign(f, { lengthCm: 0.8, bornHours: s.hours - 3 * 24 });
+    expect(incomeGapOrder([s], orderBoard(s))).toBeNull();
+    for (const f of baby) f.bornHours = s.hours - GAP_FRY_MIN_DAYS * 24;
+    const fry = incomeGapOrder([s], orderBoard(s))!;
     expect(fry.kind).toBe('fry');
     expect(fry.count).toBe(2);
-    expect(fry.unitPrice).toBeLessThanOrEqual(FISH_PRICES.guppy);
+    expect(fry.unitPrice).toBeGreaterThanOrEqual(5);
+    expect(fry.unitPrice).toBeLessThanOrEqual(8);
     expect(deliverableNow(s, fry)).toBe(true);
+    expect(fulfillOrder([s], fry.id)).toBe(0); // 還沒掛上板
+    orderBoard(s).orders.push(fry);
+    expect(fulfillOrder([s], fry.id)).toBe(fry.count * fry.unitPrice);
     // 店裡買的魚（第 0 代）生出來以前不算
     for (const f of baby) f.generation = 0;
-    expect(incomeGapOrder(s, orderBoard(s))).toBeNull();
+    expect(incomeGapOrder([s], orderBoard(s))).toBeNull();
   });
 
   it(`一直不交保底單：不會卡住，每 ${INCOME_GAP_DAYS} 天換一張新的，板上同時只有一張`, () => {
@@ -379,6 +396,24 @@ describe('收入空檔保底（polish-to-9.md §4）', () => {
     // 30 天裡每 6 天換一張：至少 5 張不同的保底單，而且隨時都有一張
     expect(seen.length).toBeGreaterThanOrEqual(5);
     expect(orderBoard(s).orders.some((o) => o.gap)).toBe(true);
+  });
+
+  it('訂單板全家共用：每小時查一次時看所有缸，第一缸沒東西、第二缸有剪得下來的草也會出保底單', () => {
+    const a = tank(3);
+    const b = tank(4);
+    a.hours = b.hours = 20 * 24 + 8;
+    linkTanks([a, b]);
+    const board = fishOnly(a);
+    economy(a).lastEarnedDay = 0;
+    grown(b);
+    // 第一缸先查這一小時（看的是所有缸），第二缸同一小時就不再查
+    updateOrders(a);
+    updateOrders(b);
+    const gap = board.orders.find((o) => o.gap)!;
+    expect(gap.kind).toBe('cutting');
+    expect(board.orders.filter((o) => o.gap)).toHaveLength(1);
+    addCuttings(a, 'anubias', trimPlant(b, b.plants.at(-1)!.id));
+    expect(fulfillOrder([a, b], gap.id)).toBeGreaterThan(0);
   });
 
   it('舊存檔沒有最後收入的天數：從讀檔那天開始算，不會一更新就出保底單', () => {
