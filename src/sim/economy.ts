@@ -124,7 +124,10 @@ export interface Economy {
   freeMeals?: number;
   /** 寶箱累計開出多少魚幣（第 60 天前上限 400，polish-to-9.md §4）。 */
   chestCoins?: number;
-  /** 最後一次賺到魚幣（賣魚、賣插枝、交單、市場入帳、寶箱魚幣）是第幾個遊戲天；寶箱保底用。舊存檔沒有＝第 0 天。 */
+  /**
+   * 最後一次有真的收入（賣魚、賣插枝、交單、市場賣出）是第幾個遊戲天；寶箱魚幣不算。
+   * 訂單板的收入空檔保底用（polish-to-9.md §4「收入空檔」）；舊存檔沒有，第一次檢查時從那天開始算。
+   */
   lastEarnedDay?: number;
   /** 手上的插枝裡有幾株是寶箱來的：只能種，不能賣回店家、交單、上架或送人換錢（polish-to-9.md §4）。 */
   chestCuttings?: Partial<Record<PlantSpeciesId, number>>;
@@ -179,7 +182,7 @@ export function applyLedger(state: TankState, entry: { delta: number; ledgerSeq:
   return true;
 }
 
-/** 記下今天賺到魚幣了（寶箱保底看多久沒賺錢，daily.ts）。 */
+/** 記下今天有真的收入（訂單板看多久沒收入，orders.ts 的收入空檔保底）。寶箱魚幣不算。 */
 export function noteEarned(state: TankState): void {
   economy(state).lastEarnedDay = Math.floor(state.hours / 24);
 }

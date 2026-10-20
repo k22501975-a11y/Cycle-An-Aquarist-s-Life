@@ -32,6 +32,8 @@ import {
   TANKS,
   trimPlant,
   updateOrders,
+  INCOME_GAP_DAYS,
+  incomeGapOrder,
   type Fish,
   type ShopOrder,
   type TankState,
@@ -277,5 +279,67 @@ describe('店家訂單板（M21）', () => {
       expect(orderContext(s).safeFry).toBe(20);
       expect(fryOrderSize(orderContext(s))).toBeCloseTo(6, 5);
     });
+  });
+});
+
+describe('收入空檔保底（polish-to-9.md §4）', () => {
+  const fishOnly = (s: TankState) => {
+    const board = orderBoard(s);
+    board.orders = [0, 1, 2].map((i) => ({ id: 900 + i, kind: 'fish', species: 'guppy', size: 'juvenile', count: 3, unitPrice: 50, postedHours: s.hours - i } as ShopOrder));
+    board.lastChangeHours = s.hours;
+    return board;
+  };
+
+  it(`連續 ${INCOME_GAP_DAYS} 天沒有賣東西或交單，板上換一張用手上的東西就交得出來的小單；交了就重算`, () => {
+    const s = tank();
+    s.hours = 20 * 24 + 8;
+    const e = economy(s);
+    addCuttings(s, 'anubias', 3);
+    const board = fishOnly(s);
+    e.lastEarnedDay = 20 - INCOME_GAP_DAYS + 1;
+    updateOrders(s);
+    expect(board.orders.some((o) => deliverableNow(s, o))).toBe(false);
+    e.lastEarnedDay = 20 - INCOME_GAP_DAYS;
+    updateOrders(s);
+    expect(board.orders).toHaveLength(ORDER_BOARD_SIZE);
+    const gap = board.orders.find((o) => deliverableNow(s, o))!;
+    expect(gap.kind).toBe('cutting');
+    expect(gap.count * gap.unitPrice).toBeGreaterThanOrEqual(40);
+    expect(fulfillOrder([s], gap.id)).toBeGreaterThan(0);
+    expect(e.lastEarnedDay).toBe(20);
+  });
+
+  it('寶箱來的插枝不算交得出來的東西；什麼都沒有就不出保底單', () => {
+    const s = tank();
+    s.hours = 20 * 24 + 8;
+    const e = economy(s);
+    addCuttings(s, 'anubias', 2);
+    e.chestCuttings = { anubias: 2 };
+    const board = fishOnly(s);
+    e.lastEarnedDay = 0;
+    expect(incomeGapOrder(s, board)).toBeNull();
+    updateOrders(s);
+    expect(board.orders.map((o) => o.id)).toEqual([900, 901, 902]);
+  });
+
+  it('舊存檔沒有最後收入的天數：從讀檔那天開始算，不會一更新就出保底單', () => {
+    const s = tank();
+    s.hours = 40 * 24 + 8;
+    const e = economy(s);
+    addCuttings(s, 'anubias', 3);
+    const board = fishOnly(s);
+    delete e.lastEarnedDay;
+    updateOrders(s);
+    expect(e.lastEarnedDay).toBe(40);
+    expect(board.orders.some((o) => o.gap)).toBe(false);
+  });
+
+  it('有螺或長到 1.2 cm 的小孔雀也行（擇一）', () => {
+    const s = tank();
+    s.hours = 20 * 24 + 8;
+    snailState(s).pests.bladder = 8;
+    const o = incomeGapOrder(s, orderBoard(s))!;
+    expect(o.kind).toBe('snail');
+    expect(deliverableNow(s, o)).toBe(true);
   });
 });

@@ -70,11 +70,6 @@ export const CHEST_COINS_MAX = 30;
  */
 export const CHEST_COINS_CAP = 400;
 export const CHEST_CAP_DAY = 60;
-/**
- * 寶箱保底：已經這麼多天沒賺到任何魚幣（賣魚、交單、市場、寶箱），一般寶箱一定開出魚幣（仍受上限管）。
- * 讓 §4.3「任兩筆收入隔 ≤ 7 天」在訂單空窗期也成立；有在賺錢的玩家幾乎碰不到，寶箱魚幣還是以 25% 為主。
- */
-export const CHEST_DRY_DAYS = 6;
 /** 連續幾天開寶箱送大寶箱（大寶箱不給魚幣，給一件造景物和一株比較貴的水草）。 */
 export const BIG_CHEST_DAYS = 7;
 /** 寶箱的一罐飼料可以餵幾餐。 */
@@ -357,8 +352,8 @@ export interface ChestReward {
   value: number;
 }
 
-/** 這一天的寶箱會開出什麼（不改狀態；只看天數和出題時的種子）。forceCoins：保底，一般寶箱一定開出魚幣。 */
-export function rollChest(day: number, seed: number, big: boolean, forceCoins = false): ChestReward {
+/** 這一天的寶箱會開出什麼（不改狀態；只看天數和出題時的種子）。 */
+export function rollChest(day: number, seed: number, big: boolean): ChestReward {
   const r = (salt: number) => hash01(day, seed, salt);
   const hardscape = (): Pick<ChestReward, 'item' | 'itemId' | 'value'> => {
     const id = r(2) < 0.5 ? CHEST_ROCKS[Math.floor(r(3) * CHEST_ROCKS.length)] : CHEST_WOOD;
@@ -372,7 +367,7 @@ export function rollChest(day: number, seed: number, big: boolean, forceCoins = 
     return { big, coins: 0, ...x, plantId, value: x.value + PLANT_PRICES[plantId] / 2, text: `${name(x)}和一株${PLANT_SPECIES[plantId].name}` };
   }
   let roll = r(1);
-  const item = forceCoins ? 'coins' : (CHEST_POOL.find((p) => (roll -= p.weight) < 0)?.item ?? 'coins');
+  const item = CHEST_POOL.find((p) => (roll -= p.weight) < 0)?.item ?? 'coins';
   if (item === 'coins') {
     const coins = CHEST_COINS_MIN + Math.floor(r(4) * (CHEST_COINS_MAX - CHEST_COINS_MIN + 1));
     return { big, coins, value: coins, text: `${coins} 魚幣` };
@@ -412,14 +407,12 @@ export function claimDaily(tanks: TankState[]): ChestReward | null {
   const streak = e.dailyStreak && e.dailyStreak.lastDay === d.day - 1 ? e.dailyStreak.count + 1 : 1;
   const big = streak >= BIG_CHEST_DAYS;
   e.dailyStreak = { count: big ? 0 : streak, lastDay: d.day };
-  const dry = d.day - (e.lastEarnedDay ?? 0) >= CHEST_DRY_DAYS;
-  let got = rollChest(d.day, d.chestSeed ?? 0, big, dry);
+  let got = rollChest(d.day, d.chestSeed ?? 0, big);
   // 到上限：只給剩下的額度，額度用完改給一罐飼料
   const room = CHEST_COINS_CAP - (e.chestCoins ?? 0);
   if (got.coins > room && d.day <= CHEST_CAP_DAY) got = room > 0 ? { ...got, coins: room, value: room, text: `${room} 魚幣` } : foodChest(big);
   e.coins += got.coins;
   e.chestCoins = (e.chestCoins ?? 0) + got.coins;
-  if (got.coins > 0) e.lastEarnedDay = d.day;
   if (got.item === 'food') e.freeMeals = (e.freeMeals ?? 0) + CHEST_FOOD_MEALS;
   if (got.item === 'bacteria') e.bacteriaBottles = (e.bacteriaBottles ?? 0) + 1;
   if (got.item === 'hardscape') (e.hardscapeBag ??= []).push(got.itemId!);

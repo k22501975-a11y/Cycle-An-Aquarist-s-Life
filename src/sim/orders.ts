@@ -64,6 +64,8 @@ export interface ShopOrder {
   fin?: FinTrait;
   /** 尾鰭分數至少幾分（孔雀魚）。 */
   minTail?: number;
+  /** 收入空檔保底單：連續 6 天沒收入時掛的小單，用手上現有的東西就交得出來（polish-to-9.md §4）。 */
+  gap?: boolean;
 }
 
 export interface OrderBoard {
@@ -447,10 +449,68 @@ function swapInSmallOrder(state: TankState, board: OrderBoard, ctx: OrderContext
   return false;
 }
 
+/** 連續幾天沒有真的收入（賣魚、賣插枝、交單），訂單板就保證出一張現在交得出來的小單（polish-to-9.md §4「收入空檔」）。 */
+export const INCOME_GAP_DAYS = 6;
+
+/**
+ * 收入空檔保底的小單：用玩家現在手上就有的東西（插枝、螺、小孔雀擇一，有哪種挑哪種），一張約 40～60 元。
+ * 寶箱來的插枝不算（ctx.cuttings 已經扣掉）。什麼都沒有就回傳 null。
+ */
+export function incomeGapOrder(state: TankState, board: OrderBoard, ctx: OrderContext = orderContext(state)): ShopOrder | null {
+  const r = () => nextRandom(board.rng);
+  const base = { id: 0, count: 0, unitPrice: 0, postedHours: state.hours };
+  const candidates: ShopOrder[] = [];
+  for (const plant of Object.keys(ctx.cuttings) as PlantSpeciesId[]) {
+    const count = Math.min(ctx.cuttings[plant] ?? 0, 2);
+    if (count > 0) candidates.push({ ...base, kind: 'cutting', plant, count, unitPrice: round5(Math.max(40 / count, PLANT_PRICES[plant] / 3)) });
+  }
+  for (const snail of Object.keys(ctx.snails) as OrderSnail[]) {
+    const count = Math.min(ctx.snails[snail] ?? 0, snail === 'appleYoung' ? 3 : 5);
+    if (count > 0) candidates.push({ ...base, kind: 'snail', snail, count, unitPrice: round5(40 / count) });
+  }
+  // 小孔雀：長到 1.2 cm 的才交得出來，最多拿 2 尾，其他留著養大（下次空檔還有得交）
+  const fry: ShopOrder = { ...base, kind: 'fry', species: 'guppy', minCm: FRY_ORDER_MIN_CM, count: 1, unitPrice: 0 };
+  const fryCount = Math.min(2, orderSupply([state], fry));
+  if (fryCount > 0) candidates.push({ ...fry, count: fryCount, unitPrice: Math.round(40 / fryCount) });
+  const ok = candidates.filter((o) => deliverableNow(state, o, ctx));
+  if (ok.length === 0) return null;
+  const o = ok[Math.floor(r() * ok.length)];
+  o.id = board.nextId++;
+  o.gap = true;
+  return o;
+}
+
+/**
+ * 收入空檔保底：連續 INCOME_GAP_DAYS 天沒有真的收入，板上又沒有交得出來的保底單，就掛一張（§4.4.1「至少一張交得出的單」的加強）。
+ * 一般單交得出來但玩家想留著（例如小魚要養大做中魚單）也一樣補：保底單數量少，交了不會把要留的賣光。
+ * 板子滿了就換掉最舊、交不出來的那張（都交得出來就換最舊的）。寶箱魚幣不算收入。
+ */
+function ensureIncomeOrder(state: TankState, board: OrderBoard): void {
+  const e = economy(state);
+  const today = Math.floor(state.hours / 24);
+  if (e.lastEarnedDay === undefined) e.lastEarnedDay = today;
+  if (today - e.lastEarnedDay < INCOME_GAP_DAYS) return;
+  const ctx = orderContext(state);
+  if (board.orders.some((o) => o.gap && deliverableNow(state, o, ctx))) return;
+  const o = incomeGapOrder(state, board, ctx);
+  if (!o) return;
+  if (board.orders.length >= ORDER_BOARD_SIZE) {
+    const byAge = [...board.orders].sort((a, b) => a.postedHours - b.postedHours);
+    const stale = byAge.find((x) => !deliverableNow(state, x, ctx)) ?? byAge[0];
+    board.orders = board.orders.filter((x) => x !== stale);
+  }
+  board.orders.push(o);
+}
+
 /** 每次模擬更新時呼叫：記下玩家養出了什麼；第一次掛滿 3 張，之後交掉一張隔天補一張。 */
 export function updateOrders(state: TankState): void {
   const board = orderBoard(state);
   noteProgress(state, board);
+  fillOrders(state, board);
+  ensureIncomeOrder(state, board);
+}
+
+function fillOrders(state: TankState, board: OrderBoard): void {
   // 太久沒人交的單，客人就不等了（不用玩家自己撕）
   const expired = board.orders.filter((o) => state.hours - o.postedHours >= (o.kind === 'fry' ? FRY_ORDER_EXPIRE_DAYS : ORDER_EXPIRE_DAYS) * 24);
   if (expired.length > 0) board.orders = board.orders.filter((o) => !expired.includes(o));

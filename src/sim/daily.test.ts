@@ -7,8 +7,6 @@ import {
   BIG_CHEST_PLANTS,
   CHEST_CAP_DAY,
   CHEST_COINS_CAP,
-  CHEST_DRY_DAYS,
-  noteEarned,
   chestCuttingsOf,
   orderSupply,
   PLANT_SPECIES,
@@ -249,9 +247,8 @@ describe('寶箱獎勵池（polish-to-9.md U5）', () => {
     const kinds = new Set<string>();
     for (let d = 0; d < 40 && kinds.size < 5; d++) {
       s.hours = (20 + d) * 24 + 8;
-      // 斷開連續天數，只看一般寶箱；每天都有別的收入，不觸發保底
+      // 斷開連續天數，只看一般寶箱
       e.dailyStreak = undefined;
-      e.lastEarnedDay = 20 + d;
       updateDaily(tanks);
       dailyTasks(tanks)!.tasks = [{ id: 'observe', done: false }];
       markDaily(tanks, 'observe');
@@ -329,34 +326,8 @@ describe('寶箱獎勵池（polish-to-9.md U5）', () => {
       expect(got.coins).toBeLessThanOrEqual(5);
       if (got.coins === 0) expect(got.item).toBeDefined();
     }
-    // 沒有別的收入，保底一定會開到魚幣：只給剩下的 5 元
+    // 40 天裡一定會抽到魚幣：只給剩下的 5 元
     expect(e.chestCoins).toBe(CHEST_COINS_CAP);
-  });
-
-  it(`寶箱保底：${CHEST_DRY_DAYS} 天沒賺到魚幣，一般寶箱一定開出魚幣；有在賺錢就照機率`, () => {
-    const s = richTank();
-    const tanks = [s];
-    const e = economy(s);
-    const open = (day: number) => {
-      s.hours = day * 24 + 8;
-      e.dailyStreak = undefined;
-      updateDaily(tanks);
-      dailyTasks(tanks)!.tasks = [{ id: 'observe', done: false }];
-      markDaily(tanks, 'observe');
-      updateDaily(tanks);
-      return claimDaily(tanks)!;
-    };
-    // 開 10 天（最多 300 元，不碰上限）
-    for (let d = 20; d < 30; d++) {
-      e.lastEarnedDay = d - CHEST_DRY_DAYS;
-      const got = open(d);
-      expect(got.coins).toBeGreaterThanOrEqual(CHEST_COINS_MIN);
-      expect(e.lastEarnedDay).toBe(d);
-    }
-    // 賣魚、交單也算賺到錢
-    s.hours = 50 * 24 + 8;
-    noteEarned(s);
-    expect(e.lastEarnedDay).toBe(50);
   });
 
   it('寶箱來的插枝只能種，不能賣回店家、交單、上架或送人換錢', () => {
@@ -369,7 +340,6 @@ describe('寶箱獎勵池（polish-to-9.md U5）', () => {
     for (let d = 10; d < 80 && got?.item !== 'plant'; d++) {
       s.hours = d * 24 + 8;
       e.dailyStreak = undefined;
-      e.lastEarnedDay = d;
       updateDaily(tanks);
       dailyTasks(tanks)!.tasks = [{ id: 'observe', done: false }];
       markDaily(tanks, 'observe');
