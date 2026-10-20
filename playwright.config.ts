@@ -30,6 +30,10 @@ export default defineConfig({
       use: {
         ...devices['Pixel 7 landscape'],
         viewport: { width: 915, height: 412 },
+        // Pixel 7 的像素比 2.625 會讓遊戲用 2 倍解析度繪圖。CI 沒有 GPU，軟體繪圖一幀要 200ms 以上，
+        // 暫停時也一樣，主執行緒幾乎沒空，每次點擊或 evaluate 都要等快 1 秒（#164）。測試用 1 倍；
+        // 高解析度的版面另外在 flows/devices.spec.ts 測。
+        deviceScaleFactor: 1,
         launchOptions: {
           executablePath: process.env.PW_CHROMIUM || undefined,
           // 沒有 GPU 的環境要用軟體 WebGL，否則 PixiJS 會黑畫面
