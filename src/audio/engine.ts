@@ -1,5 +1,6 @@
 import { barNotes, midiToFreq, pluckSamples, STEP_SECONDS, STEPS_PER_BAR } from './music';
 import type { AudioSettings } from './settings';
+import { Haptics } from './haptics';
 import { SOUND_COOLDOWN_MS, Throttle, type SoundId } from './sounds';
 
 /** 環境音要知道的缸內狀態。 */
@@ -29,13 +30,16 @@ export class AudioEngine {
   private noise!: AudioBuffer;
   private plucks = new Map<number, AudioBuffer>();
   private throttle = new Throttle();
+  private haptics: Haptics;
   private nextBarTime = 0;
   private bar = 0;
   private nextBubble = 0;
   private timer: number | null = null;
   private ambience: AmbienceState = { filterOn: true, airPumpOn: false, calm: 0 };
 
-  constructor(private settings: AudioSettings) {}
+  constructor(private settings: AudioSettings) {
+    this.haptics = new Haptics(settings.haptics);
+  }
 
   get started(): boolean {
     return this.ctx !== null;
@@ -97,6 +101,7 @@ export class AudioEngine {
 
   applySettings(settings: AudioSettings): void {
     this.settings = settings;
+    this.haptics.enabled = settings.haptics;
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     const set = (g: GainNode, v: number) => g.gain.setTargetAtTime(v, t, 0.05);
@@ -120,7 +125,15 @@ export class AudioEngine {
     else void this.ctx.resume();
   }
 
-  play(id: SoundId): void {
+  /** 只震不出聲（點魚、點水草這類沒有音效的動作）。 */
+  buzz(id: SoundId): void {
+    this.haptics.buzz(id);
+  }
+
+  /** 播音效；haptic 是玩家自己的動作才給（模擬事件只出聲）。 */
+  play(id: SoundId, haptic = true): void {
+    // 震動不用等音訊解鎖，靜音時也照樣震
+    if (haptic) this.haptics.buzz(id);
     const ctx = this.ctx;
     if (!ctx || ctx.state !== 'running') return;
     const cooldown = SOUND_COOLDOWN_MS[id] ?? 60;
