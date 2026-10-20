@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, economy, GOALS, goalState, nextStep } from '.';
+import { addFish, economy, GENERIC_STEP, GOALS, goalState, nextStep } from '.';
 
 describe('主畫面的下一步（U1）', () => {
   it('每個目標都說得出下一步，句子短', () => {
@@ -10,6 +10,8 @@ describe('主畫面的下一步（U1）', () => {
       const step = nextStep([s]);
       expect(step?.goal).toBe(goal.id);
       expect(step!.text.length).toBeLessThanOrEqual(24);
+      // 每個目標都有自己的一句，沒有掉到保底
+      expect(step!.text).not.toBe(GENERIC_STEP);
       g.done.push(goal.id);
     }
     expect(nextStep([s])).toBeNull();
@@ -17,6 +19,8 @@ describe('主畫面的下一步（U1）', () => {
 
   it('跟著缸裡的狀況變：母魚快生了、錢夠不夠買第二缸', () => {
     const s = newGameState(1);
+    expect(nextStep([s])).toMatchObject({ goal: 'cycled', target: 'test' });
+    goalState([s]).done.push('cycled');
     expect(nextStep([s])).toMatchObject({ goal: 'protect_fry', target: 'feed' });
     const mom = addFish(s, 'guppy', { sex: 'female' });
     mom.ageDays = 120;
