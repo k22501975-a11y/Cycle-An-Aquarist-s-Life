@@ -237,10 +237,18 @@ async function start(): Promise<void> {
   };
   debugHandle.cloud = cloud;
   // 這幾個介面拆成另外的檔案，用到才載入（主程式 gzip 有 300 KB 上限，見 scripts/check-assets.mjs）
-  const cloudUi = () => import('./ui/cloud-panel');
-  const friendsUi = () => import('./ui/friends-panel');
-  const mallUi = () => import('./ui/mall-panel');
-  const loadMarket = () => import('./ui/market-panel');
+  // 網頁版離線時第一次打開會載不到：提示一聲就停在這裡，不讓它變成當機畫面
+  const lazyUi =
+    <T,>(load: () => Promise<T>) =>
+    () =>
+      load().catch(() => {
+        toasts.show('要連上網路才能打開這個', 'warn');
+        return new Promise<T>(() => {});
+      });
+  const cloudUi = lazyUi(() => import('./ui/cloud-panel'));
+  const friendsUi = lazyUi(() => import('./ui/friends-panel'));
+  const mallUi = lazyUi(() => import('./ui/mall-panel'));
+  const loadMarket = lazyUi(() => import('./ui/market-panel'));
   /** 市場載入過才會有在路上的貨（App 版排到貨通知用）。 */
   let marketMod: Awaited<ReturnType<typeof loadMarket>> | null = null;
   const marketUi = async () => (marketMod ??= await loadMarket());
