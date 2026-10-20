@@ -1,5 +1,5 @@
 import type { KeyValueStore } from '../game/save';
-import { cycleMaturity, freeAmmonia, hasVisible, isCycled, observeSymptoms, tankStarted, sexVisible, type TankState } from '../sim';
+import { freeAmmonia, hasVisible, isCycled, observeSymptoms, tankStarted, sexVisible, type TankState } from '../sim';
 
 /**
  * 新手引導任務（GAME_DESIGN 定案）：水族館老闆一步步帶玩家開缸、放魚、餵食、換水、養水。
@@ -35,6 +35,11 @@ export type QuestShopTab = 'fish' | 'snails' | 'plants' | 'gear';
 
 const living = (s: TankState) => s.fish.filter((f) => f.alive);
 
+/**
+ * 任務順序（design/polish-to-9.md §4 G7、U2）：開缸 → 挑魚對水 → 餵食，第一條魚 90 秒內就進缸；
+ * 接著種草、測水、換水、擺石頭、取名。「等養水」不再是任務，改成教學後目標串的第一個背景目標（goals.ts），
+ * 不擋教學結束：照基準玩法第 4 天以前教學就全部做完。
+ */
 export const QUESTS: Quest[] = [
   {
     id: 'setup',
@@ -45,16 +50,37 @@ export const QUESTS: Quest[] = [
       '歡迎！我是隔壁水族館的阿德。這個空缸送你，設備就用起始資金自己挑吧。',
       '過濾器決定硝化菌住多少、燈決定能種什麼草、底沙會影響水質。每張卡都寫了好處和代價；拿不定主意就按「推薦組合」。',
     ],
-    done: '缸開好了！水裡還沒有能分解魚便便的硝化菌，接下來我們一步步把它養起來。',
+    done: '缸開好了！空缸看起來冷清，先挑幾條魚住進來吧。',
     // 按下「開機」才算開好缸（#204），付錢裝設備還不算
     check: (s) => tankStarted(s),
+  },
+  {
+    id: 'fish',
+    reward: 50,
+    title: '挑 2～3 條魚，對好水放進缸',
+    short: '挑魚、對水',
+    lines: [
+      '到「商店」挑魚吧，新手推薦孔雀魚「一公兩母」。店裡的魚耐得住還在養水的新缸，別一次放太多就好。',
+      '魚店的水和你缸裡的水不一樣：用滴管一滴一滴把缸水滴進袋子，讓牠們慢慢適應，這叫「對水」。',
+    ],
+    done: '歡迎新住民！硝化菌要靠魚的排泄物才長得起來，接下來幾天就是「養水」。牠們剛運到會有點緊張，過一陣子就會放鬆了。',
+    check: (s) => living(s).length > 0,
+    shopTab: 'fish',
+  },
+  {
+    id: 'feed',
+    reward: 50,
+    title: '餵一次飼料',
+    lines: ['點「餵食」。新缸期間少量就好，吃不完的飼料會爛掉變成更多氨。'],
+    done: '看牠們搶食的樣子就很療癒吧。記得一天一次、一小撮就夠。',
+    check: (s) => s.water.foodMg > 0,
   },
   {
     id: 'plant',
     reward: 50,
     title: '種下第一株水草',
-    lines: ['先到「商店」買幾株水草種下去吧。水草會吸收養分，讓新缸穩定得快一點。'],
-    done: '種得不錯！水草也會給之後的小魚躲藏的地方。缸還空著的時候最好造景，按「造景」可以把草和石頭拖到喜歡的位置。',
+    lines: ['到「商店」買幾株水草種下去吧。水草會吸收養分，讓新缸穩定得快一點，也是小魚躲藏的地方。'],
+    done: '種得不錯！按「造景」可以把草和石頭拖到喜歡的位置。',
     doneScape: true,
     check: (s) => s.plants.length > 0,
     shopTab: 'plants',
@@ -64,25 +90,8 @@ export const QUESTS: Quest[] = [
     reward: 50,
     title: '用測試劑測一次水',
     lines: ['魚看不見的東西才最危險。點「測試」用測試劑量一下水質。', '上面那排膠囊就是你測到的數值；沒測過的會顯示「?」，太久沒測也會變回「?」。'],
-    done: '記住這幾個數字：氨和亞硝酸鹽都要是 0，魚才安全。',
+    done: '記住這幾個數字：氨和亞硝酸鹽都要是 0，魚才安全。養水這幾天每天測一次，冒出來就換水。',
     check: (s) => s.lastTest !== undefined,
-  },
-  {
-    id: 'fish',
-    reward: 50,
-    title: '先放 2～3 條魚',
-    lines: ['硝化菌要靠魚的排泄物（氨）才長得起來。先放少量好養的魚，例如 2～3 條孔雀魚。', '別一次放太多，新缸的細菌還處理不了那麼多廢物。'],
-    done: '歡迎新住民！牠們剛運到會有點緊張，過一陣子就會放鬆了。',
-    check: (s) => living(s).length > 0,
-    shopTab: 'fish',
-  },
-  {
-    id: 'feed',
-    reward: 50,
-    title: '餵一次飼料',
-    lines: ['點「餵食」。新缸期間少量就好，吃不完的飼料會爛掉變成更多氨。'],
-    done: '看牠們搶食的樣子就很療癒吧。記得一天一兩次、少量。',
-    check: (s) => s.water.foodMg > 0,
   },
   {
     id: 'water',
@@ -112,53 +121,20 @@ export const QUESTS: Quest[] = [
     check: (s) => !!s.label,
   },
   {
-    id: 'cycled',
-    reward: 250,
-    title: '養水完成：硝化菌長好、氨 0、亞硝 0',
-    short: '養水完成',
-    lines: [
-      '接下來每天測水，看到氨或亞硝酸鹽就換水。',
-      '硝化菌長起來的途中，亞硝酸鹽會先冒出來一陣子，接著才降回 0。等硝化菌長好、氨和亞硝酸鹽都測到 0，缸子就養好了。',
-      '剛放魚的頭一兩天也常測到 0，那是魚的排泄物還少，不是養好了；看任務卡上的硝化菌進度。養水通常要 4～7 天，等的時候可以用時鐘旁的快轉。',
-      '想快一點可以到商店買硝化菌液（1～3 天），或從自己養好的舊缸分一份濾材過來。',
-    ],
-    done: '恭喜，你的缸子「養好了」！現在可以慢慢多加一些魚。',
-    check: (s) => {
-      const r = s.lastTest?.reading;
-      return !!r && living(s).length > 0 && r.ammonia === 0 && r.nitrite === 0 && s.hours - s.lastTest!.hours < 24 && isCycled(s);
-    },
-    progress: cycleProgress,
-    meter: (s) => Math.max(0, Math.min(1, cycleMaturity(s))),
-    shopTab: 'gear',
-  },
-  {
     id: 'babies',
     reward: 150,
-    title: '迎接第一窩小魚',
-    short: '第一窩小魚',
+    title: '看看母魚有沒有懷孕',
+    short: '母魚懷孕',
     lines: ['店裡的母魚大多已經懷孕了，肚子鼓起來、下面出現黑點就是快生了。', '成魚會吃小魚：多種莫絲、矮珍珠讓小魚躲，或把快生的母魚放進育幼盒。'],
-    done: '母魚要當媽媽了！新手引導就到這裡，接下來看任務卡上的目標，一步步把缸養起來。有狀況我還會來提醒你。',
+    done: '母魚要當媽媽了！新手引導就到這裡。缸還在養水，任務卡上會一直顯示硝化菌長到幾成：每天測水，看到氨或亞硝酸鹽就換水，等它長好。有狀況我還會來提醒你。',
     // 懷孕看得出來，或已經生過了（任務出現前就生了也算）
     check: (s) => living(s).some((f) => observeSymptoms(s, f).includes('pregnant')) || s.events.some((e) => e.type === 'fry_born') || s.fish.some((f) => (f.generation ?? 0) > 0),
     progress: pairProgress,
   },
 ];
 
-/** 養水任務的進度：照上次測水的讀數（玩家看得到的資訊）。 */
-export function cycleProgress(s: TankState): string {
-  const test = s.lastTest;
-  if (!test) return '還沒測過水';
-  const r = test.reading;
-  const parts = [`硝化菌 ${Math.floor(cycleMaturity(s) * 100)}%`];
-  if (r.ammonia > 0) parts.unshift(`氨 ${fmt(r.ammonia)}`);
-  if (r.nitrite > 0) parts.unshift(`亞硝 ${fmt(r.nitrite)}`);
-  const stale = s.hours - test.hours >= 24;
-  return `${parts.join('・')}（${stale ? '舊讀數，再測一次' : '上次測水'}）`;
-}
-
-function fmt(n: number): string {
-  return String(Math.round(n * 100) / 100);
-}
+/** 等養水的進度（現在是目標串的背景目標，goals.ts）；舊程式從這裡拿。 */
+export { cycleProgress } from '../sim';
 
 /** 等母魚懷孕的進度：缸裡有幾尾公、母孔雀魚（沒有公魚或母魚就說要補）。 */
 export function pairProgress(s: TankState): string {
@@ -207,6 +183,12 @@ export const TIPS: Tip[] = [
     id: 'nitrite',
     text: '亞硝酸鹽冒出來了，代表第二種硝化菌還在長。繼續換水撐過去，大概再一兩週就會降下來。',
     check: (s) => (s.lastTest?.reading.nitrite ?? 0) >= 0.5 && s.hours - (s.lastTest?.hours ?? -999) < 2,
+  },
+  // 還在養水、氨不歸零時又放魚（polish-to-9.md §4）：魚撐得住，老闆提醒一次養水會多拖一天
+  {
+    id: 'cycling_fish',
+    text: '缸還在養水，水裡的氨還沒歸零就放了新魚。店裡的魚撐得住，別擔心；不過廢物一下變多，養水大概要多等一天。這幾天每天測水，看到氨或亞硝酸鹽就換三成的水。',
+    check: (s) => (s.cycleDelay?.leftH ?? 0) > 0,
   },
   {
     id: 'nitrate',
@@ -285,6 +267,10 @@ export const TUTORIAL_KEY = 'cycle.tutorial.v1';
 
 /** 存檔裡記「目前任務 id」以前（只有數字 step）的任務順序；舊進度照這份換算。 */
 export const LEGACY_QUEST_IDS = ['plant', 'test', 'fish', 'feed', 'water', 'cycled', 'babies'];
+/** 調順序（先放魚，polish-to-9.md G7）以前的任務順序：存檔沒記 order 的任務 id 照這份算做過哪些。 */
+export const PRE_FISH_FIRST_QUEST_IDS = ['setup', 'plant', 'test', 'fish', 'feed', 'water', 'scape', 'name', 'cycled', 'babies'];
+/** 存檔裡記的任務順序版本：2 = 先放魚。 */
+const ORDER_VERSION = 2;
 /** 存檔裡表示教學全部做完的任務 id。 */
 const ALL_DONE = 'done';
 
@@ -296,14 +282,28 @@ function stepOf(id: string): number | null {
 }
 
 /**
- * 讀回存的進度是第幾個任務。新存檔看任務 id；舊存檔只有數字，照 LEGACY_QUEST_IDS 換算，
+ * 舊順序存的「目前任務」：排在它前面的都做過了，從現在清單裡第一個還沒做過的接著做。
+ * 例如舊順序停在「測水」（種草做過了），現在接「挑魚」；停在「養水完成」（搬去目標串了），現在接「母魚懷孕」。
+ * 獎勵每個任務只發一次（claimQuestReward），做過的任務再過一次也不會重領。
+ */
+function stepFromOldOrder(id: string): number {
+  if (id === ALL_DONE) return QUESTS.length;
+  const at = PRE_FISH_FIRST_QUEST_IDS.indexOf(id);
+  if (at < 0) return stepOf(id) ?? 0;
+  const done = new Set(PRE_FISH_FIRST_QUEST_IDS.slice(0, at));
+  const i = QUESTS.findIndex((q) => !done.has(q.id));
+  return i >= 0 ? i : QUESTS.length;
+}
+
+/**
+ * 讀回存的進度是第幾個任務。新存檔看任務 id；調順序以前的存檔照舊順序換算；更舊的只有數字，照 LEGACY_QUEST_IDS 換算，
  * 新插進來的任務（擺石頭、取名…）排在玩家已經走過的位置之前就直接略過，不會讓做完教學的玩家重跑、重領獎勵。
  */
-function restoreStep(p: { step?: unknown; quest?: unknown }): number {
+function restoreStep(p: { step?: unknown; quest?: unknown; order?: unknown }): number {
   const raw = typeof p.step === 'number' && p.step >= 0 ? Math.floor(p.step) : 0;
-  if (typeof p.quest === 'string') return stepOf(p.quest) ?? Math.min(QUESTS.length, raw);
+  if (typeof p.quest === 'string') return p.order === ORDER_VERSION ? (stepOf(p.quest) ?? Math.min(QUESTS.length, raw)) : stepFromOldOrder(p.quest);
   if (raw >= LEGACY_QUEST_IDS.length) return QUESTS.length;
-  return stepOf(LEGACY_QUEST_IDS[raw]) ?? Math.min(QUESTS.length, raw);
+  return stepFromOldOrder(LEGACY_QUEST_IDS[raw]);
 }
 
 export function newProgress(): TutorialProgress {
@@ -340,7 +340,7 @@ export function loadProgress(store: KeyValueStore): TutorialProgress {
   try {
     const raw = store.getItem(TUTORIAL_KEY);
     if (!raw) return newProgress();
-    const p = JSON.parse(raw) as Partial<TutorialProgress> & { quest?: unknown };
+    const p = JSON.parse(raw) as Partial<TutorialProgress> & { quest?: unknown; order?: unknown };
     return {
       step: restoreStep(p),
       skipped: p.skipped === true,
@@ -353,7 +353,7 @@ export function loadProgress(store: KeyValueStore): TutorialProgress {
 
 export function saveProgress(store: KeyValueStore, p: TutorialProgress): void {
   try {
-    store.setItem(TUTORIAL_KEY, JSON.stringify({ ...p, quest: QUESTS[p.step]?.id ?? ALL_DONE }));
+    store.setItem(TUTORIAL_KEY, JSON.stringify({ ...p, quest: QUESTS[p.step]?.id ?? ALL_DONE, order: ORDER_VERSION }));
   } catch {
     // 存不了就算了
   }

@@ -15,8 +15,10 @@ function bredFish(s: TankState, frac: number) {
 }
 
 describe('新手之後的目標（M19）', () => {
-  it('一開始是「第一桶金」：先保護小魚、養大 5 條；鬥魚和水晶蝦還沒開賣', () => {
+  it('一開始是等養水（從新手任務搬來的背景目標），接著「第一桶金」：保護小魚、養大 5 條；鬥魚和水晶蝦還沒開賣', () => {
     const tanks = [newGameState(1)];
+    expect(nextGoals(tanks).map((g) => g.id)).toEqual(['cycled', 'protect_fry']);
+    goalState(tanks).done.push('cycled');
     expect(nextGoals(tanks).map((g) => g.id)).toEqual(['protect_fry', 'raise5']);
     expect(speciesUnlocked(tanks, 'guppy')).toBe(true);
     expect(speciesUnlocked(tanks, 'betta')).toBe(false);
