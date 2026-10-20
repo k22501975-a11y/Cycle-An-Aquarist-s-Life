@@ -1,4 +1,5 @@
 import { Application } from 'pixi.js';
+import { introReady } from './intro';
 import { AudioEngine } from './audio/engine';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
 import { eventSound, type SoundId } from './audio/sounds';
@@ -1650,6 +1651,12 @@ async function start(): Promise<void> {
   }
 
   void loadPaintedArt();
+  // 主畫面畫出第一格後，開場動畫演完就可以收起來
+  requestAnimationFrame(() => introReady());
 }
 
-start();
+// 開不起來也要把開場動畫收掉，不然畫面會一直停在標題
+start().catch((err) => {
+  introReady();
+  throw err;
+});
