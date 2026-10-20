@@ -11,6 +11,7 @@ import { applyFoodLook, BITE_SECONDS, biteKick, biteMotion, frenzyLevel, visible
 import { canvasTexture, flakeTextures, spotlightTexture, makeCanvas, mix, pelletTextures, softDotTexture, tabletTexture, wormTextures } from './paint';
 import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame, TEST_SECONDS, WATER_CHANGE_SECONDS, type KitParam } from './ops-fx';
 import { PlantMesh } from './plant-sway';
+import { dayLight, flowNear } from './daylight';
 import { SnailView } from './snail-view';
 import { LAYER_LOOK, ScapeView, type Rect, type ScapeEdit, type ScapeTarget } from './scape-view';
 import { clawPose, clawRate, pleopods, type Pt } from './shrimp-limbs';
@@ -217,6 +218,8 @@ export class TankView {
   private dropT = -1;
   /** 夜晚的程度 0（開燈）～1（關燈），慢慢轉換。 */
   private night = 0;
+  /** 燈的時間表（亮度、色溫），每格慢慢追上 dayLight()，避免跳一下。 */
+  private day = { level: 1, warm: 0 };
   private cuttings: Cutting[] = [];
   /** 換水演出進行了幾秒（-1 沒在演）與這次換掉的比例。 */
   private wcT = -1;
@@ -837,17 +840,22 @@ export class TankView {
     const b = this.bounds;
     this.rayLayer.visible = lit;
     this.causticsLayer.visible = lit;
+    // 跟著燈的時間表（V2）：剛開燈慢慢亮、中午最亮、關燈前漸暗；留個底，不會亮著燈卻看不到光
+    const day = dayLight(state);
+    this.day.level += (day.level - this.day.level) * Math.min(1, dt * 2);
+    this.day.warm += (day.warm - this.day.warm) * Math.min(1, dt * 2);
+    const glow = 0.25 + 0.75 * this.day.level;
     if (lit) {
       for (const r of this.rays) {
         r.s.x = r.x + Math.sin(t * 0.15 + r.phase) * b.width * 0.03;
-        r.s.alpha = 0.45 + 0.15 * Math.sin(t * 0.4 + r.phase);
+        r.s.alpha = (0.45 + 0.15 * Math.sin(t * 0.4 + r.phase)) * glow;
       }
       this.causticsA.tilePosition.x += dt * 9;
       this.causticsA.tilePosition.y += dt * 4;
       this.causticsB.tilePosition.x -= dt * 6;
       this.causticsB.tilePosition.y += dt * 7;
-      this.causticsA.alpha = 0.16 + 0.05 * Math.sin(t * 0.8);
-      this.causticsB.alpha = 0.12 + 0.05 * Math.sin(t * 0.6 + 1);
+      this.causticsA.alpha = (0.16 + 0.05 * Math.sin(t * 0.8)) * glow;
+      this.causticsB.alpha = (0.12 + 0.05 * Math.sin(t * 0.6 + 1)) * glow;
     }
     for (const m of this.motes) {
       m.x += (m.vx + Math.sin(t * 0.5 + m.phase) * 4) * dt;
@@ -1847,8 +1855,6 @@ export class TankView {
       }
     }
     const t = state.hours;
-    // 過濾器開著水流比較強，水草擺得比較明顯
-    const flow = state.equipment.filter?.on ? 1 : 0.35;
     for (const plant of state.plants) {
       let view = this.plants.get(plant.id);
       if (!view) {
@@ -1886,7 +1892,8 @@ export class TankView {
       view.holder.scale.set(place.flip ? -look.scale : look.scale, look.scale);
       // 水流造成的搖擺：根部不動、葉尖擺最多
       const tall = view.rig!.mesh.texture.height;
-      view.rig!.sway(t * 6 + plant.id + this.time * 1.1, tall * 0.045 * flow);
+      // 過濾器開著水流比較強，靠近出水口的擺得最明顯（V2）
+      view.rig!.sway(t * 6 + plant.id + this.time * 1.1, tall * 0.045 * flowNear(state, place.x));
     }
   }
 
@@ -2007,6 +2014,10 @@ export class TankView {
         g.circle(x, edge, (10 + (i % 5) * 7) * this.hs).fill({ color: 0x3f7a22, alpha: a * 0.3 });
       }
     }
+    // 早上偏暖白、傍晚偏橘（V2）
+    const warm = this.day.warm * (1 - this.night);
+    if (warm > 0.01) g.rect(0, 0, width, height).fill({ color: 0xff8a3a, alpha: 0.12 * warm });
+    else if (warm < -0.01) g.rect(0, 0, width, height).fill({ color: 0xfff1d0, alpha: 0.07 * -warm });
     // 夜晚（關燈或停電）：月光藍，魚還看得清楚（原本整片灰暗，新玩家第一眼就是暗畫面）；開關燈慢慢轉換
     if (this.night > 0.01) {
       g.rect(0, 0, width, height).fill({ color: 0x0a2246, alpha: 0.34 * this.night });
