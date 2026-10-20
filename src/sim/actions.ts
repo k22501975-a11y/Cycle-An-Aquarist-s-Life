@@ -8,6 +8,7 @@ import { createFish } from './processes/population';
 import { roomTemperature } from './processes/thermal';
 import { addFood, DEFAULT_FOOD, type FoodGrade, type FoodKind } from './food';
 import { nextRandom } from './random';
+import { economy } from './economy';
 import { plantHitchhikers } from './snails';
 import { FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 import type { FilterSpec, HardscapeSpec, SubstrateSpec } from './equipment';
@@ -217,10 +218,13 @@ export function addPlant(state: TankState, species: PlantSpeciesId, biomassG = P
   return plant;
 }
 
-/** 在店裡買一株水草種下：可能夾帶扁卷螺（第一次必定，見 plantHitchhikers）。不含付錢。 */
+/** 在店裡買一株水草種下：可能夾帶扁卷螺（整個存檔第一次買必定，次數記在共用錢包；見 plantHitchhikers）。不含付錢。 */
 export function buyPlant(state: TankState, species: PlantSpeciesId): Plant {
   const plant = addPlant(state, species);
-  plantHitchhikers(state);
+  const e = economy(state);
+  const first = (e.plantBuys ?? 0) === 0;
+  e.plantBuys = (e.plantBuys ?? 0) + 1;
+  plantHitchhikers(state, first);
   return plant;
 }
 

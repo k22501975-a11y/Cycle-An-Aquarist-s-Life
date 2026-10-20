@@ -122,6 +122,11 @@ export interface Economy {
   bacteriaBottles?: number;
   /** 寶箱開出來的飼料還能餵幾餐（週末結算飼料錢時先扣這個）。 */
   freeMeals?: number;
+  /**
+   * 這個存檔在店裡買過幾次水草（所有缸合計；第一次必定夾帶扁卷螺，snails.ts plantHitchhikers）。
+   * 新遊戲從 0 開始；舊存檔沒有，讀檔時任一缸有水草就當作已經用掉第一次（migrateHousehold）。
+   */
+  plantBuys?: number;
   /** 寶箱累計開出多少魚幣（第 60 天前上限 400，polish-to-9.md §4）。 */
   chestCoins?: number;
   /**
@@ -181,7 +186,7 @@ export function householdTanks(state: TankState): TankState[] {
 }
 
 export function economy(state: TankState): Economy {
-  return (state.economy ??= { coins: STARTING_COINS, kwh: 0, lastBillHours: state.hours, sold: { day: -1, count: 0 }, cuttings: {} });
+  return (state.economy ??= { coins: STARTING_COINS, kwh: 0, lastBillHours: state.hours, sold: { day: -1, count: 0 }, cuttings: {}, plantBuys: 0 });
 }
 
 /**

@@ -46,7 +46,7 @@ export interface SnailState {
   neriteEggs: number;
   /** 螺陷阱（放一片燙過的菜）：放下去的時間。 */
   trapHour?: number;
-  /** 在店裡買過幾次水草（第一次必定夾帶扁卷螺，polish-to-9.md §4）。舊存檔沒有＝0。 */
+  /** 舊版：這缸在店裡買過幾次水草（現在記在共用錢包的 plantBuys，整個存檔只算一次；只在讀舊存檔時看）。 */
   plantBuys?: number;
   /** 缸裡的害蟲小螺已經多到看得見了（第一次看見時記一筆 pests_seen）。 */
   pestsSeen?: boolean;
@@ -116,13 +116,11 @@ export const PLANT_HITCHHIKE_QUARANTINE = 0.08;
 export const PESTS_VISIBLE = 5;
 
 /**
- * 在店裡買了一株水草：第一次買必定、之後 30%（有檢疫盒 8%）夾帶 2～3 隻扁卷螺（「搭便車的螺」，卵小到看不到，會自己繁殖）。
- * 回傳夾帶了幾隻（沒有是 0）。
+ * 在店裡買了一株水草：整個存檔第一次買（first，次數記在共用錢包，見 actions.ts buyPlant）必定、之後 30%（有檢疫盒 8%）
+ * 夾帶 2～3 隻扁卷螺（「搭便車的螺」，卵小到看不到，會自己繁殖）。回傳夾帶了幾隻（沒有是 0）。
  */
-export function plantHitchhikers(state: TankState): number {
+export function plantHitchhikers(state: TankState, first: boolean): number {
   const s = snailState(state);
-  const first = (s.plantBuys ?? 0) === 0;
-  s.plantBuys = (s.plantBuys ?? 0) + 1;
   if (!first && nextRandom(state.rng) >= (state.quarantine ? PLANT_HITCHHIKE_QUARANTINE : PLANT_HITCHHIKE_CHANCE)) return 0;
   const n = 2 + Math.floor(nextRandom(state.rng) * 2);
   s.pests.ramshorn += n;

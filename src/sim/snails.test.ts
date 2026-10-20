@@ -3,6 +3,7 @@ import {
   addFish,
   addSnail,
   buyPlant,
+  linkTanks,
   PESTS_VISIBLE,
   PLANT_HITCHHIKE_CHANCE,
   collectTrap,
@@ -132,6 +133,21 @@ describe('搭便車的螺（polish-to-9.md §4「第二次確認」）', () => {
       if (snailState(s).pests.ramshorn > before) hits++;
     }
     expect(Math.abs(hits / n - PLANT_HITCHHIKE_CHANCE)).toBeLessThan(0.04);
+  });
+
+  it('第一次必帶螺是整個存檔只算一次：第一缸買過以後，第二缸第一次買也只是 30%', () => {
+    let none = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      const a = createTank({ ...MATURE, seed });
+      const b = createTank({ ...MATURE, seed: seed + 100 });
+      linkTanks([a, b]);
+      buyPlant(a, 'anubias');
+      expect(snailState(a).pests.ramshorn).toBeGreaterThanOrEqual(2);
+      buyPlant(b, 'anubias');
+      if (snailState(b).pests.ramshorn === 0) none++;
+    }
+    // 30 次裡大約 21 次沒帶螺（70%）
+    expect(none).toBeGreaterThan(10);
   });
 
   it(`螺會自己繁殖；第一次多到 ${PESTS_VISIBLE} 隻看得見時記一筆（只記一次）`, () => {

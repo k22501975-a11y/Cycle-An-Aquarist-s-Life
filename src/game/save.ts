@@ -1,4 +1,4 @@
-import { DEFAULT_TIME_SCALE, linkTanks, normalizeState, simulate, step, tankStarted, TICK_HOURS, type SimEvent, type TankState } from '../sim';
+import { DEFAULT_TIME_SCALE, linkTanks, migrateHousehold, normalizeState, simulate, step, tankStarted, TICK_HOURS, type SimEvent, type TankState } from '../sim';
 
 export const SAVE_KEY = 'cycle.save.v1';
 
@@ -76,6 +76,8 @@ export function parseSave(raw: string): ParseResult {
   try {
     normalizeState(state);
     for (const t of file.tanks ?? []) normalizeState(t);
+    // 存檔層級的舊欄位：第一次買水草夾帶螺、已經看過的螺（polish-to-9.md §4）
+    migrateHousehold([state, ...(file.tanks ?? [])]);
   } catch {
     return { ok: false, reason: 'corrupt' };
   }

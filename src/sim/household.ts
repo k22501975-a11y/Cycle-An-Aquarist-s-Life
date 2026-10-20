@@ -1,4 +1,5 @@
 import { economy, PRICES, registerHousehold, spend } from './economy';
+import { PESTS_VISIBLE } from './snails';
 import { tankLock, unlockHint } from './goals';
 import { FILTERS, HEATERS, LIGHTS, TANKS, type FilterSpec, type HeaterSpec, type TankSpec } from './equipment';
 import { nextRandom } from './random';
@@ -151,4 +152,20 @@ export function removeTank(tanks: TankState[], index: number): number {
   economy(tanks[0]).coins += refund;
   linkTanks(tanks);
   return refund;
+}
+
+/**
+ * 讀舊存檔時補上新欄位（存檔層級，所有缸一起看）：
+ * - 錢包沒有 plantBuys：任一缸已經有水草（或舊版記過買水草）就當作第一次已經用掉，之後買水草照 30% 算。
+ * - 缸裡的害蟲小螺已經 ≥ PESTS_VISIBLE：直接當作看過了，不會一讀檔就補記 pests_seen、老闆突然說話。
+ */
+export function migrateHousehold(tanks: TankState[]): void {
+  const home = tanks[0];
+  if (!home) return;
+  const e = economy(home);
+  if (e.plantBuys === undefined) e.plantBuys = tanks.some((t) => t.plants.length > 0 || (t.snails?.plantBuys ?? 0) > 0) ? 1 : 0;
+  for (const t of tanks) {
+    const s = t.snails;
+    if (s && s.pestsSeen === undefined && s.pests.ramshorn + s.pests.bladder + s.pests.mts >= PESTS_VISIBLE) s.pestsSeen = true;
+  }
 }
