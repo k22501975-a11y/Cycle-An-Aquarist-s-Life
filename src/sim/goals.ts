@@ -3,12 +3,13 @@ import { phenotype } from './genetics';
 import { growthStage, sexVisible } from './growth';
 import { orderBoard } from './orders';
 import { hasVisible } from './processes/disease';
+import { cycleMaturity, isCycled } from './processes/nitrogen';
 import { FISH_SPECIES, isShrimpSpecies, type FishSpeciesId } from './species';
 import { type Fish, type TankState } from './state';
 
 /**
  * 新手教學之後的目標串（design/mvp.md §4.2，M19）：一次顯示 1～2 個，完成給魚幣或解鎖。
- * 前四個是「第一桶金」（遊戲性評測 g2），接著是 §4.2 的解鎖目標。
+ * 第一個是「等養水」（從新手任務搬來的背景目標，polish-to-9.md U2），接著四個是「第一桶金」（遊戲性評測 g2），再來是 §4.2 的解鎖目標。
  * 一開始只有好養的孔雀魚、斑馬魚、米蝦；學會了再開鬥魚（要單獨一缸）、水晶蝦（軟水、怕熱）、90L 缸。
  * 目標只看玩家做到的事和看得到的東西；完成的紀錄存在共用錢包上（所有缸共用）。
  */
@@ -41,6 +42,10 @@ export interface Goal {
   check: (tanks: TankState[], g: GoalState) => boolean;
   /** 數得出來的目標：現在做到幾個／要幾個（任務卡顯示「3/5」）。 */
   progress?: (tanks: TankState[]) => [number, number];
+  /** 數不出來、但看得出進度的目標：任務卡上的一行字（例如「硝化菌 40%（上次測水）」）。 */
+  detail?: (tanks: TankState[]) => string | null;
+  /** 第一次提到這個目標時，老闆多說的幾句（例如養水要等多久、怎麼加快）。 */
+  intro?: string[];
 }
 
 export interface GoalState {
@@ -79,7 +84,43 @@ export function tankAlarm(t: TankState): boolean {
 /** 穩定多少天沒有警告才算數。 */
 export const CALM_DAYS = 14;
 
+/** 等養水的進度：照上次測水的讀數（玩家看得到的資訊）。 */
+export function cycleProgress(s: TankState): string {
+  const test = s.lastTest;
+  if (!test) return '還沒測過水';
+  const r = test.reading;
+  const parts = [`硝化菌 ${Math.floor(cycleMaturity(s) * 100)}%`];
+  if (r.ammonia > 0) parts.unshift(`氨 ${fmt(r.ammonia)}`);
+  if (r.nitrite > 0) parts.unshift(`亞硝 ${fmt(r.nitrite)}`);
+  const stale = s.hours - test.hours >= 24;
+  return `${parts.join('・')}（${stale ? '舊讀數，再測一次' : '上次測水'}）`;
+}
+
+function fmt(n: number): string {
+  return String(Math.round(n * 100) / 100);
+}
+
+/** 養水完成：有魚、硝化菌長好，而且玩家一天內測到氨 0、亞硝 0（不看硝酸鹽，#65）。 */
+export function cycleConfirmed(s: TankState): boolean {
+  const r = s.lastTest?.reading;
+  return !!r && living(s).length > 0 && r.ammonia === 0 && r.nitrite === 0 && s.hours - s.lastTest!.hours < 24 && isCycled(s);
+}
+
 export const GOALS: Goal[] = [
+  // 等養水（design/polish-to-9.md §4 U2）：以前是新手任務，要等它才結束教學；現在是教學後的第一個背景目標
+  {
+    id: 'cycled',
+    title: '等養水完成：氨 0、亞硝 0',
+    done: '恭喜，你的缸子「養好了」！硝化菌長好、氨和亞硝酸鹽都是 0，現在可以慢慢多加一些魚。',
+    coins: 250,
+    check: (tanks) => tanks.some(cycleConfirmed),
+    detail: (tanks) => cycleProgress(tanks[0]),
+    intro: [
+      '硝化菌長起來的途中，亞硝酸鹽會先冒出來一陣子，接著才降回 0。等硝化菌長好、氨和亞硝酸鹽都測到 0，缸子就養好了。',
+      '剛放魚的頭一兩天常測到 0，那是魚的排泄物還少，不是養好了；看任務卡上的硝化菌進度。養水通常要 4～7 天，等的時候可以用時鐘旁的快轉。',
+      '想快一點可以到商店買硝化菌液（1～3 天），或從自己養好的舊缸分一份濾材過來。',
+    ],
+  },
   // 第一桶金（遊戲性評測 g2）：保護仔魚 → 養大 5 條 → 第一次賣魚 → 存錢買第二缸
   {
     id: 'protect_fry',
@@ -183,6 +224,8 @@ export function goalState(tanks: TankState[]): GoalState {
     e.goals = { done: [], unlocked: [], sick: [], calmSince: {} };
     grandfather(tanks, e.goals);
   }
+  // 舊存檔：養水還是新手任務時已經領過獎勵的，不再算一次
+  if (e.questRewards?.includes('cycled') && !e.goals.done.includes('cycled')) e.goals.done.push('cycled');
   return e.goals;
 }
 

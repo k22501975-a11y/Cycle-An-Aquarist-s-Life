@@ -170,7 +170,7 @@ export async function seedRng(page: Page, seed: number): Promise<void> {
   }, seed);
 }
 
-/** 新手任務完成了幾個（存在 localStorage 的教學進度；7 表示全部完成）。 */
+/** 新手任務完成了幾個（存在 localStorage 的教學進度；等於任務數（9）表示全部完成）。 */
 export async function questStep(page: Page): Promise<number> {
   return page.evaluate(() => {
     const raw = localStorage.getItem('cycle.tutorial.v1');

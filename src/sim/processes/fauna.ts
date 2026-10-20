@@ -6,6 +6,7 @@ import { chance } from '../random';
 import { FISH_SPECIES, type FishSpecies } from '../species';
 import { recordEvent, type Fish, type TankState } from '../state';
 import { diseaseStress, progressInfections, spreadInfections } from './disease';
+import { cycleMaturity } from './nitrogen';
 import { sizeRatio } from './population';
 
 /** 吃下的飼料中，以氨氮形式排出的比例；其餘一部分變成糞便。 */
@@ -113,6 +114,18 @@ export function freeAmmonia(state: TankState): number {
 }
 
 /**
+ * 店裡的魚耐得住還在養水的缸（design/polish-to-9.md §4）：硝化菌還沒長好時，買來的成魚（第 0 代）
+ * 對游離氨多耐這麼多（mg/L）。傷害門檻從 0.04 放寬到 0.10，約是 pH 8.3、25°C 時總氨 1 mg/L：
+ * 照基準玩法（測到氨就換水）放魚時氨不歸零也不會死；一次放太多魚、氨衝到好幾 mg/L 還是會中毒（新缸症候群保留）。
+ */
+export const CYCLING_NH3_ALLOWANCE = 0.06;
+
+/** 這尾魚對游離氨額外的耐受（只有養水期間的店家魚有）。 */
+function ammoniaAllowance(state: TankState, fish: Fish): number {
+  return (fish.generation ?? 0) === 0 && cycleMaturity(state) < 1 ? CYCLING_NH3_ALLOWANCE : 0;
+}
+
+/**
  * 擁擠度：魚的總體長（cm）÷ 水量（L），超過 1 就太擠（經典的「每公升 1 cm」原則，指的是成魚）。
  * 幼魚的排泄和耗氧小得多，體長再乘上體型比例，一群剛出生的仔魚不會讓缸子馬上爆滿。
  */
@@ -162,7 +175,7 @@ export function computeStressors(state: TankState, fish: Fish, census: TankCensu
     // 超出存活範圍很危險；在範圍內只看離這尾魚習慣的水多遠（慢慢適應就沒事）
     ph: phBeyondSurvival(state, fish) / 0.4 + habitStress(state, fish),
     // 測試劑讀到 0 的微量不構成壓力。
-    ammonia: (Math.max(0, census.nh3 - 0.01) / 0.05) * sensitivity,
+    ammonia: (Math.max(0, census.nh3 - 0.01 - ammoniaAllowance(state, fish)) / 0.05) * sensitivity,
     nitrite: Math.max(0, water.no2 - 0.2) * sensitivity,
     nitrate: Math.max(0, water.no3 - 50) / 100,
     // 鬥魚會到水面吸空氣，缺氧影響小很多
@@ -221,7 +234,7 @@ function computeDamage(state: TankState, fish: Fish, sp: FishSpecies): Damage[] 
   const add = (amount: number, cause: string) => {
     if (amount > 0) damage.push({ amount, cause });
   };
-  add((freeAmmonia(state) - 0.04) * 0.3 * sensitivity, 'ammonia');
+  add((freeAmmonia(state) - 0.04 - ammoniaAllowance(state, fish)) * 0.3 * sensitivity, 'ammonia');
   add((water.no2 - 1) * 0.004 * sensitivity, 'nitrite');
   add((2 - water.o2) * 0.05 * (sp.airBreather ? 0.15 : 1), 'oxygen');
   add((water.co2 - 45) * 0.004, 'co2');
