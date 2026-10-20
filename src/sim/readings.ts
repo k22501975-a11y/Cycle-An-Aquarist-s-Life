@@ -34,6 +34,20 @@ export function testWater(state: TankState): TestKitReading {
   };
 }
 
+/** 測試劑讀到這個數字（mg/L）就算有問題：換水是在解決量得到的問題。 */
+export const MEASURED_PROBLEM_LEVEL = 0.25;
+
+/**
+ * 現在測水會量到的問題（照測試劑色卡讀數，不是精確數值）：氨優先，其次亞硝酸，都沒有就是 null。
+ * 教學、每日任務用來判斷「換水」是不是在解決一個量得到的問題。
+ */
+export function measuredProblem(state: TankState): 'ammonia' | 'nitrite' | null {
+  const r = testWater(state);
+  if (r.ammonia >= MEASURED_PROBLEM_LEVEL) return 'ammonia';
+  if (r.nitrite >= MEASURED_PROBLEM_LEVEL) return 'nitrite';
+  return null;
+}
+
 export type Symptom =
   | 'hiding'
   | 'clamped_fins'

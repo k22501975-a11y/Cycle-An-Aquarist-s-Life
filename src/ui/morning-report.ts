@@ -8,6 +8,8 @@ import {
   isJuvenile,
   isShrimpSpecies,
   orderBoard,
+  MEASURED_PROBLEM_LEVEL,
+  testWater,
   pestCount,
   tankLabel,
   youngGettingHungry,
@@ -53,6 +55,9 @@ export type ReportKind =
   | 'hungry'
   | 'orders'
   | 'nursery'
+  | 'plant_grew' // 水草長了一點
+  | 'fish_relaxed' // 魚放鬆了
+  | 'ammonia' // 新缸開始出現氨
   | 'quiet';
 
 export interface ReportItem {
@@ -82,6 +87,8 @@ export interface MorningReport {
 interface FishSnap {
   alive: boolean;
   juvenile: boolean;
+  stress: number;
+  colorBoost: number;
 }
 
 interface TankSnap {
@@ -93,6 +100,10 @@ interface TankSnap {
   algae: number;
   pests: number;
   orders: Set<number>;
+  /** 每株水草的重量（g）。 */
+  plants: Map<number, number>;
+  /** 測試劑讀到的總氨（mg/L）。 */
+  ammonia: number;
 }
 
 export interface Snapshot {
@@ -109,12 +120,14 @@ export function snapshot(tanks: TankState[]): Snapshot {
     tanks: tanks.map((t) => ({
       tank: t,
       events: t.events.at(-1),
-      fish: new Map(allFish(t).map((f) => [f.id, { alive: f.alive, juvenile: isJuvenile(f) }])),
+      fish: new Map(allFish(t).map((f) => [f.id, { alive: f.alive, juvenile: isJuvenile(f), stress: f.stress, colorBoost: f.colorBoost ?? 0 }])),
       maturity: cycleMaturity(t),
       cycled: isCycled(t),
       algae: t.algae,
       pests: pestCount(t),
       orders: new Set(orderBoard(t).orders.map((o) => o.id)),
+      plants: new Map(t.plants.map((p) => [p.id, p.biomassG])),
+      ammonia: testWater(t).ammonia,
     })),
   };
 }
@@ -206,6 +219,32 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     // 小魚兩倍快變餓：一天只餵一次的話，下一餐前就會餓到消耗體力，還沒到要叫醒的程度就在這裡提醒（#193）
     else if (living.some((f) => !isShrimpSpecies(f.species) && youngGettingHungry(f)))
       push({ kind: 'hungry', tone: 'info', text: '小魚長得快、餓得也快，一天餵兩次比較好', action: 'feed' });
+    // 新缸症候群（P6）：測試劑讀到的氨昨晚第一次到 0.25，換水就是在解決量得到的問題
+    const ammonia = testWater(t).ammonia;
+    const ammoniaCrisis = crisis?.reason === 'ammonia' && crisis.tank === index;
+    if (!ammoniaCrisis && living.length > 0 && ammonia >= MEASURED_PROBLEM_LEVEL && snap.ammonia < MEASURED_PROBLEM_LEVEL)
+      push({ kind: 'ammonia', tone: 'warn', text: `氨 ${ammonia}，水開始髒了，換三成水`, action: 'water_change' });
+    // 水草長了一點（睡前就種著的那幾株，合計長了 1% 以上才寫；沒照光的晚上不會長）
+    let plantsBefore = 0;
+    let plantsNow = 0;
+    for (const p of t.plants) {
+      const was = snap.plants.get(p.id);
+      if (was === undefined) continue;
+      plantsBefore += was;
+      plantsNow += p.biomassG;
+    }
+    if (plantsBefore > 0 && plantsNow >= plantsBefore * PLANT_GREW) push({ kind: 'plant_grew', tone: 'good', text: `水草長了一點（+${Math.round((plantsNow / plantsBefore - 1) * 100)}%）` });
+    // 魚放鬆了：睡前睡後都活著的魚，平均壓力降了一截（壓力低就不躲、鰭張開）；發色真的變好才說顏色變亮
+    const both = living.filter((f) => snap.fish.get(f.id)?.alive);
+    if (both.length > 0) {
+      const avg = (get: (f: (typeof both)[number]) => number) => both.reduce((a, f) => a + get(f), 0) / both.length;
+      const stressDrop = avg((f) => snap.fish.get(f.id)!.stress) - avg((f) => f.stress);
+      // 畫面的發色加成以 0.25 為一級（tank-view.ts），有魚升了一級才看得出來
+      const level = (x: number) => Math.round(x * 4);
+      const brighter = both.some((f) => level(f.colorBoost ?? 0) > level(snap.fish.get(f.id)!.colorBoost));
+      if (stressDrop >= RELAXED_DROP)
+        push({ kind: 'fish_relaxed', tone: 'good', text: brighter ? '魚放鬆了，顏色變亮' : '魚慢慢適應新家，放鬆了', action: 'fish', subjectId: both[0].id });
+    }
     // 訂單
     const fresh = orderBoard(t).orders.filter((o) => !snap.orders.has(o.id)).length;
     if (fresh > 0 && index === 0) push({ kind: 'orders', tone: 'info', text: `阿德那邊來了 ${fresh} 張新訂單`, action: 'orders', count: fresh });
@@ -244,6 +283,11 @@ function sickText(sick: SimEvent[], n: number): string {
   }
   return e.cause === 'columnaris' ? `${n} 條魚嘴巴和身上長出白色棉絮狀的斑：柱狀病，快下抗生素` : `${n} 條魚鰓蓋張開、呼吸很急：水質正常的話是鰓吸蟲，下驅蟲藥`;
 }
+
+/** 水草合計長到睡前的幾倍才寫進報告（基本燈下莫絲一整天約長 1.5%，2% 就永遠不會出現）。 */
+const PLANT_GREW = 1.01;
+/** 魚的平均壓力（0–1）一晚降多少才算「放鬆了」（新魚 0.5，第一天約降到 0.3～0.43）。 */
+const RELAXED_DROP = 0.05;
 
 const pct = (x: number) => `${Math.round(Math.min(1, x) * 100)}%`;
 
