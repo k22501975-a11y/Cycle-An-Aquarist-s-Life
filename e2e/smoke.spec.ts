@@ -17,3 +17,18 @@ test('商店面板能打開', async ({ page }) => {
   await expect(sheet.locator('.sheet-title')).toHaveText('商店');
   await expect(sheet.locator('.sheet-body')).not.toBeEmpty();
 });
+
+test('開場動畫演完會自己收掉，點一下可以跳過', async ({ page }) => {
+  // 自動化測試平常不演開場（navigator.webdriver），網址加 ?intro 強制演
+  await page.goto('/?intro&full');
+  const intro = page.locator('#intro');
+  await expect(intro).toBeVisible();
+  await expect(intro).toHaveClass(/full/);
+  await expect(intro).toHaveCount(0, { timeout: 60_000 });
+  // 第二次開是短版，點一下就收（遊戲載好之後）
+  await page.goto('/?intro');
+  await expect(intro).toHaveClass(/short/);
+  await intro.click();
+  await expect(intro).toHaveCount(0, { timeout: 60_000 });
+  await expect(page.locator('.setup-panel')).toBeVisible();
+});
