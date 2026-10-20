@@ -101,7 +101,7 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'feed',
-    hint: '點「餵食」，少少餵一點',
+    hint: '點「餵食」再點水面撒飼料',
     target: 'feed',
     doneShort: '餵好了',
     reward: 50,

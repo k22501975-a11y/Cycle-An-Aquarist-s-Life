@@ -963,3 +963,16 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .owner-tip .tip-text { margin: 0; font-size: 12.5px; line-height: 1.45; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
 .owner-tip .tip-close { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); border: 0; color: var(--muted); font-size: 12px; }
 .scaping .owner-tip, .setting-up .owner-tip { display: none !important; }
+
+/* 手指餵食（P5）：底下一條餵食列，點水面撒飼料，三個點是這一餐撒了多少 */
+.feed-bar { position: absolute; z-index: 6; left: 50%; transform: translateX(-50%); bottom: calc(var(--dock-top, 120px) + 12px); display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 10px; border-radius: 16px; white-space: nowrap; animation: rise 0.25s ease-out; }
+.feed-bar-art { width: 34px; height: 34px; border-radius: 50%; }
+.feed-say { font-size: 14px; font-weight: 700; min-width: 7em; }
+.feed-dots { display: inline-flex; align-items: center; gap: 4px; }
+.feed-dots i { width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, 0.16); border: 1px solid rgba(243, 234, 216, 0.3); transition: background 0.2s; }
+.feed-dots i.on { background: #e8a24a; border-color: #ffd28a; box-shadow: 0 0 8px rgba(232, 162, 74, 0.7); }
+.feed-dots b { font-size: 12px; color: var(--warn); margin-left: 2px; }
+.feed-bar.over .feed-say { color: var(--warn); }
+.feed-bar .btn.small { width: auto; margin: 0; }
+.feeding #stage canvas { cursor: crosshair; }
+.feeding .owner-tip, .feeding .selcard { display: none !important; }

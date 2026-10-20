@@ -240,6 +240,26 @@ function button(label: string, onclick: () => void, kind = ''): HTMLButtonElemen
 /** 上次選的飼料（同一次遊戲記住）。 */
 let feedChoice: { kind: FoodKind; grade: FoodGrade } = { ...DEFAULT_FOOD };
 
+/** 手指餵食一下撒多少：一餐的三分之一。 */
+export const TAP_MEAL_SHARE = 1 / 3;
+
+/**
+ * 手指餵食（P5）：點一下水面撒一小撮上次選的飼料（種類、等級在「進階」面板選）。
+ * 回傳這次撒了多少和一餐是多少；缸裡沒魚回傳 null。
+ */
+export function feedTap(ctx: PanelContext): { mg: number; meal: number } | null {
+  const meal = mealSize(ctx.game.state);
+  if (meal <= 0) return null;
+  const mg = meal * TAP_MEAL_SHARE;
+  const { kind, grade } = feedChoice;
+  ctx.game.act((st) => {
+    chargeMeal(st, mealPrice(kind, grade) * (mg / meal));
+    feed(st, mg, kind, grade);
+  });
+  ctx.sound?.('feed');
+  return { mg, meal };
+}
+
 /** 缸裡有誰吃不太到這種飼料（例如只餵漂浮的，蝦吃不到）。 */
 export function feedWarning(s: TankState, kind: FoodKind): string | null {
   const species = [...new Set(alive(s).map((f) => f.species))];

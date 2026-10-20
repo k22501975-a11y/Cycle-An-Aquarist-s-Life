@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { aliveCount, closeSheet, dismissGuide, finishDrip, fastForward, gameState, questStep, seedRng, setSpeed, sheetButton, startGame, tool, watchConsoleErrors, type CycleWindow } from './helpers';
+import { aliveCount, closeSheet, dismissGuide, finishDrip, fastForward, gameState, NO_WAIT, questStep, seedRng, setSpeed, sheetButton, startGame, tool, watchConsoleErrors, type CycleWindow } from './helpers';
 
 // 要快轉很多天：用 1 倍密度省 CPU（無頭瀏覽器用軟體繪圖）
 test.use({ deviceScaleFactor: 1, actionTimeout: 20_000 });
@@ -11,6 +11,21 @@ test.use({ deviceScaleFactor: 1, actionTimeout: 20_000 });
 async function questNow(page: Parameters<typeof questStep>[0]): Promise<number> {
   await dismissGuide(page);
   return questStep(page);
+}
+
+/** 進餵食模式（底下出現餵食列）。 */
+async function feedMode(page: Parameters<typeof questStep>[0]): Promise<void> {
+  await dismissGuide(page);
+  await closeSheet(page);
+  await page.locator('button.tool', { hasText: '餵食' }).click(NO_WAIT);
+  await expect(page.locator('.feed-bar')).toBeVisible();
+}
+
+/** 餵一餐：餵食模式的「進階」面板裡選份量。 */
+async function feedMeal(page: Parameters<typeof questStep>[0]): Promise<void> {
+  await feedMode(page);
+  await page.locator('.feed-bar button', { hasText: '進階' }).click(NO_WAIT);
+  await sheetButton(page, '一餐');
 }
 
 const DAY_SUMMARY = `JSON.stringify({
@@ -64,9 +79,12 @@ test('新手任務 1～10：照老闆的引導從新存檔玩得完，魚不會�
   await expect.poll(() => questNow(page)).toBe(4);
   expect(await aliveCount(page)).toBe(3);
 
-  // 5 餵食
-  await tool(page, '餵食');
-  await sheetButton(page, '一小撮');
+  // 5 餵食（P5）：按「餵食」進餵食模式，點水面撒飼料
+  await feedMode(page);
+  const box = (await page.locator('#stage canvas').boundingBox())!;
+  await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.45);
+  await expect.poll(() => gameState<number>(page, 's.water.foodMg')).toBeGreaterThan(0);
+  await page.locator('.feed-bar button', { hasText: '好了' }).click(NO_WAIT);
   await expect.poll(() => questNow(page)).toBe(5);
 
   // 6 換水
@@ -102,8 +120,7 @@ test('新手任務 1～10：照老闆的引導從新存檔玩得完，魚不會�
   while ((await questStep(page)) < 9) {
     day++;
     await fastForward(page, 12);
-    await tool(page, '餵食');
-    await sheetButton(page, '一餐');
+    await feedMeal(page);
     await fastForward(page, 12);
     await tool(page, '測試');
     await closeSheet(page);
@@ -113,8 +130,7 @@ test('新手任務 1～10：照老闆的引導從新存檔玩得完，魚不會�
       await sheetButton(page, '開始換水');
       await closeSheet(page);
     }
-    await tool(page, '餵食');
-    await sheetButton(page, '一餐');
+    await feedMeal(page);
     const step = await questStep(page);
     log.push(`第 ${day} 天：任務 ${step}/10，${await gameState<string>(page, DAY_SUMMARY)}`);
     expect(await aliveCount(page), `照教學照顧，魚不該死光（第 ${day} 天）\n${log.join('\n')}`).toBeGreaterThan(0);

@@ -15,6 +15,8 @@ export class Sheet {
   /** 會隨遊戲時間變化的面板（測試劑、觀察魚）才定時重繪；有輸入框的面板不重繪，以免打斷操作。 */
   private live = false;
   onClose: (() => void) | null = null;
+  /** 開了一個面板（main 用來收掉餵食模式）。 */
+  onOpen: (() => void) | null = null;
 
   constructor(host: HTMLElement) {
     const closeBtn = h('button.sheet-close', { onclick: () => this.close(), 'aria-label': '關閉' }, '✕');
@@ -43,6 +45,7 @@ export class Sheet {
     if (fresh) this.panel.scrollTop = this.body.scrollTop = 0;
     this.backdrop.classList.add('open');
     this.panel.classList.add('open');
+    if (fresh) this.onOpen?.();
   }
 
   /** 重畫；內容跟畫面上的一模一樣就不換，免得按鈕在按下和放開之間被換掉而點不到（#144）。 */

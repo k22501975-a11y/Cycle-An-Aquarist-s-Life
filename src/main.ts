@@ -37,6 +37,7 @@ import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card
 import {
   debugPanel,
   feedPanel,
+  feedTap,
   fishPanel,
   splitPanel,
   snailPanel,
@@ -416,6 +417,7 @@ async function start(): Promise<void> {
     onScapeSelect: (target) => scapeBar.select(target),
     onScapeDrop: (target, x) => scapeBar.drop(target, x),
     // 手指餵食（F6）：撒下去的第一口被誰吃到，在那尾魚頭上浮一行小字，看得出誰貪吃
+    onFeedTap: () => onFeedTap(),
     onFirstBite: (id) => {
       const fish = game.state.fish.find((f) => f.id === id);
       if (!fish || game.state.fish.filter((f) => f.alive && !sim.isShrimpSpecies(f.species)).length < 2) return;
@@ -568,6 +570,56 @@ async function start(): Promise<void> {
     requestAnimationFrame(() => measure());
   };
   ctx.openScape = enterScape;
+  // 手指餵食（P5）：按「餵食」進餵食模式，點水面哪裡飼料就從哪裡撒下去，魚過去搶；種類、等級收進「進階」
+  let feedingMode = false;
+  let fedThisRound = 0;
+  const feedDots = h('span.feed-dots', { 'aria-hidden': 'true' });
+  const feedSay = h('span.feed-say', {}, '點水面撒飼料');
+  const leaveFeeding = () => {
+    if (!feedingMode) return;
+    feedingMode = false;
+    view.setFeedMode(false);
+    document.body.classList.remove('feeding');
+    feedBar.remove();
+  };
+  const renderFeedBar = () => {
+    // 一餐分三下撒：三個點填滿就夠了，再撒會剩在缸底
+    const taps = Math.round(fedThisRound * 3);
+    feedDots.replaceChildren(...[0, 1, 2].map((i) => h(`i${i < taps ? '.on' : ''}`)), ...(taps > 3 ? [h('b', {}, `+${taps - 3}`)] : []));
+    feedBar.classList.toggle('over', taps > 3);
+    feedSay.textContent = taps === 0 ? '點水面撒飼料' : taps < 3 ? '再撒一點' : taps === 3 ? '這一餐夠了' : '吃不完的會沉底爛掉';
+  };
+  const feedBar = h(
+    'div.feed-bar.glass',
+    {},
+    h('img.feed-bar-art', { src: `${import.meta.env.BASE_URL}art/ui/icon-feed.webp`, alt: '', draggable: 'false' }),
+    feedSay,
+    feedDots,
+    h('button.btn.small', { onclick: () => (leaveFeeding(), sheet.open('餵食', () => feedPanel(ctx))) }, '進階'),
+    h('button.btn.small.primary', { onclick: () => leaveFeeding() }, '好了'),
+  );
+  const startFeeding = () => {
+    if (feedingMode) return leaveFeeding();
+    // 沒有魚：面板會說要先去買魚
+    if (!game.state.fish.some((f) => f.alive)) return sheet.open('餵食', () => feedPanel(ctx));
+    if (scaping) leaveScape();
+    sheet.close();
+    select(null);
+    feedingMode = true;
+    fedThisRound = 0;
+    view.setFeedMode(true);
+    document.body.classList.add('feeding');
+    renderFeedBar();
+    stage.append(feedBar);
+  };
+  const onFeedTap = () => {
+    const got = feedTap(ctx);
+    if (!got) return leaveFeeding();
+    fedThisRound += got.mg / got.meal;
+    renderFeedBar();
+  };
+  sheet.onOpen = () => leaveFeeding();
+  debugHandle.feeding = { start: startFeeding, leave: leaveFeeding };
   debugHandle.scape = { enter: enterScape, leave: leaveScape, bar: scapeBar };
   // 畫質：低畫質關掉景深模糊、柔光，降低解析度與粒子數量
   const setQuality = (q: Quality) => {
@@ -982,7 +1034,7 @@ async function start(): Promise<void> {
     tools.append(b);
     return b;
   };
-  tool('feed', '餵食', '#e8a24a', () => sheet.open('餵食', () => feedPanel(ctx)));
+  tool('feed', '餵食', '#e8a24a', () => startFeeding());
   tool('water', '換水', '#4fb8e0', () => sheet.open('換水', () => waterChangePanel(ctx)));
   const testBtn = tool('test', '測試', '#a98be8', () => {
     const cost = sim.price('use:test');
@@ -1119,7 +1171,7 @@ async function start(): Promise<void> {
   };
   const goDaily = (id: sim.DailyTaskId) => {
     if (id === 'test') testBtn.click();
-    else if (id === 'feed') sheet.open('餵食', () => feedPanel(ctx));
+    else if (id === 'feed') startFeeding();
     else if (id === 'water') sheet.open('換水', () => waterChangePanel(ctx));
     else if (id === 'trim') sheet.open('修剪水草', () => trimListPanel(ctx));
     else if (id === 'snail') sheet.open('螺', () => snailPanel(ctx));
@@ -1285,11 +1337,12 @@ async function start(): Promise<void> {
             label: '去餵食',
             run: () => {
               game.switchTo(c.tank);
-              sheet.open('餵食', () => feedPanel(ctx));
+              startFeeding();
             },
           }
         : undefined;
-    toasts.show(tankPrefix(c.tank) + crisisText(c), 'warn', fix);
+    // 危機一定要跳出來（不只進通知匣）：用壞消息的樣子
+    toasts.show(tankPrefix(c.tank) + crisisText(c), 'bad', fix);
   });
   // 選育成功：自家繁殖的公魚第一次長出沒見過的品系
   const strains = new StrainTracker(store);
@@ -1332,7 +1385,7 @@ async function start(): Promise<void> {
         sheet.open('換水', () => waterChangePanel(ctx));
         break;
       case 'feed':
-        sheet.open('餵食', () => feedPanel(ctx));
+        startFeeding();
         break;
       case 'equipment':
         sheet.open('設備與維護', () => maintenancePanel(ctx));
