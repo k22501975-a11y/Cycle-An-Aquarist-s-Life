@@ -329,8 +329,13 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   // 靠牆時漫遊方向也轉回缸中間，不然推開又游回去，整群貼著缸壁疊成一排
   if (!p.crawler && ((s.x < margin && Math.cos(s.wander) < 0) || (s.x > bounds.width - margin && Math.cos(s.wander) > 0))) s.wander = Math.PI - s.wander;
   const floor = floorAt(bounds, s.x);
-  if (s.y < bounds.surface + margin * 0.5 && cond.nestX === undefined && !chasing) ay += 2;
-  if (s.y > floor - halfH - margin * 0.5 && !p.crawler) ay -= 2;
+  // 靠近水面、底沙時越深推越用力（漸進）：原本一越線就推 2、離開就歸零，魚在線上來回彈，
+  // 上下速度每格變號，身體跟著一直點頭抖動（YenWel 回報「魚一直抽搐抖動」）
+  const band = Math.max(1, margin * 0.5);
+  const top = bounds.surface + band;
+  const low = floor - halfH - band;
+  if (s.y < top && cond.nestX === undefined && !chasing) ay += 2 * Math.min(1, (top - s.y) / band);
+  if (s.y > low && !p.crawler) ay -= 2 * Math.min(1, (s.y - low) / band);
 
   s.vx += ax * speed * dt * 2;
   // 魚主要水平游動，垂直方向的速度壓低；搶食往上衝時放寬一點
@@ -346,9 +351,12 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   }
   const edge = Math.max(16 * scale, halfLen + 4 * scale);
   s.x = Math.min(bounds.width - edge, Math.max(edge, s.x + s.vx * dt));
+  const wantY = s.y + s.vy * dt;
   s.y = p.crawler
     ? floorAt(bounds, s.x) - Math.max(3 * scale, halfH * 0.8)
-    : Math.min(Math.max(bounds.surface + 4, floorAt(bounds, s.x) - Math.max(3 * scale, halfH)), Math.max(bounds.surface + 4 + halfH * 0.3, s.y + s.vy * dt));
+    : Math.min(Math.max(bounds.surface + 4, floorAt(bounds, s.x) - Math.max(3 * scale, halfH)), Math.max(bounds.surface + 4 + halfH * 0.3, wantY));
+  // 頂到水面或底沙：往那邊的速度歸零，不然速度一直朝牆、位置被夾住，頭一直朝下（或朝上）抖
+  if (!p.crawler && Math.abs(s.y - wantY) > 1e-6 && Math.sign(s.vy) === Math.sign(wantY - s.y)) s.vy = 0;
   // 病懨懨的魚尾巴也擺得慢
   s.phase += dt * (4 + v / (8 * scale)) * (sym.has('lethargic') || sym.has('loss_of_balance') ? 0.5 : 1);
 }

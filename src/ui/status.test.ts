@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addFish, createTank, FILTERS, HEATERS, TANKS, tankSize, useTestKit, waterChange } from '../sim';
-import { clockLabel, todos, waterCapsules } from './status';
+import { clockLabel, householdTodos, todos, waterCapsules } from './status';
 
 function tank() {
   return createTank({ tank: TANKS.std40, filter: FILTERS.sponge, heater: { spec: HEATERS.h50, targetC: 25 }, seed: 3 });
@@ -54,7 +54,32 @@ describe('todos', () => {
     const state = tank();
     addFish(state, 'guppy');
     addFish(state, 'guppy').alive = false;
-    expect(todos(state)[0]).toEqual({ text: '撈出 1 條死魚', tone: 'bad' });
+    expect(todos(state)[0]).toEqual({ text: '撈出 1 條死魚', tone: 'bad', go: 'remove_dead' });
+  });
+
+  it('要處理的待辦都點得進去（U3）：撈死魚、測水、換水、加熱棒各自帶去對的地方', () => {
+    const state = tank();
+    addFish(state, 'guppy');
+    state.hours = 24 * 8;
+    state.equipment.heater!.broken = true;
+    const go = Object.fromEntries(todos(state).map((t) => [t.text, t.go]));
+    expect(go['還沒測過水質']).toBe('test_water');
+    expect(Object.entries(go).find(([t]) => t.startsWith('該換水了'))?.[1]).toBe('water_change');
+    expect(go['加熱棒壞了，換一支']).toBe('equipment');
+    // 紅色、黃色的待辦全部都有去處
+    expect(todos(state).filter((t) => t.tone !== 'ok').every((t) => t.go || t.split || t.snails || t.nursery)).toBe(true);
+  });
+});
+
+describe('householdTodos', () => {
+  it('別缸的待辦點了先切到那缸：不帶育幼盒、分缸、螺這些直接作用在目前這缸的按鈕', () => {
+    const a = tank();
+    const b = tank();
+    addFish(a, 'guppy');
+    addFish(b, 'guppy').alive = false;
+    const other = householdTodos([a, b], 0).find((t) => t.tank === 1);
+    expect(other?.go).toBe('remove_dead');
+    expect(other?.nursery ?? other?.split ?? other?.snails).toBeUndefined();
   });
 });
 

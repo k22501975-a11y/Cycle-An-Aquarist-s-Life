@@ -92,6 +92,8 @@ interface FishView {
   deathT: number;
   /** 咬一口後過了幾秒。 */
   biteT: number;
+  /** 身體仰頭、低頭的角度（平滑過的，不跟著每格速度跳）。 */
+  tilt: number;
   /** 上一格的嘴巴位置，判斷飼料是誰吃掉的（死魚為 null）。 */
   mouth: Mouth | null;
   /** 轉身中的面向（壓扁再彈回）。 */
@@ -1525,6 +1527,7 @@ export class TankView {
       eggsDrawn: false,
       deathT: fish.alive ? -1 : DEATH_SECONDS,
       biteT: BITE_SECONDS,
+      tilt: 0,
       turn: { f: swimmer.vx < 0 ? 1 : -1, v: 0 },
       limbs: null,
       tone: '',
@@ -1736,7 +1739,9 @@ export class TankView {
         rig.scale.y = k * turn.sy * sick.thin * hungerLook(fish.hunger).thin * (1 - 0.55 * sick.flash);
         rig.alpha = rig.look.alpha;
         rig.setDim(sick.dim);
-        const tilt = symptoms.includes('loss_of_balance') ? 1.2 : swimTilt(swimmer) + 0.5 * sick.flash;
+        // 仰頭低頭照速度算，但平滑地跟上（約 0.2 秒），推擠、閃避時速度一格一格變也不會抖
+        view.tilt += (swimTilt(swimmer) - view.tilt) * Math.min(1, dt * 6);
+        const tilt = symptoms.includes('loss_of_balance') ? 1.2 : view.tilt + 0.5 * sick.flash;
         rig.rotation = facingLeft ? tilt : -tilt;
         const clamped = symptoms.includes('clamped_fins');
         // 停在飼料旁邊吃：尾巴只輕輕擺著平衡

@@ -31,7 +31,7 @@ import * as sim from './sim';
 import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, useTestKit } from './sim';
 import { h } from './ui/dom';
 import { ICONS } from './ui/icons';
-import { DEATH_ADVICE, describeEvent, fishName, fishStrain } from './ui/labels';
+import { DEATH_ADVICE, describeEvent, firstDeathOwnerLine, fishName, fishStrain } from './ui/labels';
 import { personaChip } from './ui/persona';
 import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
 import {
@@ -58,12 +58,12 @@ import { Guide } from './ui/guide';
 import { Celebration, type CelebrateSpec } from './ui/celebrate';
 import { firstTime, loadMoments, type DeathAdviceCause, type MomentId } from './ui/moments';
 import { causeAdvice, HUNGER_LABEL, illnessOf, needsAdvice } from './ui/owner-advice';
-import { ownerGuide, ownerSay } from './ui/owner-ask';
+import { kickOwnerQueue, ownerGuide, ownerSay, setOwnerBlocker } from './ui/owner-ask';
 import { fryArt, guppyArt } from './ui/shop-cards';
 import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
 import { recordsPanel } from './ui/records';
 import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt, ordersPanel } from './ui/orders-panel';
-import { flyCoins } from './ui/coin-fly';
+import { flyCoins, rewardBurst } from './ui/coin-fly';
 import { morningCard } from './ui/morning-card';
 import { morningReport, snapshot, type ReportItem } from './ui/morning-report';
 import { loadCodexSeen, saveCodexSeen, unlockCodex } from './ui/codex';
@@ -134,8 +134,9 @@ async function start(): Promise<void> {
   // 聲音：瀏覽器要等第一次點擊才能出聲
   let audioSettings = loadAudioSettings(store);
   const audio = new AudioEngine(audioSettings);
-  document.addEventListener('pointerdown', () => audio.unlock(), { capture: true });
-  document.addEventListener('keydown', () => audio.unlock(), { capture: true });
+  // 震動只跟著玩家的動作（模擬觸發的音效只出聲）
+  document.addEventListener('pointerdown', () => (audio.unlock(), audio.noteInput()), { capture: true });
+  document.addEventListener('keydown', () => (audio.unlock(), audio.noteInput()), { capture: true });
   // 一般按鈕都有輕輕的點擊聲；工具列和選單另外處理
   document.addEventListener('click', (e) => {
     const target = e.target as HTMLElement | null;
@@ -382,7 +383,7 @@ async function start(): Promise<void> {
     const hungry = cond.hunger === 'hungry' || cond.hunger === 'starving';
     // 魚不太舒服、又找得到原因：多一顆有老闆頭像的「為什麼？」，老闆用一句話說原因和怎麼做
     const ask = needsAdvice(cond) || illnessOf(fish)
-      ? h('button.btn.small.primary.ask-owner', { onclick: () => void ownerSay(causeAdvice(fishName(fish), cond.causes, fish)) }, ownerImg('ask-avatar'), '為什麼？')
+      ? h('button.btn.small.primary.ask-owner', { onclick: () => void ownerSay(causeAdvice(fishName(fish), cond.causes, fish), undefined, undefined, true) }, ownerImg('ask-avatar'), '為什麼？')
       : null;
     selCard.replaceChildren(
       close,
@@ -407,10 +408,12 @@ async function start(): Promise<void> {
   debugHandle.select = select;
 
   const view = new TankView(app, {
-    onSelectFish: (id) => select(id),
+    // 點到魚、螺、水草：沒有音效，手機上給一下短震動（G1）
+    onSelectFish: (id) => (id !== null && audio.buzz('tap'), select(id)),
     // 在缸裡點到螺：打開螺的面板（每日小事「找到螺點一下」也就做完了）
-    onTapSnail: () => sheet.open('螺', () => snailPanel(ctx)),
+    onTapSnail: () => (audio.buzz('tap'), sheet.open('螺', () => snailPanel(ctx))),
     onSelectPlant: (id) => {
+      audio.buzz('tap');
       sim.markDaily(game.tanks, 'plant');
       sheet.open('水草', () => plantPanel(ctx, id), { live: true });
     },
@@ -623,7 +626,11 @@ async function start(): Promise<void> {
   const coinsValue = h('b');
   const coinsBtn = h('button.coins', { 'aria-label': '錢包', title: '錢包：點一下打開商店', onclick: () => openShop() }, h('i.coin'), coinsValue);
   // 拿到錢時金幣飛進錢包（F8）
-  ctx.reward = (from, amount) => flyCoins(from, coinsBtn, amount);
+  // 獎勵特效分級（V5）：小事寶箱是小的（金幣＋一圈亮點），交單是中的（再加光環和金額），大的是全螢幕慶祝卡
+  ctx.reward = (from, amount, tier = 'small') => {
+    flyCoins(from, coinsBtn, amount);
+    rewardBurst(from, tier, tier === 'medium' ? `+${amount}` : undefined);
+  };
   // 對水對得完美：新魚一進缸就聚光展開尾巴（F5）
   ctx.welcome = (ids, perfect) => {
     if (perfect && ids[0] !== undefined) view.celebrate(ids[0]);
@@ -663,7 +670,10 @@ async function start(): Promise<void> {
       ? h(`button.todo-item.${t.tone}.split`, { onclick: () => sheet.open('分缸', () => splitPanel(ctx, t.split!)) }, h('img.todo-icon', { src: `${import.meta.env.BASE_URL}art/ui/icon-split.webp`, alt: '' }), t.text)
       : t.snails
         ? h(`button.todo-item.${t.tone}.split`, { onclick: () => sheet.open('螺', () => snailPanel(ctx)) }, h('img.todo-icon', { src: `${import.meta.env.BASE_URL}art/snail/snail-bladder.webp`, alt: '' }), t.text)
-        : h(`div.todo-item.${t.tone}`, {}, t.text);
+        : t.go
+          ? // 點了直接去處理（U3）：開對應的面板或看那條魚
+            h(`button.todo-item.${t.tone}.go`, { onclick: () => (sheet.close(), goReport({ tank: t.tank ?? game.active, action: t.go, subjectId: t.subjectId } as ReportItem)) }, t.text, h('span.todo-go', { 'aria-hidden': 'true' }, '›'))
+          : h(`div.todo-item.${t.tone}`, {}, t.text);
   const todoBadge = h('span.badge');
   const todoCard = h('div.card.glass.todo');
   const todosChanged = memo();
@@ -809,6 +819,12 @@ async function start(): Promise<void> {
         {},
         h('input', { type: 'checkbox', checked: audioSettings.muted, onchange: (e: Event) => updateAudio({ muted: (e.target as HTMLInputElement).checked }) }),
         h('span', {}, '靜音'),
+      ),
+      h(
+        'label.check-row',
+        {},
+        h('input', { type: 'checkbox', checked: audioSettings.haptics, onchange: (e: Event) => updateAudio({ haptics: (e.target as HTMLInputElement).checked }) }),
+        h('span', {}, '震動'),
       ),
       h('p.hint', {}, '背景音樂是即時彈奏的慢板指彈吉他，每次都不一樣；晚上關燈後會彈得更輕。音樂和音效的音量可以分開調。'),
       h('h3', {}, '顯示'),
@@ -1007,6 +1023,8 @@ async function start(): Promise<void> {
   const tankLabel = h('div.tank-label');
   stage.append(tankLabel);
   const guide = new Guide(stage, store, (id) => audio.play(id), () => requestAnimationFrame(() => measure()));
+  // 老闆一次只說一件事（G9）：新手引導在說、慶祝卡（也有老闆的話）在演時，事件帶出來的老闆對話先排隊
+  setOwnerBlocker(() => guide.talking || celebration.isOpen);
   guide.openShop = (tab) => openShop(tab);
   guide.openScape = () => enterScape();
   // 開缸（F1-a）：新遊戲先挑設備，開完缸時間才開始走；關掉面板時主畫面留一個「開缸」按鈕
@@ -1048,7 +1066,7 @@ async function start(): Promise<void> {
     const got = game.actAll((tanks) => sim.claimDaily(tanks));
     if (!got) return;
     audio.play('fanfare');
-    flyCoins(dailyHolder.getBoundingClientRect(), coinsBtn, got.coins);
+    if (got.coins > 0) ctx.reward?.(dailyHolder.getBoundingClientRect(), got.coins, 'small');
     // 寶箱獎勵池（U5）：開到東西要說放在哪裡
     // 大寶箱是一件造景物加一株水草
     const where = got.plantId ? '，到商店「設備」免費擺進缸、「水草」免費種下' : got.item === 'hardscape' ? '，到商店「設備」免費擺進缸' : got.item === 'plant' ? '，到商店「水草」免費種下' : got.item === 'bacteria' ? '，到商店「設備」免費倒' : got.item === 'food' ? '，週末結算時先用它' : '';
@@ -1151,6 +1169,8 @@ async function start(): Promise<void> {
   const tankPrefix = (tank: number) => (game.tanks.length > 1 && tank !== game.active ? `${sim.tankLabel(game.tanks, tank)}：` : '');
   /** 過一晚時老闆送了育幼盒：報告卡關掉後再帶玩家放母魚（記是哪一缸）。 */
   let nurseryGiftTank: number | null = null;
+  /** 過一晚時第一次死魚：報告卡關掉後阿德老闆再來安慰（U4）。 */
+  let firstDeathLine: string | null = null;
   /** 第一次有母魚快生了，老闆送育幼盒，一個步驟帶玩家把她放進去（mvp.md §4.4.2 第 2 點）。 */
   const nurseryGuide = async (tank: number) => {
     const t = game.tanks[tank] ?? game.state;
@@ -1173,6 +1193,15 @@ async function start(): Promise<void> {
       if (game.sleeping || sleepingNow) nurseryGiftTank = tank;
       else void nurseryGuide(tank);
     }
+    // 第一次死魚（不管什麼死法）：阿德老闆安慰一次、說怎麼避免（U4）；過一晚的話等報告卡關掉再說
+    if (e.type === 'fish_died' && firstTime(store, 'first_death')) {
+      const cause = e.cause as DeathAdviceCause | undefined;
+      if (cause && cause in DEATH_ADVICE) firstTime(store, `died_${cause}`); // 同一段說明下面不再講第二次
+      const t = game.tanks[tank] ?? game.state;
+      const line = firstDeathOwnerLine(e, [...t.fish, ...(t.quarantine?.fish ?? [])].find((f) => f.id === e.subjectId));
+      if (game.sleeping || sleepingNow) firstDeathLine = line;
+      else void ownerSay(line);
+    }
     // 過一晚的時候不跳提示，早上報告會一條一條列出來
     if (game.sleeping) return;
     if (e.type === 'fish_died') {
@@ -1189,7 +1218,8 @@ async function start(): Promise<void> {
       if (fryEatenToast.get(tank) === day) return;
       fryEatenToast.set(tank, day);
     }
-    audio.play(eventSound(e.type));
+    // 模擬事件（夜裡生小魚、死魚…）不是玩家按的，只出聲不震
+    audio.play(eventSound(e.type), false);
     if (e.type === 'fry_born' && (e.count ?? 0) > 0) {
       // 生小魚是大事：跳出慶祝卡，在看的那一缸聚光特寫母魚
       const t = game.tanks[tank] ?? game.state;
@@ -1203,6 +1233,8 @@ async function start(): Promise<void> {
         title: `${tankPrefix(tank)}${shrimp ? '孵出' : '生了'} ${e.count} ${shrimp ? '隻小蝦' : '尾小魚'}！`,
         sub: `${mom ? fishName(mom) : '母魚'}當媽媽了。成魚會吃小魚，水草越密越好躲`,
         owner: !first ? undefined : shrimp ? '第一窩小蝦！多放莫絲或水草，小蝦躲得住才長得大。' : '第一胎！小魚長到轉色期才看得出公母，到時候挑尾巴大、顏色亮的留下來配對。',
+        // 第一窩是大特效（全螢幕），之後每一窩是中特效（停在上方，V5）
+        size: first ? 'big' : 'medium',
       });
       return;
     }
@@ -1359,6 +1391,10 @@ async function start(): Promise<void> {
           nurseryGiftTank = null;
           void nurseryGuide(tank);
         }
+        if (firstDeathLine !== null) {
+          void ownerSay(firstDeathLine);
+          firstDeathLine = null;
+        }
       });
       shade.setAttribute('aria-hidden', 'false');
       shade.append(card);
@@ -1367,6 +1403,8 @@ async function start(): Promise<void> {
   };
   debugHandle.sleep = goNight;
   debugHandle.celebration = celebration;
+  debugHandle.owner = { say: ownerSay, guide: ownerGuide };
+  debugHandle.reward = (tier: 'small' | 'medium', amount = 120) => ctx.reward?.(null, amount, tier);
 
   game.onChange(() => {
     sheet.refresh();
@@ -1509,6 +1547,7 @@ async function start(): Promise<void> {
       renderTankChip();
       // 開缸演出和「你的第一個缸」卡片演完才讓老闆開口（「開缸」任務在演出一開始就完成，不能蓋在演出上，#171）
       if (!guideHeld) guide.update(game.state, game.tanks);
+      kickOwnerQueue();
       setupBtn.hidden = !sim.needsSetup(game.tanks[0]) || sheet.isOpen;
       checkDaily();
       if (scaping) scapeBar.refresh();

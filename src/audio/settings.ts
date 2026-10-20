@@ -7,11 +7,13 @@ export interface AudioSettings {
   sfx: number;
   ambience: number;
   muted: boolean;
+  /** 手機短震動（G1）；和靜音分開。 */
+  haptics: boolean;
 }
 
 export const AUDIO_SETTINGS_KEY = 'cycle.audio.v1';
 
-export const DEFAULT_AUDIO_SETTINGS: AudioSettings = { master: 0.8, music: 0.3, sfx: 0.8, ambience: 0.5, muted: false };
+export const DEFAULT_AUDIO_SETTINGS: AudioSettings = { master: 0.8, music: 0.3, sfx: 0.8, ambience: 0.5, muted: false, haptics: true };
 
 const clamp01 = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : fallback);
 
@@ -24,6 +26,7 @@ export function normalizeAudioSettings(raw: unknown): AudioSettings {
     sfx: clamp01(r.sfx, d.sfx),
     ambience: clamp01(r.ambience, d.ambience),
     muted: typeof r.muted === 'boolean' ? r.muted : d.muted,
+    haptics: typeof r.haptics === 'boolean' ? r.haptics : d.haptics,
   };
 }
 

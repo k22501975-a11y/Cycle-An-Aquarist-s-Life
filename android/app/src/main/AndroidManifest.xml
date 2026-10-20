@@ -39,4 +39,6 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 動作的短震動（設定裡可以關） -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 </manifest>

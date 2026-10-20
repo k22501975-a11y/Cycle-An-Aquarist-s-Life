@@ -54,6 +54,91 @@ export const DEATH_ADVICE: Record<DeathAdviceCause, string> = {
   flukes: '這條是鰓吸蟲死的，蟲咬鰓讓魚喘不過氣。下驅蟲藥整缸一起處理，新買的魚先放檢疫盒觀察幾天再放進來。',
 };
 
+/** 每種死因下次怎麼避免（一句話，早上報告的死亡那條要寫，U4）。 */
+export const DEATH_AVOID: Record<string, string> = {
+  ammonia: '新缸先養好水再放魚，少餵一點、每週換三成水，測到氨就馬上換水',
+  nitrite: '亞硝酸高代表硝化菌還沒長好：多換水、少餵，養水完成前別一次放太多魚',
+  oxygen: '開打氣或把過濾出水口調高、攪動水面，停電時先手動打氣；魚太多也會缺氧',
+  co2: 'CO₂ 只在開燈時打、關燈就關掉，並開打氣；看到魚浮頭先關 CO₂',
+  temperature: '用有控溫的加熱棒、夏天開冷氣或風扇，每天看一眼溫度計，別讓水溫超出魚能撐的範圍',
+  starvation: '魚一天要吃一到兩餐，關掉遊戲時間也照樣在走；要出門就裝自動餵食器或放假期飼料錠',
+  medication: '下藥照份量，蝦和怕藥的魚先撈到別缸再下',
+  copper: '有蝦的缸不要下除螺藥（含銅），改用捕螺器或用手撈',
+  ich: '新魚先檢疫、水溫別忽高忽低；看到白點就下白點藥，整個療程做完',
+  chronic_stress: '點魚看「為什麼？」找出讓牠緊張的原因：水質、太擠、被欺負或沒地方躲',
+  fin_nip: '別把愛咬鰭的魚跟長尾魚養在一起，多種水草讓牠躲',
+  fight: '一缸只養一尾公鬥魚',
+  betta_attack: '鬥魚產完卵就把母魚撈到別缸',
+  old_age: '這是自然的，想讓品系傳下去就趁年輕留下小魚',
+  molt: '換水別一次換太多，GH 保持在 6 以上（不夠就加礦物鹽）',
+  ph: '換水用跟缸水差不多的水，別用藥劑大幅調 pH，要調就分好幾天慢慢來',
+  ph_shock: '新魚一定要滴水對水，水溫和 pH 慢慢對齊再放進缸',
+  columnaris: '保持水質乾淨、別讓魚緊迫；看到白色棉絮就換水、下抗生素，病魚撈去檢疫盒',
+  flukes: '新魚先放檢疫盒觀察幾天；看到鰓蓋張開喘氣就下驅蟲藥',
+  unknown: '每天看一眼魚、測一次水，有異狀早點處理',
+};
+
+/** 小數：小於 1 留兩位（0.25 ppm），其他留一位。 */
+const reading = (v: number) => (Math.abs(v) < 1 ? v.toFixed(2) : v.toFixed(1));
+
+/** 死的那一刻的讀數（fish_died 事件的 value，見 deathReading）寫成一句；舊存檔沒記就回空字串。 */
+export function deathReadingText(e: SimEvent, fish?: Fish): string {
+  const v = e.value;
+  if (v === undefined) return '';
+  switch (e.cause) {
+    case 'ammonia':
+      return `氨 ${reading(v)} ppm`;
+    case 'nitrite':
+      return `亞硝酸 ${reading(v)} ppm`;
+    case 'oxygen':
+      return `溶氧 ${v.toFixed(1)} mg/L，魚要 5 以上才舒服`;
+    case 'co2':
+      return `CO₂ ${Math.round(v)} mg/L，超過 30 魚就會喘`;
+    case 'temperature': {
+      const lethal = fish ? FISH_SPECIES[fish.species].tempLethal : null;
+      const over = lethal ? (v > lethal.max ? v - lethal.max : lethal.min - v) : 0;
+      const side = lethal && v > lethal.max ? '高' : '低';
+      return `水溫 ${v.toFixed(1)}°C${lethal && over > 0 ? `，比牠能撐的${side === '高' ? '上限' : '下限'}${side} ${over.toFixed(1)}°C` : ''}`;
+    }
+    case 'ph':
+    case 'ph_shock':
+      return `缸水 pH ${v.toFixed(1)}`;
+    case 'starvation':
+      return `飢餓 ${Math.max(1, Math.round(v))} 天`;
+    case 'old_age':
+      return `活了 ${Math.round(v)} 天`;
+    case 'chronic_stress':
+      return `壓力 ${Math.round(v * 100)}%`;
+    case 'copper':
+      return `銅 ${reading(v)} ppm`;
+    case 'molt':
+      return `GH ${Math.round(v)}`;
+    default:
+      return `當時水溫 ${v.toFixed(1)}°C`;
+  }
+}
+
+/** 早上報告的死亡那條：死因、當時的數值、下次怎麼避免（U4）。name 是魚的稱呼。 */
+export function deathText(name: string, e: SimEvent, fish?: Fish): string {
+  const cause = e.cause ?? 'unknown';
+  const label = DEATH_CAUSE_LABELS[cause] ?? cause;
+  const value = deathReadingText(e, fish);
+  return `${name}死了。死因：${label}${value ? `（${value}）` : ''}。下次：${DEATH_AVOID[cause] ?? DEATH_AVOID.unknown}`;
+}
+
+/**
+ * 玩家第一次死魚（不管什麼死法）阿德老闆安慰一次、說怎麼避免（U4）。
+ * 餓死、病死有更細的說明（DEATH_ADVICE）就用那段。
+ */
+export function firstDeathOwnerLine(e: SimEvent, fish?: Fish): string {
+  const cause = e.cause ?? 'unknown';
+  const value = deathReadingText(e, fish);
+  const advice =
+    (DEATH_ADVICE as Record<string, string>)[cause] ??
+    `這條是${DEATH_CAUSE_LABELS[cause] ?? cause}${value ? `，當時${value}` : ''}。下次${DEATH_AVOID[cause] ?? DEATH_AVOID.unknown}。`;
+  return `別太難過，養魚的人都送走過魚，我也是。重點是知道為什麼。${advice}`;
+}
+
 /** 母魚為什麼顧不好小孩（design: market-and-breeding.md §1.3.3）。 */
 export const BROOD_ISSUE_LABELS: Record<string, string> = {
   noisy: '缸裡太吵了，魚太多',

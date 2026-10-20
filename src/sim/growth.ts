@@ -163,7 +163,7 @@ export function growFish(state: TankState, fish: Fish, tf: number, crowding: num
     fish.alive = false;
     fish.corpseMg = sp.bodyMassMg * Math.min(1, fish.lengthCm / sp.adultLengthCm) ** 3;
     fish.stuckMolt = true;
-    recordEvent(state, { type: 'fish_died', subjectId: fish.id, cause: 'molt' });
+    recordEvent(state, { type: 'fish_died', subjectId: fish.id, cause: 'molt', value: waterGh(state) });
     return;
   }
   fish.lengthCm += fish.pendingCm;

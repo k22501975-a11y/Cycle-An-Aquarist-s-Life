@@ -115,7 +115,7 @@ function orderCard(ctx: PanelContext, o: ShopOrder, refresh: () => void): HTMLEl
               const got = game.actAll((tanks) => fulfillOrder(tanks, o.id));
               if (got > 0) {
                 ctx.sound?.('buy');
-                ctx.reward?.(from, got);
+                ctx.reward?.(from, got, 'medium');
                 toasts.show(`交了「${orderTitle(o)}」，拿到 ${got} 元。明天會有新的單`);
               } else toasts.show(orderRefusal(game.tanks, o.id) ?? '交不了', 'warn');
               refresh();

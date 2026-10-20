@@ -294,7 +294,8 @@ export function updateFauna(state: TankState, dt: number): void {
       fish.health = 0;
       fish.alive = false;
       fish.corpseMg = sp.bodyMassMg * sizeRatio(fish) ** 3;
-      recordEvent(state, { type: 'fish_died', subjectId: fish.id, cause: mainCause(fish) });
+      const cause = mainCause(fish);
+      recordEvent(state, { type: 'fish_died', subjectId: fish.id, cause, value: deathReading(state, fish, cause) });
     }
   }
 
@@ -325,6 +326,38 @@ function rememberDamage(fish: Fish, damage: Damage[], dt: number): void {
   const fade = Math.exp(-dt / 24);
   for (const cause of Object.keys(fish.recentDamage)) fish.recentDamage[cause] *= fade;
   for (const d of damage) fish.recentDamage[d.cause] = (fish.recentDamage[d.cause] ?? 0) + d.amount * dt;
+}
+
+/**
+ * 死的那一刻跟死因有關的讀數（記在 fish_died 事件的 value，早上報告寫「當時的數值」用，U4）：
+ * 缺氧記溶氧 mg/L、水溫記 °C、餓死記幾天沒餵、氨和亞硝酸記 ppm…；沒有專屬讀數的死因記當時水溫。
+ */
+export function deathReading(state: TankState, fish: Fish, cause: string): number {
+  const { water } = state;
+  switch (cause) {
+    case 'ammonia':
+      return water.tan;
+    case 'nitrite':
+      return water.no2;
+    case 'oxygen':
+      return water.o2;
+    case 'co2':
+      return water.co2;
+    case 'ph':
+    case 'ph_shock':
+      return water.ph;
+    case 'starvation':
+      // 沒餵過就只能看牠自己撐了多久
+      return state.lastFedHours !== undefined ? (state.hours - state.lastFedHours) / 24 : fish.starvingHours / 24;
+    case 'old_age':
+      return fish.ageDays;
+    case 'chronic_stress':
+      return fish.stress;
+    case 'copper':
+      return water.copper ?? 0;
+    default:
+      return water.tempC;
+  }
 }
 
 /** 主要死因：近期造成最多健康損失的原因。 */
