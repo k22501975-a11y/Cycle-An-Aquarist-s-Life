@@ -143,6 +143,7 @@ import {
   FANS,
   FOOD_GRADES,
   FOOD_KINDS,
+  mealMg,
   mealPrice,
   FILTERS,
   FISH_SPECIES,
@@ -229,9 +230,7 @@ function doUndoable(ctx: Pick<PanelContext, 'toasts' | 'undoable'>, run: () => v
 const alive = (s: TankState) => s.fish.filter((f) => f.alive);
 
 /** 一餐的份量：缸內所有魚每日食量的一半（建議一天兩餐）。 */
-function mealSize(s: TankState): number {
-  return alive(s).reduce((sum, f) => sum + FISH_SPECIES[f.species].dailyFoodMg, 0) / 2;
-}
+const mealSize = mealMg;
 
 function button(label: string, onclick: () => void, kind = ''): HTMLButtonElement {
   return h(`button.btn${kind ? '.' + kind : ''}`, { onclick }, label);

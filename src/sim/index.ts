@@ -5,6 +5,7 @@ export * from './equipment';
 export * from './state';
 export * from './step';
 export * from './actions';
+export * from './tap-feed';
 export * from './food';
 export * from './readings';
 export * from './season';
