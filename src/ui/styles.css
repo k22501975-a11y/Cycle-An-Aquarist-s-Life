@@ -981,3 +981,16 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .morning-more { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 8px; font-size: 0.86em; color: var(--gold); background: rgba(255, 255, 255, 0.08); cursor: pointer; white-space: nowrap; }
 .morning-avoid { display: block; margin-top: 3px; font-size: 0.9em; color: #cfe8d6; }
 .morning-avoid[hidden] { display: none; }
+
+/* 全螢幕面板（商店、設定、選單）：蓋滿畫面、缸藏在後面，內容置中、圖卡排得開 */
+.sheet-backdrop.full { background: rgba(5, 18, 25, 0.96); }
+.sheet.full,
+.sheet.full.open { left: 0; right: 0; top: 0; bottom: 0; width: 100%; max-width: none; max-height: none; border: 0; border-radius: 0; transform: none; opacity: 1; padding: 0 max(20px, calc((100vw - 1080px) / 2)) calc(env(safe-area-inset-bottom) + 18px); padding-left: max(calc(env(safe-area-inset-left) + 20px), calc((100vw - 1080px) / 2)); padding-right: max(calc(env(safe-area-inset-right) + 20px), calc((100vw - 1080px) / 2)); box-shadow: none; transition: opacity 0.2s ease; }
+.sheet.full:not(.open) { opacity: 0; pointer-events: none; }
+.sheet.full .sheet-head { margin: 0 calc(-1 * max(20px, (100vw - 1080px) / 2)); padding-left: max(20px, calc((100vw - 1080px) / 2)); padding-right: max(20px, calc((100vw - 1080px) / 2)); }
+.sheet.full .card-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+@media (orientation: landscape) and (max-height: 500px) {
+  .sheet.full .card-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}
+/* 全螢幕面板開著時，老闆的對話框、通知仍在最上層；缸上的提示卡先收起來 */
+body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { display: none !important; }

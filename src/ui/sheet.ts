@@ -1,6 +1,9 @@
 import { artImg, sheetArt } from './art-icons';
 import { h } from './dom';
 
+/** 全螢幕的面板（YenWel：「選單最好做全螢幕？」）：商店、設定、選單內容多，蓋滿畫面、藏起後面的缸；其他面板照舊靠邊，看得到缸。 */
+const FULLSCREEN = new Set(['商店', '設定', '選單']);
+
 /**
  * 從底部滑出的面板（手機單手操作）。同時只開一個。
  * render 會在遊戲狀態變化時重新呼叫，讓數值保持最新。
@@ -41,6 +44,9 @@ export class Sheet {
     this.icon.hidden = !art;
     this.render = render;
     this.live = options.live ?? false;
+    const full = FULLSCREEN.has(title);
+    this.panel.classList.toggle('full', full);
+    this.backdrop.classList.toggle('full', full);
     this.refresh();
     if (fresh) this.panel.scrollTop = this.body.scrollTop = 0;
     this.backdrop.classList.add('open');
