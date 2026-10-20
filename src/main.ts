@@ -121,6 +121,7 @@ async function start(): Promise<void> {
   (window as unknown as { cycle: unknown }).cycle = debugHandle;
   const sheet = new Sheet(document.body);
   const toasts = new Toasts(document.body);
+  debugHandle.toasts = toasts;
   const celebration = new Celebration(document.body);
   /** 開缸演出到「你的第一個缸」卡片關掉之前，老闆先不開口（#171）。 */
   let guideHeld = false;
@@ -908,7 +909,43 @@ async function start(): Promise<void> {
     );
   const menuBtn = h('button.hud-btn', { onclick: () => sheet.open('選單', menu), 'aria-label': '選單' }, icon(ICONS.menu));
   hud.classList.add('glass');
-  hud.append(clock, speed.el, sleepBtn, coinsBtn, tankBtn, h('span.hud-sep'), caps, todoBtn, menuBtn);
+  // 通知匣（YenWel：通知太亂）：沒跳出來的通知都在這裡，鈴鐺上的數字是沒看過的則數
+  const bellBadge = h('span.badge');
+  const ago = (at: number) => {
+    const m = Math.floor((Date.now() - at) / 60_000);
+    return m < 1 ? '剛剛' : m < 60 ? `${m} 分鐘前` : `${Math.floor(m / 60)} 小時前`;
+  };
+  const inboxSheet = () =>
+    h(
+      'div.stack',
+      {},
+      ...(toasts.inbox.length === 0
+        ? [h('p.hint', {}, '目前沒有通知')]
+        : toasts.inbox.map((n) =>
+            h(
+              `div.inbox-row.${n.tone}`,
+              {},
+              h('i.toast-icon', { 'aria-hidden': 'true' }),
+              h('span', {}, n.text, n.count > 1 ? h('b.toast-count', {}, ` ×${n.count}`) : null),
+              n.action ? h('button.btn.small', { onclick: () => (sheet.close(), n.action!.run()) }, n.action.label) : h('small', {}, ago(n.at)),
+            ),
+          )),
+    );
+  const openInbox = () => {
+    toasts.markRead();
+    sheet.open('通知', inboxSheet);
+  };
+  const bellBtn = h('button.hud-btn.bell-btn', { 'aria-label': '通知', onclick: openInbox }, icon(ICONS.bell), bellBadge);
+  toasts.onInbox = () => {
+    bellBadge.textContent = toasts.unread > 0 ? String(Math.min(99, toasts.unread)) : '';
+    bellBadge.classList.toggle('show', toasts.unread > 0);
+    bellBtn.classList.remove('ring');
+    if (toasts.unread > 0) {
+      void bellBtn.offsetWidth; // 重新觸發搖鈴動畫
+      bellBtn.classList.add('ring');
+    }
+  };
+  hud.append(clock, speed.el, sleepBtn, coinsBtn, tankBtn, h('span.hud-sep'), caps, bellBtn, todoBtn, menuBtn);
 
   // ---- 下方櫃台：待辦卡｜圓形工具列｜選取卡 ----
   const tools = h('div.tools.glass');
@@ -1313,7 +1350,7 @@ async function start(): Promise<void> {
     if (sleepingNow) return;
     // 開缸演出還在演：演完會跳「你的第一個缸」，夜幕會把它蓋掉
     if (view.settingUp) {
-      toasts.show('等開缸演完再過夜，也可以先按「跳過」');
+      toasts.show('等開缸做完再過夜');
       return;
     }
     if (cloud.session) {

@@ -21,5 +21,6 @@ export const ICONS = {
   moon: svg(`<path d="M4,-12 A11,11 0 1 0 12,5 A9,9 0 1 1 4,-12 Z" fill="${GOLD}" fill-opacity="0.25"/><path d="M-8,-10 l1,2.4 l2.4,1 l-2.4,1 l-1,2.4 l-1,-2.4 l-2.4,-1 l2.4,-1 z" fill="${GOLD}" stroke="none"/>`),
   orders: svg(`<path d="M-10,-13 L10,-13 L10,13 L-10,13Z"/><circle cx="0" cy="-13" r="2.2" fill="${GOLD}" stroke="none"/><path d="M-6,-5 L6,-5 M-6,0 L6,0"/><path d="M-5,7 q3,-3 6,0 q-3,3 -6,0 M1,7 l3,-2 l0,4 z" stroke="${GOLD}" stroke-width="1.3"/>`),
   scape: svg(`<path d="M-12,12 L-7,-6 L1,-12 L5,2 L8,12 Z"/><path d="M4,12 Q5,2 11,-4 M7,5 Q2,0 1,-5" stroke="${GOLD}"/>`),
+  bell: svg(`<path d="M-9,7 L-9,-1 A9,9 0 0 1 9,-1 L9,7 L11,10 L-11,10 Z"/><path d="M-3,13 A3,3 0 0 0 3,13" stroke="${GOLD}"/><circle cx="0" cy="-12" r="1.6" fill="${GOLD}" stroke="none"/>`),
   menu: svg(`<path d="M-9,-6 L9,-6 M-9,0 L9,0 M-9,6 L9,6"/>`),
 };

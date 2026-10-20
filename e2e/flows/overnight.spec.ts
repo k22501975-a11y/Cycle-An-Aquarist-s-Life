@@ -53,6 +53,6 @@ test('開缸演出途中不能過一晚', async ({ page }) => {
   await page.waitForFunction(() => !!(window as unknown as ViewWindow).cycle.view, null, { timeout: 30_000 });
   test.skip(!(await page.evaluate(() => (window as unknown as ViewWindow).cycle.view!.settingUp)), '開缸演出已經演完');
   await page.locator('button.sleep-btn').dispatchEvent('click');
-  await expect(page.locator('.toast').filter({ hasText: '開缸演完' })).toBeVisible();
+  await expect(page.locator('.toast').filter({ hasText: '開缸做完' })).toBeVisible();
   await expect(page.locator('.night')).toHaveCount(0);
 });

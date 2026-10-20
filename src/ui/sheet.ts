@@ -62,21 +62,56 @@ export class Sheet {
   }
 }
 
-type ToastArgs = [text: string, tone?: 'bad' | 'warn' | 'info', action?: { label: string; run: () => void }];
+type Tone = 'bad' | 'warn' | 'info';
+type ToastAction = { label: string; run: () => void };
+type ToastArgs = [text: string, tone?: Tone, action?: ToastAction];
 
+/** 通知匣的一則：同樣的字合成一則、記次數。 */
+export interface Note {
+  text: string;
+  tone: Tone;
+  action?: ToastAction;
+  count: number;
+  /** 最後一次發生的時間（Date.now()）。 */
+  at: number;
+}
+
+/** 玩家剛按過東西（這段時間內的通知是對那一下的回應）。 */
+const DIRECT_MS = 1500;
+const INBOX_MAX = 40;
+
+/**
+ * 通知（YenWel：「通知太亂，文字一直跳出來」）：
+ * - 畫面上同一時間最多一則，一行、前面一個圖示；新的換掉舊的，同樣的字合成「×2」。
+ * - 玩家剛按的東西的回應、壞消息、要處理的（有按鈕）才跳；其他（今天的小事、畫質調整、自己發生的好事）
+ *   只進通知匣，鈴鐺上的數字加一，想看再點開。
+ * - 有「去處理」按鈕的要等玩家點掉或處理掉才收（U3）。
+ */
 export class Toasts {
   private readonly host = h('div.toasts');
   /** hold() 期間的通知先排隊，release() 再一起跳（開缸演出時只留演出的說明，#199）。 */
   private held: ToastArgs[] | null = null;
+  /** 通知匣：新的在前面。 */
+  readonly inbox: Note[] = [];
+  /** 還沒看過的則數（鈴鐺上的數字）。 */
+  unread = 0;
+  /** 通知匣有變（main 更新鈴鐺）。 */
+  onInbox: (() => void) | null = null;
+  private lastInput = -Infinity;
+  private current: { el: HTMLElement; text: string; count: number; sticky: boolean } | null = null;
+  private fadeTimer = 0;
+  private removeTimer = 0;
 
   constructor(parent: HTMLElement) {
     parent.append(this.host);
+    const mark = () => (this.lastInput = performance.now());
+    for (const type of ['pointerdown', 'click', 'keydown']) window.addEventListener(type, mark, { capture: true });
   }
 
-  /** action：通知上的按鈕（例如「復原」），有按鈕的通知停留久一點。 */
+  /** action：通知上的按鈕（例如「去處理」），要等玩家點掉或處理掉才收。 */
   show(...args: ToastArgs): void {
     if (this.held) this.held.push(args);
-    else this.showNow(...args);
+    else this.route(...args);
   }
 
   /** 先把通知排隊（例如演出時）。保險：演出萬一被中斷沒 release，safetyMs（預設 45 秒）後自己放出來；給 0 表示一定會 release，不設保險。 */
@@ -87,18 +122,65 @@ export class Toasts {
     if (safetyMs > 0) setTimeout(() => this.held === mine && this.release(), safetyMs);
   }
 
-  /** 放出排隊的通知：同一則只跳一次，太多只留最後 3 則。 */
+  /** 放出排隊的通知：都進通知匣，畫面上最多跳最後一則要緊的。 */
   release(): void {
     const queued = this.held ?? [];
     this.held = null;
-    const seen = new Set<string>();
-    const unique = queued.filter(([text]) => !seen.has(text) && seen.add(text));
-    for (const args of unique.slice(-3)) this.showNow(...args);
+    for (const [text, tone = 'info', action] of queued) this.record(text, tone, action, false);
+    const urgent = [...queued].reverse().find(([, tone, action]) => action || tone === 'bad');
+    if (urgent) this.pop(urgent[0], urgent[1] ?? 'info', urgent[2]);
   }
 
-  /** 不管有沒有 hold，馬上跳出來（演出本身的說明）。 */
-  showNow(text: string, tone: 'bad' | 'warn' | 'info' = 'info', action?: { label: string; run: () => void }): void {
-    const el = h(`div.toast.${tone}`, {}, h('span', {}, text));
+  /** 不管有沒有 hold，馬上跳出來（演出本身的說明），不進通知匣。 */
+  showNow(text: string, tone: Tone = 'info', action?: ToastAction): void {
+    this.pop(text, tone, action);
+  }
+
+  /** 打開通知匣：都算看過了。 */
+  markRead(): void {
+    if (this.unread === 0) return;
+    this.unread = 0;
+    this.onInbox?.();
+  }
+
+  private route(text: string, tone: Tone = 'info', action?: ToastAction): void {
+    const direct = performance.now() - this.lastInput < DIRECT_MS;
+    const popNow = direct || !!action || tone === 'bad';
+    this.record(text, tone, action, !popNow);
+    if (popNow) this.pop(text, tone, action);
+  }
+
+  private record(text: string, tone: Tone, action: ToastAction | undefined, unread: boolean): void {
+    const i = this.inbox.findIndex((n) => n.text === text);
+    const note = i >= 0 ? this.inbox.splice(i, 1)[0] : { text, tone, count: 0, at: 0 };
+    note.count++;
+    note.at = Date.now();
+    note.action = action ?? note.action;
+    this.inbox.unshift(note);
+    this.inbox.length = Math.min(this.inbox.length, INBOX_MAX);
+    if (unread) this.unread++;
+    this.onInbox?.();
+  }
+
+  /** 畫面上那一格：同一句就加「×2」，不同的換掉（要處理的不會被一般通知蓋掉）。 */
+  private pop(text: string, tone: Tone, action?: ToastAction): void {
+    const cur = this.current;
+    if (cur && cur.el.isConnected) {
+      if (cur.text === text) {
+        cur.count++;
+        cur.el.querySelector('.toast-count')!.textContent = `×${cur.count}`;
+        cur.el.classList.remove('bump');
+        void cur.el.offsetWidth;
+        cur.el.classList.add('bump');
+        if (!cur.sticky) this.arm(cur.el);
+        return;
+      }
+      // 正在等玩家處理的不讓一般通知蓋掉（一般的已經在通知匣裡）
+      if (cur.sticky && !action) return;
+      cur.el.remove();
+    }
+    const el = h(`div.toast.${tone}`, { role: 'status' }, h('i.toast-icon', { 'aria-hidden': 'true' }), h('span.toast-text', {}, text), h('b.toast-count'));
+    const sticky = !!action;
     if (action) {
       el.append(
         h('button.toast-action', {
@@ -107,18 +189,22 @@ export class Toasts {
             el.remove();
           },
         }, action.label),
+        h('button.toast-close', { 'aria-label': '關閉', onclick: () => el.remove() }, '✕'),
       );
-    }
-    this.host.append(el);
-    if (action) {
-      // 有「去處理」的提示要等玩家點掉或處理掉才收（U3，#166）：原本 8 秒就消失，看到時已經不見了
       el.classList.add('sticky');
-      el.append(h('button.toast-close', { 'aria-label': '關閉', onclick: () => el.remove() }, '✕'));
-    } else {
-      setTimeout(() => el.classList.add('fade'), 4500);
-      setTimeout(() => el.remove(), 5200);
     }
-    // 太多就先收掉最舊的一般通知，要處理的留著
-    while (this.host.children.length > 4) (this.host.querySelector('.toast:not(.sticky)') ?? this.host.firstElementChild)?.remove();
+    this.host.replaceChildren(el);
+    this.current = { el, text, count: 1, sticky };
+    window.clearTimeout(this.fadeTimer);
+    window.clearTimeout(this.removeTimer);
+    if (!sticky) this.arm(el);
+  }
+
+  private arm(el: HTMLElement): void {
+    window.clearTimeout(this.fadeTimer);
+    window.clearTimeout(this.removeTimer);
+    el.classList.remove('fade');
+    this.fadeTimer = window.setTimeout(() => el.classList.add('fade'), 3000);
+    this.removeTimer = window.setTimeout(() => el.remove(), 3600);
   }
 }
