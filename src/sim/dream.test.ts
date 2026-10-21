@@ -8,6 +8,11 @@ const mature = (f: ReturnType<typeof addFish>) => {
 };
 
 describe('夢想魚與 3 步路線（P2）', () => {
+  it('夢想魚配方的爸媽品系都找得到（品系改名時一鍵買和配對預覽不會壞）', () => {
+    expect(GUPPY_STRAINS[DREAM_FISH.parents.male]).toBe('紅蛇王');
+    expect(GUPPY_STRAINS[DREAM_FISH.parents.female]).toBe('白子全紅');
+  });
+
   it('夢想魚店裡買不到，照配方兩代做得出來', () => {
     expect(GUPPY_STRAINS).not.toContain(DREAM_FISH.name);
     const rng = { seed: 7 };
