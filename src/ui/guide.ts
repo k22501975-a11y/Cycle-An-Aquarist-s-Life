@@ -153,11 +153,12 @@ export class Guide {
     this.shownTray = tray ?? '';
     this.tray.hidden = !tray || !this.quickTray;
     this.tray.replaceChildren(...(tray && this.quickTray ? [this.quickTray(tray)] : []));
-    // 換任務時圖卡先收著，任務卡上亮個記號，點了才展開（畫面評測第 9 輪 #265：不要每換一個任務就蓋住左邊的缸）
+    // 教學裡挑魚、種草、擺石頭的圖卡就是下一步，換到這種任務時直接展開（遊戲性第 15 輪 #275：收著要多點一下任務卡）；
+    // 玩家點了缸就收起來，任務卡上留記號（#252）。教學後才照 #265 換任務時先收著、點了才展開。
     // 錢變了重畫（refreshTray）時保持玩家展開或收起的樣子
     const changed = (tray ?? '') !== this.trayKind;
     this.trayKind = tray ?? '';
-    if (this.tray.hidden) this.untuck();
+    if (this.tray.hidden || (changed && !this.tutorialOver)) this.untuck();
     else if (changed) this.tuckTray();
   }
 

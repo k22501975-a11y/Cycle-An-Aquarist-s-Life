@@ -60,6 +60,8 @@ test('新手任務 1～9：照老闆的引導從新存檔玩得完，教學第 4
 
   // 2 挑魚、對水（#235）：任務卡下面一鍵買，不用開商店：第一個品系「一公兩母」（滴水對水小遊戲）
   await dismissGuide(page);
+  // 教學裡換到要買東西的任務時圖卡直接展開，不用先點任務卡（#275）
+  await expect(page.locator('.quest-tray .qt-card', { hasText: '一公兩母' }).first()).toBeVisible();
   await trayCard(page, '一公兩母');
   await finishDrip(page);
   await closeSheet(page);
@@ -114,6 +116,8 @@ test('新手任務 1～9：照老闆的引導從新存檔玩得完，教學第 4
 
   // 7 擺石頭（#235）：任務卡下面點火山石，拿在手上進造景模式（拖放另有上面水草那段測過），按「完成」收起
   await dismissGuide(page);
+  // 教學裡換到要買東西的任務時圖卡直接展開，不用先點任務卡（#275）
+  await expect(page.locator('.quest-tray .qt-card', { hasText: '火山石' }).first()).toBeVisible();
   await trayCard(page, '火山石');
   await expect(page.locator('.scape-bar')).toBeVisible();
   expect(await gameState<number>(page, '(s.equipment.hardscape ?? []).length')).toBe(1);
