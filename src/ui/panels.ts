@@ -396,7 +396,7 @@ export function waterChangePanel({ game, sheet, toasts, sound, undoable }: Panel
 export function quickWaterChange({ game, toasts, sound, undoable }: PanelContext): void {
   const fraction = suggestedWaterChange(game.state);
   // 第一次換水多說一次長按的捷徑（企劃 2026-10-21），之後不再出現
-  const hint = game.state.lastWaterChangeHours === undefined ? '（長按「換水」可以調比例）' : '';
+  const hint = game.state.lastWaterChangeHours === undefined ? '・長按「換水」可調量' : '';
   doUndoable({ toasts, undoable }, () => game.act((st) => waterChange(st, fraction, { tempC: st.water.tempC })), `換了 ${Math.round(fraction * 100)}% 的水${hint}`);
   sound?.('water');
 }
