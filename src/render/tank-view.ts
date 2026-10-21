@@ -54,6 +54,8 @@ interface PlantView {
   drawnRes: number;
   /** 上一格的生物量（判斷是不是剛剪過）。 */
   seenBiomass: number;
+  /** 早上報告說的那株草：草後面一圈暖黃的光（spotlight）。 */
+  spotGlow?: Sprite;
 }
 
 /** 剪下來的插枝：往上飄、慢慢淡出（玩家把它撈起來）。 */
@@ -276,6 +278,8 @@ export class TankView {
   private motes: Mote[] = [];
   private rays: Ray[] = [];
   private selectedFish: number | null = null;
+  /** 早上報告收起來後，報告裡說的那條魚或那株草亮一下（spotlight）。 */
+  private reportSpot: { kind: 'fish' | 'plant'; id: number; t: number } | null = null;
   private seed = 12345;
   private time = 0;
 
@@ -365,6 +369,20 @@ export class TankView {
 
   selectFish(id: number | null): void {
     this.selectedFish = id;
+  }
+
+  /** 讓某條魚或某株草亮幾秒（早上報告收起來後，玩家一眼找到報告說的是誰）。 */
+  spotlight(kind: 'fish' | 'plant', id: number): void {
+    this.reportSpot = { kind, id, t: 0 };
+  }
+
+  /** spotlight 的亮度：0.3 秒亮起、閃三下、最後一秒淡掉。 */
+  private spotLevel(kind: 'fish' | 'plant', id: number): number {
+    const sp = this.reportSpot;
+    if (!sp || sp.kind !== kind || sp.id !== id) return 0;
+    const fadeIn = Math.min(1, sp.t / 0.3);
+    const fadeOut = Math.min(1, (SPOT_SECONDS - sp.t) / 1);
+    return Math.max(0, fadeIn * fadeOut) * (0.75 + 0.25 * Math.sin(sp.t * 5.4));
   }
 
   /** 某條魚在畫面上的位置（像素，相對畫布左上角）；找不到就回傳 null。 */
@@ -548,6 +566,7 @@ export class TankView {
     this.syncMolts(state);
     this.snails.sync(state, { bounds: this.bounds, look: this.look, ppc: this.ppc, hs: this.hs, lit: isLightOn(state), time: this.time });
     this.easeWater(state, dt);
+    if (this.reportSpot && (this.reportSpot.t += dt) > SPOT_SECONDS) this.reportSpot = null;
     this.syncFish(state, dt);
     this.drawParty(dt);
     this.syncPlants(state);
@@ -1892,14 +1911,15 @@ export class TankView {
       }
       // 選取的魚：身後一圈柔和的金色光暈
       const selected = this.selectedFish === fish.id;
-      view.glow.visible = selected;
-      rig.setRim(selected ? 0xffe9b0 : null, 0.75 + 0.25 * Math.sin(this.time * 3), this.quality.softGlow);
-      if (selected) {
-        const r = this.lengthPx(fish) * depth * 1.5;
+      const spot = selected ? 0 : this.spotLevel('fish', fish.id);
+      view.glow.visible = selected || spot > 0.01;
+      rig.setRim(selected ? 0xffe9b0 : spot > 0.01 ? 0xfff1c8 : null, selected ? 0.75 + 0.25 * Math.sin(this.time * 3) : spot, this.quality.softGlow);
+      if (view.glow.visible) {
+        const r = this.lengthPx(fish) * depth * (selected ? 1.5 : 2);
         view.glow.width = r;
         view.glow.height = r * 0.75;
         view.glow.tint = 0xffe2a0;
-        view.glow.alpha = 0.55 + 0.15 * Math.sin(this.time * 3);
+        view.glow.alpha = selected ? 0.55 + 0.15 * Math.sin(this.time * 3) : 0.95 * spot;
       }
     }
   }
@@ -1953,6 +1973,23 @@ export class TankView {
       const tall = view.rig!.mesh.texture.height;
       // 過濾器開著水流比較強，靠近出水口的擺得最明顯（V2）
       view.rig!.sway(t * 6 + plant.id + this.time * 1.1, tall * 0.045 * flowNear(state, place.x));
+      const spot = this.spotLevel('plant', plant.id);
+      if (spot > 0.01 && !view.spotGlow) {
+        view.spotGlow = new Sprite(softDotTexture());
+        view.spotGlow.anchor.set(0.5);
+        view.spotGlow.blendMode = 'add';
+        view.spotGlow.tint = 0xffe2a0;
+        view.holder.addChildAt(view.spotGlow, 0);
+      }
+      if (view.spotGlow) {
+        const { mesh } = view.rig!;
+        view.spotGlow.visible = spot > 0.01;
+        // 草的圖上面留了搖擺的空間，光放低一點才包得住葉子
+        view.spotGlow.position.set(mesh.x + mesh.texture.width / 2, mesh.y + tall * 0.68);
+        view.spotGlow.width = mesh.texture.width * 1.9;
+        view.spotGlow.height = tall * 1.3;
+        view.spotGlow.alpha = spot;
+      }
     }
   }
 
@@ -2100,6 +2137,9 @@ export class TankView {
     }
   }
 }
+
+/** 早上報告說的魚、草亮多久（秒）。 */
+const SPOT_SECONDS = 3.5;
 
 /** 出生演出：第一尾等多久、之後每尾隔多久、冒出來花幾秒（V3）。 */
 const BIRTH_FIRST = 0.3;
