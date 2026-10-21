@@ -67,7 +67,11 @@ public class MarketService {
         this.ledger = ledger;
     }
 
-    public record Seller(String username, int deals, double doaRate, boolean warning) {}
+    /**
+     * survival：到貨 30 天存活率（有結果的筆數裡，活過 30 天的比例；還沒有結果是 null）。
+     * warning：到貨死亡率偏高；sick：常有魚到貨後發病死掉（死於出貨時就帶著的病）。
+     */
+    public record Seller(String username, int deals, double doaRate, boolean warning, Double survival, boolean sick) {}
 
     public record Listing(long id, String kind, String species, String title, JsonNode item, double health, int price, Seller seller, long createdAt) {}
 
@@ -465,20 +469,53 @@ public class MarketService {
         return db.queryForObject("select count(*) from market_order where seller_id = ? and status = 'shipped' and doa = false and arrive_at <= ?", Integer.class, me, now());
     }
 
-    /** 賣家信譽：客觀資料算（§3.6）。目前有成交筆數和到貨死亡率；到貨後的發病和存活要等伺服器權威模擬。 */
+    /** 賣家信譽：客觀資料算（§3.6）。成交筆數、到貨死亡率，和到貨 30 天存活率（買家上傳存檔時查，recordArrivals）。 */
     private Seller seller(long id, ResultSet rs) {
         try {
             String name = rs != null ? rs.getString("username") : db.queryForObject("select username from account where id = ?", String.class, id);
-            int[] counts = db.query("select count(*) as n, coalesce(sum(case when doa then 1 else 0 end), 0) as d from market_order where seller_id = ? and status = 'shipped' and arrive_at <= ?",
+            int[] counts = db.query("select count(*) as n, coalesce(sum(case when doa then 1 else 0 end), 0) as d,"
+                            + " coalesce(sum(case when outcome = 'survived' then 1 else 0 end), 0) as s,"
+                            + " coalesce(sum(case when outcome = 'sick' then 1 else 0 end), 0) as k"
+                            + " from market_order where seller_id = ? and status = 'shipped' and arrive_at <= ?",
                     r -> {
                         r.next();
-                        return new int[] {r.getInt("n"), r.getInt("d")};
+                        return new int[] {r.getInt("n"), r.getInt("d"), r.getInt("s"), r.getInt("k")};
                     },
                     id, now());
             double rate = counts[0] == 0 ? 0 : (double) counts[1] / counts[0];
-            return new Seller(name, counts[0] - counts[1], rate, counts[0] >= 5 && rate > MarketRules.DOA_WARNING);
+            // 只算有結果的：買家自己養死、賣掉的不算，還在追、查不到紀錄的也不算（查不到不能當成活著）
+            int tracked = counts[2] + counts[3];
+            Double survival = tracked == 0 ? null : (double) counts[2] / tracked;
+            boolean sick = tracked >= 5 && survival < MarketRules.SURVIVAL_WARNING;
+            return new Seller(name, counts[0] - counts[1], rate, counts[0] >= 5 && rate > MarketRules.DOA_WARNING, survival, sick);
         } catch (SQLException e) {
             throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * 到貨存活追蹤（L2，#76）：買家上傳存檔時，查這個買家最近收到的市場魚活得怎樣，記在訂單上（賣家的 30 天存活率）。
+     * 活過 30 天算存活；死於出貨時就帶著的病算賣家的；買家自己養死的、賣掉送人的不算。還在追、查不到紀錄的不寫，下次再查。
+     * 只在伺服器收下的存檔上查；查不了（模擬服務掛了）就跳過，不能擋到上傳。
+     */
+    public void recordArrivals(long me, JsonNode save) throws Exception {
+        if (!sim.enabled()) return;
+        List<Map<String, Object>> rows = db.queryForList(
+                "select id, item from market_order where buyer_id = ? and kind = 'fish' and status = 'shipped' and doa = false and outcome is null"
+                        + " and buyer_done is not null and buyer_done >= ? order by id limit ?",
+                me, now().minusDays(MarketRules.ARRIVAL_CHECK_DAYS), MarketRules.ARRIVAL_BATCH);
+        if (rows.isEmpty()) return;
+        List<SimClient.ArrivalQuery> orders = new ArrayList<>();
+        for (Map<String, Object> r : rows) orders.add(new SimClient.ArrivalQuery(((Number) r.get("id")).longValue(), json.readTree((String) r.get("item"))));
+        for (SimClient.Arrival a : sim.arrivals(save, orders)) {
+            String outcome = switch (a.status()) {
+                case "died" -> a.sellerFault() ? "sick" : "buyer";
+                case "gone" -> "gone";
+                case "alive" -> a.survived() ? "survived" : null;
+                default -> null;
+            };
+            if (outcome != null)
+                db.update("update market_order set outcome = ?, outcome_at = ? where id = ? and buyer_id = ? and outcome is null", outcome, now(), a.order(), me);
         }
     }
 

@@ -43,6 +43,9 @@ class SimTest {
         final List<Long> advancedFrom = new ArrayList<>();
         final List<List<JsonNode>> verifiedShipped = new ArrayList<>();
         Inspect inspect = new Inspect(false, false, null);
+        /** 到貨查詢：照收到的訂單回答；記下每次問了哪些訂單。 */
+        java.util.function.Function<ArrivalQuery, Arrival> arrival = q -> new Arrival(q.order(), "unknown", false, false);
+        final List<List<ArrivalQuery>> arrivalQueries = new ArrayList<>();
 
         @Override
         public boolean enabled() {
@@ -73,6 +76,13 @@ class SimTest {
         public Inspect inspect(JsonNode save, long fishId) {
             return inspect;
         }
+
+        @Override
+        public List<Arrival> arrivals(JsonNode save, List<ArrivalQuery> orders) {
+            if (down) throw new Unavailable("down", null);
+            arrivalQueries.add(orders);
+            return orders.stream().map(arrival).toList();
+        }
     }
 
     @TestConfiguration
@@ -87,6 +97,13 @@ class SimTest {
         @Primary
         FakeSim fakeSim() {
             return new FakeSim();
+        }
+
+        /** 到貨不會死在路上（MarketTest.FixedRandom 的 0.99）。 */
+        @Bean
+        @Primary
+        MarketTest.FixedRandom testRandom() {
+            return new MarketTest.FixedRandom();
         }
     }
 
@@ -105,6 +122,8 @@ class SimTest {
         sim.advancedFrom.clear();
         sim.verifiedShipped.clear();
         sim.inspect = new SimClient.Inspect(false, false, null);
+        sim.arrival = q -> new SimClient.Arrival(q.order(), "unknown", false, false);
+        sim.arrivalQueries.clear();
     }
 
     private ResultActions send(MockHttpServletRequestBuilder req, String token, String body) throws Exception {
@@ -342,5 +361,102 @@ class SimTest {
         JsonNode economy = r.get("save").get("state").get("economy");
         assertThat(economy.get("coins").asInt()).isEqualTo(9_998);
         assertThat(economy.get("ledgerSeq").asInt()).isEqualTo(1);
+    }
+
+    /** 照雲端那份的版本和帳本筆數上傳一次（魚、錢都沒變）。 */
+    private void upload(String token) throws Exception {
+        JsonNode cloud = read(send(get("/api/save"), token, null));
+        int seq = cloud.get("save").get("state").get("economy").path("ledgerSeq").asInt(0);
+        send(put("/api/save"), token, saveBody(cloud.get("revision").asLong(), false, seq)).andExpect(status().isOk());
+    }
+
+    /** 賣家上架一條魚、買家買下、賣家出貨、到貨後買家收貨；回傳訂單編號。 */
+    private long delivered(String seller, String buyer, long fishId) throws Exception {
+        JsonNode real = json.readTree("{\"id\":" + fishId + ",\"species\":\"guppy\",\"sex\":\"male\",\"genome\":{\"tail\":60},\"health\":1}");
+        sim.inspect = new SimClient.Inspect(true, true, real);
+        long sellerRev = read(send(get("/api/save"), seller, null)).get("revision").asLong();
+        String fish = "{\"kind\":\"fish\",\"species\":\"guppy\",\"title\":\"孔雀魚 公\",\"price\":200,\"item\":{\"id\":" + fishId + "}}";
+        long listing = read(send(post("/api/market/listings"), seller, withRevision(fish, sellerRev)).andExpect(status().isCreated())).get("id").asLong();
+        long buyerRev = read(send(get("/api/save"), buyer, null)).get("revision").asLong();
+        long order = read(send(post("/api/market/listings/" + listing + "/buy"), buyer, "{\"packaging\":\"box\",\"baseRevision\":" + buyerRev + "}").andExpect(status().isOk())).get("order").get("id").asLong();
+        send(post("/api/market/orders/" + order + "/ship"), seller, "{\"item\":" + real + ",\"bagTemp\":25,\"bagPh\":7}").andExpect(status().isOk());
+        clock.advance(Duration.ofHours(6));
+        send(post("/api/market/orders/" + order + "/collect"), buyer, null).andExpect(status().isOk());
+        return order;
+    }
+
+    /** 賣家再上架一條魚（買家看得到賣家信譽的地方）；回傳上架編號。 */
+    private long listed(String seller, long fishId) throws Exception {
+        sim.inspect = new SimClient.Inspect(true, true, json.readTree("{\"id\":" + fishId + ",\"species\":\"guppy\",\"sex\":\"male\",\"health\":1}"));
+        long rev = read(send(get("/api/save"), seller, null)).get("revision").asLong();
+        String fish = "{\"kind\":\"fish\",\"species\":\"guppy\",\"title\":\"孔雀魚 公\",\"price\":200,\"item\":{\"id\":" + fishId + "}}";
+        return read(send(post("/api/market/listings"), seller, withRevision(fish, rev)).andExpect(status().isCreated())).get("id").asLong();
+    }
+
+    /** 從買家那邊看這件上架的賣家信譽。 */
+    private JsonNode sellerOf(String viewer, long listing) throws Exception {
+        for (JsonNode l : read(send(get("/api/market/listings?species=guppy"), viewer, null)))
+            if (l.get("id").asLong() == listing) return l.get("seller");
+        throw new AssertionError("看不到賣家的上架");
+    }
+
+    @Test
+    void 到貨存活追蹤_買家上傳存檔時查_活過30天才算存活_查不到不算() throws Exception {
+        String me = player();
+        String buyer = player();
+        clock.advance(Duration.ofDays(3));
+        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        send(put("/api/save"), buyer, saveBody(0, false)).andExpect(status().isOk());
+        long order = delivered(me, buyer, 7);
+
+        // 買家存檔裡查不到這條魚：不算存活，下次再查
+        upload(buyer);
+        assertThat(sim.arrivalQueries).hasSize(1);
+        SimClient.ArrivalQuery asked = sim.arrivalQueries.get(0).get(0);
+        assertThat(asked.order()).isEqualTo(order);
+        // 帶不帶病看伺服器出貨的那份
+        assertThat(asked.item().get("genome").get("tail").asInt()).isEqualTo(60);
+        // 還活著、還沒滿 30 天：也還不算
+        sim.arrival = q -> new SimClient.Arrival(q.order(), "alive", false, false);
+        clock.advance(Duration.ofMinutes(5));
+        upload(buyer);
+        long shown = listed(me, 8);
+        assertThat(sellerOf(buyer, shown).get("survival").isNull()).isTrue();
+        // 活過 30 天
+        sim.arrival = q -> new SimClient.Arrival(q.order(), "alive", true, false);
+        clock.advance(Duration.ofMinutes(5));
+        upload(buyer);
+        JsonNode seen = sellerOf(buyer, shown);
+        assertThat(seen.get("survival").asDouble()).isEqualTo(1.0);
+        assertThat(seen.get("sick").asBoolean()).isFalse();
+        // 有結果了就不再查
+        clock.advance(Duration.ofMinutes(5));
+        upload(buyer);
+        assertThat(sim.arrivalQueries).hasSize(3);
+    }
+
+    @Test
+    void 到貨存活追蹤_死於出貨時帶的病算賣家的_買家自己養死的不算_查不了不擋上傳() throws Exception {
+        String me = player();
+        String buyer = player();
+        clock.advance(Duration.ofDays(3));
+        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        send(put("/api/save"), buyer, saveBody(0, false)).andExpect(status().isOk());
+        long sick = delivered(me, buyer, 7);
+        delivered(me, buyer, 8);
+
+        // 查到貨的時候模擬服務掛了：上傳照收，下次再查
+        sim.arrival = q -> {
+            throw new SimClient.Unavailable("down", null);
+        };
+        upload(buyer);
+
+        sim.arrival = q -> new SimClient.Arrival(q.order(), "died", false, q.order() == sick);
+        clock.advance(Duration.ofMinutes(5));
+        upload(buyer);
+        JsonNode seen = sellerOf(buyer, listed(me, 9));
+        // 買家自己養死的那筆不算：1 筆有結果、0 筆存活
+        assertThat(seen.get("survival").asDouble()).isEqualTo(0.0);
+        assertThat(seen.get("sick").asBoolean()).isFalse();
     }
 }

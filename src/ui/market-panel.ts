@@ -248,7 +248,15 @@ function priceTrend(species: string, points: { day: string; median: number; coun
 
 function sellerLine(l: MarketListing): string {
   const s = l.seller;
-  return s.deals === 0 && s.doaRate === 0 ? `${s.username} · 新賣家` : `${s.username} · 成交 ${s.deals} 筆 · 到貨死亡 ${pct(s.doaRate)}`;
+  if (s.deals === 0 && s.doaRate === 0) return `${s.username} · 新賣家`;
+  const survival = typeof s.survival === 'number' ? ` · 30 天存活 ${pct(s.survival)}` : '';
+  return `${s.username} · 成交 ${s.deals} 筆 · 到貨死亡 ${pct(s.doaRate)}${survival}`;
+}
+
+/** 賣家信譽的警示：常死在路上、常到貨後發病。 */
+function sellerWarning(l: MarketListing): string {
+  const parts = [l.seller.warning ? '常有魚死在路上' : '', l.seller.sick ? '常有魚到貨後發病' : ''].filter(Boolean);
+  return parts.length > 0 ? ` · ${parts.join('、')}` : '';
 }
 
 function itemDetails(l: Pick<MarketListing, 'kind' | 'item' | 'health'>): string {
@@ -270,7 +278,7 @@ function listingRow(deps: MarketDeps, l: MarketListing): Node {
       {},
       h('b', {}, l.title),
       h('div.hint', {}, itemDetails(l)),
-      h(`div.hint${l.seller.warning ? '.warn-text' : ''}`, {}, sellerLine(l) + (l.seller.warning ? ' · 常有魚死在路上' : '')),
+      h(`div.hint${sellerWarning(l) ? '.warn-text' : ''}`, {}, sellerLine(l) + sellerWarning(l)),
     ),
     h('div.row', {}, h('b.price', {}, yuan(l.price)), h('button.btn.primary', { onclick: () => deps.sheet.open('購買', () => buyPanel(deps, l)) }, '買')),
   );
