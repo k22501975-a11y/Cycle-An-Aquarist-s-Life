@@ -135,8 +135,8 @@ export function updateQuarantine(state: TankState, dt: number): void {
     if (fish.ich.stage === 'incubating') {
       fish.ich.progress += (dt / 72) * tf;
       if (fish.ich.progress >= 1) {
-        fish.ich = { stage: 'visible', progress: 0 };
-        recordEvent(state, { type: 'ich_visible', subjectId: fish.id });
+        fish.ich = { stage: 'visible', progress: 0, cause: fish.ich.cause };
+        recordEvent(state, { type: 'ich_visible', subjectId: fish.id, cause: fish.ich.cause ?? 'new_fish' });
       }
     } else if (fish.ich.stage === 'visible') {
       if (q.ichMedication > 0.05) {

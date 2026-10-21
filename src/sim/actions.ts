@@ -152,8 +152,8 @@ export interface AddFishOptions {
 /** 店裡的母魚、母蝦已經懷孕的機率：孔雀魚母魚跟公魚養在一起，買回來的大多已經懷孕（design/mvp.md §4.6）。 */
 const STORE_PREGNANT_CHANCE: Partial<Record<FishSpeciesId, number>> = { guppy: 0.9, cherry_shrimp: 0.2, crystal_shrimp: 0.15 };
 
-/** 店家魚帶白點蟲的機率。 */
-const STORE_ICH_CHANCE = 0.15;
+/** 店家魚帶白點蟲的機率：教學一次買一公兩母，沒檢疫時約 27% 會帶進來（polish-to-9.md §4：前 30 天 ≤ 1/3）。 */
+const STORE_ICH_CHANCE = 0.1;
 
 /** 放入新魚。剛運輸過來的魚處於緊迫狀態。 */
 export function addFish(state: TankState, species: FishSpeciesId, options: AddFishOptions = {}): Fish {
@@ -167,7 +167,7 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
     lengthCm: sp.adultLengthCm * (0.9 + 0.1 * nextRandom(state.rng)),
     // 店裡賣的是剛長大到幾個月大的魚
     ageDays: sp.daysToAdult * (1 + 0.6 * nextRandom(state.rng)),
-    ich: carries ? { stage: 'incubating', progress: 0 } : { stage: 'none', progress: 0 },
+    ich: carries ? { stage: 'incubating', progress: 0, cause: 'new_fish' } : { stage: 'none', progress: 0 },
   });
   if (species === 'guppy') fish.genome = storeGenome(state.rng, fish.sex, options.strain, options.fin);
   // 店裡的魚習慣魚場的水；直接倒進差很多的缸會休克

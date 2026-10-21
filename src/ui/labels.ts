@@ -1,6 +1,6 @@
 import type { DeathAdviceCause } from './moments';
 import { guppyLook } from '../render/strains';
-import { dueMothers, hidingFactor, nurseryFish, NURSERY_FRY_CAPACITY, NURSERY_RELEASE_CM, isJuvenile, isShrimpSpecies, FISH_SPECIES, growthStage, SNAILS, phenotype, PLANT_SPECIES, sexVisible, strainName, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
+import { dueMothers, hidingFactor, nurseryFish, NURSERY_FRY_CAPACITY, NURSERY_RELEASE_CM, isJuvenile, isShrimpSpecies, FISH_SPECIES, growthStage, ICH_CAUSE_LABELS, type IchCause, SNAILS, phenotype, PLANT_SPECIES, sexVisible, strainName, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
 
 export const SYMPTOM_LABELS: Record<Symptom, string> = {
   hiding: '躲在角落',
@@ -166,6 +166,11 @@ export function fishStrain(fish: Fish): string | null {
   return fish.genome ? strainName(phenotype(fish.genome)) : guppyLook(fish.id).strain;
 }
 
+/** 白點病的原因（polish-to-9.md G3：早上報告寫出原因）；沒記原因的舊事件回空字串。 */
+export function ichCauseText(e: SimEvent): string {
+  return e.cause && e.cause in ICH_CAUSE_LABELS ? `。原因：${ICH_CAUSE_LABELS[e.cause as IchCause]}` : '';
+}
+
 export function describeEvent(state: TankState, e: SimEvent): { text: string; tone: 'bad' | 'warn' | 'info' } | null {
   const fish = state.fish.find((f) => f.id === e.subjectId) ?? state.quarantine?.fish.find((f) => f.id === e.subjectId);
   switch (e.type) {
@@ -179,7 +184,7 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
         tone: e.cause === 'columnaris' ? 'bad' : 'warn',
       };
     case 'ich_visible':
-      return { text: `${fish ? fishName(fish) : '有魚'} 身上出現白點`, tone: 'warn' };
+      return { text: `${fish ? fishName(fish) : '有魚'} 身上出現白點${ichCauseText(e)}`, tone: 'warn' };
     case 'plant_died':
       return { text: '有一株水草溶光了', tone: 'warn' };
     case 'heater_broke':

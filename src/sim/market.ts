@@ -193,7 +193,7 @@ export function receiveFish(state: TankState, item: Record<string, unknown>, arr
   const sire = item.sire as Fish['sire'];
   if (fish.pregnancy > 0 && sire && typeof sire === 'object' && sire.genome) fish.sire = { genome: sire.genome, lineage: -fish.id, inbreeding: num(sire.inbreeding, 0, 1, 0) };
   const ich = item.ich as Fish['ich'] | undefined;
-  if (sp.susceptibleToIch && ich && (ich.stage === 'incubating' || ich.stage === 'visible')) fish.ich = { stage: ich.stage, progress: num(ich.progress, 0, 1, 0) };
+  if (sp.susceptibleToIch && ich && (ich.stage === 'incubating' || ich.stage === 'visible')) fish.ich = { stage: ich.stage, progress: num(ich.progress, 0, 1, 0), cause: 'new_fish' };
   const infections = Array.isArray(item.infections) ? (item.infections as Fish['infections'])! : [];
   fish.infections = infections
     .filter((i) => i && (i.kind === 'columnaris' || i.kind === 'flukes'))

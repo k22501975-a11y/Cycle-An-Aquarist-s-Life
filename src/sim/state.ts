@@ -167,6 +167,8 @@ export interface Water {
   ichPathogen: number;
   /** 底砂中的白點蟲包囊（藥物殺不到，破裂後變成游走期）。 */
   ichCysts: number;
+  /** 水裡、底砂這批白點蟲是哪一波的（從魚身上脫落時記下原因）；蟲死光就清掉。朋友濾材帶來的沒有。 */
+  ichCause?: IchCause;
   /** 白點藥濃度，1 = 一份標準劑量。 */
   medication: number;
   /** 抗生素（治柱狀病，也會傷到硝化菌）。 */
@@ -194,6 +196,12 @@ export interface Bacteria {
 
 export type IchStage = 'none' | 'incubating' | 'visible';
 
+/**
+ * 白點病的誘因（polish-to-9.md §4）：只有這三種，沒有誘因就不會爆發。
+ * temp_swing：24 小時內水溫差 ≥ 3°C；new_fish：新魚沒檢疫就放進來；crowding：密度超過缸的建議量。
+ */
+export type IchCause = 'temp_swing' | 'new_fish' | 'crowding';
+
 export interface Fish {
   id: number;
   species: FishSpeciesId;
@@ -208,7 +216,8 @@ export interface Fish {
   hunger: number;
   /** 持續處於飢餓狀態的小時數。 */
   starvingHours: number;
-  ich: { stage: IchStage; progress: number };
+  /** cause：這尾是因為什麼染上的（早上報告寫出原因）；舊存檔沒有。 */
+  ich: { stage: IchStage; progress: number; cause?: IchCause };
   /** 基因（目前只有孔雀魚有）。 */
   genome?: GuppyGenome;
   /** 母魚儲存的精子：孔雀魚交配一次可以連生好幾胎，這是那條公魚的基因與血統。 */
