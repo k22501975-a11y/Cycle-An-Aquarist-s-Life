@@ -148,7 +148,6 @@ export interface AddFishOptions {
   carries?: DiseaseKind[];
 }
 
-/** 店家的孔雀魚母魚幾乎都已經懷孕（和公魚混養）；櫻花蝦母蝦偶爾抱卵。 */
 /** 店裡的母魚、母蝦已經懷孕的機率：孔雀魚母魚跟公魚養在一起，買回來的大多已經懷孕（design/mvp.md §4.6）。 */
 const STORE_PREGNANT_CHANCE: Partial<Record<FishSpeciesId, number>> = { guppy: 0.9, cherry_shrimp: 0.2, crystal_shrimp: 0.15 };
 /** 店裡已懷孕的母魚懷孕到哪裡（0–1，1 就生）。 */
