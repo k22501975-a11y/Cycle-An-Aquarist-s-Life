@@ -37,10 +37,15 @@ export interface NextStep {
 const living = (tanks: TankState[]) => tanks.flatMap((t) => t.fish.filter((f) => f.alive));
 const bredFry = (tanks: TankState[]) => living(tanks).filter((f) => (f.generation ?? 0) >= 1 && !isShrimpSpecies(f.species) && growthStage(f) === 'fry');
 
+/** 沒寫到的目標用的保底句。 */
+export const GENERIC_STEP = '看看任務卡上的目標';
+
 /** 每個目標在現在的狀況下要做的事。 */
 function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
   const home = tanks[0];
   switch (goal.id) {
+    case 'cycled':
+      return { text: '每天測水，等氨和亞硝都到 0', target: 'test' };
     case 'protect_fry': {
       if (bredFry(tanks).length > 0) return { text: '小魚還小，一天餵兩次', target: 'feed' };
       const due = tanks.some((t) => dueMothers(t).length > 0);
@@ -66,9 +71,12 @@ function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
       const best = Math.max(0, ...tanks.map((t, i) => Math.floor((t.hours - (g.calmSince[i] ?? t.hours)) / 24)));
       return { text: `每天測水，${CALM_DAYS} 天沒警告（${Math.min(best, CALM_DAYS)}/${CALM_DAYS}）`, target: 'test' };
     }
-    // strain、fins：選育
-    default:
+    case 'strain':
+    case 'fins':
       return { text: '挑漂亮的公母配對留種', target: 'select' };
+    // 新目標忘了在這裡加一句時的保底（測試會抓到）
+    default:
+      return { text: GENERIC_STEP, target: 'test' };
   }
 }
 

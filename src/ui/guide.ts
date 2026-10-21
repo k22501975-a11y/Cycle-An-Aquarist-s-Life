@@ -203,7 +203,11 @@ export class Guide {
   private goalPages(lead: string): Page[] {
     const goals = this.tanks.length > 0 ? nextGoals(this.tanks) : [];
     if (goals.length === 0) return [];
-    return [{ text: `${lead}${goals.map((g) => `「${g.title}」（${g.coins} 魚幣）`).join('、')}。`, label: '好，我來試試' }];
+    // 有說明的目標（等養水：要等多久、怎麼加快）接著多說幾頁
+    const intro = goals.flatMap((g) => g.intro ?? []);
+    const pages: Page[] = [{ text: `${lead}${goals.map((g) => `「${g.title}」（${g.coins} 魚幣）`).join('、')}。`, label: intro.length ? '然後呢？' : '好，我來試試' }];
+    intro.forEach((text, i) => pages.push({ text, label: i === intro.length - 1 ? '好，我來試試' : '然後呢？' }));
+    return pages;
   }
 
   private questPages(): Page[] {
@@ -297,15 +301,18 @@ export class Guide {
       // 數得出來的目標顯示進度（#183：「養大 5 條」交單後看得出還差幾條）
       const p = goal.progress?.(this.tanks);
       const title = p ? `${goal.title}（${p[0]}/${p[1]}）` : goal.title;
+      // 等養水這種數不出來的目標：標題下面一行進度（硝化菌幾成、上次測水的讀數）
+      const detail = goal.detail?.(this.tanks) ?? '';
       // 下一步（U1）：照現在缸裡的狀況說具體要做什麼，點任務卡就帶過去
       this.step = nextStep(this.tanks);
-      const key = goal.id + title + (this.step?.text ?? '');
+      const key = goal.id + title + detail + (this.step?.text ?? '');
       if (this.shownGoal === key) return;
       this.shownGoal = key;
       this.pill.replaceChildren(
         ownerPortrait('quest-avatar'),
         h('span.quest-step', {}, '目標'),
         h('span.quest-title', { title }, title),
+        detail ? h('span.quest-progress', {}, detail) : '',
         ...(this.step ? [h('span.quest-hint', {}, `下一步：${this.step.text} ›`)] : []),
       );
     } else {

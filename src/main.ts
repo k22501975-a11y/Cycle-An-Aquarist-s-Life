@@ -1424,8 +1424,9 @@ async function start(): Promise<void> {
             },
           }
         : undefined;
-    // 危機一定要跳出來（不只進通知匣）：用壞消息的樣子
-    toasts.show(tankPrefix(c.tank) + crisisText(c), 'bad', fix);
+    // 危機一定要跳出來（不只進通知匣）：用壞消息的樣子。
+    // 畫面上同時只有一格：等同一幀的事件通知（「某某魚死了」）都送完再跳，才不會被它們換掉（那些照樣進通知匣）
+    setTimeout(() => toasts.show(tankPrefix(c.tank) + crisisText(c), 'bad', fix), 0);
   });
   // 選育成功：自家繁殖的公魚第一次長出沒見過的品系
   const strains = new StrainTracker(store);
