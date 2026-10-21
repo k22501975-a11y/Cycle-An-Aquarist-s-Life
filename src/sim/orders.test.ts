@@ -315,6 +315,20 @@ describe('店家訂單板（M21）', () => {
       expect(board.orders.filter((o) => !reachableInTime([s], o)).length).toBeLessThan(2);
     });
 
+    it('板子交空了、又沒有期限內湊得齊的魚單：隔天用缸裡的仔魚出一張小單，不會一直空著（#292）', () => {
+      const s = tank(11);
+      simulate(s, 1);
+      const board = orderBoard(s);
+      const fry = brood(s, 4);
+      for (const f of fry) f.bornHours = s.hours - 8 * 24;
+      board.orders = [];
+      board.lastChangeHours = s.hours;
+      for (const f of fry) f.hunger = 0;
+      simulate(s, ORDER_GAP_HOURS + 1);
+      expect(board.orders).toHaveLength(1);
+      expect(deliverableNow(s, board.orders[0])).toBe(true);
+    });
+
     it('小孔雀單的數量：主缸裡的只算活得下來的一成五（草密多一點），盒子裡的算三成', () => {
       const s = tank(6);
       const fry = brood(s, 20);
