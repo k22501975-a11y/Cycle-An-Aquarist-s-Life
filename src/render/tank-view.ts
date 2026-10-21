@@ -1,4 +1,4 @@
-import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
+import { BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
 import { waterLook, isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, personalitySpec, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { newToneFrame, PaintedRig, paintedArtVersion, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
@@ -21,6 +21,7 @@ import { quantizeTone } from './tone';
 import { clampPan, fitCamera, maxSpan, zoomAt, type Camera } from './camera';
 import { type QualitySpec, qualitySpec } from './quality';
 import { causticsTexture, MOCKUP_PX_PER_CM, paintBackdrop, paintDriftwood, paintFront, paintPlant, paintVignette, rayTexture } from './scenery';
+import type { GlApplication } from './gl-app';
 
 interface FoodParticle extends Pellet {
   s: Sprite;
@@ -288,7 +289,7 @@ export class TankView {
     return this.app.renderer.resolution;
   }
 
-  constructor(private readonly app: Application, private readonly events: TankViewEvents = {}) {
+  constructor(private readonly app: GlApplication, private readonly events: TankViewEvents = {}) {
     this.bounds = sceneBounds(app.screen.width, app.screen.height, this.insets);
     const tex = causticsTexture();
     this.causticsA = new TilingSprite({ texture: tex, width: 10, height: 10 });
