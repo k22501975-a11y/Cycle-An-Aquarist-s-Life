@@ -239,8 +239,9 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
       return { text: '螺陷阱的菜爛了，記得拿出來', tone: 'warn' };
     case 'pests_seen':
       return { text: `缸裡發現了 ${e.count ?? 5} 隻小螺，是跟著水草搭便車來的`, tone: 'info' };
+    // mated 只寫在早上報告（G8），白天不跳通知；first_bred_sale 畫面演慶祝卡（main.ts），不另外跳通知
+    case 'mated':
     case 'first_bred_sale':
-      // 畫面演慶祝卡（main.ts），不另外跳通知
       return null;
   }
 }
