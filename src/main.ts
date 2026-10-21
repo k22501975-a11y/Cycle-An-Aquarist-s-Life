@@ -1613,7 +1613,8 @@ async function start(): Promise<void> {
     const fish = item.subjectId !== undefined ? t.fish.find((f) => f.id === item.subjectId) : undefined;
     if (item.kind === 'birth') return `${import.meta.env.BASE_URL}art/${fryArt(fish?.species ?? 'guppy')}`;
     if (item.kind === 'snails') return `${import.meta.env.BASE_URL}art/snail/snail-bladder.webp`;
-    if (fish && fish.alive && (item.kind === 'grown' || item.kind === 'disease' || item.kind === 'fish_relaxed')) return view.portrait(fish);
+    // G8：缸裡真的發生的事配那條魚（懷孕的母魚、追母魚的公魚、長大的小魚）
+    if (fish && fish.alive && (['grown', 'disease', 'fish_relaxed', 'belly', 'courtship', 'fry_grew', 'lookalike'] as ReportItem['kind'][]).includes(item.kind)) return view.portrait(fish);
     // P6：自己做的事的效果配上那樣東西的圖（長最多的那種草、硝化菌、育幼盒）
     const art = (file: string) => `${import.meta.env.BASE_URL}art/${file}`;
     if (item.kind === 'plant_grew' && t.plants.length) {
@@ -1623,6 +1624,9 @@ async function start(): Promise<void> {
     }
     if (item.kind === 'cycle' || item.kind === 'cycled') return art('gear/bottle-bacteria.webp');
     if (item.kind === 'nursery') return art('gear/nursery-box.webp');
+    const leaf = item.kind === 'new_leaf' ? t.plants.find((p) => p.id === item.plantId) : undefined;
+    if (leaf) return art(plantArt(leaf.species));
+    if (item.kind === 'fry_grew') return art(fryArt(fish?.species ?? 'guppy'));
     return null;
   };
   const goReport = (item: ReportItem) => {
