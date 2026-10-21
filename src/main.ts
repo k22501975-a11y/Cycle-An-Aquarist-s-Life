@@ -1,4 +1,4 @@
-import { Application } from 'pixi.js';
+import { GlApplication } from './render/gl-app';
 import { introReady } from './intro';
 import { AudioEngine } from './audio/engine';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
@@ -10,7 +10,7 @@ import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, w
 import { catchUpSave } from './game/catchup-runner';
 import { menuTile, ownerImg } from './ui/art-icons';
 import { cloudTimeScale, SpeedControl } from './ui/speed-control';
-import { installCrashGuard } from './ui/crash';
+import { installCrashGuard, showStartupError } from './ui/crash';
 import { Analytics } from './net/analytics';
 import { isNativeApp, saveTextFile } from './ui/native';
 import { CloudClient } from './net/cloud';
@@ -85,7 +85,7 @@ async function start(): Promise<void> {
   const hud = document.getElementById('hud')!;
   const dock = document.getElementById('dock')!;
 
-  const app = new Application();
+  const app = new GlApplication();
   // 讀取存檔
   const store = browserStore();
   const loaded = loadSave(store);
@@ -1941,5 +1941,7 @@ async function start(): Promise<void> {
 // 開不起來也要把開場動畫收掉，不然畫面會一直停在標題
 start().catch((err) => {
   introReady();
-  throw err;
+  // 開機失敗時錯誤畫面還沒裝好（installCrashGuard 要等存檔讀進來），這裡直接顯示原因
+  console.error(err);
+  showStartupError(err);
 });
