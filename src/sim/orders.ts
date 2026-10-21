@@ -1,4 +1,4 @@
-import { buybackRefusal, economy, FISH_PRICES, guppyBuybackTier, householdTanks, noteEarned, noteRaisedGone, PLANT_PRICES, sellableCuttings } from './economy';
+import { buybackRefusal, economy, FISH_PRICES, guppyBuybackTier, householdTanks, noteBredSale, noteEarned, noteRaisedGone, PLANT_PRICES, sellableCuttings } from './economy';
 import { phenotype, type FinTrait, type GuppyPhenotype } from './genetics';
 import { nextRandom, type RngState } from './random';
 import { PESTS, SNAILS, type PestKind } from './snails';
@@ -181,6 +181,7 @@ export function fulfillOrder(tanks: TankState[], orderId: number, keep: readonly
   const state = tanks[0];
   const board = orderBoard(state);
   const o = board.orders.find((x) => x.id === orderId)!;
+  let firstGiven: Fish | undefined;
   if (o.kind === 'cutting') economy(state).cuttings[o.plant!]! -= o.count;
   else if (o.kind === 'snail') {
     let left = o.count;
@@ -195,6 +196,7 @@ export function fulfillOrder(tanks: TankState[], orderId: number, keep: readonly
     let left = o.count;
     for (const t of tanks) {
       const give = new Set(matchingFish(t, o, keep).slice(0, left));
+      firstGiven ??= give.values().next().value;
       left -= give.size;
       for (const f of give) noteRaisedGone(state, f);
       t.fish = t.fish.filter((f) => !give.has(f));
@@ -203,6 +205,7 @@ export function fulfillOrder(tanks: TankState[], orderId: number, keep: readonly
   }
   const coins = o.count * o.unitPrice;
   economy(state).coins += coins;
+  if (firstGiven) noteBredSale(state, firstGiven, coins, 'order');
   noteEarned(state);
   board.orders = board.orders.filter((x) => x !== o);
   board.done += 1;

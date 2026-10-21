@@ -29,6 +29,7 @@ const KIND_ICON: Record<ReportKind, ArtIcon> = {
   fish_relaxed: 'owner',
   ammonia: 'waterchange',
   gear: 'gear',
+  lookalike: 'owner',
   quiet: 'owner',
 };
 
