@@ -1330,8 +1330,13 @@ async function start(): Promise<void> {
         if (game.state.nurseryBox) withPanels((p) => p.putDueInNursery(ctx));
         else panelSheet('育幼盒', (p) => p.nurseryPanel(ctx));
         return;
-      case 'treat':
-        return select(sick()?.id ?? null);
+      case 'treat': {
+        // 生病的魚可能在別缸：先切過去，直接打開用藥（#291），老闆先說是什麼病、下什麼藥
+        const at = game.tanks.findIndex((t) => t.fish.some((f) => f.alive && illnessOf(f)));
+        if (at >= 0) game.switchTo(at);
+        const fish = sick();
+        return panelSheet('用藥', (p) => p.treatPanel(ctx, fish ? causeAdvice(fishName(fish), [], fish) : '缸裡現在看不到生病的魚。'));
+      }
       case 'select':
         return select(showy()?.id ?? null);
       case 'mother': {

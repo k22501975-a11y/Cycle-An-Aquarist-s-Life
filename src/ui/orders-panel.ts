@@ -110,7 +110,7 @@ export function ordersPanel(ctx: PanelContext): Node {
   const refresh = () => sheet.open('客人的訂單', () => ordersPanel(ctx));
   const anyReady = board.orders.some((o) => orderSupply(game.tanks, o) >= o.count);
   const outlooks = compareOrders(game.tanks);
-  const say = board.orders.length === 0 ? '單都交完了，明天會有新的客人來訂。' : anyReady ? '有單湊齊了，按「交貨」我就幫你包好送過去。' : '客人只收你自己繁殖的魚。照單子挑魚配對，養大就能交。';
+  const say = board.orders.length === 0 ? '單都交完了。客人會陸續來，過幾天再來看看。' : anyReady ? '有單湊齊了，按「交貨」我就幫你包好送過去。' : '客人只收你自己繁殖的魚。照單子挑魚配對，養大就能交。';
   return h(
     'div.stack',
     {},

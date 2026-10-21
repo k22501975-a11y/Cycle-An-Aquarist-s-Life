@@ -659,7 +659,11 @@ function fillOrders(state: TankState, board: OrderBoard): void {
     while (board.orders.length < ORDER_BOARD_SIZE && addOrder(state, board, ctx));
     board.lastChangeHours = state.hours;
   } else if (state.hours - board.lastChangeHours >= ORDER_GAP_HOURS) {
-    addOrder(state, board, orderContext(state));
+    // 板子空了、又抽不到期限內湊得齊的單：用缸裡現有的東西（插枝、小螺、仔魚）出一張小單，不要讓板子一直空著（體驗第 15 輪 #292）
+    if (!addOrder(state, board, orderContext(state)) && board.orders.length === 0) {
+      const small = incomeGapOrder(householdTanks(state), board);
+      if (small) board.orders.push(small);
+    }
     board.lastChangeHours = state.hours;
   }
 }
