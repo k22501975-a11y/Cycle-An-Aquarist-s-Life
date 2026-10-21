@@ -274,7 +274,7 @@ export interface OrderContext {
 }
 
 /** 這株水草現在修剪得下幾株插枝（跟 trimPlant 一樣：留一半，多的剪下來）。 */
-function trimmable(state: TankState, plant: PlantSpeciesId): number {
+export function trimmableCuttings(state: TankState, plant: PlantSpeciesId): number {
   const sp = PLANT_SPECIES[plant];
   return state.plants.filter((p) => p.species === plant).reduce((n, p) => n + Math.max(0, Math.floor((p.biomassG - sp.maxBiomassG * 0.5) / sp.cuttingMassG)), 0);
 }
@@ -286,7 +286,7 @@ export function orderContext(state: TankState): OrderContext {
   const cuttings: OrderContext['cuttings'] = {};
   for (const plant of Object.keys(PLANT_PRICES) as PlantSpeciesId[]) {
     // 寶箱來的插枝不能交單，不照它出插枝單
-    const n = sellableCuttings(state, plant) + trimmable(state, plant);
+    const n = sellableCuttings(state, plant) + trimmableCuttings(state, plant);
     if (n > 0) cuttings[plant] = n;
   }
   const snails: OrderContext['snails'] = {};
@@ -473,7 +473,7 @@ const GAP_PEST_PRICE = 8;
 
 /** 這張保底單在這幾缸（共用錢包）湊不湊得出來：插枝看手上能賣的加每缸剪得下來的，魚和螺從每一缸湊（跟交單一樣）。 */
 function gapDeliverable(tanks: TankState[], o: ShopOrder): boolean {
-  if (o.kind === 'cutting') return sellableCuttings(tanks[0], o.plant!) + tanks.reduce((n, t) => n + trimmable(t, o.plant!), 0) >= o.count;
+  if (o.kind === 'cutting') return sellableCuttings(tanks[0], o.plant!) + tanks.reduce((n, t) => n + trimmableCuttings(t, o.plant!), 0) >= o.count;
   return orderSupply(tanks, o) >= o.count;
 }
 
@@ -491,7 +491,7 @@ export function incomeGapOrder(tanks: TankState[], board: OrderBoard): ShopOrder
   const base = { id: 0, count: 0, unitPrice: 0, postedHours: now, gap: true };
   const candidates: ShopOrder[] = [];
   for (const plant of Object.keys(PLANT_PRICES) as PlantSpeciesId[]) {
-    const count = Math.min(tanks.reduce((n, t) => n + trimmable(t, plant), 0), 2);
+    const count = Math.min(tanks.reduce((n, t) => n + trimmableCuttings(t, plant), 0), 2);
     if (count > 0) candidates.push({ ...base, kind: 'cutting', plant, count, unitPrice: Math.max(1, Math.floor(PLANT_PRICES[plant] / 3)) });
   }
   for (const snail of Object.keys(ORDER_SNAIL_NAMES) as OrderSnail[]) {
