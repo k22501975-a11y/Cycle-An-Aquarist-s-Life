@@ -89,7 +89,9 @@ export function morningLine(report: MorningReport): string {
   const bad = report.items.some(isBadNews);
   const good = report.items.some((i) => i.tone === 'good');
   if (bad) return good ? '昨晚有點狀況，也有好消息。' : '昨晚有點狀況。';
-  return good ? '有好消息！' : '安靜的一晚。';
+  if (good) return '有好消息！';
+  // 氨在升、藻變多、該餵了：死亡要有預警，不能寫「安靜」
+  return report.items.some((i) => i.tone === 'warn') ? '有件事要留意一下。' : '安靜的一晚。';
 }
 
 /**

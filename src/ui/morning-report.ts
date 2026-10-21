@@ -341,8 +341,8 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     const where = tanks.length > 1 ? `${tankLabel(tanks, look.tank)}：` : '';
     items.push({ kind: 'lookalike', tank: look.tank, tone: 'good', text: where + lookalikeLine(look), action: 'fish', subjectId: look.childId, lookalike: look });
   }
-  // 沒好事也沒壞事：帶一句缸裡的小變化（#258）
-  if (!crisis && tanks[0] && before.tanks[0] && !items.some((i) => isBadNews(i) || i.tone === 'good')) {
+  // 安靜的一晚（沒好事、沒壞事、也沒要留意的）：帶一句缸裡的小變化（#258）
+  if (!crisis && tanks[0] && before.tanks[0] && items.every((i) => i.tone === 'info')) {
     const text = quietObservation(tanks[0], tanks[0], before.tanks[0]);
     if (text) items.push({ kind: 'observe', tank: 0, tone: 'info', text });
   }

@@ -21,7 +21,8 @@ describe('早上報告的開頭照昨晚的好壞說（#258，tutorial-lines.md 
     expect(morningLine(report([{ kind: 'eaten', tone: 'warn' }]))).toBe('昨晚有點狀況。');
     expect(morningLine(report([{ kind: 'birth', tone: 'good' }]))).toBe('有好消息！');
     expect(morningLine(report([{ kind: 'disease', tone: 'warn' }, { kind: 'birth', tone: 'good' }]))).toBe('昨晚有點狀況，也有好消息。');
-    expect(morningLine(report([{ kind: 'hungry', tone: 'warn' }]))).toBe('安靜的一晚。');
+    expect(morningLine(report([{ kind: 'hungry', tone: 'warn' }]))).toBe('有件事要留意一下。');
+    expect(morningLine(report([{ kind: 'cycle', tone: 'info' }]))).toBe('安靜的一晚。');
     expect(morningLine(report([]))).toBe('安靜的一晚。');
   });
 });
@@ -42,10 +43,14 @@ describe('平淡的早上帶一句小觀察', () => {
     expect(new Set(seen).size).toBe(3);
   });
 
-  it('有好消息的早上不出小觀察', () => {
+  it('有好消息或要留意的事的早上不出小觀察', () => {
     const s = tank();
     const before = snapshot([s]);
     s.plants[0].biomassG *= 1.05;
     expect(morningReport(before, [s], 12, null).items.map((i) => i.kind)).not.toContain('observe');
+    const t = tank();
+    const was = snapshot([t]);
+    t.algae += 0.2;
+    expect(morningReport(was, [t], 12, null).items.map((i) => i.kind)).not.toContain('observe');
   });
 });
