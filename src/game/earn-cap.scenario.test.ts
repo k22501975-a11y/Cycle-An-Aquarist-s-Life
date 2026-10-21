@@ -38,4 +38,21 @@ describe('錢的範圍檢查（L2，#76）', () => {
       expect(economy(days[b][0]).coins + extra - economy(days[a][0]).coins).toBeGreaterThan(cap);
     }
   }, 120_000);
+
+  it('上限只看伺服器收過的上一份：這一份多塞水草、多塞魚再刪掉都撐不大', () => {
+    const days: TankState[][] = [];
+    seriousPlayer(1, 3, true, { days: 25, onDay: (tanks) => days.push(snap(tanks)) });
+    const [a, b] = [days[20], days[21]];
+    const cap = earnCap(a, b).total;
+    // 這一份多塞 2000 株紅蝴蝶：上限不變
+    const stuffed = snap(b);
+    for (let i = 0; i < 2000; i++) stuffed[0].plants.push({ ...stuffed[0].plants[0], id: 900_000 + i, species: 'rotala', biomassG: 30 });
+    expect(earnCap(a, stuffed).total).toBe(cap);
+    // 上一份塞了 500 條魚、這一份全部刪掉：只算這一天賣得掉的條數
+    const padded = snap(a);
+    const model = padded[0].fish.find((f) => f.alive)!;
+    for (let i = 0; i < 500; i++) padded[0].fish.push({ ...model, id: 800_000 + i });
+    const capped = earnCap(padded, b);
+    expect(capped.fish).toBeLessThanOrEqual((2 * 10 + (economy(a[0]).orders!.orders.length + 3) * 10) * 400);
+  }, 120_000);
 });

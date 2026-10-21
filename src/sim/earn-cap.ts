@@ -29,13 +29,14 @@ export const NEWBORN_SELL_DAYS = 14;
 /** 誤差：存檔時間點的小落差（一筆電費、四捨五入）。 */
 export const EARN_SLACK = 100;
 
-/** 理論上最貴的孔雀魚（白子＋黃金＋全部鰭型、大C、尾鰭滿分、發色滿）。 */
-const GUPPY_PRICE_MAX = Math.round(
-  FISH_PRICES.guppy *
-    guppyBuybackTier({ albino: true, gold: true, tuxedo: true, red: true, snake: true, grass: true, swallow: true, ribbon: true, dumbo: true, bigC: true, sword: 3, tailShape: 'halfmoon', finLength: 1 }) *
-    1.5 *
-    1.25,
-);
+/** 一張魚單最多收幾尾（米蝦單 10 尾）。 */
+const ORDER_FISH_MAX = 10;
+
+/** 理論上最貴的孔雀魚（白子＋黃金＋全部鰭型、大C、尾鰭滿分、發色滿）。在函式裡算，沒用到 earnCap 的打包就搖得掉。 */
+function guppyPriceMax(): number {
+  const tier = guppyBuybackTier({ albino: true, gold: true, tuxedo: true, red: true, snake: true, grass: true, swallow: true, ribbon: true, dumbo: true, bigC: true, sword: 3, tailShape: 'halfmoon', finLength: 1 });
+  return Math.round(FISH_PRICES.guppy * tier * 1.5 * 1.25);
+}
 
 const allFish = (tanks: TankState[]): Fish[] => tanks.flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])]);
 
@@ -97,32 +98,35 @@ export function earnCap(prev: TankState[], next: TankState[]): EarnCapDetail {
   let chest = days * CHEST_COINS_MAX;
   if (Math.floor(next[0].hours / 24) <= CHEST_CAP_DAY) chest = Math.min(chest, Math.max(0, CHEST_COINS_CAP - (pe.chestCoins ?? 0)));
 
-  // 魚：上一份有、這一份不見的魚，每條照最高價算（賣店家或交單）
+  // 魚：上一份有、這一份不見的魚，每條照最高價算（賣店家或交單）。
+  // 條數不會超過這段時間賣得掉的：每天賣店家的次數，加上每張單最多收的尾數（先塞一堆魚、下次再刪掉也撐不大）
   const stillHere = new Set(allFish(next).map((f) => f.id));
   const before = allFish(prev).filter((f) => f.alive);
-  const fish = before.filter((f) => !stillHere.has(f.id)).reduce((n, f) => n + fishEarnCap(f), 0);
+  const board = pe.orders?.orders.length ?? 0;
+  const orderSlots = board + days * ORDERS_PER_DAY + 1;
+  const sellable = days * DAILY_SELL_LIMIT + orderSlots * ORDER_FISH_MAX;
+  const fish = before
+    .filter((f) => !stillHere.has(f.id))
+    .map(fishEarnCap)
+    .sort((a, b) => b - a)
+    .slice(0, sellable)
+    .reduce((n, x) => n + x, 0);
 
   // 這段時間內才出生又賣掉的魚：要長夠久才收，所以短時間的上傳不會有
   // 長到收購大小之前的那幾天賣不了；單價照上一份最貴的魚（小魚可能比爸媽好一點，再寬一點取 1.5 倍）
   const sellDays = Math.max(0, Math.ceil(hours / 24 - NEWBORN_SELL_DAYS));
-  const newborn = sellDays * DAILY_SELL_LIMIT * Math.min(GUPPY_PRICE_MAX, Math.round(1.5 * Math.max(GUPPY_PLAIN_ORDER_MAX, ...before.map(fishEarnCap))));
+  const newborn = sellDays * DAILY_SELL_LIMIT * Math.min(guppyPriceMax(), Math.round(1.5 * Math.max(GUPPY_PLAIN_ORDER_MAX, ...before.map(fishEarnCap))));
 
-  // 插枝：手上的、上一份每株現在就剪得下來的（剪到上限一半），加上每株每天長出來的
+  // 插枝：手上的、上一份每株現在就剪得下來的（剪到上限一半），加上每株每天長出來的。
+  // 只看上一份（伺服器收過的）：這一份是還沒驗證的，多塞水草不能撐大上限。這段時間才買的草要花錢，剪下來賣也賺不回來
   let plants = 0;
   for (const t of prev) for (const p of t.plants) if (p.species in PLANT_PRICES) plants += (Math.max(0, p.biomassG - PLANT_SPECIES[p.species].maxBiomassG * 0.5) / PLANT_SPECIES[p.species].cuttingMassG) * cuttingUnit(p.species);
   for (const [sp, n] of Object.entries(pe.cuttings ?? {}) as Array<[PlantSpeciesId, number]>) if (sp in PLANT_PRICES) plants += Math.max(0, n) * cuttingUnit(sp);
-  const plantCount = new Map<PlantSpeciesId, number>();
-  for (const list of [prev, next]) {
-    const here = new Map<PlantSpeciesId, number>();
-    for (const t of list) for (const p of t.plants) if (p.species in PLANT_PRICES) here.set(p.species, (here.get(p.species) ?? 0) + 1);
-    for (const [sp, n] of here) plantCount.set(sp, Math.max(plantCount.get(sp) ?? 0, n));
-  }
-  for (const [sp, n] of plantCount) plants += n * days * cuttingsPerDay(sp) * cuttingUnit(sp);
+  for (const t of prev) for (const p of t.plants) if (p.species in PLANT_PRICES) plants += days * cuttingsPerDay(p.species) * cuttingUnit(p.species);
   plants = Math.ceil(plants);
 
   // 小單（螺、小孔雀、保底單）：板上現有的加上每天新出的
-  const board = pe.orders?.orders.length ?? 0;
-  const orders = (board + days * ORDERS_PER_DAY + 1) * SMALL_ORDER_MAX;
+  const orders = orderSlots * SMALL_ORDER_MAX;
 
   const total = goals + quests + tanks + chest + fish + newborn + plants + orders + EARN_SLACK;
   return { total, goals, quests, tanks, chest, fish, newborn, plants, orders };
