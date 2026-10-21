@@ -189,7 +189,7 @@ def sword(n, which):
   tp = np.tan(np.radians(PS))
   spread = 0.22 * ph + along * tp                                           # 劍中線離中軸的距離
   if which == 3:
-    rm = 0.34 * f.L * (0.72 + 0.28 * np.clip(np.abs(dy) / np.maximum(spread, 1), 0, 1) ** 2)   # 中間最短：凹進去
+    rm = 0.58 * f.L * (0.9 + 0.1 * np.clip(np.abs(dy) / np.maximum(spread, 1), 0, 1) ** 2)   # 中間最短：凹進去
     memb = np.clip((spread + 2 - np.abs(dy)) / 2, 0, 1)
   else:
     sd = sides[0]
@@ -205,7 +205,7 @@ def sword(n, which):
   m = bilinear(f.a, f.ox - np.cos(np.radians(ts)) * k * rsrc, f.oy - np.sin(np.radians(ts)) * k * rsrc)
   rays = 0.5 + 0.5 * np.sin(np.radians(phi) * 40)
   m[..., :3] *= (1 - 0.12 * rays)[..., None]
-  thin = 0.6 if which == 3 else 0.9                                        # 雙劍中間比較透明
+  thin = 0.72 if which == 3 else 0.9                                        # 雙劍中間比較透明
   m[..., 3] *= memb * thin * np.clip(1 - 0.4 * (along / np.maximum(rm, 1)) ** 2, 0, 1)
   out = m
   u = np.clip(along / RT, 0, 1)
