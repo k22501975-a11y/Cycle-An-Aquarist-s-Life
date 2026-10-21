@@ -7,9 +7,9 @@ import { type Fish, type TankState } from './state';
  * 買家自己養死的（水質、餓、沒對水）不算。帶不帶病看伺服器自己存的出貨資料，不信存檔。
  */
 
-/** 追蹤幾天（存活率看 30 天，多留幾天讓伺服器有時間收）。 */
+/** 追蹤幾天（存活率看 30 天）。紀錄留 ARRIVAL_KEEP_DAYS 天：伺服器查收貨後 14 個現實天內的（約 98 遊戲天），要比那長，不然還沒回報就被清掉。 */
 export const ARRIVAL_TRACK_DAYS = 30;
-const ARRIVAL_KEEP_DAYS = 45;
+const ARRIVAL_KEEP_DAYS = 120;
 
 export interface MarketArrival {
   /** 市場訂單編號。 */

@@ -17,7 +17,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -53,6 +58,8 @@ public class SaveController {
     private final SimClient sim;
     private final MarketService market;
     private final CoinLedger ledger;
+    /** 存檔收下之後的附帶工作（查到貨存活）用的獨立交易。 */
+    private final TransactionTemplate afterSave;
     /** 已經在市場出貨的魚又出現在存檔裡。 */
     private static final String SHIPPED = "shipped_fish";
     /** 存檔最上層的欄位（src/game/save.ts 的 SaveFile）。 */
@@ -61,7 +68,8 @@ public class SaveController {
     static final Duration ADVANCE_EVERY = Duration.ofMinutes(1);
     private static final Logger log = LoggerFactory.getLogger(SaveController.class);
 
-    public SaveController(CloudSaveRepository saves, CycleProperties props, ObjectMapper json, Clock clock, SimClient sim, MarketService market, CoinLedger ledger) {
+    public SaveController(CloudSaveRepository saves, CycleProperties props, ObjectMapper json, Clock clock, SimClient sim, MarketService market, CoinLedger ledger,
+                          PlatformTransactionManager tx) {
         this.saves = saves;
         this.props = props;
         this.json = json;
@@ -69,6 +77,8 @@ public class SaveController {
         this.sim = sim;
         this.market = market;
         this.ledger = ledger;
+        this.afterSave = new TransactionTemplate(tx);
+        this.afterSave.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     public record Upload(
@@ -113,17 +123,37 @@ public class SaveController {
         }
         save.update(file.path("savedAt").asLong(), file.path("version").asInt(), data, now);
         saves.save(save);
-        // 對得上的存檔才拿來查市場買來的魚活得怎樣（賣家的 30 天存活率）；查不了不影響上傳
-        if (problems.isEmpty()) {
-            try {
-                market.recordArrivals(accountId, file);
-            } catch (SimClient.Unavailable | HttpSimClient.BadSave e) {
-                log.warn("查不了到貨存活：{}", e.getMessage());
-            }
-        }
+        // 對得上的存檔才拿來查市場買來的魚活得怎樣（賣家的 30 天存活率）：等存檔交易 commit 之後另開一個交易查，
+        // 查失敗（模擬服務掛了、SQL 出錯）只記 log，不能拖垮已經收下的上傳
+        if (problems.isEmpty()) afterCommit(() -> market.recordArrivals(accountId, file));
         out.put("revision", save.getRevision());
         out.put("savedAt", save.getSavedAt());
         return out;
+    }
+
+    /** 存檔交易 commit 之後，另開一個交易跑（失敗只記 log）。 */
+    private void afterCommit(Work work) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    afterSave.executeWithoutResult(status -> {
+                        try {
+                            work.run();
+                        } catch (Exception e) {
+                            throw new IllegalStateException(e);
+                        }
+                    });
+                } catch (RuntimeException e) {
+                    log.warn("查不了到貨存活：{}", e.getMessage());
+                }
+            }
+        });
+    }
+
+    @FunctionalInterface
+    private interface Work {
+        void run() throws Exception;
     }
 
     /**

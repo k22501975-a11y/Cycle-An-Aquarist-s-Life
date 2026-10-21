@@ -477,4 +477,25 @@ class SimTest {
         assertThat(received).hasSize(1);
         assertThat(received.get(0).get("tail").asInt()).isEqualTo(60);
     }
+
+    @Test
+    void 到貨存活追蹤_查的時候出了別的錯_存檔照樣收下_下次再查() throws Exception {
+        String me = player();
+        String buyer = player();
+        clock.advance(Duration.ofDays(3));
+        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        send(put("/api/save"), buyer, saveBody(0, false)).andExpect(status().isOk());
+        delivered(me, buyer, 7);
+        long before = read(send(get("/api/save"), buyer, null)).get("revision").asLong();
+        sim.arrival = q -> {
+            throw new IllegalStateException("boom");
+        };
+        upload(buyer);
+        // 存檔已經收下（新的一版），到貨查詢下次再來
+        assertThat(read(send(get("/api/save"), buyer, null)).get("revision").asLong()).isEqualTo(before + 1);
+        sim.arrival = q -> new SimClient.Arrival(q.order(), "alive", true, false);
+        clock.advance(Duration.ofMinutes(5));
+        upload(buyer);
+        assertThat(sellerOf(buyer, listed(me, 8)).get("survival").asDouble()).isEqualTo(1.0);
+    }
 }
