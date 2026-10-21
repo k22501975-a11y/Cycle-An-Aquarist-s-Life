@@ -1,5 +1,5 @@
 import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
-import { cloudiness, isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, personalitySpec, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
+import { waterLook, isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, personalitySpec, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { newToneFrame, PaintedRig, paintedArtVersion, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { SetupShow, type SetupStep } from './setup-show';
@@ -220,6 +220,9 @@ export class TankView {
   private dropT = -1;
   /** 夜晚的程度 0（開燈）～1（關燈），慢慢轉換。 */
   private night = 0;
+  /** 畫面上的水況（waterLook）：慢慢跟上真的值，換水後白濁、黃濁約 2～3 秒散開，不是一格就變清。 */
+  private water = { bloom: 0, organic: 0, uneasy: 0 };
+  private waterSeen = false;
   /** 燈的時間表（亮度、色溫），每格慢慢追上 dayLight()，避免跳一下。 */
   private day = { level: 1, warm: 0 };
   private cuttings: Cutting[] = [];
@@ -544,6 +547,7 @@ export class TankView {
     this.drawDirt(state);
     this.syncMolts(state);
     this.snails.sync(state, { bounds: this.bounds, look: this.look, ppc: this.ppc, hs: this.hs, lit: isLightOn(state), time: this.time });
+    this.easeWater(state, dt);
     this.syncFish(state, dt);
     this.drawParty(dt);
     this.syncPlants(state);
@@ -1772,7 +1776,10 @@ export class TankView {
       const halfLen = this.lengthPx(fish) * (0.72 + 0.33 * view.z) * 0.5;
       const body = { halfLen, halfH: halfLen * ('heightPx' in rig ? rig.heightPx / Math.max(1, rig.lengthPx) : 0.35) };
       const caged = boxed.has(fish.id);
-      const mood = isShrimpSpecies(fish.species) ? undefined : personalitySpec(fish);
+      const spec = isShrimpSpecies(fish.species) ? undefined : personalitySpec(fish);
+      // 水不舒服（氨、亞硝）：游得慢一點、鰭收一點；只是表現，不算症狀
+      const uneasy = this.water.uneasy;
+      const mood = spec && uneasy > 0.02 ? { ...spec, activity: spec.activity * (1 - 0.3 * uneasy) } : spec;
       if (view.born) this.stepBirth(view, dt);
       updateSwimmer(swimmer, caged ? inBox : living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX, body, begging: hungerLook(fish.hunger).begging, mood }, ctx, dt, () => this.rand());
 
@@ -1824,7 +1831,8 @@ export class TankView {
         const clamped = symptoms.includes('clamped_fins');
         // 停在飼料旁邊吃：尾巴只輕輕擺著平衡
         const hovering = (swimmer.eating || swimmer.settled) && !isShrimpSpecies(fish.species);
-        rig.animate(swimmer.phase, clamped ? 0.25 : hovering ? 0.35 : 1, clamped ? 0.55 : 1, fish.finDamage);
+        const calm = 1 - 0.3 * this.water.uneasy;
+        rig.animate(swimmer.phase, clamped ? 0.25 : hovering ? 0.35 : calm, clamped ? 0.55 : calm, fish.finDamage);
       }
       // 咬一口：身體只往前吸一點點，動作集中在張嘴
       const len = this.lengthPx(fish) * depth;
@@ -2043,12 +2051,27 @@ export class TankView {
     g.roundRect(r.x + r.w * 0.2, r.y - 10 * hs, r.w * 0.6, 10 * hs, 3 * hs).fill({ color: 0xcfe9f2, alpha: 0.5 });
   }
 
+  private easeWater(state: TankState, dt: number): void {
+    const target = waterLook(state);
+    // 第一格直接用真的值，開遊戲時不會看到水慢慢變濁
+    const k = this.waterSeen ? 1 - Math.exp(-dt * 1.2) : 1;
+    this.waterSeen = true;
+    for (const key of ['bloom', 'organic', 'uneasy'] as const) this.water[key] += (target[key] - this.water[key]) * k;
+  }
+
   private drawOverlay(state: TankState): void {
     const { width, height, surface, bottom } = this.bounds;
     const g = this.overlay.clear();
     // 混濁：有機物與細菌濃度高時水變黃綠（餵太多看得到，§6 P5）
-    const turbidity = cloudiness(state);
+    const turbidity = this.water.organic;
     if (turbidity > 0.02) g.rect(0, 0, width, height).fill({ color: 0x8a8a3a, alpha: turbidity });
+    // 新缸細菌白濁（g13 門檻 2）：水裡一層乳白的霧，中間最濃；氨 0.25 就看得出一點，換水後慢慢散
+    const bloom = this.water.bloom;
+    if (bloom > 0.01) {
+      const depth = bottom - surface;
+      g.rect(0, surface, width, depth).fill({ color: 0xe9f0ec, alpha: Math.min(0.4, bloom * 1.5) });
+      g.rect(0, surface + depth * 0.2, width, depth * 0.55).fill({ color: 0xf4f7f2, alpha: Math.min(0.2, bloom * 0.8) });
+    }
     // 剛動過造景：攪起來的細沙讓水白濁，底下最濃，慢慢沉澱
     const silt = state.water.turbidity ?? 0;
     if (silt > 0.01) {
