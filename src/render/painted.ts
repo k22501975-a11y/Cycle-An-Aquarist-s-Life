@@ -3,7 +3,9 @@ import { Assets, BlurFilter, ColorMatrixFilter, Container, type DestroyOptions, 
 import type { Fish, FishSpeciesId, GrowthStage, GuppyPhenotype, TankState } from '../sim';
 import type { FishForm } from './fish-art';
 import { canvasTexture, makeCanvas } from './paint';
-import { parseRecipeKey, patternBase, phenotypeRecipe, recolorImage, WHOLE_FINS } from './phenotype-art';
+import { FEMALE_TINTS, femaleTint, parseRecipeKey, patternBase, phenotypeRecipe, recolorImage, WHOLE_FINS } from './phenotype-art';
+
+export { FEMALE_TINTS, femaleTint, type FemaleTint } from './phenotype-art';
 import { guppyLook } from './strains';
 import { RefLru } from './lru';
 import { tankSubstrateLook } from './substrate';
@@ -38,9 +40,6 @@ interface PaintedSpec {
 /** 公魚花紋圖的身體範圍：各張圖身體在圖裡的高度不一樣（上面留了背鰭的空間），y 照圖量過（#101：原本統一 0.02，大C 的鰭和白點都浮在背上方）。 */
 const maleBody = (y: number) => ({ x: 0.14, y, rx: 0.2, ry: 0.12 });
 const GUPPY_FEMALE_BODY = { x: 0.1, y: 0.02, rx: 0.3, ry: 0.22 };
-/** 母魚的尾巴帶品系的顏色（scripts/art/guppy-females.py）：藍、紅、金，白子另外是紅眼。 */
-export const FEMALE_TINTS = ['blue', 'red', 'gold', 'albino'] as const;
-export type FemaleTint = (typeof FEMALE_TINTS)[number];
 const SHRIMP_BODY = { x: 0.08, y: -0.02, rx: 0.25, ry: 0.12 };
 const ZEBRA_BODY = { x: 0.1, y: 0.0, rx: 0.3, ry: 0.11 };
 const FRY_BODY = { x: 0.12, y: 0.0, rx: 0.25, ry: 0.1 };
@@ -109,11 +108,6 @@ function finArt(): Record<string, PaintedSpec> {
   return out;
 }
 
-
-/** 母魚用哪個顏色：白子是淡紅尾紅眼，其他照花紋的色系（草尾、禮服的母魚是藍尾）。 */
-export function femaleTint(p: GuppyPhenotype): FemaleTint {
-  return p.albino ? 'albino' : phenotypeRecipe(p).to;
-}
 
 /** 有基因的母孔雀魚：尾巴帶品系色的圖。 */
 export function femaleKey(p: GuppyPhenotype, gravid: boolean): string {
@@ -234,7 +228,7 @@ export const ART_FILES: { key: string; file: string; scenery: boolean }[] = [
 
 /** 各魚種會用到哪些圖（斑馬魚的仔魚、幼魚共用孔雀魚的圖；蝦都會脫殼）。公孔雀魚的花紋圖另外看缸裡有哪幾種（guppyMaleArt）。 */
 const SPECIES_ART: Record<FishSpeciesId, RegExp> = {
-  guppy: /^(guppy-(fry|juvenile|female-)|fin-)/,
+  guppy: /^(guppy-(fry|juvenile|female-(base|pregnant)(#eating)?$)|fin-)/,
   zebrafish: /^(zebrafish-|guppy-fry$|guppy-juvenile$)/,
   cherry_shrimp: /^shrimp-(cherry-|molt)/,
   crystal_shrimp: /^shrimp-(crystal-|molt)/,
@@ -256,6 +250,8 @@ export function startupArt(tanks: TankState[]): Set<string> {
       want.push(SPECIES_ART[f.species]);
       const male = f.species === 'guppy' && f.sex === 'male' && guppyMaleArt(f);
       if (male) want.push(new RegExp(`^${male}(-(${WHOLE_FINS.join('|')}))?(#eating)?$`));
+      // 母魚也只先載缸裡有的尾色（架構審查 #274：4 色 × 一般、懷孕全載約 530 KB）
+      if (f.species === 'guppy' && f.sex === 'female' && f.genome) want.push(new RegExp(`^guppy-female-(base|pregnant)-${femaleTint(phenotype(f.genome))}(#eating)?$`));
     }
     for (const p of t.plants) want.push(new RegExp(`^plant-${p.species}$`));
     if (t.equipment.hardscape?.length) want.push(/^(rock|wood)-/);

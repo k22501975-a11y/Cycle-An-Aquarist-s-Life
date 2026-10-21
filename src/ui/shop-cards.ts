@@ -1,6 +1,7 @@
 import type { AppleColor, FishSpeciesId, GuppyPhenotype, PlantSpeciesId, SnailKind } from '../sim';
 import { artImg, ownerImg, type ArtIcon } from './art-icons';
 import { h } from './dom';
+import { femaleTint, wholeFin } from '../render/phenotype-art';
 
 /**
  * 商店圖卡（介面改版）：每個商品一張卡，上面是商品圖、下面是名字、價錢徽章、幾個小標籤和購買按鈕。
@@ -28,15 +29,14 @@ export function femaleGuppyArt(strain: number): string {
   return `fish/guppy-female-base-${FEMALE_STRAIN_TINT[strain] ?? 'blue'}.webp`;
 }
 
-/** 照基因挑母魚圖（和缸裡 painted.ts 的 femaleTint 一樣）。 */
+/** 照基因挑母魚圖（和缸裡用同一個 femaleTint）。 */
 export function femaleArtOf(p: GuppyPhenotype): string {
-  const tint = p.albino ? 'albino' : p.gold && !p.tuxedo ? 'gold' : p.red ? 'red' : 'blue';
-  return `fish/guppy-female-base-${tint}.webp`;
+  return `fish/guppy-female-base-${femaleTint(p)}.webp`;
 }
 
-/** 照基因挑公魚的鰭型圖（和缸裡 phenotype-art.ts 的 wholeFin 同樣的先後）。 */
+/** 照基因挑公魚的鰭型圖（和缸裡用同一個 wholeFin）。 */
 export function maleFinOf(p: GuppyPhenotype): string | undefined {
-  return p.bigC ? 'bigc' : p.ribbon ? 'ribbon' : p.swallow ? 'swallow' : p.sword ? `sword${p.sword}` : p.tailShape === 'halfmoon' ? 'halfmoon' : undefined;
+  return wholeFin(p) ?? undefined;
 }
 
 const SPECIES_ART: Record<FishSpeciesId, string> = {
