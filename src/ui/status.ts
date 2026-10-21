@@ -129,7 +129,7 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
   }
   // 分缸提示：太擠、成魚會吃小魚、小魚轉色後公母混著（點一下照建議分缸）
   for (const a of splitAdvice(state)) out.push({ text: a.text, tone: a.tone, split: a.plan });
-  // 螺：看得到的才提醒（尖螺白天躲在沙裡）
+  // 螺：看得到的才提醒（馬來螺白天躲在沙裡）
   const sn = state.snails;
   if (sn) {
     const deadSnails = sn.snails.filter((x) => !x.alive).length;

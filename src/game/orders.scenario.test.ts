@@ -11,5 +11,5 @@ function check(strain: number): void {
 
 describe('經濟劇本：認真玩家 120 天、有接訂單（M21）', () => {
   it('養禮服', () => check(3), 120_000);
-  it('養白子全紅', () => check(2), 120_000);
+  it('養全紅白子', () => check(2), 120_000);
 });

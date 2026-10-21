@@ -400,7 +400,7 @@ function zebraArt(): SpeciesArt {
   };
 }
 
-// ---- 櫻花蝦 ---------------------------------------------------------------
+// ---- 極火蝦 ---------------------------------------------------------------
 
 function shrimpArt(): SpeciesArt {
   const R = 4;
@@ -599,7 +599,7 @@ export function appearance(species: FishSpeciesId, form: FishForm, variant: numb
       alpha: juvenile ? 0.82 : 1,
     };
   }
-  // 櫻花蝦：母蝦紅得深，公蝦偏淡，仔蝦幾乎透明
+  // 極火蝦：母蝦紅得深，公蝦偏淡，仔蝦幾乎透明
   return {
     body: form === 'female' ? 0xe8281c : form === 'male' ? 0xff7a66 : 0xffc2b8,
     fin: 0,

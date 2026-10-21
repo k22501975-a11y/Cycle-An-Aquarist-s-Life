@@ -10,7 +10,7 @@ import type { TankState } from './state';
  * 路線常駐在任務卡上方，取代「任務 N/10」當主要目標。只用現有的品系和選育，不加新系統；這裡只出資料。
  */
 
-/** 夢想魚：白子紅蛇王。店裡只有白子全紅和紅蛇王，兩種配一代看不到白子，小魚兄妹再配，約一成的兒子會是牠。 */
+/** 夢想魚：白子紅蛇王。店裡只有全紅白子和紅蛇王，兩種配一代看不到白子，小魚兄妹再配，約一成的兒子會是牠。 */
 export const DREAM_FISH = {
   name: '白子紅蛇王',
   /** 畫面用的外觀編號（GUPPY_STRAINS 的索引）；白子的紅眼和淡色由畫面另外處理。 */
@@ -18,10 +18,10 @@ export const DREAM_FISH = {
   albino: true,
   /** 卡片上的一句話。 */
   tagline: '店裡買不到，要自己選育出來',
-  /** 配方的爸媽（GUPPY_STRAINS 的索引）：紅蛇王公魚配白子全紅母魚；商店一鍵買和「配一對看看」的預設都用這組。 */
-  parents: { male: GUPPY_STRAINS.indexOf('紅蛇王'), female: GUPPY_STRAINS.indexOf('白子全紅') },
+  /** 配方的爸媽（GUPPY_STRAINS 的索引）：紅蛇王公魚配全紅白子母魚；商店一鍵買和「配一對看看」的預設都用這組。 */
+  parents: { male: GUPPY_STRAINS.indexOf('紅蛇王'), female: GUPPY_STRAINS.indexOf('全紅白子') },
   /** 怎麼做（點卡片看）。 */
-  recipe: ['買白子全紅的母魚和紅蛇王的公魚', '等小魚長大，挑兄妹配一窩', '孫代裡找紅眼睛的蛇紋公魚'],
+  recipe: ['買全紅白子的母魚和紅蛇王的公魚', '等小魚長大，挑兄妹配一窩', '孫代裡找紅眼睛的蛇紋公魚'],
 } as const;
 
 export type DreamStepId = 'tank' | 'brood' | 'bred';

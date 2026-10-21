@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { addFish, addPlant, createTank, FILTERS, HEATERS, LIGHTS, PLANT_SPECIES, recordEvent, TANKS, testWater, type TankState } from '../sim';
 import { morningReport, snapshot } from './morning-report';
 
-/** 養好水、一株榕、一公兩母孔雀魚（都沒懷孕）的缸。 */
+/** 養好水、一株小榕、一公兩母孔雀魚（都沒懷孕）的缸。 */
 function tank(): TankState {
   const s = createTank({ tank: TANKS.std40, filter: FILTERS.hangOn, heater: { spec: HEATERS.h50, targetC: 25 }, light: { spec: LIGHTS.basic }, roomTempC: 24, seed: 21, matureMedia: true });
   s.hours = 20;
@@ -53,7 +53,7 @@ describe('早上報告寫缸裡真的發生的事（polish-to-9.md G8）', () =>
     const leafG = PLANT_SPECIES.anubias.cuttingMassG / 4;
     plant.biomassG = leafG * 3 - 0.05;
     const r = reportAfter(() => (plant.biomassG = leafG * 3 + 0.05), s);
-    expect(item(r, 'new_leaf')).toMatchObject({ tone: 'good', text: '榕長出新葉了', plantId: plant.id });
+    expect(item(r, 'new_leaf')).toMatchObject({ tone: 'good', text: '小榕長出新葉了', plantId: plant.id });
     expect(item(r, 'plant_grew')).toBeUndefined();
     // 還在同一片葉子裡長：照舊寫長了幾 %
     plant.biomassG = leafG * 3 + 0.05;

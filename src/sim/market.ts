@@ -33,7 +33,7 @@ export function marketPayout(price: number): number {
   return price - Math.round(price * MARKET_TAX);
 }
 
-/** 買家看到的名字，例如「藍草孔雀魚 公」「櫻花蝦 母（抱卵）」。 */
+/** 買家看到的名字，例如「藍草尾孔雀魚 公」「極火蝦 母（抱卵）」。 */
 export function listingTitle(fish: Fish): string {
   const sp = FISH_SPECIES[fish.species];
   const shrimp = isShrimpSpecies(fish.species);

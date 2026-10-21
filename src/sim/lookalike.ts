@@ -38,7 +38,7 @@ const COLORS: Array<[keyof GuppyPhenotype, string]> = [
   ['tuxedo', '禮服'],
   ['red', '紅'],
   ['snake', '蛇王'],
-  ['grass', '藍草'],
+  ['grass', '藍草尾'],
 ];
 const TAILS = { halfmoon: '半月尾', delta: '三角尾', round: '圓尾' } as const;
 

@@ -663,7 +663,7 @@ export interface PlantPainting {
 }
 
 /**
- * 依生物量畫一株水草。紅蝴蝶：一叢有莖草，越往上越紅（強光下的典型顏色）。榕：綁在小石頭上的寬葉。
+ * 依生物量畫一株水草。紅蝴蝶：一叢有莖草，越往上越紅（強光下的典型顏色）。小榕：綁在小石頭上的寬葉。
  * 溶葉時偏黃褐，葉面長藻時顏色變暗、有斑點。
  */
 export function paintPlant(plant: Plant, hs: number, scale = 1): PlantPainting {
@@ -761,7 +761,7 @@ export function paintPlant(plant: Plant, hs: number, scale = 1): PlantPainting {
       ctx.moveTo(0, stemY);
       ctx.quadraticCurveTo(bx * 0.4, by - 6 * hs, bx, by);
       ctx.stroke();
-      // 榕：寬厚的深綠葉，表面有光澤
+      // 小榕：寬厚的深綠葉，表面有光澤
       paintLeaf(ctx, bx, by, a, (36 + size * 8) * hs, 13 * hs, tint(0x2f8f45));
       if (algae > 0.2) {
         ctx.fillStyle = `rgba(26,42,20,${algae})`;

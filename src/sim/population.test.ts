@@ -105,7 +105,7 @@ describe('繁殖（Phase 0 簡化版）', () => {
 });
 
 describe('混養：吃仔魚、吃仔蝦', () => {
-  it('成魚會吃仔魚；水草越密，仔魚活下來越多（莫絲這種密草比大葉子的榕好躲）', () => {
+  it('成魚會吃仔魚；水草越密，仔魚活下來越多（莫絲這種密草比大葉子的小榕好躲）', () => {
     const bare = createTank({ ...MATURE, seed: 110 });
     addAdults(bare, 'guppy', 4);
     addYoung(bare, 'guppy', 40);

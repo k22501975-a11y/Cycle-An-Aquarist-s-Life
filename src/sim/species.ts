@@ -180,7 +180,7 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
   },
   crystal_shrimp: {
     id: 'crystal_shrimp',
-    name: '水晶蝦',
+    name: '紅白水晶蝦',
     // 怕熱：26°C 以上就危險，台灣夏天要冷水機或冷氣房（design/temperature.md）
     temp: { min: 20, max: 24 },
     tempLethal: { min: 16, max: 27 },
@@ -192,7 +192,7 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     dailyFoodMg: 2,
     diet: { floating: 0.35, sinking: 1, sticky: 0.6, meat: 0.7 },
     o2UseMgPerHour: 0.035,
-    // 比櫻花蝦嬌貴很多：水質一點點不穩就會出事
+    // 比極火蝦嬌貴很多：水質一點點不穩就會出事
     hardiness: 0.3,
     minGroup: 0,
     susceptibleToIch: false,
@@ -205,12 +205,12 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
     juvenilePredationPerDay: 0.15,
     finNipPerDay: 0,
     longFinnedMales: false,
-    // 抱卵約 30 天，一窩比櫻花蝦少
+    // 抱卵約 30 天，一窩比極火蝦少
     breeding: { gestationDays: 30, broodMean: 15, broodMin: 5, broodMax: 25 },
   },
   cherry_shrimp: {
     id: 'cherry_shrimp',
-    name: '櫻花蝦',
+    name: '極火蝦',
     temp: { min: 18, max: 28 },
     tempLethal: { min: 14, max: 31 },
     ph: { min: 6.5, max: 8.0 },
@@ -239,7 +239,7 @@ export const FISH_SPECIES: Record<FishSpeciesId, FishSpecies> = {
   },
 };
 
-/** 蝦（櫻花蝦、水晶蝦）：貼底爬、脫殼長大、抱卵。 */
+/** 蝦（極火蝦、水晶蝦）：貼底爬、脫殼長大、抱卵。 */
 export function isShrimpSpecies(id: FishSpeciesId): boolean {
   return FISH_SPECIES[id].invertebrate === true;
 }
@@ -270,7 +270,7 @@ export interface PlantSpecies {
 export const PLANT_SPECIES: Record<PlantSpeciesId, PlantSpecies> = {
   anubias: {
     id: 'anubias',
-    name: '榕',
+    name: '小榕',
     lightType: 'low',
     lightSaturationPar: 30,
     lightTolerancePar: 70,
@@ -318,7 +318,7 @@ export const PLANT_SPECIES: Record<PlantSpeciesId, PlantSpecies> = {
   },
   hydrocotyle: {
     id: 'hydrocotyle',
-    name: '大葉珍珠',
+    name: '香菇草',
     lightType: 'low',
     lightSaturationPar: 80,
     lightTolerancePar: 260,

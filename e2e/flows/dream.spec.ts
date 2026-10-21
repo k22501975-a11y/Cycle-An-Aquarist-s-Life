@@ -19,8 +19,8 @@ test('夢想魚路線與配一對看看', async ({ page }) => {
   await expect(pp).toBeVisible();
   await expect(pp.locator('.pp-row.surprise .pp-kid.dream')).toContainText('白子紅蛇王');
   // 換一尾公魚：預覽跟著變
-  await pp.locator('.pp-chooser').nth(1).locator('.pp-chip', { hasText: '藍草' }).first().click();
-  await expect(pp.locator('.pp-row-head').first()).toContainText('白子全紅 × 藍草');
+  await pp.locator('.pp-chooser').nth(1).locator('.pp-chip', { hasText: '藍草尾' }).first().click();
+  await expect(pp.locator('.pp-row-head').first()).toContainText('全紅白子 × 藍草尾');
 });
 
 /** G4：買第二缸後先問這缸拿來做什麼；選了缸就有名字，接著到商店買必買的東西。 */

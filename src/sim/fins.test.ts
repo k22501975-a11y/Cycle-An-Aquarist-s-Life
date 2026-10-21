@@ -74,7 +74,7 @@ describe('鰭型基因（strains.md §1.3）', () => {
   it('品系名自動組合花紋和鰭型；配對預測也看得到', () => {
     const r = rng();
     expect(strainName(phenotype(storeGenome(r, 'male', 3, 'dumbo')))).toBe('藍尾禮服大耳');
-    expect(strainName(phenotype(storeGenome(r, 'male', 0, 'sword')))).toBe('藍草雙劍');
+    expect(strainName(phenotype(storeGenome(r, 'male', 0, 'sword')))).toBe('藍草尾雙劍');
     const mom = storeGenome(r, 'female', 3, 'swallow');
     const dad = { ...storeGenome(r, 'male', 3), swallow: [1, 0] as [1, 0] };
     const pred = predictOffspring(mom, dad);

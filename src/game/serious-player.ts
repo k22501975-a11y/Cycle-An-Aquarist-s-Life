@@ -155,7 +155,7 @@ export function seriousPlayer(seed: number, strain: number, takeOrders = false, 
 }
 
 /**
- * 一般玩家（遊戲性評測 g3 的玩法）：一公兩母藍草、1 株榕、一天兩餐、每週換水三成、能賣就賣（留種的 3 條除外），
+ * 一般玩家（遊戲性評測 g3 的玩法）：一公兩母藍草尾、1 株小榕、一天兩餐、每週換水三成、能賣就賣（留種的 3 條除外），
  * 不用產卵盒、不修剪水草、不加缸。takeOrders：訂單板上交得出來的單就交。回傳每天累計的賣魚和訂單收入。
  */
 export function casualPlayer(seed: number, takeOrders: boolean, days = 90): { income: Record<number, number>; orders: Record<number, number> } {
