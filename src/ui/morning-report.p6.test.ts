@@ -129,4 +129,14 @@ describe('早上報告寫玩家自己做的事的結果（polish-to-9 §6 P6）'
     expect(kinds(report).some((k) => k === 'plant_grew' || k === 'fish_relaxed')).toBe(true);
     expect(kinds(report)).not.toContain('quiet');
   });
+
+  it('細菌白濁第一次看得出來時說一次是新缸常見的（整個存檔一次）', () => {
+    const s = tank();
+    s.water.tan = 0;
+    s.water.no2 = 0;
+    expect(kinds(reportAfter((t) => (t.water.tan = 0.02), s))).not.toContain('bloom');
+    const r = reportAfter((t) => (t.water.tan = 0.25), s);
+    expect(r.items.find((i) => i.kind === 'bloom')?.text).toContain('新缸常見的細菌白濁');
+    expect(kinds(reportAfter((t) => (t.water.tan = 0.5), s))).not.toContain('bloom');
+  });
 });
