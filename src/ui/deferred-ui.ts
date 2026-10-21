@@ -1,0 +1,8 @@
+// 主程式用到才載入的介面（main.ts 的 loadDeferred）：各種面板、紀錄、圖鑑、早上報告。
+// 開機後閒下來就先在背景載好，之後打開都是同步的；拆出來是為了主程式 gzip 300 KB 的上限（scripts/check-assets.mjs）
+export * from './panels';
+export { recordsPanel } from './records';
+export { codexPanel } from './codex-panel';
+export { unlockCodex } from './codex';
+export { morningCard } from './morning-card';
+export { morningReport, snapshot } from './morning-report';

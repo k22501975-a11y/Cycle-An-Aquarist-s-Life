@@ -36,26 +36,7 @@ import { DEATH_ADVICE, describeEvent, FIRST_PESTS_LINE, firstDeathOwnerLine, fis
 import { mergeEventToasts, type EventToast } from './ui/notify-gate';
 import { personaChip } from './ui/persona';
 import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
-import {
-  debugPanel,
-  feedPanel,
-  fishPanel,
-  splitPanel,
-  snailPanel,
-  maintenancePanel,
-  quarantinePanel,
-  nurseryPanel,
-  putDueInNursery,
-  buyNurseryForDue,
-  plantPanel,
-  shopPanel,
-  tanksPanel,
-  testKitPanel,
-  trimListPanel,
-  waterChangePanel,
-  type PanelContext,
-  type ShopTab,
-} from './ui/panels';
+import type { PanelContext, ShopTab } from './ui/panels';
 import { Guide } from './ui/guide';
 import { Celebration, type CelebrateSpec } from './ui/celebrate';
 import { firstTime, loadMoments, type DeathAdviceCause, type MomentId } from './ui/moments';
@@ -63,13 +44,10 @@ import { causeAdvice, HUNGER_LABEL, illnessOf, needsAdvice } from './ui/owner-ad
 import { kickOwnerQueue, ownerGuide, ownerSay, setOwnerBlocker } from './ui/owner-ask';
 import { fryArt, guppyArt } from './ui/shop-cards';
 import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
-import { recordsPanel } from './ui/records';
 import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt, ordersPanel } from './ui/orders-panel';
 import { flyCoins, rewardBurst } from './ui/coin-fly';
-import { morningCard } from './ui/morning-card';
-import { morningReport, snapshot, type ReportItem } from './ui/morning-report';
-import { loadCodexSeen, saveCodexSeen, unlockCodex } from './ui/codex';
-import { codexPanel } from './ui/codex-panel';
+import type { ReportItem } from './ui/morning-report';
+import { loadCodexSeen, saveCodexSeen } from './ui/codex-seen';
 import { Sheet, Toasts } from './ui/sheet';
 import { clockLabel, householdTodos, waterCapsules, type Todo } from './ui/status';
 import { cornerRect, pickCorner, type Corner, type Rect } from './ui/dodge';
@@ -250,6 +228,34 @@ async function start(): Promise<void> {
   const friendsUi = lazyUi(() => import('./ui/friends-panel'));
   const mallUi = lazyUi(() => import('./ui/mall-panel'));
   const loadMarket = lazyUi(() => import('./ui/market-panel'));
+  // 面板、紀錄、圖鑑、早上報告：開機後閒下來就在背景載好（見檔尾 prefetchDeferred），載好之後照舊同步打開
+  const importDeferred = () => import('./ui/deferred-ui');
+  type DeferredUi = Awaited<ReturnType<typeof importDeferred>>;
+  let deferredUi: DeferredUi | null = null;
+  const loadDeferred = lazyUi(importDeferred);
+  /** 載好了就馬上做（跟原本一樣同步）；還沒載好（剛開機就點）就等載完再做。 */
+  const withPanels = (run: (p: DeferredUi) => void) => {
+    if (deferredUi) run(deferredUi);
+    else
+      void loadDeferred().then((p) => {
+        deferredUi = p;
+        run(p);
+      });
+  };
+  // 還沒載好時連點好幾個面板，只打開最後點的那個（不要載完後一層層疊出來）
+  let sheetRequest = 0;
+  const panelSheet = (title: string, render: (p: DeferredUi) => Node, options?: { live?: boolean }) => {
+    const request = ++sheetRequest;
+    withPanels((p) => {
+      if (request === sheetRequest) sheet.open(title, () => render(p), options);
+    });
+  };
+  /** 背景先載：失敗（網頁版離線）不吵，真的要打開時再提示。 */
+  const prefetchDeferred = () =>
+    void importDeferred().then(
+      (p) => (deferredUi ??= p),
+      () => {},
+    );
   /** 市場載入過才會有在路上的貨（App 版排到貨通知用）。 */
   let marketMod: Awaited<ReturnType<typeof loadMarket>> | null = null;
   const marketUi = async () => (marketMod ??= await loadMarket());
@@ -405,7 +411,7 @@ async function start(): Promise<void> {
       h('div.bar-row', {}, h('span', {}, label), h('div.bar', {}, h(`i.${tone}`, { style: { width: `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%` } })));
     const close = h('button.card-x', { 'aria-label': '取消選取', onclick: () => select(null) }, '✕');
     if (!fish.alive) {
-      selCard.replaceChildren(close, h('div.card-title', {}, title), h('div.card-sub', {}, sub), h('p.dead', {}, '已經死了'), h('button.btn.small.primary', { onclick: () => sheet.open('死掉的魚', () => fishPanel(ctx, fish.id), { live: true }) }, '看原因'));
+      selCard.replaceChildren(close, h('div.card-title', {}, title), h('div.card-sub', {}, sub), h('p.dead', {}, '已經死了'), h('button.btn.small.primary', { onclick: () => panelSheet('死掉的魚', (p) => p.fishPanel(ctx, fish.id), { live: true }) }, '看原因'));
       return;
     }
     if (!cond) return;
@@ -422,7 +428,7 @@ async function start(): Promise<void> {
       bar('健康', fish.health, fish.health > 0.6 ? 'ok' : fish.health > 0.3 ? 'warn' : 'bad'),
       bar('壓力', fish.stress, fish.stress < 0.4 ? 'warn' : 'bad'),
       bar('飽足', 1 - cond.hungerValue, hungry ? (cond.hunger === 'starving' ? 'bad' : 'warn') : 'ok'),
-      h('div.row', {}, ask, h('button.btn.small', { onclick: () => sheet.open('觀察這條魚', () => fishPanel(ctx, fish.id), { live: true }) }, '詳細')),
+      h('div.row', {}, ask, h('button.btn.small', { onclick: () => panelSheet('觀察這條魚', (p) => p.fishPanel(ctx, fish.id), { live: true }) }, '詳細')),
     );
   };
   const select = (id: number | null) => {
@@ -440,11 +446,11 @@ async function start(): Promise<void> {
     // 點到魚、螺、水草：沒有音效，手機上給一下短震動（G1）
     onSelectFish: (id) => (id !== null && audio.buzz('tap'), select(id)),
     // 在缸裡點到螺：打開螺的面板（每日小事「找到螺點一下」也就做完了）
-    onTapSnail: () => (audio.buzz('tap'), sheet.open('螺', () => snailPanel(ctx))),
+    onTapSnail: () => (audio.buzz('tap'), panelSheet('螺', (p) => p.snailPanel(ctx))),
     onSelectPlant: (id) => {
       audio.buzz('tap');
       sim.markDaily(game.tanks, 'plant');
-      sheet.open('水草', () => plantPanel(ctx, id), { live: true });
+      panelSheet('水草', (p) => p.plantPanel(ctx, id), { live: true });
     },
     onScapeSelect: (target) => scapeBar.select(target),
     onScapeDrop: (target, x) => scapeBar.drop(target, x),
@@ -651,7 +657,7 @@ async function start(): Promise<void> {
   // 過一晚（F2）：跳到隔天早上 8 點，醒來看早上報告；雲端模式時間跟著伺服器走，不能跳
   const sleepBtn = h('button.sleep-btn', { 'aria-label': '過一晚', title: '過一晚：跳到明天早上 8 點，看昨晚發生了什麼', onclick: () => goNight() }, icon(ICONS.moon), h('span.sleep-label', {}, '過一晚'));
   // 商店開在任務要買的那一頁（買水草的任務就直接是水草）
-  const openShop = (tab?: ShopTab) => sheet.open('商店', () => shopPanel(ctx, tab ?? guide.shopTab ?? 'fish'));
+  const openShop = (tab?: ShopTab) => panelSheet('商店', (p) => p.shopPanel(ctx, tab ?? guide.shopTab ?? 'fish'));
   const coinsValue = h('b');
   const coinsBtn = h('button.coins', { 'aria-label': '錢包', title: '錢包：點一下打開商店', onclick: () => openShop() }, h('i.coin'), coinsValue);
   // 拿到錢時金幣飛進錢包（F8）
@@ -673,7 +679,7 @@ async function start(): Promise<void> {
   // 多缸：目前在看哪一缸，點一下切換或加缸
   const tankName = h('b');
   const tankCount = h('span.count');
-  const tankBtn = h('button.tank-chip', { 'aria-label': '我的水缸', title: '我的水缸：切換、加一缸', onclick: () => sheet.open('我的水缸', () => tanksPanel(ctx)) }, icon(ICONS.tank), tankName, tankCount);
+  const tankBtn = h('button.tank-chip', { 'aria-label': '我的水缸', title: '我的水缸：切換、加一缸', onclick: () => panelSheet('我的水缸', (p) => p.tanksPanel(ctx)) }, icon(ICONS.tank), tankName, tankCount);
   const renderTankChip = () => {
     const multi = game.tanks.length > 1;
     const text = multi ? sim.tankLabel(game.tanks, game.active) : '水缸';
@@ -685,7 +691,7 @@ async function start(): Promise<void> {
     const alarm = game.tanks.some((t, i) => i !== game.active && householdTodos([t], 0).some((x) => x.tone === 'bad'));
     tankBtn.classList.toggle('alert', alarm);
   };
-  const caps = h('button.caps', { 'aria-label': '水質趨勢', title: '點一下看水質趨勢', onclick: () => sheet.open('紀錄', () => recordsPanel(ctx)) });
+  const caps = h('button.caps', { 'aria-label': '水質趨勢', title: '點一下看水質趨勢', onclick: () => panelSheet('紀錄', (p) => p.recordsPanel(ctx)) });
   // 分缸提示可以點：打開一鍵分缸
   const todoRow = (t: Todo) =>
     t.nursery
@@ -693,12 +699,12 @@ async function start(): Promise<void> {
           `div.todo-item.${t.tone}.nursery`,
           {},
           h('span', {}, t.text.replace(/[，：].*$/, '')),
-          h('button.btn.small.primary', { onclick: () => (t.nursery === 'put' ? putDueInNursery(ctx) : buyNurseryForDue(ctx)) }, t.nursery === 'put' ? '放進育幼盒' : `去買育幼盒 ${sim.price('nursery:box')} 元`),
+          h('button.btn.small.primary', { onclick: () => withPanels((p) => (t.nursery === 'put' ? p.putDueInNursery(ctx) : p.buyNurseryForDue(ctx))) }, t.nursery === 'put' ? '放進育幼盒' : `去買育幼盒 ${sim.price('nursery:box')} 元`),
         )
       : t.split
-      ? h(`button.todo-item.${t.tone}.split`, { onclick: () => sheet.open('分缸', () => splitPanel(ctx, t.split!)) }, h('img.todo-icon', { src: `${import.meta.env.BASE_URL}art/ui/icon-split.webp`, alt: '' }), t.text)
+      ? h(`button.todo-item.${t.tone}.split`, { onclick: () => panelSheet('分缸', (p) => p.splitPanel(ctx, t.split!)) }, h('img.todo-icon', { src: `${import.meta.env.BASE_URL}art/ui/icon-split.webp`, alt: '' }), t.text)
       : t.snails
-        ? h(`button.todo-item.${t.tone}.split`, { onclick: () => sheet.open('螺', () => snailPanel(ctx)) }, h('img.todo-icon', { src: `${import.meta.env.BASE_URL}art/snail/snail-bladder.webp`, alt: '' }), t.text)
+        ? h(`button.todo-item.${t.tone}.split`, { onclick: () => panelSheet('螺', (p) => p.snailPanel(ctx)) }, h('img.todo-icon', { src: `${import.meta.env.BASE_URL}art/snail/snail-bladder.webp`, alt: '' }), t.text)
         : t.go
           ? // 點了直接去處理（U3）：開對應的面板或看那條魚
             h(`button.todo-item.${t.tone}.go`, { onclick: () => (sheet.close(), goReport({ tank: t.tank ?? game.active, action: t.go, subjectId: t.subjectId } as ReportItem)) }, t.text, h('span.todo-go', { 'aria-hidden': 'true' }, '›'))
@@ -710,7 +716,7 @@ async function start(): Promise<void> {
     const list = householdTodos(game.tanks, game.active);
     if (!todosChanged(JSON.stringify(list))) return;
     todoCard.replaceChildren(
-      h('button.card-link', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx, 'events')) }, '紀錄 ›'),
+      h('button.card-link', { onclick: () => panelSheet('紀錄', (p) => p.recordsPanel(ctx, 'events')) }, '紀錄 ›'),
       h('div.card-title', {}, '今日待辦'),
       ...list.slice(0, 3).map(todoRow),
     );
@@ -723,7 +729,7 @@ async function start(): Promise<void> {
       'div.stack',
       {},
       ...householdTodos(game.tanks, game.active).map(todoRow),
-      h('button.btn', { onclick: () => sheet.open('紀錄', () => recordsPanel(ctx, 'events')) }, '看事件紀錄'),
+      h('button.btn', { onclick: () => panelSheet('紀錄', (p) => p.recordsPanel(ctx, 'events')) }, '看事件紀錄'),
     );
   const todoBtn = h('button.hud-btn.todo-btn', { 'aria-label': '待辦', onclick: () => sheet.open('待辦', todoSheet, { live: true }) }, icon(ICONS.todo), todoBadge);
   const capsChanged = memo();
@@ -905,7 +911,7 @@ async function start(): Promise<void> {
       // App 版本來就是裝好的，不用顯示安裝說明
       ...(isNativeApp() ? [] : [h('h3', {}, '安裝'), ...installSection()]),
       h('h3', {}, '開發者'),
-      h('button.btn', { onclick: () => sheet.open('開發者數值', () => debugPanel(ctx), { live: true }) }, '開發者數值'),
+      h('button.btn', { onclick: () => panelSheet('開發者數值', (p) => p.debugPanel(ctx), { live: true }) }, '開發者數值'),
       h('label.check-row', {}, h('input', { type: 'checkbox', checked: uiPrefs.showFps, onchange: (e: Event) => setShowFps((e.target as HTMLInputElement).checked) }), h('span', {}, '顯示幀率（實機量效能用）')),
     );
   const menu = () =>
@@ -915,12 +921,12 @@ async function start(): Promise<void> {
       h(
         'div.menu-grid',
         {},
-        menuTile('tanks', '我的水缸', '切換、加一缸', () => sheet.open('我的水缸', () => tanksPanel(ctx))),
+        menuTile('tanks', '我的水缸', '切換、加一缸', () => panelSheet('我的水缸', (p) => p.tanksPanel(ctx))),
         FEATURES.friends ? menuTile('friends', '好友', '參觀、按讚、送禮', openFriends) : null,
         FEATURES.market ? menuTile('market', '市場', '買賣魚蝦和水草', () => void marketUi().then((m) => sheet.open('市場', () => m.marketPanel(marketDeps)))) : null,
         FEATURES.mall ? menuTile('mall', '商城', '點數、特效藥、套缸', () => void mallUi().then((m) => sheet.open('商城', () => m.mallPanel(mallDeps)))) : null,
-        menuTile('codex', '圖鑑', '魚蝦、水草、疾病', () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen))),
-        menuTile('records', '紀錄', '水質趨勢、事件', () => sheet.open('紀錄', () => recordsPanel(ctx))),
+        menuTile('codex', '圖鑑', '魚蝦、水草、疾病', () => panelSheet('圖鑑', (p) => p.codexPanel(ctx, codexSeen))),
+        menuTile('records', '紀錄', '水質趨勢、事件', () => panelSheet('紀錄', (p) => p.recordsPanel(ctx))),
         menuTile('guide', '教學', '再聽阿德老闆說一次', () => (sheet.close(), guide.restart())),
         menuTile('settings', '設定', '聲音、顯示、存檔', () => sheet.open('設定', settings)),
       ),
@@ -976,8 +982,8 @@ async function start(): Promise<void> {
     tools.append(b);
     return b;
   };
-  tool('feed', '餵食', '#e8a24a', () => sheet.open('餵食', () => feedPanel(ctx)));
-  tool('water', '換水', '#4fb8e0', () => sheet.open('換水', () => waterChangePanel(ctx)));
+  tool('feed', '餵食', '#e8a24a', () => panelSheet('餵食', (p) => p.feedPanel(ctx)));
+  tool('water', '換水', '#4fb8e0', () => panelSheet('換水', (p) => p.waterChangePanel(ctx)));
   const testBtn = tool('test', '測試', '#a98be8', () => {
     const cost = sim.price('use:test');
     if (!sim.canAfford(game.state, cost)) {
@@ -989,13 +995,13 @@ async function start(): Promise<void> {
       useTestKit(st);
     });
     renderCaps();
-    sheet.open('水質測試', () => testKitPanel(ctx), { live: true });
+    panelSheet('水質測試', (p) => p.testKitPanel(ctx), { live: true });
   });
-  tool('trim', '修剪', '#7ccf8a', () => sheet.open('修剪水草', () => trimListPanel(ctx)));
+  tool('trim', '修剪', '#7ccf8a', () => panelSheet('修剪水草', (p) => p.trimListPanel(ctx)));
   // 造景（F1-c）：養水的那幾天能做的事，入口放在主畫面
   tool('scape', '造景', '#9fd6a0', () => enterScape());
   tool('shop', '商店', '#ef8a6a', () => openShop());
-  tool('gear', '設備', '#e3bd6d', () => sheet.open('設備與維護', () => maintenancePanel(ctx)));
+  tool('gear', '設備', '#e3bd6d', () => panelSheet('設備與維護', (p) => p.maintenancePanel(ctx)));
   // 店家訂單（#143）：自己的入口，有能交的單亮綠色數字並發光，有沒看過的新單亮小紅點
   const seenOrders = loadSeenOrders(store);
   const ordersBadge = h('span.badge');
@@ -1103,21 +1109,21 @@ async function start(): Promise<void> {
     renderDaily();
   };
   const goDaily = (id: sim.DailyTaskId) => {
-    const maintenance = () => sheet.open('設備與維護', () => maintenancePanel(ctx));
-    const snails = () => sheet.open('螺', () => snailPanel(ctx));
+    const maintenance = () => panelSheet('設備與維護', (p) => p.maintenancePanel(ctx));
+    const snails = () => panelSheet('螺', (p) => p.snailPanel(ctx));
     const go: Record<sim.DailyTaskId, () => void> = {
       test: () => testBtn.click(),
-      feed: () => sheet.open('餵食', () => feedPanel(ctx)),
-      water: () => sheet.open('換水', () => waterChangePanel(ctx)),
+      feed: () => panelSheet('餵食', (p) => p.feedPanel(ctx)),
+      water: () => panelSheet('換水', (p) => p.waterChangePanel(ctx)),
       topup: maintenance,
-      nursery: () => sheet.open('育幼盒', () => nurseryPanel(ctx)),
+      nursery: () => panelSheet('育幼盒', (p) => p.nurseryPanel(ctx)),
       gear: maintenance,
       observe: () => toasts.show('在缸裡點一尾魚，看看牠今天怎麼樣'),
       snail: snails,
       shrimp: () => toasts.show('在缸裡點一隻蝦，看看牠今天怎麼樣'),
       plant: () => toasts.show('在缸裡點一株水草，看看長得好不好'),
-      records: () => sheet.open('紀錄', () => recordsPanel(ctx)),
-      codex: () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen)),
+      records: () => panelSheet('紀錄', (p) => p.recordsPanel(ctx)),
+      codex: () => panelSheet('圖鑑', (p) => p.codexPanel(ctx, codexSeen)),
       orders: () => sheet.open('客人的訂單', () => ordersPanel(ctx)),
       scape: enterScape,
       scapePlant: enterScape,
@@ -1125,7 +1131,7 @@ async function start(): Promise<void> {
       scapeLayer: enterScape,
       scapeScale: enterScape,
       scapePlace: () => openShop('gear'),
-      trim: () => sheet.open('修剪水草', () => trimListPanel(ctx)),
+      trim: () => panelSheet('修剪水草', (p) => p.trimListPanel(ctx)),
       cuttings: () => openShop('plants'),
       clutch: snails,
       pests: snails,
@@ -1215,7 +1221,7 @@ async function start(): Promise<void> {
       return;
     }
     game.switchTo(tank);
-    putDueInNursery(ctx);
+    withPanels((p) => p.putDueInNursery(ctx));
   };
   /** 每缸上次提醒「小魚被吃」是第幾個遊戲天。 */
   const fryEatenToast = new Map<number, number>();
@@ -1305,7 +1311,7 @@ async function start(): Promise<void> {
           label: '去處理',
           run: () => {
             game.switchTo(c.tank);
-            sheet.open('設備與維護', () => maintenancePanel(ctx));
+            panelSheet('設備與維護', (p) => p.maintenancePanel(ctx));
           },
         }
       : c.reason === 'starving'
@@ -1313,7 +1319,7 @@ async function start(): Promise<void> {
             label: '去餵食',
             run: () => {
               game.switchTo(c.tank);
-              sheet.open('餵食', () => feedPanel(ctx));
+              panelSheet('餵食', (p) => p.feedPanel(ctx));
             },
           }
         : undefined;
@@ -1357,31 +1363,31 @@ async function start(): Promise<void> {
         testBtn.click();
         break;
       case 'water_change':
-        sheet.open('換水', () => waterChangePanel(ctx));
+        panelSheet('換水', (p) => p.waterChangePanel(ctx));
         break;
       case 'feed':
-        sheet.open('餵食', () => feedPanel(ctx));
+        panelSheet('餵食', (p) => p.feedPanel(ctx));
         break;
       case 'equipment':
-        sheet.open('設備與維護', () => maintenancePanel(ctx));
+        panelSheet('設備與維護', (p) => p.maintenancePanel(ctx));
         break;
       case 'orders':
         ordersBtn.click();
         break;
       case 'snails':
-        sheet.open('螺', () => snailPanel(ctx));
+        panelSheet('螺', (p) => p.snailPanel(ctx));
         break;
       case 'trim':
-        sheet.open('修剪水草', () => trimListPanel(ctx));
+        panelSheet('修剪水草', (p) => p.trimListPanel(ctx));
         break;
       case 'fry_box':
         // 有育幼盒（或兩個都沒有，可以在那裡買）就開育幼盒；只有檢疫盒才開檢疫盒
-        if (game.state.quarantine && !game.state.nurseryBox) sheet.open('檢疫盒', () => quarantinePanel(ctx));
-        else sheet.open('育幼盒', () => nurseryPanel(ctx));
+        if (game.state.quarantine && !game.state.nurseryBox) panelSheet('檢疫盒', (p) => p.quarantinePanel(ctx));
+        else panelSheet('育幼盒', (p) => p.nurseryPanel(ctx));
         break;
       case 'nursery':
-        if (game.state.nurseryBox) putDueInNursery(ctx);
-        else sheet.open('育幼盒', () => nurseryPanel(ctx));
+        if (game.state.nurseryBox) withPanels((p) => p.putDueInNursery(ctx));
+        else panelSheet('育幼盒', (p) => p.nurseryPanel(ctx));
         break;
       case 'fish':
       case 'treat':
@@ -1389,7 +1395,9 @@ async function start(): Promise<void> {
         break;
     }
   };
-  const goNight = () => {
+  // 早上報告在拆出去的檔案裡（通常開機後早就載好了，照舊同步）
+  const goNight = () => withPanels(goNightWith);
+  const goNightWith = ({ snapshot, morningReport, morningCard }: DeferredUi) => {
     if (sleepingNow) return;
     // 開缸演出還在演：演完會跳「你的第一個缸」，夜幕會把它蓋掉
     if (view.settingUp) {
@@ -1608,7 +1616,8 @@ async function start(): Promise<void> {
       checkDaily();
       if (scaping) scapeBar.refresh();
       celebrateStrains();
-      for (const entry of unlockCodex(codexSeen, game.state)) {
+      // 圖鑑條目在拆出去的檔案裡：背景載好之前先不檢查（下一次刷新再補，解鎖條件看的是缸的狀態和事件紀錄）
+      for (const entry of deferredUi?.unlockCodex(codexSeen, game.state) ?? []) {
         saveCodexSeen(store, codexSeen);
         toasts.show(`圖鑑新增了「${entry.name}」`);
       }
@@ -1623,6 +1632,9 @@ async function start(): Promise<void> {
   }
 
   void loadPaintedArt();
+  // 主畫面出來、閒下來之後把面板那包先載好（第一分鐘就會開商店、餵食）
+  if ('requestIdleCallback' in window) window.requestIdleCallback(prefetchDeferred, { timeout: 2000 });
+  else setTimeout(prefetchDeferred, 300); // iOS Safari 沒有 requestIdleCallback
 }
 
 start();
