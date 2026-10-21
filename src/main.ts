@@ -1,5 +1,5 @@
 import { GlApplication } from './render/gl-app';
-import { introReady } from './intro';
+import { introReady, whenIntroDone } from './intro';
 import { LazyAudio } from './audio/lazy-audio';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
 import { eventSound, type SoundId } from './audio/sounds';
@@ -1332,7 +1332,8 @@ async function start(): Promise<void> {
     window.setTimeout(close, 7000);
   };
   const openSetup = () => {
-    showWelcome();
+    // 開場動畫還在演就等它收起來再出歡迎卡（7 秒從那時才開始算）
+    whenIntroDone(showWelcome);
     sheet.open('開缸', () =>
       setupPanel(ctx, () => {
         save();
@@ -1859,6 +1860,8 @@ async function start(): Promise<void> {
   renderTodos();
   renderCaps();
   renderCoins();
+  // 重開遊戲時夢想魚膠囊一進來就在（以前要等玩家先做一個動作才出現，#256）
+  renderDream();
   // 還沒開缸：先挑設備，開缸演出播完才開始教學；演出還在播也一樣等它播完（不然老闆的對話框會擋住整段演出）
   if (sim.needsSetup(game.tanks[0])) openSetup();
   // 設備裝好、4 步沒做完就關掉遊戲：從倒沙重來一次，開機做完才開機

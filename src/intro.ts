@@ -21,6 +21,7 @@ let gameReady = false;
 let timeUp = false;
 let finished = false;
 let root: HTMLElement | null = null;
+let after: (() => void)[] = [];
 
 function seenBefore(): boolean {
   try {
@@ -51,6 +52,14 @@ function finish(): void {
   const el = root;
   el.classList.add('out');
   window.setTimeout(() => el.remove(), 700);
+  after.forEach((cb) => cb());
+  after = [];
+}
+
+/** 開場動畫收起來之後才做（沒演動畫就馬上做）：免得歡迎卡被動畫蓋住、計時白白跑掉。 */
+export function whenIntroDone(cb: () => void): void {
+  if (finished || !root) cb();
+  else after.push(cb);
 }
 
 function maybeFinish(): void {
