@@ -54,6 +54,9 @@ export function snailArt(kind: SnailKind, color?: AppleColor): string {
   return kind === 'nerite' ? 'snail/snail-nerite-zebra.webp' : 'snail/snail-assassin.webp';
 }
 
+/** 造景石、沉木的商店圖。 */
+export const HARDSCAPE_ART: Record<string, string> = { seiryu: 'scape/rock-seiryu-1.webp', lava: 'gear/rock-lava.webp', slate: 'gear/rock-slate.webp', driftwood: 'scape/wood-spider-1.webp' };
+
 export function plantArt(id: PlantSpeciesId): string {
   return `scape/plant-${id}.webp`;
 }

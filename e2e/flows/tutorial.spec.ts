@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { aliveCount, closeSheet, dismissGuide, finishDrip, fastForward, gameState, NO_WAIT, questStep, seedRng, setSpeed, sheetButton, startGame, tool, watchConsoleErrors, type CycleWindow } from './helpers';
+import { aliveCount, closeSheet, dismissGuide, finishDrip, fastForward, gameState, NO_WAIT, questStep, seedRng, setSpeed, sheetButton, startGame, tool, watchConsoleErrors } from './helpers';
 
 // 要快轉很多天：用 1 倍密度省 CPU（無頭瀏覽器用軟體繪圖）
 test.use({ deviceScaleFactor: 1, actionTimeout: 20_000 });
@@ -58,29 +58,28 @@ test('新手任務 1～9：照老闆的引導從新存檔玩得完，教學第 4
   // 固定種子：店裡的魚不帶病、照顧得當會繁殖（帶病整缸死光的情況見 #122）
   await seedRng(page, 2);
 
-  // 2 挑魚、對水：商店 → 魚 → 第一個品系「一公兩母」（滴水對水小遊戲）
-  await tool(page, '商店');
-  await page.locator('.sheet.open button.icon-tab', { hasText: '魚' }).click();
-  await sheetButton(page, '一公兩母');
+  // 2 挑魚、對水（#235）：任務卡下面一鍵買，不用開商店：第一個品系「一公兩母」（滴水對水小遊戲）
+  await dismissGuide(page);
+  await page.locator('.quest-tray .qt-card', { hasText: '一公兩母' }).click(NO_WAIT);
   await finishDrip(page);
   await closeSheet(page);
   expect(await aliveCount(page)).toBe(3);
   await test.info().attach('開新遊戲到第一條魚進缸（毫秒，自動操作）', { body: String(Date.now() - started) });
   await expect.poll(() => questNow(page)).toBe(2);
 
-  // 3 餵食（P5）：按「餵食」進餵食模式，點水面撒飼料
-  await feedMode(page);
+  // 3 餵食（P5、#235）：魚放好就自動進餵食模式，點水面撒飼料
+  await dismissGuide(page);
+  await expect(page.locator('.feed-bar')).toBeVisible();
   const box = (await page.locator('#stage canvas').boundingBox())!;
   await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.45);
   await expect.poll(() => gameState<number>(page, 's.water.foodMg')).toBeGreaterThan(0);
   await page.locator('.feed-bar button', { hasText: '好了' }).click(NO_WAIT);
   await expect.poll(() => questNow(page)).toBe(3);
 
-  // 4 種水草：商店 → 水草 → 種一株
-  await tool(page, '商店');
-  await page.locator('.sheet.open button.icon-tab', { hasText: '水草' }).click();
-  await sheetButton(page, '種一株');
-  // P4：買了先拿在手上，商店收起來、進造景模式，拖到想種的位置
+  // 4 種水草（#235）：任務卡下面點一株草
+  await dismissGuide(page);
+  await page.locator('.quest-tray .qt-card').first().click(NO_WAIT);
+  // P4：買了先拿在手上，進造景模式，拖到想種的位置
   await expect(page.locator('.scape-bar')).toBeVisible();
   const coach = page.locator('.scape-coach');
   await expect(coach).toBeVisible();
@@ -98,7 +97,8 @@ test('新手任務 1～9：照老闆的引導從新存檔玩得完，教學第 4
   await page.mouse.move(at.x - 120, at.y, { steps: 6 });
   await page.mouse.up();
   await expect.poll(plantX).not.toBeCloseTo(x0, 2);
-  await page.locator('.scape-bar button', { hasText: '完成' }).click(NO_WAIT);
+  // 放下去就自己收起造景模式，不用按「完成」
+  await expect(page.locator('.scape-bar')).toBeHidden();
   await expect.poll(() => questNow(page)).toBe(4);
 
   // 5 測水
@@ -113,14 +113,17 @@ test('新手任務 1～9：照老闆的引導從新存檔玩得完，教學第 4
   await fastForward(page, 1);
   await expect.poll(() => questNow(page)).toBe(6);
 
-  // 7 擺石頭、8 幫缸取名（等養水的空檔；造景拖放和改名的畫面另有測試，這裡直接改狀態）
-  await page.evaluate(() => {
-    const { game, sim } = (window as unknown as CycleWindow).cycle;
-    game.act((s) => {
-      sim.addHardscape(s, sim.HARDSCAPE.lava);
-      s.label = '我的第一缸';
-    });
-  });
+  // 7 擺石頭（#235）：任務卡下面點火山石，拿在手上進造景模式（拖放另有上面水草那段測過），按「完成」收起
+  await dismissGuide(page);
+  await page.locator('.quest-tray .qt-card', { hasText: '火山石' }).click(NO_WAIT);
+  await expect(page.locator('.scape-bar')).toBeVisible();
+  expect(await gameState<number>(page, '(s.equipment.hardscape ?? []).length')).toBe(1);
+  await page.locator('.scape-bar button', { hasText: '完成' }).click(NO_WAIT);
+  await expect.poll(() => questNow(page)).toBe(7);
+  // 8 幫缸取名（#235）：點缸下面發光的名牌，就地改名
+  await page.locator('button.tank-label.quest-target').click(NO_WAIT);
+  await page.locator('.tank-rename .chip', { hasText: '孔雀魚之家' }).click(NO_WAIT);
+  await expect.poll(() => gameState<string>(page, 's.label')).toBe('孔雀魚之家');
   // 老闆的對話框開著時任務不會往下走：關掉「完成」和下一個任務的說明。
   // 兩個任務各有好幾頁對話，慢的 CI 上一幀要好幾秒，給久一點。
   // 店裡懷孕的母魚都是看得出肚子的階段（#229），第 9 步「等母魚懷孕」可能跟著一起做完
