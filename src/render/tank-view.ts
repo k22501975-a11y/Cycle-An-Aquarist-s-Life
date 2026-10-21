@@ -1,7 +1,7 @@
 import { Application, BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
 import { cloudiness, isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, personalitySpec, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
-import { PaintedRig, paintedArtVersion, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
+import { newToneFrame, PaintedRig, paintedArtVersion, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { SetupShow, type SetupStep } from './setup-show';
 import { DEATH_SECONDS, POKE_SECONDS, STARTLE_SECONDS, deathPose, hungerLook, sickLook, spawnSwimmer, stepTurn, swimTilt, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { floorAt, keepInRect, nurseryRect, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
@@ -530,6 +530,7 @@ export class TankView {
   update(state: TankState, realDt: number): void {
     const dt = Math.min(0.1, realDt);
     this.time += dt;
+    newToneFrame();
     if (this.artVersion !== paintedArtVersion()) {
       this.artVersion = paintedArtVersion();
       this.sceneKey = '';
@@ -1856,7 +1857,8 @@ export class TankView {
           // 精繪圖：色調烘進快取的貼圖，不掛濾鏡（I1）
           // 統一調色（畫面評測 V15）：寫實的魚圖整體加一點飽和與亮度，配上插畫風的缸
           const q = quantizeTone(sat + ART_SAT, (1 + boost * 0.08 - (stage === 'old' ? 0.06 : 0)) * ART_BRIGHT);
-          rig.setTone(q.sat, q.bright);
+          // 這一格調色額度用完了：先用原圖，下一格再試
+          if (!rig.setTone(q.sat, q.bright)) view.tone = '';
         } else if (sat !== 0 || boost > 0) {
           const f = new ColorMatrixFilter();
           f.saturate(sat, false);

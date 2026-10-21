@@ -8,7 +8,7 @@ export class Forecaster {
 
   run(tanks: TankState[], hours: number): Promise<ForecastAlert[]> {
     if (!this.worker) {
-      this.worker = new Worker(new URL('./forecast-worker.ts', import.meta.url), { type: 'module' });
+      this.worker = new Worker(new URL('./sim-worker.ts', import.meta.url), { type: 'module' });
       this.worker.onmessage = (e: MessageEvent<{ id: number; alerts: ForecastAlert[] }>) => {
         this.pending.get(e.data.id)?.(e.data.alerts);
         this.pending.delete(e.data.id);

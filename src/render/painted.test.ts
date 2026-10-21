@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, addPlant, addSnail, FISH_SPECIES, HARDSCAPE, PLANT_SPECIES, type FishSpeciesId, type GrowthStage, type PlantSpeciesId } from '../sim';
+import { addFish, addPlant, addSnail, FISH_SPECIES, HARDSCAPE, lookVariant, PLANT_SPECIES, type FishSpeciesId, type GrowthStage, type PlantSpeciesId } from '../sim';
 import { ART_FILES, PAINTED, paintedKey, paintedTexture, SCENERY, sceneryImage, startupArt } from './painted';
 import { GUPPY_LOOKS } from './strains';
 
@@ -61,6 +61,8 @@ describe('開機只先載當前缸用到的圖（Issue #81）', () => {
         for (const gravid of [false, true])
           for (const stage of stages)
             for (const variant of [0, 1, 2, 3, 4]) {
+              // 公孔雀魚只先載缸裡有的花紋（下面另外驗）
+              if (sp === 'guppy' && form === 'male') continue;
               const key = paintedKey(sp, form, variant, gravid, stage);
               if (key) expect(need, `${sp} ${form} ${stage}`).toContain(key);
             }
@@ -74,6 +76,18 @@ describe('開機只先載當前缸用到的圖（Issue #81）', () => {
     expect(need).toContain('snail-nerite-zebra');
     expect(need).toContain('rock-1');
     expect(need).toContain('wood-1');
+  });
+
+  it('公孔雀魚只先載缸裡有的花紋和它的鰭型圖（G6）', () => {
+    const s = newGameState(1);
+    const male = addFish(s, 'guppy', { sex: 'male', strain: 0 });
+    const need = startupArt([s]);
+    const key = paintedKey('guppy', 'male', lookVariant(male), false)!;
+    for (const k of [key, `${key}-ribbon`, `${key}-swallow`, `${key}-halfmoon`]) expect(need).toContain(k);
+    const males = [...need].filter((k) => k.startsWith('guppy-male-'));
+    expect(males.every((k) => k.startsWith(key)), males.join()).toBe(true);
+    // 母魚、仔魚、幼魚的圖照樣都在（公魚之後生的小魚也看得到）
+    for (const k of ['guppy-female-base', 'guppy-female-pregnant', 'guppy-fry', 'guppy-juvenile']) expect(need).toContain(k);
   });
 
   it('其他缸（多缸）用到的圖也算進去', () => {

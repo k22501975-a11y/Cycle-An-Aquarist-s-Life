@@ -1,9 +1,9 @@
-import { isShrimpSpecies } from '../sim';
+import { isShrimpSpecies, lookVariant, phenotype } from '../sim';
 import { Assets, BlurFilter, ColorMatrixFilter, Container, type DestroyOptions, Mesh, MeshPlane, Texture } from 'pixi.js';
-import type { FishSpeciesId, GrowthStage, TankState } from '../sim';
+import type { Fish, FishSpeciesId, GrowthStage, TankState } from '../sim';
 import type { FishForm } from './fish-art';
 import { canvasTexture, makeCanvas } from './paint';
-import { parseRecipeKey, patternBase, recolorImage } from './phenotype-art';
+import { parseRecipeKey, patternBase, phenotypeRecipe, recolorImage } from './phenotype-art';
 import { guppyLook } from './strains';
 import { RefLru } from './lru';
 import { tankSubstrateLook } from './substrate';
@@ -202,9 +202,9 @@ export const ART_FILES: { key: string; file: string; scenery: boolean }[] = [
   ...Object.entries(SCENERY).map(([key, file]) => ({ key, file, scenery: true })),
 ];
 
-/** 各魚種會用到哪些圖（斑馬魚的仔魚、幼魚共用孔雀魚的圖；蝦都會脫殼）。 */
+/** 各魚種會用到哪些圖（斑馬魚的仔魚、幼魚共用孔雀魚的圖；蝦都會脫殼）。公孔雀魚的花紋圖另外看缸裡有哪幾種（guppyMaleArt）。 */
 const SPECIES_ART: Record<FishSpeciesId, RegExp> = {
-  guppy: /^(guppy-|fin-)/,
+  guppy: /^(guppy-(fry|juvenile|female-)|fin-)/,
   zebrafish: /^(zebrafish-|guppy-fry$|guppy-juvenile$)/,
   cherry_shrimp: /^shrimp-(cherry-|molt)/,
   crystal_shrimp: /^shrimp-(crystal-|molt)/,
@@ -222,7 +222,11 @@ export function startupArt(tanks: TankState[]): Set<string> {
   for (const t of tanks) {
     const look = tankSubstrateLook(t.equipment.substrate);
     if (look !== 'bare') want.push(new RegExp(`^sub-${look}-`));
-    for (const f of t.fish) want.push(SPECIES_ART[f.species]);
+    for (const f of t.fish) {
+      want.push(SPECIES_ART[f.species]);
+      const male = f.species === 'guppy' && f.sex === 'male' && guppyMaleArt(f);
+      if (male) want.push(new RegExp(`^${male}(-ribbon|-swallow|-halfmoon)?(#eating)?$`));
+    }
     for (const p of t.plants) want.push(new RegExp(`^plant-${p.species}$`));
     if (t.equipment.hardscape?.length) want.push(/^(rock|wood)-/);
     if (t.nurseryBox) want.push(/^nursery-/);
@@ -230,6 +234,15 @@ export function startupArt(tanks: TankState[]): Set<string> {
     if (sn && (sn.snails.length || sn.clutches.length || sn.appleYoung || Object.values(sn.pests).some((n) => n > 0))) want.push(/^snail-/);
   }
   return new Set(ART_FILES.map((a) => a.key).filter((k) => want.some((re) => re.test(k))));
+}
+
+/**
+ * 這尾公孔雀魚用哪張花紋圖（不含鰭型後綴）：照基因上色的看配方，沒有基因的看品系。
+ * 開機只先載缸裡有的花紋（G6：一個品系的缸不用等 5 種花紋 × 4 種鰭型的圖），其他的進遊戲後在背景載。
+ */
+function guppyMaleArt(f: Fish): string | null {
+  if (f.genome) return patternBase(phenotypeRecipe(phenotype(f.genome)).base);
+  return paintedKey('guppy', 'male', lookVariant(f), false);
 }
 
 /** 已經試著載過的圖（成功或失敗都算，不重複載）。 */
@@ -301,7 +314,7 @@ function derivedTexture(key: string): Texture | null {
 export function tonedTexture(key: string, sat: number, bright: number, eating = false): Texture | null {
   const base = eating ? (textures.get(`${key}#eating`) ?? null) : paintedTexture(key);
   if (!base) return base;
-  const cacheKey = `${key}${eating ? '#eating' : ''}@${toneKey(sat, bright)}`;
+  const cacheKey = tonedKey(key, sat, bright, eating);
   const hit = toned.get(cacheKey);
   if (hit) return hit;
   const img = base.source.resource as CanvasImageSource & { width: number; height: number };
@@ -313,6 +326,22 @@ export function tonedTexture(key: string, sat: number, bright: number, eating = 
   rimLight(data.data, canvas.width, canvas.height, Math.max(2, Math.round(canvas.height * 0.02)), RIM_STRENGTH);
   ctx.putImageData(data, 0, 0);
   return toned.add(cacheKey, canvasTexture(canvas));
+}
+
+function tonedKey(key: string, sat: number, bright: number, eating: boolean): string {
+  return `${key}${eating ? '#eating' : ''}@${toneKey(sat, bright)}`;
+}
+
+/**
+ * 每一格最多幾條魚新調色（G6）：調色要在 CPU 上逐點算，開機那一格十幾條魚一起調，主畫面要晚將近一秒才出來。
+ * 還沒輪到的魚先用原圖，下一格再調（開機時開場動畫正在淡出，看不出來）。
+ */
+export const TONE_PER_FRAME = 2;
+let toneBudget = TONE_PER_FRAME;
+
+/** 新的一格開始（TankView.update 呼叫），調色的額度補滿。 */
+export function newToneFrame(): void {
+  toneBudget = TONE_PER_FRAME;
 }
 
 /** 快取裡有幾張貼圖（開發者數值、測試用）。 */
@@ -408,10 +437,15 @@ export class PaintedRig extends Container {
     this.mesh.alpha = 1 - k * k * (3 - 2 * k);
   }
 
-  /** 色調（飽和度、亮度）：換成快取裡調好色的圖，不用濾鏡。 */
-  setTone(sat: number, bright: number): void {
+  /** 色調（飽和度、亮度）：換成快取裡調好色的圖，不用濾鏡。這一格的調色額度用完、又要新調的話回 false，下一格再呼叫。 */
+  setTone(sat: number, bright: number): boolean {
     const tone = `${sat}:${bright}`;
-    if (tone === this.tone) return;
+    if (tone === this.tone) return true;
+    const cached = toned.get(tonedKey(this.key, sat, bright, false)) && (!textures.has(`${this.key}#eating`) || toned.get(tonedKey(this.key, sat, bright, true)));
+    if (!cached) {
+      if (toneBudget <= 0) return false;
+      toneBudget--;
+    }
     this.tone = tone;
     // 拿到就先 retain，再拿下一張：不然建吃東西那張時，剛拿到的 rest 可能被清掉
     const rest = tonedTexture(this.key, sat, bright);
@@ -426,6 +460,7 @@ export class PaintedRig extends Container {
     this.eatingTexture = eating;
     if (this.mesh.texture !== this.restTexture) this.mesh.texture = this.restTexture;
     this.setMouthOpen(this.mouthOpen);
+    return true;
   }
 
   override destroy(options?: DestroyOptions): void {
