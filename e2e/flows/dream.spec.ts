@@ -22,3 +22,17 @@ test('夢想魚路線與配一對看看', async ({ page }) => {
   await pp.locator('.pp-chooser').nth(1).locator('.pp-chip', { hasText: '藍草' }).first().click();
   await expect(pp.locator('.pp-row-head').first()).toContainText('白子全紅 × 藍草');
 });
+
+/** G4：買第二缸後先問這缸拿來做什麼；選了缸就有名字，接著到商店買必買的東西。 */
+test('第二缸選用途：繁殖缸或展示缸', async ({ page }) => {
+  await startClean(page);
+  await page.evaluate(() => (window as unknown as { cycle: { game: { actAll: (f: (t: { economy?: { coins: number } }[]) => void) => void } } }).cycle.game.actAll((t) => (t[0].economy!.coins = 20_000)));
+  await page.locator('button.tank-chip').click(NO_WAIT);
+  await page.locator('.sheet.open .shop-card', { hasText: '20L' }).first().locator('button', { hasText: '買' }).click(NO_WAIT);
+  const panel = page.locator('.sheet.open .purpose-panel');
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('.purpose-card')).toHaveCount(2);
+  await panel.locator('.purpose-card', { hasText: '繁殖缸' }).locator('button').click(NO_WAIT);
+  await expect(page.locator('.sheet.open .sheet-title')).toContainText('商店');
+  expect(await page.evaluate(() => (window as unknown as { cycle: { game: { state: { purpose?: string; label?: string } } } }).cycle.game.state.purpose)).toBe('breeding');
+});

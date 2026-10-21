@@ -1072,3 +1072,7 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 .pp-kid.dream { border-color: var(--gold-bright); box-shadow: 0 0 16px rgba(246, 216, 145, 0.45); }
 .pp-dream-badge { position: absolute; top: -8px; right: -6px; padding: 2px 8px; border-radius: 999px; background: var(--gold-bright); color: var(--deep); font-size: 11px; font-weight: 700; }
 .dream-strip-label small { color: var(--muted); margin-right: 4px; }
+
+/* 第二缸用途（G4）：推薦的那張亮一點 */
+.purpose-card.picked { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(227, 189, 109, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35); }
+.purpose-card .card-note { color: var(--text); }
