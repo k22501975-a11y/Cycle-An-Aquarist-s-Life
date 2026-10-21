@@ -67,7 +67,8 @@ function chooser(label: string, sex: 'mother' | 'father', refresh: () => void): 
         h(
           `button.pp-chip${pick[sex] === i ? '.active' : ''}`,
           { title: p.name, onclick: () => ((pick[sex] = i), refresh()) },
-          h('img', { src: ART + guppyArt(p.strain, p.fin), alt: '', draggable: 'false' }),
+          // 母的那排用母魚圖（畫面評測 v10 截圖 11：母的那排放的是公魚圖，圖文不符）；鰭型只有公魚看得出來
+          h('img', { src: ART + (sex === 'mother' ? femaleGuppyArt(p.strain) : guppyArt(p.strain, p.fin)), alt: '', draggable: 'false' }),
           h('span', {}, p.name),
         ),
       ),
