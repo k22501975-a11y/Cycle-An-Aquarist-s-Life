@@ -76,6 +76,13 @@ export interface ShopOrder {
   days?: number;
   /** 目標單預告（mvp.md §4.4.5 第 2 格）：還沒有自家魚時讓玩家看到之後的仔魚單。不能交、不能撕、不會過期；第一窩生出來就換成正式單。 */
   preview?: true;
+  /**
+   * 期限內湊不齊（#299）：板子每個遊戲小時判斷一次寫在單上，卡片照這個標「交不出」，不每次重算。
+   * 標上去要估的天數超過期限；拿掉要多出一天餘裕，估計值每天上下跳一點也不會一下交不出、一下再養幾天。
+   */
+  late?: boolean;
+  /** 從第幾個遊戲小時開始交不出：標了一整天還是交不出就撤掉，空格照常補（板子沒滿也一樣）。 */
+  lateSince?: number;
 }
 
 export interface OrderBoard {
@@ -560,13 +567,16 @@ function swapDeadOrder(state: TankState, board: OrderBoard, ctx: OrderContext): 
   if (ctx.stage === 'start') return false;
   const tanks = householdTanks(state);
   const dead = board.orders.filter((o) => !o.gap && !reachableInTime(tanks, o)).sort((a, b) => a.postedHours - b.postedHours)[0];
-  if (!dead) return false;
+  return !!dead && replaceOrder(state, board, ctx, dead);
+}
+
+/** 換一張新單放回 old 那格，其他單不換位置；抽不到期限內湊得齊的就不換，回 false。 */
+function replaceOrder(state: TankState, board: OrderBoard, ctx: OrderContext, old: ShopOrder): boolean {
   const before = board.orders;
-  board.orders = before.filter((x) => x !== dead);
-  const added = addOrder(state, board, ctx) ? board.orders.pop()! : dead;
-  // 新單放回原來那格，其他單不換位置
-  board.orders = before.map((x) => (x === dead ? added : x));
-  return added !== dead;
+  board.orders = before.filter((x) => x !== old);
+  const added = addOrder(state, board, ctx) ? board.orders.pop()! : old;
+  board.orders = before.map((x) => (x === old ? added : x));
+  return added !== old;
 }
 
 /** 連續幾天沒有真的收入（賣魚、賣插枝、交單），訂單板就保證出一張現在交得出來的小單（polish-to-9.md §4「收入空檔」）。 */
@@ -737,6 +747,27 @@ function dropExtraDeadOrders(state: TankState, board: OrderBoard): void {
   if (dead.length > 1) board.orders = board.orders.filter((o) => !dead.slice(1).includes(o));
 }
 
+/** 每個遊戲小時更新一次每張單的「交不出」（#299）。估不出天數的（缸裡還沒有養得成的魚、等第一株水草附的螺）卡片另外寫原因，不算交不出。 */
+function markLate(state: TankState, board: OrderBoard): void {
+  const tanks = householdTanks(state);
+  for (const o of board.orders) {
+    if (o.preview || o.gap) continue;
+    const days = daysToFill(tanks, o);
+    const daysLeft = (orderExpiresHours(o) - state.hours) / 24;
+    const late = days !== null && (o.late ? days > daysLeft - 1 : days > daysLeft);
+    if (late && !o.late) o.lateSince = state.hours;
+    if (!late) delete o.lateSince;
+    o.late = late;
+  }
+}
+
+/** 標「交不出」一整天了（#299）：在原來那格換一張湊得齊的，抽不到就撤掉，空格照常隔天補。板子沒滿也換。 */
+function dropLateOrders(state: TankState, board: OrderBoard, ctx: OrderContext): void {
+  for (const o of board.orders.filter((x) => x.late && x.lateSince !== undefined && state.hours - x.lateSince >= ORDER_GAP_HOURS)) {
+    if (!replaceOrder(state, board, ctx, o)) board.orders = board.orders.filter((x) => x !== o);
+  }
+}
+
 /** 第一窩生出來了：預告卡換成正式的小孔雀單（數量照 fryOrderSize，至少 1 尾、不超過現有仔魚）。 */
 function promotePreview(state: TankState, board: OrderBoard, ctx: OrderContext): void {
   const count = Math.max(1, Math.min(10, ctx.fry, Math.round(fryOrderSize(ctx))));
@@ -769,8 +800,13 @@ function fillOrders(state: TankState, board: OrderBoard): void {
   if (expired.length === 0 && board.fillCheckedHour === hour) return;
   board.fillCheckedHour = hour;
   const ctx = orderContext(state);
-  if (ctx.stage === 'start') return fillStarterBoard(state, board, ctx);
+  if (ctx.stage === 'start') {
+    fillStarterBoard(state, board, ctx);
+    return markLate(state, board);
+  }
   if (board.orders.some((o) => o.preview)) promotePreview(state, board, ctx);
+  markLate(state, board);
+  dropLateOrders(state, board, ctx);
   dropExtraDeadOrders(state, board);
   if (board.orders.length >= ORDER_BOARD_SIZE) {
     if (board.lastChangeHours !== undefined && state.hours - board.lastChangeHours >= ORDER_GAP_HOURS && swapAny(state, board)) board.lastChangeHours = state.hours;

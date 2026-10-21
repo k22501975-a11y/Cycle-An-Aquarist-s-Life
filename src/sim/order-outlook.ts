@@ -24,7 +24,7 @@ export interface OrderOutlook {
   coins: number;
   /** 這張單還掛幾天（不到一天算 0）。 */
   daysLeft: number;
-  /** 估的天數比單子剩下的久：等魚長大之前客人就不等了。 */
+  /** 估的天數比單子剩下的久：等魚長大之前客人就不等了。板上的單照板子每小時標的（ShopOrder.late，#299），不每次重算。 */
   late: boolean;
   /** 螺單：還沒買過水草、缸裡也沒螺（起步螺單照第一株一定夾帶的螺估，§4.4.5）。 */
   firstPlant?: boolean;
@@ -46,7 +46,7 @@ export function orderOutlook(tanks: TankState[], o: ShopOrder, keep: readonly nu
     const d = daysToFill(tanks, o);
     const days = d === null ? null : Math.ceil(d);
     const firstPlant = d === null && (economy(tanks[0]).plantBuys ?? 0) === 0;
-    return { ...base, fish: [], days, late: days !== null && days * 24 > hoursLeft, ...(firstPlant ? { firstPlant } : {}) };
+    return { ...base, fish: [], days, late: d !== null && (o.late ?? d * 24 > hoursLeft), ...(firstPlant ? { firstPlant } : {}) };
   }
   const now: OrderOutlook['fish'] = [];
   const later: OrderOutlook['fish'] = [];
@@ -63,7 +63,7 @@ export function orderOutlook(tanks: TankState[], o: ShopOrder, keep: readonly nu
   later.sort((a, b) => a.days - b.days);
   const fish = [...now, ...later].slice(0, o.count);
   const days = fish.length < o.count ? null : Math.max(0, ...fish.map((f) => f.days));
-  return { ...base, fish, days, late: days !== null && days * 24 > hoursLeft };
+  return { ...base, fish, days, late: days !== null && (o.late ?? days * 24 > hoursLeft) };
 }
 
 /** 板上有 2 張以上的單才比較（一張單沒什麼好比）；回傳每張單的比較資料，順序跟板上一樣。 */
