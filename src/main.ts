@@ -1438,6 +1438,8 @@ async function start(): Promise<void> {
       if (fryEatenToast.get(tank) === day) return;
       fryEatenToast.set(tank, day);
     }
+    // 配對很常發生：只寫在早上報告，不出聲、不跳通知（G8）
+    if (e.type === 'mated') return;
     // 模擬事件（夜裡生小魚、死魚…）不是玩家按的，只出聲不震
     audio.play(eventSound(e.type), false);
     if (e.type === 'fry_born' && (e.count ?? 0) > 0) {
