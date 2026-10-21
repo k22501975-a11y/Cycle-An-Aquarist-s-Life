@@ -1,5 +1,6 @@
 """把 compose.py 的原稿輸出成 PWA、iOS、Android 各尺寸圖示。
 用法（在 scripts/app-icon/ 裡）：python3 compose.py . && python3 export.py ../..，接著在 repo 根目錄跑 python3 scripts/app-icon/splash.py
+要先裝 Pillow 和 numpy（compose.py 去鰭邊鋸齒用到）：python3 -m pip install pillow numpy
 """
 import sys
 from PIL import Image, ImageDraw

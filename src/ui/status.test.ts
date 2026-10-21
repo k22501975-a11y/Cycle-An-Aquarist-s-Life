@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addFish, createTank, FILTERS, HEATERS, TANKS, tankSize, useTestKit, waterChange } from '../sim';
-import { clockLabel, householdTodos, todos, waterCapsules } from './status';
+import { clockLabel, householdTodos, todos, waterCapsules, waterSummary } from './status';
 
 function tank() {
   return createTank({ tank: TANKS.std40, filter: FILTERS.sponge, heater: { spec: HEATERS.h50, targetC: 25 }, seed: 3 });
@@ -89,5 +89,17 @@ describe('tankSize', () => {
     const est = tankSize({ ...TANKS.std40, id: 'custom', sizeCm: undefined, volumeL: 120 });
     expect(est.w * est.h * est.d).toBeGreaterThan(100_000);
     expect(est.w * est.h * est.d).toBeLessThan(140_000);
+  });
+});
+
+describe('waterSummary', () => {
+  const cap = (tone: 'ok' | 'warn' | 'bad' | 'unknown') => ({ label: 'x', value: '1', tone, stale: false, title: '' });
+  it('看最糟的一項', () => {
+    expect(waterSummary([cap('ok'), cap('warn'), cap('bad')])).toEqual({ tone: 'bad', value: '危險' });
+    expect(waterSummary([cap('ok'), cap('warn'), cap('unknown')])).toEqual({ tone: 'warn', value: '注意' });
+  });
+  it('有一項沒測就不說正常', () => {
+    expect(waterSummary([cap('ok'), cap('unknown')])).toEqual({ tone: 'unknown', value: '待測' });
+    expect(waterSummary([cap('ok'), cap('ok')])).toEqual({ tone: 'ok', value: '正常' });
   });
 });

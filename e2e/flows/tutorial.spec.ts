@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { aliveCount, closeSheet, dismissGuide, finishDrip, fastForward, gameState, NO_WAIT, questStep, seedRng, setSpeed, sheetButton, startGame, tool, watchConsoleErrors } from './helpers';
+import { aliveCount, closeSheet, dismissGuide, finishDrip, fastForward, gameState, NO_WAIT, questStep, seedRng, setSpeed, sheetButton, startGame, tapTool, tool, watchConsoleErrors } from './helpers';
 
 // 要快轉很多天：用 1 倍密度省 CPU（無頭瀏覽器用軟體繪圖）
 test.use({ deviceScaleFactor: 1, actionTimeout: 20_000 });
@@ -107,9 +107,8 @@ test('新手任務 1～9：照老闆的引導從新存檔玩得完，教學第 4
   await expect.poll(() => questNow(page)).toBe(5);
 
   // 6 換水
-  await tool(page, '換水');
-  await sheetButton(page, '開始換水');
-  await closeSheet(page);
+  // 換水一鍵換（#257）：點工具列就照建議的量換，不開面板
+  await tapTool(page, '換水');
   await fastForward(page, 1);
   await expect.poll(() => questNow(page)).toBe(6);
 
@@ -146,9 +145,7 @@ test('新手任務 1～9：照老闆的引導從新存檔玩得完，教學第 4
     await closeSheet(page);
     const r = await gameState<{ ammonia: number; nitrite: number }>(page, 's.lastTest.reading');
     if (r.ammonia > 0 || r.nitrite > 0) {
-      await tool(page, '換水');
-      await sheetButton(page, '開始換水');
-      await closeSheet(page);
+      await tapTool(page, '換水');
     }
     await dismissGuide(page);
     log.push(`第 ${day} 天：任務 ${await questStep(page)}/9，${await gameState<string>(page, DAY_SUMMARY)}`);

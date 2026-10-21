@@ -5,7 +5,12 @@ import { expect, openGame, test } from './fixtures';
 
 test('新遊戲能開啟主畫面', async ({ page }) => {
   await openGame(page);
-  for (const label of ['餵食', '換水', '測試', '修剪', '商店', '設備', '撈死魚']) {
+  // 平常只露常用的 4 個，其他收在「更多」裡（畫面評測第 8 輪）
+  for (const label of ['餵食', '換水', '測試', '商店']) {
+    await expect(page.locator('button.tool', { hasText: label })).toBeVisible();
+  }
+  await page.locator('button.tool-more').click();
+  for (const label of ['修剪', '造景', '設備', '訂單', '撈死魚']) {
     await expect(page.locator('button.tool', { hasText: label })).toBeVisible();
   }
 });
