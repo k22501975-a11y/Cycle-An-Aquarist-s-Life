@@ -97,6 +97,8 @@ export interface Economy {
   lookalikeShown?: boolean;
   /** 早上報告說明過「新缸常見的細菌白濁」了（整個存檔一次，tap-feed.ts waterLook）。 */
   bloomNoted?: boolean;
+  /** 平淡早上的小觀察（ui/morning-observe.ts）：每種句型上次出現的遊戲小時，3 天內不重複。 */
+  observed?: number[];
   /** 自己繁殖的魚第一次賣掉或交單了（G2 的慶祝只演一次）。 */
   firstBredSale?: boolean;
   /** 上次領保底起步包的時間（遊戲小時）。 */

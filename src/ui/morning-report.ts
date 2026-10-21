@@ -30,6 +30,7 @@ import {
   type TankState,
 } from '../sim';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
+import { quietObservation } from './morning-observe';
 
 /**
  * 「過一晚」的早上報告（first-10-minutes.md F2）：睡前拍一張快照，醒來跟現在比，
@@ -79,6 +80,7 @@ export type ReportKind =
   | 'new_leaf' // 水草長出新葉（G8）
   | 'rescued' // 測到氨或亞硝、換了水、讀數降下來（G8）
   | 'lookalike' // 第一窩小魚轉色，長得像誰（G2）
+  | 'observe' // 平淡早上的小觀察（morning-observe.ts）
   | 'quiet';
 
 export interface ReportItem {
@@ -161,6 +163,9 @@ export function snapshot(tanks: TankState[]): Snapshot {
     })),
   };
 }
+
+/** 算「壞事」的（企劃 tutorial-lines.md §7）：死魚、被吃、生病、危機，加上設備壞掉這類紅色的。 */
+export const isBadNews = (i: ReportItem) => i.tone === 'bad' || i.kind === 'eaten' || i.kind === 'disease';
 
 const TONE_ORDER: Record<ReportItem['tone'], number> = { bad: 0, warn: 1, good: 2, info: 3 };
 
@@ -335,6 +340,11 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   if (look) {
     const where = tanks.length > 1 ? `${tankLabel(tanks, look.tank)}：` : '';
     items.push({ kind: 'lookalike', tank: look.tank, tone: 'good', text: where + lookalikeLine(look), action: 'fish', subjectId: look.childId, lookalike: look });
+  }
+  // 沒好事也沒壞事：帶一句缸裡的小變化（#258）
+  if (!crisis && tanks[0] && before.tanks[0] && !items.some((i) => isBadNews(i) || i.tone === 'good')) {
+    const text = quietObservation(tanks[0], tanks[0], before.tanks[0]);
+    if (text) items.push({ kind: 'observe', tank: 0, tone: 'info', text });
   }
   if (items.length === 0) items.push({ kind: 'quiet', tank: 0, tone: 'info', text: '昨晚很平靜，魚都在水草裡睡覺' });
   items.sort((a, b) => (a.kind === 'crisis' ? -1 : b.kind === 'crisis' ? 1 : TONE_ORDER[a.tone] - TONE_ORDER[b.tone]));
