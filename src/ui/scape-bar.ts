@@ -84,6 +84,13 @@ export class ScapeBar {
     this.render();
   }
 
+  /** 剛買來的石頭、水草（P4）：切到它那層、選著它，讓玩家直接拖去想擺的位置。 */
+  focus(target: ScapeTarget): void {
+    const sel = describeTarget(this.deps.game.state, target);
+    this.edit = { ...this.edit, layer: sel?.place.layer ?? this.edit.layer, selected: sel ? target : null };
+    this.changed();
+  }
+
   select(target: ScapeTarget | null): void {
     // 點到的物件就是這層的（畫面只讓點目前那層）
     this.edit = { ...this.edit, selected: target };

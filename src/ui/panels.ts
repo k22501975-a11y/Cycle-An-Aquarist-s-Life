@@ -148,6 +148,8 @@ import {
   FOOD_KINDS,
   mealMg,
   mealPrice,
+  tapFeed,
+  type TapFeedResult,
   FILTERS,
   FISH_SPECIES,
   freeAmmonia,
@@ -206,6 +208,8 @@ export interface PanelContext {
   undoable?: (run: () => void, text: string, tone?: 'warn' | 'info') => void;
   /** 進入造景模式（拖曳擺放石頭、沉木、水草）。 */
   openScape?: () => void;
+  /** 剛買的石頭、水草拿在手上（P4）：收起商店、進造景模式選著它，讓玩家拖到想擺的位置。 */
+  placeNew?: (target: { kind: 'plant'; id: number } | { kind: 'hardscape'; index: number }) => void;
   /** 「第一次」的慶祝演出（只演一次）；有演出時回傳 true。 */
   moment?: (id: MomentId, spec: CelebrateSpec) => boolean;
   /** 這條魚在缸裡的樣子（觀察面板頂端的大圖）；沒有就不放圖。 */
@@ -241,6 +245,17 @@ function button(label: string, onclick: () => void, kind = ''): HTMLButtonElemen
 
 /** 上次選的飼料（同一次遊戲記住）。 */
 let feedChoice: { kind: FoodKind; grade: FoodGrade } = { ...DEFAULT_FOOD };
+
+/**
+ * 手指餵食（P5）：點一下水面撒一小撮上次選的飼料（種類、等級在「進階」面板選），份量和扣錢照核心的 tapFeed。
+ * 缸裡沒魚回傳 null。
+ */
+export function feedTap(ctx: PanelContext): TapFeedResult | null {
+  const got = ctx.game.act((st) => tapFeed(st, feedChoice));
+  if (got.mg <= 0) return null;
+  ctx.sound?.('feed');
+  return got;
+}
 
 /** 缸裡有誰吃不太到這種飼料（例如只餵漂浮的，蝦吃不到）。 */
 export function feedWarning(s: TankState, kind: FoodKind): string | null {
@@ -886,15 +901,19 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       `買了一對${FISH_SPECIES[species].name}（一公一母）${quarantined ? `，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天` : ''}`,
     );
   };
-  const buyPlant = (species: PlantSpeciesId) => () =>
-    purchase(
+  // 買了不是馬上種好（P4）：拿在手上，拖到缸裡想種的位置
+  const buyPlant = (species: PlantSpeciesId) => () => {
+    let id = -1;
+    const ok = purchase(
       ctx,
       PLANT_PRICES[species],
       (st) => {
-        plantFromShop(st, species);
+        id = plantFromShop(st, species).id;
       },
-      `種下一株${PLANT_SPECIES[species].name}`,
+      `買了一株${PLANT_SPECIES[species].name}`,
     );
+    if (ok && id >= 0) ctx.placeNew?.({ kind: 'plant', id });
+  };
   const buySnail = (kind: SnailKind, color?: AppleColor) => () =>
     purchase(ctx, SNAILS[kind].price, (st) => addSnail(st, kind, color), `放了一隻${color ? APPLE_COLOR_LABELS[color] : ''}${SNAILS[kind].name}`);
 
@@ -1126,12 +1145,14 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
               count > 0 ? button('拿出', () => game.act((st) => removeHardscape(st, x.id)), 'small') : null,
               inHand > 0
                 ? button('放手上的', () => {
-                    game.act((st) => placeFromBag(st, x.id));
+                    if (game.act((st) => placeFromBag(st, x.id))) ctx.placeNew?.({ kind: 'hardscape', index: (game.state.equipment.hardscape ?? []).length - 1 });
                     toasts.show(`放了一組${x.name}（寶箱開到的）`);
                     sheet.refresh();
                   }, 'small.primary')
                 : null,
-              button('買一組', () => purchase(ctx, price(key), (st) => addHardscape(st, x), `放了一組${x.name}`), 'small'),
+              button('買一組', () => {
+                if (purchase(ctx, price(key), (st) => addHardscape(st, x), `買了一組${x.name}`)) ctx.placeNew?.({ kind: 'hardscape', index: (game.state.equipment.hardscape ?? []).length - 1 });
+              }, 'small'),
             ].filter((b): b is HTMLButtonElement => !!b),
           });
         }),

@@ -132,6 +132,8 @@ export interface TankViewEvents {
   onSetupStep?: (finished: SetupStep, next: SetupStep | 'done') => void;
   /** 玩家撒的這一把飼料，第一口被這尾魚吃到（F6：看得出誰貪吃）。 */
   onFirstBite?: (fishId: number) => void;
+  /** 餵食模式（P5）：點了水裡一點，飼料要從這裡的水面撒下去。 */
+  onFeedTap?: () => void;
 }
 
 /** 魚畫得比真實比例大一些（遊戲裡要看得清楚品系花紋）。 */
@@ -241,6 +243,10 @@ export class TankView {
   private poke: { x: number; y: number; age: number; seq: number } | null = null;
   /** 玩家剛撒飼料，還沒有魚吃到第一口。 */
   private firstBitePending = false;
+  /** 餵食模式（P5）：點水面哪裡，飼料就從哪裡掉下去。 */
+  private feeding = false;
+  /** 下一把飼料撒在哪（玩家點的位置）；null 就照舊隨機撒在中間一帶。 */
+  private dropX: number | null = null;
   private crumbs: Crumb[] = [];
   /** 黏缸壁錠貼在玻璃上的位置；t 記一開始有幾顆碎屑，越吃越小。 */
   private tablet: { x: number; y: number; t: number } | null = null;
@@ -470,7 +476,19 @@ export class TankView {
     return [{ x: pick.swimmer.x, y: pick.swimmer.y, r: pick.rig.lengthPx * Math.abs(pick.rig.scale.y) * 0.38 }];
   }
 
+  /** 餵食模式開關：開著時點水裡任何地方都是撒飼料，不選魚。 */
+  setFeedMode(on: boolean): void {
+    this.feeding = on;
+    if (!on) this.dropX = null;
+  }
+
   private handleTap(x: number, y: number): void {
+    if (this.feeding) {
+      const w = this.waterBounds;
+      this.dropX = Math.max(w.width * 0.05, Math.min(w.width * 0.95, x));
+      this.events.onFeedTap?.();
+      return;
+    }
     let best: number | null = null;
     let bestD = Infinity;
     for (const v of this.fish.values()) {
@@ -755,9 +773,12 @@ export class TankView {
   scapeHintPos(): { x: number; y: number } | null {
     const edit = this.scape.editing;
     if (!edit) return null;
-    let r: Rect | null = null;
-    const rock = this.scape.firstInLayer(edit.layer);
-    if (rock !== null) r = this.scape.hardscapeRect(rock);
+    // 選著的（剛買來要擺的）優先，其次這層第一個
+    let r: Rect | null = this.selectedScapeRect();
+    const rock = r ? null : this.scape.firstInLayer(edit.layer);
+    if (r) {
+      // 已經有了
+    } else if (rock !== null) r = this.scape.hardscapeRect(rock);
     else {
       for (const view of this.plants.values()) {
         if (view.holder.parent !== this.scape.plants[edit.layer]) continue;
@@ -1314,7 +1335,8 @@ export class TankView {
         this.tablet = { x: x0, y: y0, t: 0 };
       } else {
         // 撒一把：集中落在一處，水面泛起漣漪
-        const dropX = width * (0.3 + this.rand() * 0.4);
+        const dropX = this.dropX ?? width * (0.3 + this.rand() * 0.4);
+        this.dropX = null;
         pellets = scatterPellets(add, dropX, surface, width * 0.06, () => this.rand());
         for (const p of pellets) applyFoodLook(p, kind);
         this.ripples.push({ x: dropX, t: 0 }, { x: dropX - width * 0.02, t: -0.18 }, { x: dropX + width * 0.025, t: -0.35 });

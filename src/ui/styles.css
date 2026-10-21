@@ -147,7 +147,8 @@ button.todo-item.go:hover { color: var(--accent, #f0c96a); }
   #hud { top: calc(env(safe-area-inset-top) + 6px); padding: 4px 6px 4px 14px; gap: 10px; border-radius: 14px; }
   .time .label { display: none; }
   .time .value { font-size: 14px; }
-  .cap { font-size: 12px; padding: 2px 9px; gap: 5px; }
+  .caps { gap: 5px; }
+  .cap { font-size: 12px; padding: 2px 7px; gap: 4px; }
   .cap .lbl { font-size: 11px; }
   .hud-btn { width: 30px; height: 30px; padding: 5px; border-radius: 9px; }
   #dock { bottom: calc(env(safe-area-inset-bottom) + 6px); }
@@ -562,7 +563,7 @@ body:has(.sheet.open) .owner.open { bottom: auto; top: calc(env(safe-area-inset-
   body:has(.sheet.open) .owner.open .owner-actions { flex-wrap: wrap; }
 }
 /* 任務小卡縮小：只放短標題和進度，不遮住左上角的缸 */
-.quest-pill { padding: 6px 12px 6px 52px; min-height: 50px; max-width: min(220px, 40vw); gap: 1px; }
+.quest-pill { padding: 6px 12px 6px 52px; min-height: 50px; max-width: min(250px, 42vw); gap: 1px; }
 .quest-avatar { left: 6px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; }
 .quest-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .quest-progress { font-size: 12px; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; max-width: 100%; }
@@ -916,3 +917,80 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .burst-spark { position: absolute; left: 0; top: 0; width: 8px; height: 8px; border-radius: 50%; background: radial-gradient(circle, #fff6d6, #ffd36e 55%, rgba(255, 211, 110, 0)); box-shadow: 0 0 10px rgba(255, 211, 110, 0.9); }
 .burst-ring { position: absolute; left: 0; top: 0; width: 200px; height: 200px; border-radius: 50%; border: 3px solid rgba(255, 226, 154, 0.9); box-shadow: 0 0 24px rgba(255, 211, 110, 0.6), inset 0 0 18px rgba(255, 211, 110, 0.4); }
 .burst-label { position: absolute; left: 0; top: 0; white-space: nowrap; font-size: 26px; font-weight: 800; color: #ffe29a; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7), 0 0 14px rgba(255, 211, 110, 0.7); }
+
+/* 通知（YenWel：通知太亂）：一次一則、一行、前面一個圖示；其他進通知匣（鈴鐺數字） */
+.toasts { width: auto !important; max-width: min(92vw, 460px); align-items: center; }
+.toast { padding: 6px 8px 6px 6px; border-left-width: 1px; border-radius: 999px; gap: 8px !important; font-size: 13.5px; max-width: 100%; }
+.toast-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toast-icon { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 14px; color: #08202a; background: var(--ok); }
+.toast-icon::before { content: '✓'; }
+.toast.warn .toast-icon { background: var(--warn); }
+.toast.warn .toast-icon::before { content: '!'; }
+.toast.bad .toast-icon { background: var(--bad); color: #fff; }
+.toast.bad .toast-icon::before { content: '!'; }
+.toast-count { flex: none; font-size: 12px; color: var(--gold); }
+.toast-count:empty { display: none; }
+.toast.bump { animation: toast-bump 0.3s ease-out; }
+@keyframes toast-bump { 40% { transform: scale(1.06); } }
+.toast .toast-action { padding: 3px 10px; border-radius: 999px; }
+.bell-btn { position: relative; }
+.inbox-row { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.inbox-row .toast-icon { width: 22px; height: 22px; font-size: 13px; }
+.inbox-row.warn .toast-icon { background: var(--warn); }
+.inbox-row.warn .toast-icon::before, .inbox-row.bad .toast-icon::before { content: '!'; }
+.inbox-row.bad .toast-icon { background: var(--bad); color: #fff; }
+.inbox-row > span { flex: 1; min-width: 0; }
+.inbox-row small { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.bell-btn.ring svg { animation: bell-ring 0.6s ease-in-out; transform-origin: 50% 10%; }
+@keyframes bell-ring { 20% { transform: rotate(14deg); } 45% { transform: rotate(-12deg); } 70% { transform: rotate(6deg); } }
+
+/* P1：教學只用一行提示＋要點的按鈕發光，做完任務卡閃一下就換下一步 */
+.tool.quest-target .disc { animation: quest-glow 1.6s ease-in-out infinite; }
+.hud-btn.quest-target { animation: quest-glow 1.6s ease-in-out infinite; }
+@keyframes quest-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 214, 120, 0), inset 0 1px 0 rgba(255, 255, 255, 0.18); }
+  50% { box-shadow: 0 0 0 4px rgba(255, 214, 120, 0.55), 0 0 22px 6px rgba(255, 214, 120, 0.45); }
+}
+.quest-pill .quest-hint { color: #f3e3b8; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.quest-pill.flash { border-color: rgba(155, 232, 168, 0.7); box-shadow: 0 0 0 2px rgba(155, 232, 168, 0.35), 0 8px 24px rgba(0, 0, 0, 0.35); animation: quest-flash 0.5s ease-out; }
+.quest-pill.flash .quest-step { color: #9be8a8; }
+.quest-coins { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 700; color: var(--gold); }
+@keyframes quest-flash { 0% { transform: scale(0.94); } 60% { transform: scale(1.04); } 100% { transform: none; } }
+/* 老闆的情境提醒：左下角一張小卡，不擋缸，過一陣子自己收 */
+.owner-tip { position: absolute; z-index: 6; left: calc(env(safe-area-inset-left) + 14px); bottom: calc(var(--dock-top, 120px) + 12px); width: min(360px, 44vw); display: none; align-items: flex-start; gap: 10px; padding: 8px 34px 8px 8px; border-radius: 14px; }
+.owner-tip.open { display: flex; animation: rise 0.25s ease-out; }
+.owner-tip .tip-avatar { flex: 0 0 auto; width: 38px; height: 38px; }
+.owner-tip .tip-text { margin: 0; font-size: 12.5px; line-height: 1.45; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+.owner-tip .tip-close { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); border: 0; color: var(--muted); font-size: 12px; }
+.scaping .owner-tip, .setting-up .owner-tip { display: none !important; }
+
+/* 手指餵食（P5）：底下一條餵食列，點水面撒飼料，三個點是這一餐撒了多少 */
+.feed-bar { position: absolute; z-index: 6; left: 50%; transform: translateX(-50%); bottom: calc(var(--dock-top, 120px) + 12px); display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 10px; border-radius: 16px; white-space: nowrap; animation: rise 0.25s ease-out; }
+.feed-bar-art { width: 34px; height: 34px; border-radius: 50%; }
+.feed-say { font-size: 14px; font-weight: 700; min-width: 7em; }
+.feed-dots { display: inline-flex; align-items: center; gap: 4px; }
+.feed-dots i { width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, 0.16); border: 1px solid rgba(243, 234, 216, 0.3); transition: background 0.2s; }
+.feed-dots i.on { background: #e8a24a; border-color: #ffd28a; box-shadow: 0 0 8px rgba(232, 162, 74, 0.7); }
+.feed-dots b { font-size: 12px; color: var(--warn); margin-left: 2px; }
+.feed-bar.over .feed-say { color: var(--warn); }
+.feed-bar .btn.small { width: auto; margin: 0; }
+.feeding #stage canvas { cursor: crosshair; }
+.feeding .owner-tip, .feeding .selcard { display: none !important; }
+
+/* 早上報告：死亡的「下次怎麼避免」收起來，點了才展開 */
+.morning-more { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 8px; font-size: 0.86em; color: var(--gold); background: rgba(255, 255, 255, 0.08); cursor: pointer; white-space: nowrap; }
+.morning-avoid { display: block; margin-top: 3px; font-size: 0.9em; color: #cfe8d6; }
+.morning-avoid[hidden] { display: none; }
+
+/* 全螢幕面板（商店、設定、選單）：蓋滿畫面、缸藏在後面，內容置中、圖卡排得開 */
+.sheet-backdrop.full { background: rgba(5, 18, 25, 0.96); }
+.sheet.full,
+.sheet.full.open { left: 0; right: 0; top: 0; bottom: 0; width: 100%; max-width: none; max-height: none; border: 0; border-radius: 0; transform: none; opacity: 1; padding: 0 max(20px, calc((100vw - 1080px) / 2)) calc(env(safe-area-inset-bottom) + 18px); padding-left: max(calc(env(safe-area-inset-left) + 20px), calc((100vw - 1080px) / 2)); padding-right: max(calc(env(safe-area-inset-right) + 20px), calc((100vw - 1080px) / 2)); box-shadow: none; transition: opacity 0.2s ease; }
+.sheet.full:not(.open) { opacity: 0; pointer-events: none; }
+.sheet.full .sheet-head { margin: 0 calc(-1 * max(20px, (100vw - 1080px) / 2)); padding-left: max(20px, calc((100vw - 1080px) / 2)); padding-right: max(20px, calc((100vw - 1080px) / 2)); }
+.sheet.full .card-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+@media (orientation: landscape) and (max-height: 500px) {
+  .sheet.full .card-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}
+/* 全螢幕面板開著時，老闆的對話框、通知仍在最上層；缸上的提示卡先收起來 */
+body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { display: none !important; }

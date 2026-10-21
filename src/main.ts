@@ -1,4 +1,5 @@
 import { Application } from 'pixi.js';
+import { introReady } from './intro';
 import { AudioEngine } from './audio/engine';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
 import { eventSound, type SoundId } from './audio/sounds';
@@ -101,6 +102,7 @@ async function start(): Promise<void> {
   (window as unknown as { cycle: unknown }).cycle = debugHandle;
   const sheet = new Sheet(document.body);
   const toasts = new Toasts(document.body);
+  debugHandle.toasts = toasts;
   const celebration = new Celebration(document.body);
   /** 開缸演出到「你的第一個缸」卡片關掉之前，老闆先不開口（#171）。 */
   let guideHeld = false;
@@ -455,6 +457,7 @@ async function start(): Promise<void> {
     onScapeSelect: (target) => scapeBar.select(target),
     onScapeDrop: (target, x) => scapeBar.drop(target, x),
     // 手指餵食（F6）：撒下去的第一口被誰吃到，在那尾魚頭上浮一行小字，看得出誰貪吃
+    onFeedTap: () => onFeedTap(),
     onFirstBite: (id) => {
       const fish = game.state.fish.find((f) => f.id === id);
       if (!fish || game.state.fish.filter((f) => f.alive && !sim.isShrimpSpecies(f.species)).length < 2) return;
@@ -477,7 +480,7 @@ async function start(): Promise<void> {
       save();
       setupPrompt.remove();
       document.body.classList.remove('setting-up');
-      moment('first_tank', { art: 'gear/tank-empty.webp', title: '你的第一個缸', sub: '水注滿、設備也開機了', owner: '先別急著放魚。倒一瓶硝化菌液，讓水先養個幾天。' });
+      moment('first_tank', { art: 'gear/tank-empty.webp', title: '你的第一個缸', sub: '水注滿、設備也開機了', owner: '接下來種一株草、放兩三條魚，硝化菌就會跟著長起來。' });
       // 「你的第一個缸」卡片關掉後老闆才開口，不然對話框會從卡片後面露出來（#171）
       celebration.whenClear(() => {
         guideHeld = false;
@@ -569,9 +572,10 @@ async function start(): Promise<void> {
     scapeCoach.el.remove();
     scapeCoach = null;
   };
-  const startCoach = () => {
-    if (scapeCoach || loadMoments(store).has('first_scape_drag')) return;
-    const el = h('div.scape-coach', { 'aria-hidden': 'true' }, h('span.scape-coach-hand'), h('span.scape-coach-text', {}, '按住，左右拖拖看'));
+  const startCoach = (text?: string) => {
+    // 剛買來要擺的（text）每次都比劃；一般進造景模式只有第一次
+    if (scapeCoach || (!text && loadMoments(store).has('first_scape_drag'))) return;
+    const el = h('div.scape-coach', { 'aria-hidden': 'true' }, h('span.scape-coach-hand'), h('span.scape-coach-text', {}, text ?? '按住，左右拖拖看'));
     stage.append(el);
     const coach = { el, raf: 0 };
     const follow = () => {
@@ -607,6 +611,70 @@ async function start(): Promise<void> {
     requestAnimationFrame(() => measure());
   };
   ctx.openScape = enterScape;
+  // 剛買的石頭、水草（P4）：不是馬上種好，而是拿在手上，拖到缸裡想擺的位置放開
+  ctx.placeNew = (target) => {
+    enterScape();
+    stopCoach();
+    scapeBar.focus(target);
+    startCoach(target.kind === 'plant' ? '拖到想種的位置，放開就種下' : '拖到想擺的位置');
+  };
+  // 手指餵食（P5）：按「餵食」進餵食模式，點水面哪裡飼料就從哪裡撒下去，魚過去搶；種類、等級收進「進階」
+  let feedingMode = false;
+  let fedThisRound = 0;
+  /** 缸裡沒吃完的飼料已經超過一餐半（核心 tapFeed 的 overfed）。 */
+  let overfed = false;
+  const feedDots = h('span.feed-dots', { 'aria-hidden': 'true' });
+  const feedSay = h('span.feed-say', {}, '點水面撒飼料');
+  const leaveFeeding = () => {
+    if (!feedingMode) return;
+    feedingMode = false;
+    view.setFeedMode(false);
+    document.body.classList.remove('feeding');
+    feedBar.remove();
+  };
+  const renderFeedBar = () => {
+    // 一餐分三下撒：三個點填滿就夠了，再撒會剩在缸底
+    const taps = Math.round(fedThisRound * 3);
+    feedDots.replaceChildren(...[0, 1, 2].map((i) => h(`i${i < taps ? '.on' : ''}`)), ...(taps > 3 ? [h('b', {}, `+${taps - 3}`)] : []));
+    feedBar.classList.toggle('over', overfed);
+    feedSay.textContent = overfed ? '吃不完的會沉底爛掉' : taps === 0 ? '點水面撒飼料' : taps < 3 ? '再撒一點' : '這一餐夠了';
+  };
+  const feedBar = h(
+    'div.feed-bar.glass',
+    {},
+    h('img.feed-bar-art', { src: `${import.meta.env.BASE_URL}art/ui/icon-feed.webp`, alt: '', draggable: 'false' }),
+    feedSay,
+    feedDots,
+    h('button.btn.small', { onclick: () => (leaveFeeding(), panelSheet('餵食', (p) => p.feedPanel(ctx))) }, '進階'),
+    h('button.btn.small.primary', { onclick: () => leaveFeeding() }, '好了'),
+  );
+  const startFeeding = () => {
+    if (feedingMode) return leaveFeeding();
+    // 沒有魚：面板會說要先去買魚
+    if (!game.state.fish.some((f) => f.alive)) return panelSheet('餵食', (p) => p.feedPanel(ctx));
+    if (scaping) leaveScape();
+    sheet.close();
+    select(null);
+    feedingMode = true;
+    fedThisRound = 0;
+    overfed = false;
+    view.setFeedMode(true);
+    document.body.classList.add('feeding');
+    renderFeedBar();
+    stage.append(feedBar);
+  };
+  // 面板那包通常開機後就載好了，這時是同步的；剛開機就點的話等載完才撒
+  const onFeedTap = () =>
+    withPanels((p) => {
+      if (!feedingMode) return;
+      const got = p.feedTap(ctx);
+      if (!got) return leaveFeeding();
+      fedThisRound += sim.TAP_FEED_MEALS;
+      overfed = got.overfed;
+      renderFeedBar();
+    });
+  sheet.onOpen = () => leaveFeeding();
+  debugHandle.feeding = { start: startFeeding, leave: leaveFeeding };
   debugHandle.scape = { enter: enterScape, leave: leaveScape, bar: scapeBar };
   // 畫質：低畫質關掉景深模糊、柔光，降低解析度與粒子數量
   const setQuality = (q: Quality) => {
@@ -948,7 +1016,43 @@ async function start(): Promise<void> {
     );
   const menuBtn = h('button.hud-btn', { onclick: () => sheet.open('選單', menu), 'aria-label': '選單' }, icon(ICONS.menu));
   hud.classList.add('glass');
-  hud.append(clock, speed.el, sleepBtn, coinsBtn, tankBtn, h('span.hud-sep'), caps, todoBtn, menuBtn);
+  // 通知匣（YenWel：通知太亂）：沒跳出來的通知都在這裡，鈴鐺上的數字是沒看過的則數
+  const bellBadge = h('span.badge');
+  const ago = (at: number) => {
+    const m = Math.floor((Date.now() - at) / 60_000);
+    return m < 1 ? '剛剛' : m < 60 ? `${m} 分鐘前` : `${Math.floor(m / 60)} 小時前`;
+  };
+  const inboxSheet = () =>
+    h(
+      'div.stack',
+      {},
+      ...(toasts.inbox.length === 0
+        ? [h('p.hint', {}, '目前沒有通知')]
+        : toasts.inbox.map((n) =>
+            h(
+              `div.inbox-row.${n.tone}`,
+              {},
+              h('i.toast-icon', { 'aria-hidden': 'true' }),
+              h('span', {}, n.text, n.count > 1 ? h('b.toast-count', {}, ` ×${n.count}`) : null),
+              n.action ? h('button.btn.small', { onclick: () => (sheet.close(), n.action!.run()) }, n.action.label) : h('small', {}, ago(n.at)),
+            ),
+          )),
+    );
+  const openInbox = () => {
+    toasts.markRead();
+    sheet.open('通知', inboxSheet);
+  };
+  const bellBtn = h('button.hud-btn.bell-btn', { 'aria-label': '通知', onclick: openInbox }, icon(ICONS.bell), bellBadge);
+  toasts.onInbox = () => {
+    bellBadge.textContent = toasts.unread > 0 ? String(Math.min(99, toasts.unread)) : '';
+    bellBadge.classList.toggle('show', toasts.unread > 0);
+    bellBtn.classList.remove('ring');
+    if (toasts.unread > 0) {
+      void bellBtn.offsetWidth; // 重新觸發搖鈴動畫
+      bellBtn.classList.add('ring');
+    }
+  };
+  hud.append(clock, speed.el, sleepBtn, coinsBtn, tankBtn, h('span.hud-sep'), caps, bellBtn, todoBtn, menuBtn);
 
   // ---- 下方櫃台：待辦卡｜圓形工具列｜選取卡 ----
   const tools = h('div.tools.glass');
@@ -964,6 +1068,8 @@ async function start(): Promise<void> {
     net: 'icon-net',
     orders: 'icon-orders',
   };
+  /** 任務要點的按鈕會發光（P1）。 */
+  const toolButtons: Partial<Record<keyof typeof ICONS, HTMLElement>> = {};
   const tool = (key: keyof typeof ICONS, label: string, color: string, onclick: () => void) => {
     const disc = h('span.disc', {}, icon(ICONS[key]));
     const art = TOOL_ART[key];
@@ -977,12 +1083,13 @@ async function start(): Promise<void> {
       disc.append(img);
     }
     const b = h('button.tool', { onclick }, disc, h('span.lbl', {}, label));
+    toolButtons[key] = b;
     b.addEventListener('click', () => audio.play(key === 'net' ? 'net' : key === 'test' ? 'test' : 'open'));
     b.style.setProperty('--c', color);
     tools.append(b);
     return b;
   };
-  tool('feed', '餵食', '#e8a24a', () => panelSheet('餵食', (p) => p.feedPanel(ctx)));
+  tool('feed', '餵食', '#e8a24a', () => startFeeding());
   tool('water', '換水', '#4fb8e0', () => panelSheet('換水', (p) => p.waterChangePanel(ctx)));
   const testBtn = tool('test', '測試', '#a98be8', () => {
     const cost = sim.price('use:test');
@@ -1062,6 +1169,46 @@ async function start(): Promise<void> {
   setOwnerBlocker(() => guide.talking || celebration.isOpen);
   guide.openShop = (tab) => openShop(tab);
   guide.openScape = () => enterScape();
+  guide.note = (text) => toasts.log(text);
+  // 下一步（U1）：點任務卡帶到要做的地方
+  guide.goNext = (target) => {
+    const sick = () => game.state.fish.find((f) => f.alive && (f.ich.stage === 'visible' || sim.hasVisible(f)));
+    // 選育：先看缸裡最漂亮的公魚（觀察卡上有配對、留種的按鈕）
+    const showy = () => game.state.fish.filter((f) => f.alive && f.sex === 'male' && f.generation !== undefined).sort((a, b) => (b.generation ?? 0) - (a.generation ?? 0))[0];
+    switch (target) {
+      case 'feed':
+        return startFeeding();
+      case 'test':
+        return testBtn.click();
+      case 'orders':
+        return ordersBtn.click();
+      case 'sell':
+        return openShop('sell');
+      case 'shop_fish':
+        return openShop('fish');
+      case 'shop_tank':
+        return panelSheet('我的水缸', (p) => p.tanksPanel(ctx));
+      case 'nursery':
+        if (game.state.nurseryBox) withPanels((p) => p.putDueInNursery(ctx));
+        else panelSheet('育幼盒', (p) => p.nurseryPanel(ctx));
+        return;
+      case 'treat':
+        return select(sick()?.id ?? null);
+      case 'select':
+        return select(showy()?.id ?? null);
+    }
+  };
+  guide.cheer = (from, coins) => ctx.reward?.(from, coins, 'small');
+  let litTarget: HTMLElement | null = null;
+  /** 任務要點的那顆按鈕發光；面板開著、在造景時先不亮。 */
+  const lightTarget = () => {
+    const t = sheet.isOpen ? null : guide.target;
+    const el = t === 'menu' ? menuBtn : t ? (toolButtons[t] ?? null) : null;
+    if (el === litTarget) return;
+    litTarget?.classList.remove('quest-target');
+    el?.classList.add('quest-target');
+    litTarget = el;
+  };
   // 開缸（F1-a）：新遊戲先挑設備，開完缸時間才開始走；關掉面板時主畫面留一個「開缸」按鈕
   // 開局 0～5 秒：阿德老闆的歡迎疊在挑設備的畫面上，點一下或 5 秒後自己收起來（mvp.md §4.4.4）；設備說明只寫在卡片上
   let welcomed = false;
@@ -1113,7 +1260,7 @@ async function start(): Promise<void> {
     const snails = () => panelSheet('螺', (p) => p.snailPanel(ctx));
     const go: Record<sim.DailyTaskId, () => void> = {
       test: () => testBtn.click(),
-      feed: () => panelSheet('餵食', (p) => p.feedPanel(ctx)),
+      feed: startFeeding,
       water: () => panelSheet('換水', (p) => p.waterChangePanel(ctx)),
       topup: maintenance,
       nursery: () => panelSheet('育幼盒', (p) => p.nurseryPanel(ctx)),
@@ -1319,11 +1466,13 @@ async function start(): Promise<void> {
             label: '去餵食',
             run: () => {
               game.switchTo(c.tank);
-              panelSheet('餵食', (p) => p.feedPanel(ctx));
+              startFeeding();
             },
           }
         : undefined;
-    toasts.show(tankPrefix(c.tank) + crisisText(c), 'warn', fix);
+    // 危機一定要跳出來（不只進通知匣）：用壞消息的樣子。
+    // 畫面上同時只有一格：等同一幀的事件通知（「某某魚死了」）都送完再跳，才不會被它們換掉（那些照樣進通知匣）
+    setTimeout(() => toasts.show(tankPrefix(c.tank) + crisisText(c), 'bad', fix), 0);
   });
   // 選育成功：自家繁殖的公魚第一次長出沒見過的品系
   const strains = new StrainTracker(store);
@@ -1366,7 +1515,7 @@ async function start(): Promise<void> {
         panelSheet('換水', (p) => p.waterChangePanel(ctx));
         break;
       case 'feed':
-        panelSheet('餵食', (p) => p.feedPanel(ctx));
+        startFeeding();
         break;
       case 'equipment':
         panelSheet('設備與維護', (p) => p.maintenancePanel(ctx));
@@ -1401,7 +1550,7 @@ async function start(): Promise<void> {
     if (sleepingNow) return;
     // 開缸演出還在演：演完會跳「你的第一個缸」，夜幕會把它蓋掉
     if (view.settingUp) {
-      toasts.show('等開缸演完再過夜，也可以先按「跳過」');
+      toasts.show('等開缸做完再過夜');
       return;
     }
     if (cloud.session) {
@@ -1491,7 +1640,7 @@ async function start(): Promise<void> {
     });
     flushEventToasts();
   }
-  if (window.matchMedia('(orientation: portrait)').matches) toasts.show('把手機轉成橫向，水缸會更大');
+  if (window.matchMedia('(orientation: portrait)').matches) toasts.showNow('把手機轉成橫向，水缸會更大');
   setInterval(save, 10_000);
   // 雲端：開遊戲時看看別的裝置有沒有玩過；之後每 10 分鐘和切到背景時自動上傳
   void checkCloudOnStart().then(checkGifts).then(syncMarket).then(syncMall);
@@ -1611,6 +1760,7 @@ async function start(): Promise<void> {
       renderTankChip();
       // 開缸演出和「你的第一個缸」卡片演完才讓老闆開口（「開缸」任務在演出一開始就完成，不能蓋在演出上，#171）
       if (!guideHeld) guide.update(game.state, game.tanks);
+      lightTarget();
       kickOwnerQueue();
       setupBtn.hidden = !sim.needsSetup(game.tanks[0]) || sheet.isOpen;
       checkDaily();
@@ -1635,6 +1785,12 @@ async function start(): Promise<void> {
   // 主畫面出來、閒下來之後把面板那包先載好（第一分鐘就會開商店、餵食）
   if ('requestIdleCallback' in window) window.requestIdleCallback(prefetchDeferred, { timeout: 2000 });
   else setTimeout(prefetchDeferred, 300); // iOS Safari 沒有 requestIdleCallback
+  // 主畫面畫出第一格後，開場動畫演完就可以收起來
+  requestAnimationFrame(() => introReady());
 }
 
-start();
+// 開不起來也要把開場動畫收掉，不然畫面會一直停在標題
+start().catch((err) => {
+  introReady();
+  throw err;
+});

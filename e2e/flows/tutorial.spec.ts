@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { aliveCount, closeSheet, dismissGuide, finishDrip, fastForward, gameState, questStep, seedRng, setSpeed, sheetButton, startGame, tool, watchConsoleErrors, type CycleWindow } from './helpers';
+import { aliveCount, closeSheet, dismissGuide, finishDrip, fastForward, gameState, NO_WAIT, questStep, seedRng, setSpeed, sheetButton, startGame, tool, watchConsoleErrors, type CycleWindow } from './helpers';
 
 // 要快轉很多天：用 1 倍密度省 CPU（無頭瀏覽器用軟體繪圖）
 test.use({ deviceScaleFactor: 1, actionTimeout: 20_000 });
@@ -11,6 +11,21 @@ test.use({ deviceScaleFactor: 1, actionTimeout: 20_000 });
 async function questNow(page: Parameters<typeof questStep>[0]): Promise<number> {
   await dismissGuide(page);
   return questStep(page);
+}
+
+/** 進餵食模式（底下出現餵食列）。 */
+async function feedMode(page: Parameters<typeof questStep>[0]): Promise<void> {
+  await dismissGuide(page);
+  await closeSheet(page);
+  await page.locator('button.tool', { hasText: '餵食' }).click(NO_WAIT);
+  await expect(page.locator('.feed-bar')).toBeVisible();
+}
+
+/** 照基準玩法餵一小撮：餵食模式的「進階」面板裡選份量。 */
+async function feedPinch(page: Parameters<typeof questStep>[0]): Promise<void> {
+  await feedMode(page);
+  await page.locator('.feed-bar button', { hasText: '進階' }).click(NO_WAIT);
+  await sheetButton(page, '一小撮');
 }
 
 const DAY_SUMMARY = `JSON.stringify({
@@ -53,16 +68,37 @@ test('新手任務 1～9：照老闆的引導從新存檔玩得完，教學第 4
   await test.info().attach('開新遊戲到第一條魚進缸（毫秒，自動操作）', { body: String(Date.now() - started) });
   await expect.poll(() => questNow(page)).toBe(2);
 
-  // 3 餵食
-  await tool(page, '餵食');
-  await sheetButton(page, '一小撮');
+  // 3 餵食（P5）：按「餵食」進餵食模式，點水面撒飼料
+  await feedMode(page);
+  const box = (await page.locator('#stage canvas').boundingBox())!;
+  await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.45);
+  await expect.poll(() => gameState<number>(page, 's.water.foodMg')).toBeGreaterThan(0);
+  await page.locator('.feed-bar button', { hasText: '好了' }).click(NO_WAIT);
   await expect.poll(() => questNow(page)).toBe(3);
 
   // 4 種水草：商店 → 水草 → 種一株
   await tool(page, '商店');
   await page.locator('.sheet.open button.icon-tab', { hasText: '水草' }).click();
   await sheetButton(page, '種一株');
-  await closeSheet(page);
+  // P4：買了先拿在手上，商店收起來、進造景模式，拖到想種的位置
+  await expect(page.locator('.scape-bar')).toBeVisible();
+  const coach = page.locator('.scape-coach');
+  await expect(coach).toBeVisible();
+  const plantX = () => gameState<number>(page, '(window.cycle.sim.plantPlacement(s.plants[0])).x');
+  const x0 = await plantX();
+  // 手指比劃的位置就是剛買的那株（畫面座標要加上缸的位置）
+  const at = await page.evaluate(() => {
+    const q = (window as unknown as { cycle: { view: { scapeHintPos(): { x: number; y: number } } } }).cycle.view.scapeHintPos();
+    const r = document.getElementById('stage')!.getBoundingClientRect();
+    return { x: q.x + r.x, y: q.y + r.y };
+  });
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.mouse.move(at.x - 60, at.y, { steps: 6 });
+  await page.mouse.move(at.x - 120, at.y, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(plantX).not.toBeCloseTo(x0, 2);
+  await page.locator('.scape-bar button', { hasText: '完成' }).click(NO_WAIT);
   await expect.poll(() => questNow(page)).toBe(4);
 
   // 5 測水
@@ -100,8 +136,7 @@ test('新手任務 1～9：照老闆的引導從新存檔玩得完，教學第 4
   // 之後照基準玩法（mvp.md §4.6）：每天一小撮、一次，每天測水，測到氨或亞硝才換水
   const log: string[] = [];
   const careOneDay = async (day: number) => {
-    await tool(page, '餵食');
-    await sheetButton(page, '一小撮');
+    await feedPinch(page);
     await fastForward(page, 24);
     await tool(page, '測試');
     await closeSheet(page);

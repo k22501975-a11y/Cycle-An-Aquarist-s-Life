@@ -86,8 +86,8 @@ export async function skipSetupShow(page: Page): Promise<void> {
     null,
     { timeout: 30_000 },
   );
-  // 卡片關掉後老闆才開口（#171）：演過開缸才等對話框出來，後面關教學的步驟才找得到它；讀檔進來的不會有
-  if (await page.evaluate(() => !!(window as unknown as SetupWindow).sawSetup)) await page.locator('.owner').first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+  // 卡片關掉後任務卡才出來（#171，P1 之後老闆不再跳對話框，只換任務卡上的提示）；讀檔進來的不會等
+  if (await page.evaluate(() => !!(window as unknown as SetupWindow).sawSetup)) await page.locator('.quest-pill.show').first().waitFor({ timeout: 10_000 }).catch(() => undefined);
 }
 
 /** 讀目前存檔（localStorage 的 cycle.save.v1），方便核對畫面和模擬狀態。 */
