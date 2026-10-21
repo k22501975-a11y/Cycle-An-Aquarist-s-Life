@@ -17,12 +17,14 @@ def scene(n=N):
     return Image.composite(bg,Image.new('RGBA',(n,n),(6,40,56,255)),vig.point(lambda v:int(110+v*145/255)))
 
 def fish(c, n, scale):
-    """主角：白子全紅半月公魚（遊戲裡同一張圖），斜斜往右上游，縮成小圖示也最搶眼。"""
-    w=n*0.72*scale
+    """主角：白子全紅半月公魚（遊戲裡同一張圖），斜斜往右上游，縮成小圖示也最搶眼。
+    放大到約佔圖示寬度 75%（圖示評測 2026-10-21：原本約 60%，在桌面上不夠搶眼）。"""
+    w=n*0.84*scale
     src=Image.open(A+'fish/fins/guppy-male-albino-red-halfmoon.png').convert('RGBA')
     src=src.crop(src.getchannel('A').point(lambda v:255 if v>20 else 0).getbbox())
     src=defringe(src)
     src=ImageEnhance.Color(src).enhance(1.15)
+    src=rim_light(src)
     f=src.resize((int(w),int(src.height*w/src.width)),Image.LANCZOS).rotate(12,resample=Image.BICUBIC,expand=True)
     shadow=Image.new('RGBA',f.size,(0,20,30,0)); shadow.putalpha(f.getchannel('A').filter(ImageFilter.GaussianBlur(n*0.022)).point(lambda v:int(v*0.32)))
     x=int(n*0.5-f.width/2); y=int(n*0.48-f.height/2)
@@ -56,6 +58,18 @@ def defringe(im):
     res.putalpha(Image.fromarray(al.astype('uint8')).filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.8)))
     return res
 
+def rim_light(im):
+    """從上面打下來的亮邊：魚背和背鰭的上緣加一道暖白高光，深色、淺色桌布上都更跳（圖示評測 2026-10-21）。"""
+    a=im.getchannel('A')
+    k=max(3,im.width//110)
+    shifted=Image.new('L',im.size,0); shifted.paste(a,(0,k))
+    edge=ImageChops.subtract(a,shifted).filter(ImageFilter.GaussianBlur(k*0.6))
+    edge=ImageChops.multiply(edge,a).point(lambda v:int(min(255,v*1.6)*0.7))
+    glow=Image.new('RGBA',im.size,(255,244,220,0)); glow.putalpha(edge)
+    out=im.copy(); out.alpha_composite(glow)
+    out.putalpha(a)
+    return out
+
 def rounded_mask(n,rad):
     m=Image.new('L',(n*4,n*4),0); ImageDraw.Draw(m).rounded_rectangle((0,0,n*4-1,n*4-1),radius=rad*4,fill=255)
     return m.resize((n,n),Image.LANCZOS)
@@ -84,4 +98,5 @@ sq=Image.composite(Image.new('RGBA',(N,N),(255,255,255,255)),sq,gloss)
 sq.save(OUT+'/icon-square-1024.png')
 # --- android adaptive layers (432 = 108dp*4): background scene, foreground fish only within 66dp safe zone
 bgl=scene(); bgl.save(OUT+'/adaptive-bg-1024.png')
-fg=Image.new('RGBA',(N,N),(0,0,0,0)); fish(fg,N,0.8); fg.save(OUT+'/adaptive-fg-1024.png')
+# 前景要整條在 Android 66dp 安全區內（半徑約 0.305）：魚放大後這裡縮回 0.71
+fg=Image.new('RGBA',(N,N),(0,0,0,0)); fish(fg,N,0.71); fg.save(OUT+'/adaptive-fg-1024.png')
