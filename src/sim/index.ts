@@ -19,6 +19,7 @@ export * from './gear-notes';
 export * from './tank-purpose';
 export * from './economy';
 export * from './earn-cap';
+export * from './genome-check';
 export * from './orders';
 export * from './order-outlook';
 export * from './goals';

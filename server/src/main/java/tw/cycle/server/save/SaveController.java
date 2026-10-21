@@ -145,7 +145,7 @@ public class SaveController {
     private List<SimClient.Problem> check(long accountId, CloudSave previous, JsonNode next, OffsetDateTime now, boolean force) throws Exception {
         if (!sim.enabled() || previous.getData() == null) return List.of();
         try {
-            return sim.verify(json.readTree(previous.getData()), next, Duration.between(previous.getUpdatedAt(), now).toMillis(), market.shippedFish(accountId));
+            return sim.verify(json.readTree(previous.getData()), next, Duration.between(previous.getUpdatedAt(), now).toMillis(), market.shippedFish(accountId), market.receivedFish(accountId));
         } catch (SimClient.Unavailable | HttpSimClient.BadSave e) {
             log.warn("模擬服務檢查不了這次上傳（{}）：{}", force ? "強制覆蓋，鎖市場" : "不收", e.getMessage());
             if (!force) throw e;

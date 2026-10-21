@@ -1,5 +1,5 @@
 import { catchUp, parseSave, serializeSave, type SaveFile } from '../game/save';
-import { arrivalStatus, carriedDiseases, DEFAULT_TIME_SCALE, earnCap, economy, marketItem, type ArrivalStatus, type Fish, type TankState } from '../sim';
+import { arrivalStatus, carriedDiseases, DEFAULT_TIME_SCALE, earnCap, economy, forgedGenomes, marketItem, type ArrivalStatus, type Fish, type TankState } from '../sim';
 
 /**
  * 伺服器權威模擬（L2）：Spring Boot 把存檔丟過來，這裡用跟遊戲同一份模擬程式計算。
@@ -11,7 +11,7 @@ import { arrivalStatus, carriedDiseases, DEFAULT_TIME_SCALE, earnCap, economy, m
  */
 
 export interface Problem {
-  code: 'time_ahead' | 'identity_changed' | 'gift_removed' | 'shipped_fish' | 'coins_jump';
+  code: 'time_ahead' | 'identity_changed' | 'gift_removed' | 'shipped_fish' | 'coins_jump' | 'genome_forged';
   message: string;
 }
 
@@ -64,9 +64,10 @@ export function advance(raw: unknown, now: number): AdvanceResult {
 /**
  * 檢查上傳的存檔：previous 是伺服器上一份，elapsedMs 是伺服器收到上一份到現在的現實時間，
  * shipped 是這個玩家已經在市場出貨的魚（市場用的魚資料；拿出貨前的舊存檔上傳，魚會又回來，#75）。
+ * received 是這個玩家在市場買到、已經到貨的魚的基因（和牠們肚子裡的精子）：新出現的魚是這些就不用照店魚的範圍查。
  * 回傳發現的問題（空的代表沒問題）。
  */
-export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number, shipped: readonly ShippedFish[] = []): Problem[] {
+export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number, shipped: readonly ShippedFish[] = [], received: readonly unknown[] = []): Problem[] {
   const prev = load(previousRaw);
   const next = load(nextRaw);
   const problems: Problem[] = [];
@@ -98,6 +99,10 @@ export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number
     const cap = earnCap(tanksOf(prev), tanksOf(next)).total;
     if (gained > cap) problems.push({ code: 'coins_jump', message: `錢比伺服器上一份多了 ${Math.round(gained)}，這段時間最多只賺得到約 ${cap}` });
   }
+
+  // 新出現的魚、母魚換了的精子：基因要生得出來、買得到（#76，genome-check.ts）
+  const known = [...shipped.map((f) => f.genome), ...received];
+  for (const f of forgedGenomes(tanksOf(prev), tanksOf(next), known)) problems.push({ code: 'genome_forged', message: f.reason });
 
   // 編號和身分都一樣才是同一條：新遊戲或換裝置從頭玩，編號會重來，同編號的是另一條魚
   for (const f of allFish(next)) {

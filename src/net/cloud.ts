@@ -34,7 +34,7 @@ export interface ServerAdvance extends CloudSave {
 export const LEDGER_CODES = ['ledger_behind', 'ledger_ahead'];
 
 /** 上傳時伺服器的模擬檢查沒過（L2）：遊戲時間跑太快、魚的身分被改、錢多出單機賺不到的數目。 */
-export const SAVE_CHECK_CODES = ['time_ahead', 'identity_changed', 'gift_removed', 'shipped_fish', 'coins_jump', ...LEDGER_CODES];
+export const SAVE_CHECK_CODES = ['time_ahead', 'identity_changed', 'gift_removed', 'shipped_fish', 'coins_jump', 'genome_forged', ...LEDGER_CODES];
 
 export interface FriendInfo {
   username: string;

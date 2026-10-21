@@ -460,6 +460,17 @@ public class MarketService {
         return out;
     }
 
+    /** 這個帳號在市場買到、已經到貨的魚的基因（和母魚肚子裡的精子）：存檔裡新出現這些基因的魚是市場來的，不是改出來的（#76）。 */
+    public List<JsonNode> receivedFish(long me) throws Exception {
+        List<JsonNode> out = new ArrayList<>();
+        for (String data : db.queryForList("select item from market_order where buyer_id = ? and kind = 'fish' and status = 'shipped' and doa = false and arrive_at <= ? order by id", String.class, me, now())) {
+            JsonNode item = json.readTree(data);
+            if (item.path("genome").isObject()) out.add(item.get("genome"));
+            if (item.path("sire").path("genome").isObject()) out.add(item.get("sire").get("genome"));
+        }
+        return out;
+    }
+
     private int openListings(long me) {
         return db.queryForObject("select count(*) from market_listing where seller_id = ? and status = 'open'", Integer.class, me);
     }
