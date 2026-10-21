@@ -46,7 +46,7 @@ import { Celebration, type CelebrateSpec } from './ui/celebrate';
 import { firstTime, loadMoments, type DeathAdviceCause, type MomentId } from './ui/moments';
 import { causeAdvice, HUNGER_LABEL, illnessOf, needsAdvice } from './ui/owner-advice';
 import { kickOwnerQueue, ownerGuide, ownerSay, setOwnerBlocker } from './ui/owner-ask';
-import { fryArt, guppyArt } from './ui/shop-cards';
+import { fryArt, guppyArt, plantArt } from './ui/shop-cards';
 import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
 import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt, ordersPanel } from './ui/orders-panel';
 import { flyCoins, rewardBurst } from './ui/coin-fly';
@@ -1539,7 +1539,16 @@ async function start(): Promise<void> {
     const fish = item.subjectId !== undefined ? t.fish.find((f) => f.id === item.subjectId) : undefined;
     if (item.kind === 'birth') return `${import.meta.env.BASE_URL}art/${fryArt(fish?.species ?? 'guppy')}`;
     if (item.kind === 'snails') return `${import.meta.env.BASE_URL}art/snail/snail-bladder.webp`;
-    if (fish && fish.alive && (item.kind === 'grown' || item.kind === 'disease')) return view.portrait(fish);
+    if (fish && fish.alive && (item.kind === 'grown' || item.kind === 'disease' || item.kind === 'fish_relaxed')) return view.portrait(fish);
+    // P6：自己做的事的效果配上那樣東西的圖（長最多的那種草、硝化菌、育幼盒）
+    const art = (file: string) => `${import.meta.env.BASE_URL}art/${file}`;
+    if (item.kind === 'plant_grew' && t.plants.length) {
+      const count = new Map<sim.PlantSpeciesId, number>();
+      for (const p of t.plants) count.set(p.species, (count.get(p.species) ?? 0) + 1);
+      return art(plantArt([...count.entries()].sort((a, b) => b[1] - a[1])[0][0]));
+    }
+    if (item.kind === 'cycle' || item.kind === 'cycled') return art('gear/bottle-bacteria.webp');
+    if (item.kind === 'nursery') return art('gear/nursery-box.webp');
     return null;
   };
   const goReport = (item: ReportItem) => {

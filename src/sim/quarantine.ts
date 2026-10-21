@@ -71,6 +71,7 @@ export function releaseQuarantine(state: TankState, ids?: number[]): number {
     // 換缸也是一次緊迫（對水溫、水質）
     f.stress = Math.max(f.stress, 0.3);
     f.nursery = undefined;
+    f.arrivedHours = state.hours;
     state.fish.push(f);
     delete q.since[f.id];
   }

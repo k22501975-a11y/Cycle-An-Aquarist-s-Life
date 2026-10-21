@@ -209,7 +209,10 @@ export function receiveFish(state: TankState, item: Record<string, unknown>, arr
   if (q) {
     q.fish.push(fish);
     q.since[fish.id] = state.hours;
-  } else state.fish.push(fish);
+  } else {
+    fish.arrivedHours = state.hours;
+    state.fish.push(fish);
+  }
   return fish;
 }
 

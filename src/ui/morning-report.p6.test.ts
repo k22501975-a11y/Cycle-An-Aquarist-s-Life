@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Game, newGameState } from '../game/game';
-import { addFish, addPlant, createTank, feed, FILTERS, HEATERS, LIGHTS, measuredProblem, pinchMg, TANKS, type TankState } from '../sim';
+import { addFish, addPlant, BIG_WATER_CHANGE, createTank, feed, FILTERS, HEATERS, LIGHTS, measuredProblem, NORMAL_WATER_CHANGE, pinchMg, suggestedWaterChange, TANKS, type TankState } from '../sim';
 import { morningReport, snapshot } from './morning-report';
 
 /** 養好水、種一株草、一公兩母孔雀魚的缸。 */
@@ -34,11 +34,35 @@ describe('早上報告寫玩家自己做的事的結果（polish-to-9 §6 P6）'
   it('魚的平均壓力降了一截才寫「放鬆了」；發色升一級才說顏色變亮', () => {
     const relaxed = reportAfter((s) => s.fish.forEach((f) => (f.stress = 0.2)));
     const item = relaxed.items.find((i) => i.kind === 'fish_relaxed');
-    expect(item).toMatchObject({ tone: 'good', action: 'fish', text: '魚慢慢適應新家，放鬆了' });
+    expect(item).toMatchObject({ tone: 'good', action: 'fish', text: '新來的魚慢慢適應新家，放鬆了' });
     expect(kinds(relaxed)).not.toContain('quiet');
     const bright = reportAfter((s) => s.fish.forEach((f) => ((f.stress = 0.2), (f.colorBoost = 0.3))));
-    expect(bright.items.find((i) => i.kind === 'fish_relaxed')?.text).toBe('魚放鬆了，顏色變亮');
+    expect(bright.items.find((i) => i.kind === 'fish_relaxed')?.text).toBe('新來的魚放鬆了，顏色變亮');
     expect(kinds(reportAfter((s) => s.fish.forEach((f) => (f.stress -= 0.03))))).not.toContain('fish_relaxed');
+  });
+
+  it('放進缸 2 天以後的老住戶：昨天真的緊張過才說放鬆了，而且隔 3 天才再說（#237）', () => {
+    const settled = () => {
+      const s = tank();
+      s.hours += 72;
+      return s;
+    };
+    // 每天的小起伏（0.2 → 0.1）不寫
+    let s = settled();
+    s.fish.forEach((f) => (f.stress = 0.2));
+    expect(kinds(reportAfter((x) => x.fish.forEach((f) => (f.stress = 0.1)), s))).not.toContain('fish_relaxed');
+    // 換缸、生病過（0.5 → 0.2）才寫，說的不是「適應新家」
+    s = settled();
+    s.fish.forEach((f) => (f.stress = 0.5));
+    const r = reportAfter((x) => x.fish.forEach((f) => (f.stress = 0.2)), s);
+    expect(r.items.find((i) => i.kind === 'fish_relaxed')?.text).toBe('昨天緊張的魚放鬆了，鰭又張開了');
+    // 隔天又緊張又放鬆：3 天內不重複
+    s.hours += 24;
+    s.fish.forEach((f) => (f.stress = 0.5));
+    expect(kinds(reportAfter((x) => x.fish.forEach((f) => (f.stress = 0.2)), s))).not.toContain('fish_relaxed');
+    s.hours += 48;
+    s.fish.forEach((f) => (f.stress = 0.5));
+    expect(kinds(reportAfter((x) => x.fish.forEach((f) => (f.stress = 0.2)), s))).toContain('fish_relaxed');
   });
 
   it('氨第一次讀到 0.25：警告、點了去換水，排在好消息前面', () => {
@@ -46,7 +70,7 @@ describe('早上報告寫玩家自己做的事的結果（polish-to-9 §6 P6）'
       s.water.tan = 0.3;
       s.plants[0].biomassG *= 1.05;
     });
-    expect(r.items.find((i) => i.kind === 'ammonia')).toMatchObject({ tone: 'warn', action: 'water_change', text: '氨 0.25，水開始髒了，換三成水' });
+    expect(r.items.find((i) => i.kind === 'ammonia')).toMatchObject({ tone: 'warn', action: 'water_change', text: '氨 0.25，水開始髒了，換一半的水' });
     expect(kinds(r).indexOf('ammonia')).toBeLessThan(kinds(r).indexOf('plant_grew'));
     expect(kinds(r)).not.toContain('quiet');
     // 睡前就已經讀得到：不重複
@@ -59,6 +83,25 @@ describe('早上報告寫玩家自己做的事的結果（polish-to-9 §6 P6）'
     const empty = tank();
     empty.fish = [];
     expect(kinds(reportAfter((x) => (x.water.tan = 0.3), empty))).not.toContain('ammonia');
+  });
+
+  it('建議換水量：換三成讀數掉得下來就三成，掉不下來（第 1 天讀 0.25）就換一半（#237）', () => {
+    const s = tank();
+    s.water.tan = 0;
+    s.water.no2 = 0;
+    expect(suggestedWaterChange(s)).toBe(NORMAL_WATER_CHANGE);
+    // 0.22 讀 0.25：三成後 0.154 還是 0.25，一半後 0.11 讀 0
+    s.water.tan = 0.22;
+    expect(suggestedWaterChange(s)).toBe(BIG_WATER_CHANGE);
+    // 0.45 讀 0.5：三成後 0.315 讀 0.25，掉一格
+    s.water.tan = 0.45;
+    expect(suggestedWaterChange(s)).toBe(NORMAL_WATER_CHANGE);
+    s.water.tan = 0;
+    s.water.no2 = 0.2;
+    expect(suggestedWaterChange(s)).toBe(BIG_WATER_CHANGE);
+    // 報告的文字跟著建議走
+    const r = reportAfter((x) => (x.water.tan = 0.45));
+    expect(r.items.find((i) => i.kind === 'ammonia')?.text).toBe('氨 0.5，水開始髒了，換三成水');
   });
 
   it('measuredProblem 照測試劑讀數：氨優先，其次亞硝酸', () => {

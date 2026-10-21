@@ -207,6 +207,7 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
   for (const kind of carried) infect(fish, kind);
   // 還在養水、氨不歸零時放魚：魚撐得住，但養水期多 1 天（polish-to-9.md §4）
   delayCycleForNewFish(state);
+  fish.arrivedHours = state.hours;
   state.fish.push(fish);
   return fish;
 }
