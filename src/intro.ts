@@ -4,6 +4,8 @@ import './intro.css';
  * 開場動畫（YenWel：「進遊戲希望能做個前置動畫」）：
  * 水族館的門打開 → 鏡頭走進去到一個缸 → 光從水面灑下來、幾尾孔雀魚游過 → 標題「Aquarist's Life」。
  * - 第一次開約 6.5 秒，之後只演 2 秒的短版（缸＋標題）。
+ * - 先停在安靜的開始畫面（YenWel：「開頭動畫應該要我按開始才開始」），按「開始」才演；
+ *   這一下也是瀏覽器要的第一次點擊，背景音樂從這裡開始出得了聲。
  * - 點一下就跳過（遊戲還沒載好就等它載好）。
  * - 遊戲在背後同時載入：main.ts 畫好主畫面後呼叫 introReady()，動畫演完、遊戲也好了才收起來。
  * main.ts 第一個載入它（打包在主程式裡，算進 check-assets 的體積預算，也跟著 sw.js 快取），
@@ -126,7 +128,12 @@ function build(short: boolean): HTMLElement {
       <small>Cycle</small>
       <b>Aquarist's Life</b>
     </div>
-    <div class="intro-skip">點一下跳過</div>`;
+    <div class="intro-skip">點一下跳過</div>
+    <div class="intro-gate">
+      <img class="intro-gate-bg" src="${ART}bg/bg-tank-back.webp" alt="" draggable="false">
+      <div class="intro-gate-title"><small>Cycle</small><b>Aquarist's Life</b></div>
+      <button class="intro-start" type="button">開始</button>
+    </div>`;
   return el;
 }
 
@@ -138,19 +145,30 @@ function start(): void {
   const short = seenBefore() && !new URLSearchParams(location.search).has('full');
   const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   root = build(short || reduce);
+  root.classList.add('gate');
   document.body.append(root);
+  const btn = root.querySelector<HTMLButtonElement>('.intro-start');
+  btn?.focus({ preventScroll: true });
+  btn?.addEventListener('click', () => play(short || reduce), { once: true });
+}
+
+/** 按了「開始」：收掉開始畫面，從頭演動畫。 */
+function play(short: boolean): void {
+  if (!root) return;
+  const el = root;
+  el.classList.remove('gate');
   markSeen();
   window.setTimeout(
     () => {
       timeUp = true;
       maybeFinish();
     },
-    short || reduce ? SHORT_MS : FULL_MS,
+    short ? SHORT_MS : FULL_MS,
   );
   // 點一下跳過：遊戲還在載就先換成「載入中」的樣子，載好馬上收
-  root.addEventListener('pointerdown', () => {
+  el.addEventListener('pointerdown', () => {
     timeUp = true;
-    root?.classList.add('skipped');
+    el.classList.add('skipped');
     maybeFinish();
   });
 }
