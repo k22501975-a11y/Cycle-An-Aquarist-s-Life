@@ -83,11 +83,11 @@ export const PAINTED: Record<string, PaintedSpec> = {
 function finArt(): Record<string, PaintedSpec> {
   const bodyY: Record<string, [number, number, number]> = {
     // 花紋：緞帶、燕尾、半月的身體中心 y（相對圖高）
-    bluegrass: [-0.05, -0.086, -0.039],
-    cobra: [-0.05, -0.036, -0.028],
-    'albino-red': [-0.2, 0.173, 0.113],
-    tuxedo: [-0.18, -0.163, -0.096],
-    redcobra: [-0.24, 0.199, 0.111],
+    bluegrass: [-0.05, -0.122, -0.046],
+    cobra: [-0.05, -0.073, -0.034],
+    'albino-red': [-0.2, 0.147, 0.146],
+    tuxedo: [-0.18, -0.159, -0.109],
+    redcobra: [-0.24, 0.167, 0.145],
   };
   const out: Record<string, PaintedSpec> = {};
   for (const [pat, ys] of Object.entries(bodyY)) {
