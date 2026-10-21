@@ -158,7 +158,7 @@ export class Guide {
   }
 
   /** 教學做完或跳過了：改看目標。 */
-  private get tutorialOver(): boolean {
+  get tutorialOver(): boolean {
     return currentQuest(this.progress) === null;
   }
 

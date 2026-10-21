@@ -1157,7 +1157,19 @@ async function start(): Promise<void> {
     return b;
   };
   tool('feed', '餵食', '#e8a24a', () => startFeeding());
-  tool('water', '換水', '#4fb8e0', () => withPanels((p) => p.quickWaterChange(ctx)));
+  // 換水：點一下照建議的量換（#261）；長按才開面板自己調比例（#257，企劃 2026-10-21）
+  let waterHeld = false;
+  let waterHold = 0;
+  const waterBtn = tool('water', '換水', '#4fb8e0', () => {
+    if (waterHeld) return void (waterHeld = false);
+    withPanels((p) => p.quickWaterChange(ctx));
+  });
+  waterBtn.addEventListener('pointerdown', () => {
+    waterHeld = false;
+    waterHold = window.setTimeout(() => ((waterHeld = true), panelSheet('換水', (p) => p.waterChangePanel(ctx))), 500);
+  });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) waterBtn.addEventListener(ev, () => window.clearTimeout(waterHold));
+  waterBtn.addEventListener('contextmenu', (e) => e.preventDefault());
   const testBtn = tool('test', '測試', '#a98be8', () => {
     const cost = sim.price('use:test');
     if (!sim.canAfford(game.state, cost)) {
@@ -1269,6 +1281,7 @@ async function start(): Promise<void> {
     input.focus();
   };
   const guide = new Guide(stage, store, (id) => audio.play(id, false), () => requestAnimationFrame(() => measure()));
+  toasts.quietCount = !guide.tutorialOver;
   // 老闆一次只說一件事（G9）：新手引導在說、慶祝卡（也有老闆的話）在演時，事件帶出來的老闆對話先排隊
   setOwnerBlocker(() => guide.talking || celebration.isOpen);
   guide.openShop = (tab) => openShop(tab);
@@ -1996,6 +2009,7 @@ async function start(): Promise<void> {
       renderTankChip();
       // 開缸演出和「你的第一個缸」卡片演完才讓老闆開口（「開缸」任務在演出一開始就完成，不能蓋在演出上，#171）
       if (!guideHeld) guide.update(game.state, game.tanks);
+      toasts.quietCount = !guide.tutorialOver;
       lightTarget();
       quickQuest();
       kickOwnerQueue();
