@@ -126,8 +126,11 @@ export async function tapTool(page: Page, name: string): Promise<void> {
 export async function trayCard(page: Page, text?: string): Promise<void> {
   const card = page.locator('.quest-tray .qt-card', text ? { hasText: text } : {}).first();
   await card.waitFor({ state: 'attached' });
+  // 點到之後會出現對水（魚）或造景列（草、石頭）：CI 慢的時候點擊回報逾時但其實點到了，看到這些就算成功，不要再點
+  const taken = async () => (await page.locator('.drip-shade, .scape-bar').count()) > 0;
   // 換任務的瞬間圖卡會重畫、重新收起來：沒點到就再展開一次
   for (let i = 0; i < 5; i++) {
+    if (await taken()) return;
     const tucked = page.locator('.quest-pill.tray-tucked');
     if (await tucked.count()) await tucked.click(NO_WAIT);
     try {
@@ -137,7 +140,7 @@ export async function trayCard(page: Page, text?: string): Promise<void> {
       /* 再試一次 */
     }
   }
-  await card.click(NO_WAIT);
+  if (!(await taken())) await card.click(NO_WAIT);
 }
 
 /** 在開著的面板裡點一個按鈕。 */
