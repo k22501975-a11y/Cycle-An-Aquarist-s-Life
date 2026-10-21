@@ -26,7 +26,7 @@ export type NextTarget =
   | 'shop_gear' // 商店的設備頁
   | 'shop_plants' // 商店的水草頁
   | 'select' // 挑選面板（選育）
-  | 'treat' // 治療
+  | 'treat' // 有魚生病：切到那缸、打開用藥面板
   | 'mother' // 打開懷孕最久那尾母魚的卡片（看肚子、懷孕進度）
   | 'fastest' // 打開最快轉色那尾小魚的卡片
   | 'fry_box' // 打開育幼盒（把主缸的小魚撈進去）
@@ -42,6 +42,8 @@ export interface NextStep {
 }
 
 const living = (tanks: TankState[]) => tanks.flatMap((t) => t.fish.filter((f) => f.alive));
+/** 有魚看得出生病（白點、棉絮、鰓吸蟲）。 */
+const anySick = (tanks: TankState[]) => living(tanks).some((f) => f.ich.stage === 'visible' || hasVisible(f));
 const bredFry = (tanks: TankState[]) => living(tanks).filter((f) => (f.generation ?? 0) >= 1 && !isShrimpSpecies(f.species) && growthStage(f) === 'fry');
 
 /** 沒寫到的目標用的保底句。 */
@@ -121,7 +123,7 @@ function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
       return need > 0 ? { text: `再存 ${need} 魚幣買第二個缸`, target: 'orders' } : { text: '錢夠了，去買第二個缸', target: 'shop_tank' };
     }
     case 'cure':
-      return living(tanks).some((f) => f.ich.stage === 'visible' || hasVisible(f)) ? { text: '有魚生病了，去治療', target: 'treat' } : { text: '每天測水，魚生病就治好牠', target: 'test' };
+      return anySick(tanks) ? { text: '有魚生病了，去下藥', target: 'treat' } : { text: '每天測水，魚生病就治好牠', target: 'test' };
     case 'shrimp':
       return living(tanks).some((f) => f.species === 'cherry_shrimp') ? { text: '顧好水質，等母蝦抱蛋', target: 'test' } : { text: '買幾隻米蝦，開個蝦缸', target: 'shop_fish' };
     case 'calm': {
@@ -149,5 +151,7 @@ function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
 export function nextStep(tanks: TankState[]): NextStep | null {
   const [goal] = nextGoals(tanks, 1);
   if (!goal || !tanks[0]) return null;
+  // 生病不等人：不管現在是哪個目標，先叫玩家治療（體驗第 15 輪 #291：白點 5 天，下一步還在說母魚倒數）
+  if (anySick(tanks)) return { goal: goal.id, text: '有魚生病了，去下藥', target: 'treat' };
   return { goal: goal.id, ...stepFor(goal, tanks) };
 }

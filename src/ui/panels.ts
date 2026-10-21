@@ -1552,6 +1552,31 @@ export function quarantinePanel(ctx: PanelContext): Node {
   );
 }
 
+/** 三種藥的按鈕（設備面板和「有魚生病了」的用藥面板共用）。 */
+function medicineRow({ game, sheet, toasts, undoable }: Pick<PanelContext, 'game' | 'sheet' | 'toasts' | 'undoable'>): Node {
+  return h(
+    'div.row.wrap',
+    {},
+    medButton('白點藥', price('med:ich'), () => {
+      purchase({ game, sheet, toasts, undoable }, price('med:ich'), (st) => doseIchMedication(st), '下了一份白點藥（對蝦有毒）', 'warn', true);
+    }),
+    medButton('抗生素', price('med:antibiotic'), () => {
+      purchase({ game, sheet, toasts, undoable }, price('med:antibiotic'), (st) => doseAntibiotic(st), '下了一份抗生素（也會殺掉一些硝化菌）', 'warn', true);
+    }),
+    medButton('驅蟲藥', price('med:dewormer'), () => {
+      purchase({ game, sheet, toasts, undoable }, price('med:dewormer'), (st) => doseDewormer(st), '下了一份驅蟲藥', 'info', true);
+    }),
+  );
+}
+
+/**
+ * 「下一步：有魚生病了」直接打開的用藥面板（體驗第 15 輪 #291：本來藏在 更多 → 設備 → 用藥）。
+ * advice 是老闆看那尾魚說的病名和該下什麼藥；藥的按鈕跟設備面板同一排。
+ */
+export function treatPanel(ctx: PanelContext, advice: string): Node {
+  return h('div.stack', {}, h('p.hint.treat-advice', {}, advice), medicineRow(ctx));
+}
+
 export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: PanelContext): Node {
   const s = game.state;
   // 每日小事「看看過濾器和加熱棒」
@@ -1706,19 +1731,7 @@ export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: P
       }),
     ),
     h('h3', {}, '用藥'),
-    h(
-      'div.row.wrap',
-      {},
-      medButton('白點藥', price('med:ich'), () => {
-        purchase({ game, sheet, toasts, undoable }, price('med:ich'), (st) => doseIchMedication(st), '下了一份白點藥（對蝦有毒）', 'warn', true);
-      }),
-      medButton('抗生素', price('med:antibiotic'), () => {
-        purchase({ game, sheet, toasts, undoable }, price('med:antibiotic'), (st) => doseAntibiotic(st), '下了一份抗生素（也會殺掉一些硝化菌）', 'warn', true);
-      }),
-      medButton('驅蟲藥', price('med:dewormer'), () => {
-        purchase({ game, sheet, toasts, undoable }, price('med:dewormer'), (st) => doseDewormer(st), '下了一份驅蟲藥', 'info', true);
-      }),
-    ),
+    medicineRow({ game, sheet, toasts, undoable }),
     s.quarantine
       ? h(
           'div.stack',

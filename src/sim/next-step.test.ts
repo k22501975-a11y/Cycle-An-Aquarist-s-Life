@@ -49,6 +49,20 @@ describe('主畫面的下一步（U1）', () => {
     expect(mom.bellySeen).toBeUndefined();
   });
 
+  it('有魚看得出生病：不管是哪個目標，下一步先叫你下藥（體驗第 15 輪 #291）', () => {
+    const s = newGameState(1);
+    const mom = addFish(s, 'guppy', { sex: 'female' });
+    mom.ageDays = 120;
+    mom.pregnancy = 0.6;
+    noteBellySeen(mom);
+    expect(nextStep([s])).toMatchObject({ goal: 'cycled', target: 'mother' });
+    const male = addFish(s, 'guppy', { sex: 'male' });
+    male.ich.stage = 'visible';
+    expect(nextStep([s])).toMatchObject({ goal: 'cycled', text: '有魚生病了，去下藥', target: 'treat' });
+    male.ich.stage = 'none';
+    expect(nextStep([s])).toMatchObject({ target: 'mother' });
+  });
+
   it('懷孕的母魚在別缸也找得到，帶去看她要先切缸', () => {
     const s = newGameState(1);
     const other = newGameState(2);
