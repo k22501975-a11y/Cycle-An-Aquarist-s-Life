@@ -15,7 +15,9 @@ test('聲音引擎延後載入：第一次點擊就會建立音訊環境', async
     };
   });
   await openGame(page);
-  await page.locator('#stage canvas').click({ position: { x: 20, y: 200 } });
+  // 直接點畫面中間（左邊的任務卡會擋住水缸邊緣）；任何一次點擊都會解鎖聲音
+  const box = (await page.locator('#stage canvas').boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await expect.poll(() => page.evaluate(() => (window as unknown as { audioContexts: number }).audioContexts)).toBe(1);
 });
 
