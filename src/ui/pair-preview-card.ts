@@ -25,7 +25,7 @@ export function kidArt(k: PreviewKid): string {
   // 母魚身上是素的，只有尾巴帶品系的顏色
   if (k.sex === 'female') return femaleGuppyArt(k.look);
   const has = (f: string) => k.fins.includes(f);
-  const shape = has('大C') ? 'bigc' : has('緞帶') ? 'ribbon' : has('燕尾') ? 'swallow' : has('雙劍') ? 'sword3' : has('上劍') ? 'sword1' : has('下劍') ? 'sword2' : k.tailShape === 'halfmoon' || has('半月') ? 'halfmoon' : undefined;
+  const shape = has('大C') ? 'bigc' : has('緞帶') ? 'ribbon' : has('燕尾') ? 'swallow' : has('雙劍') ? 'sword3' : has('上劍') ? 'sword1' : has('下劍') ? 'sword2' : k.tailShape === 'halfmoon' || has('大三角') || has('半月') ? 'halfmoon' : undefined;
   return guppyArt(k.look, shape);
 }
 

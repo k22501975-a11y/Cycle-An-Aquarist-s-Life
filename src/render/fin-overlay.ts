@@ -1,6 +1,6 @@
 /**
  * 鰭型（J18）：AI 畫不出來的鰭（大C 的背鰭臀鰭、劍尾、大耳的胸鰭）在花紋圖上用程式補畫。
- * 緞帶、燕尾、半月有整條魚的精繪圖，那張圖沒載入時也用這裡的形狀頂上。
+ * 緞帶、燕尾、大三角有整條魚的精繪圖，那張圖沒載入時也用這裡的形狀頂上。
  * 座標是魚的圖層像素：原點在魚中心、頭朝左（跟白點一樣），只算形狀不碰畫面物件。
  */
 
@@ -11,7 +11,7 @@ export interface FinTraits {
   bigC?: boolean;
   /** 0 沒有、1 上劍、2 下劍、3 雙劍。 */
   sword?: number;
-  /** 半月尾：尾鰭張成 180 度的半圓。 */
+  /** 大三角（id 是 halfmoon）：尾鰭張成接近 180 度的大三角扇。 */
   halfmoon?: boolean;
   /** 鰭長多基因分數 0–1（店裡平均 0.45）：大C 的弧度、劍和拖絲的長度跟著變。 */
   length?: number;
@@ -100,7 +100,7 @@ export function finShapes(t: FinTraits, body: Body, length: number): FinShape[] 
     out.push({ kind: 'line', front: false, points: [cx - rx * 0.1, cy + ry * 0.85, cx + rx * 0.3, cy + ry * drop * 0.85, cx + rx * 0.85, cy + ry * (drop + 0.3)] });
   }
   if (t.halfmoon && !t.swallow) {
-    // 半月：尾鰭上下張開成半圓，比原本的尾巴大一圈
+    // 大三角：尾鰭上下張開成大扇形，比原本的尾巴大一圈
     const r = Math.max(tailEnd - peduncle, ry * 2) * 1.05;
     const fan: number[] = [peduncle, cy - ry * 0.3];
     for (let i = 0; i <= 14; i++) {

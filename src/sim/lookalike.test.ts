@@ -6,8 +6,8 @@ const tank = (seed = 3) => createTank({ tank: TANKS.std40, filter: FILTERS.hangO
 
 describe('長得像誰（polish-to-9.md G2）', () => {
   it('特徵：顏色、鰭型、尾型；沒有顏色基因的是原生色', () => {
-    expect(guppyTraits(base).map((t) => t.name)).toEqual(['原生色', '三角尾']);
-    expect(guppyTraits({ ...base, tuxedo: true, red: true, swallow: true, tailShape: 'halfmoon' }).map((t) => t.name)).toEqual(['禮服', '紅', '燕尾', '半月尾']);
+    expect(guppyTraits(base).map((t) => t.name)).toEqual(['原生色', '扇尾']);
+    expect(guppyTraits({ ...base, tuxedo: true, red: true, swallow: true, tailShape: 'halfmoon' }).map((t) => t.name)).toEqual(['禮服', '紅', '燕尾', '大三角']);
   });
 
   it('每個特徵標出跟誰的，爸媽都沒有的是隔代冒出來', () => {
@@ -18,7 +18,7 @@ describe('長得像誰（polish-to-9.md G2）', () => {
     expect(r.traits.map((t) => [t.name, t.from])).toEqual([
       ['禮服', 'mother'],
       ['燕尾', 'hidden'],
-      ['半月尾', 'father'],
+      ['大三角', 'father'],
     ]);
     expect(r.looksLike).toBe('both');
     expect(compareLooks({ ...base, tuxedo: true }, mother, father).looksLike).toBe('mother');

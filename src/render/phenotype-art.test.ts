@@ -55,7 +55,7 @@ describe('依基因上色的公孔雀魚', () => {
 });
 
 describe('鰭型的整條魚圖（J18）', () => {
-  it('緞帶、燕尾、半月、大C、劍尾都用花紋＋鰭型的圖；改色照花紋判斷', () => {
+  it('緞帶、燕尾、大三角、大C、劍尾都用花紋＋鰭型的圖；改色照花紋判斷', () => {
     expect(recipeKey(phenotypeRecipe(P({ grass: true, ribbon: true })))).toBe('guppy-male-bluegrass-ribbon');
     expect(recipeKey(phenotypeRecipe(P({ grass: true, ribbon: true, bigC: true })))).toBe('guppy-male-bluegrass-bigc');
     expect(recipeKey(phenotypeRecipe(P({ grass: true, sword: 3 })))).toBe('guppy-male-bluegrass-sword3');

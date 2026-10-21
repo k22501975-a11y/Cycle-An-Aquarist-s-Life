@@ -1,5 +1,5 @@
 """母孔雀魚分品系：母魚身體一樣是灰金色，只有尾鰭（和一點背鰭）帶品系的顏色。
-藍：藍草尾（藍尾帶細黑點）；禮服：藍尾禮服（純藍尾、後半身偏暗）；紅：紅蛇王；金：黃金蛇王；白子：全紅白子（淡紅尾、紅眼）。
+藍：藍草尾（藍尾帶細黑點）；禮服：藍尾禮服（純藍尾、後半身偏暗）；紅：紅蛇王（後半身淡淡的紅迷宮紋、整片紅尾）；金：黃金蛇王（後半身淡淡的蛇皮紋、尾鰭黃綠網紋）；白子：全紅白子（淡紅尾、紅眼）。
 用法（repo 根目錄）：python3 scripts/art/guppy-females.py <輸出資料夾>"""
 import sys, colorsys, numpy as np
 from PIL import Image
@@ -17,6 +17,16 @@ def hsl_tint(rgb, hue, sat, light):
     a = s * np.minimum(l, 1 - l)
     return l - a * np.clip(np.minimum(k - 3, 9 - k), -1, 1)
   return np.stack([f(0), f(8), f(4)], -1) * 255
+
+def blur(f, s):
+  H, W = f.shape
+  ky = np.fft.fftfreq(H)[:, None]; kx = np.fft.fftfreq(W)[None, :]
+  return np.real(np.fft.ifft2(np.fft.fft2(f) * np.exp(-2 * np.pi ** 2 * s * s * (kx * kx + ky * ky))))
+
+def maze(H, W, seed, s, width):
+  """雜訊的零等高線：彎來彎去、互相連在一起的蛇皮紋（和公魚 guppy-cobra.py 同一種畫法）。"""
+  n = blur(np.random.default_rng(seed).standard_normal((H, W)), s)
+  return np.exp(-(n / n.std() / width) ** 2)
 
 def peduncle(al, W):
   best = None
@@ -60,6 +70,24 @@ def make(name, tint):
     body = np.clip((xx - (px - 6)) / 10, 0, 1) * np.clip((px + 0.42 * (W - px) - xx) / 22, 0, 1) * band
     navy = np.array([20, 26, 48], np.float32)
     out[..., :3] = out[..., :3] * (1 - 0.72 * body)[..., None] + navy * (0.72 * body)[..., None]
+  if tint in ('red', 'gold'):
+    # 蛇王母魚：尾柄往前約一半身長有淡淡的蛇皮紋（越往前越淡）
+    col = np.where(al[:, px] > 128)[0]
+    cy, ph = (col.min() + col.max()) / 2, (col.max() - col.min()) / 2
+    half = ph + (xx - px) * 0.2
+    band = np.clip((half - np.abs(yy - cy)) / 4, 0, 1)
+    fade = np.clip((xx - (px - 4)) / 10, 0, 1) * np.clip((px + 0.5 * (W - px) - xx) / (0.25 * (W - px)), 0, 1)
+    k = np.clip(maze(H, W, 3 if tint == 'red' else 4, 3.2, 0.45) * 1.2, 0, 1) * band * fade * (al / 255)
+    ink = np.array([200, 40, 50] if tint == 'red' else [60, 44, 18], np.float32)
+    out[..., :3] = out[..., :3] * (1 - 0.78 * k)[..., None] + ink * (0.78 * k)[..., None]
+  if tint == 'gold':
+    # 尾鰭：黃綠網紋
+    net = np.clip(maze(H, W, 9, 1.8, 0.3) * 1.5, 0, 1)
+    tail = m * (al / 255)
+    dark = np.array([46, 50, 28], np.float32)
+    out[..., :3] = out[..., :3] * (1 - 0.55 * tail * (1 - net))[..., None] + dark * (0.7 * tail * (1 - net))[..., None]
+    yellow = np.array([226, 214, 84], np.float32)
+    out[..., :3] = out[..., :3] * (1 - 0.5 * tail * net)[..., None] + yellow * (0.5 * tail * net)[..., None]
   if tint == 'albino':
     # 白子：眼睛是寶石紅（找右邊兩成裡最暗的地方當瞳孔）
     darkm = ((a[..., :3].mean(-1) < 60) & (al > 200)).astype(np.float32)

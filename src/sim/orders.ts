@@ -30,7 +30,7 @@ export const ORDER_STRAINS = {
 } as const;
 export type OrderStrain = keyof typeof ORDER_STRAINS;
 
-export const FIN_NAMES: Record<FinTrait, string> = { swallow: '燕尾', ribbon: '緞帶', dumbo: '大耳', sword: '劍尾', halfmoon: '半月', bigC: '大C' };
+export const FIN_NAMES: Record<FinTrait, string> = { swallow: '燕尾', ribbon: '緞帶', dumbo: '大耳', sword: '劍尾', halfmoon: '大三角', bigC: '大C' };
 
 const hasFin = (p: GuppyPhenotype, fin: FinTrait) => (fin === 'sword' ? (p.sword ?? 0) > 0 : fin === 'halfmoon' ? p.tailShape === 'halfmoon' : p[fin]);
 

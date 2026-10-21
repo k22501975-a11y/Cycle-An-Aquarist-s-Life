@@ -469,7 +469,7 @@ let shopDrip = true;
 /** 滴水對水時自己玩對水小遊戲（第一次一定要玩；之後預設一鍵「慢慢過水」，想玩才按「自己滴」，mvp.md §4.4.3）。 */
 let shopPlay = false;
 
-const TAIL_SHAPE_LABELS = { round: '圓尾', delta: '三角尾', halfmoon: '半月尾' } as const;
+const TAIL_SHAPE_LABELS = { round: '圓尾', delta: '扇尾', halfmoon: '大三角' } as const;
 
 /** 孔雀魚的品系、尾鰭分數、代數與近親程度（玩家看得到的外觀與紀錄，看不到隱性基因）。 */
 function geneticsInfo(fish: Fish): Node {

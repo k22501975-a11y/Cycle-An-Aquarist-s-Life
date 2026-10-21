@@ -129,8 +129,8 @@ describe('母孔雀魚分品系（#272）', () => {
     expect(femaleKey(P({ grass: true }), false)).toBe('guppy-female-base-blue');
     for (const t of FEMALE_TINTS) expect(PAINTED[`guppy-female-base-${t}`].eating).toBe(`fish/guppy-female-base-${t}-eating.webp`);
   });
-  it('鰭比較長的圖照基本款的大小算（span），半月、劍尾的圖比基本款寬', () => {
-    expect(PAINTED['guppy-male-bluegrass-halfmoon'].span).toBeGreaterThan(1);
+  it('鰭比較長的圖照基本款的大小算（span）：劍尾的圖比基本款寬，大三角的圖比基本款高', () => {
     expect(PAINTED['guppy-male-tuxedo-sword3'].span).toBeGreaterThan(1);
+    expect(PAINTED['guppy-male-bluegrass-halfmoon'].body!.ry).toBeLessThan(PAINTED['guppy-male-bluegrass'].body!.ry);
   });
 });

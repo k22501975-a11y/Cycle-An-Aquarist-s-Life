@@ -7,7 +7,7 @@ import { nextRandom, type RngState } from './random';
  * - 紅尾 R：顯性，沒有就是藍尾（簡化設定）
  * - 蛇紋 Ss：性聯，大多在公魚的 Y 上，只傳兒子；每次繁殖 1% 機率在 X、Y 之間換位
  * - 草尾 Gr：Y 連鎖，公魚 100% 傳給兒子、女兒 0%
- * - 尾鰭分數：多基因，子代約為父母平均再加上隨機變異；近親繁殖會退化。分數也決定尾型（圓尾、三角、半月）
+ * - 尾鰭分數：多基因，子代約為父母平均再加上隨機變異；近親繁殖會退化。分數也決定尾型（圓尾、扇尾、大三角）
  * 鰭型（strains.md §1.3）：
  * - 燕尾 sw：體染色體隱性，所有鰭條拉長；公魚交接器也長，交配成功率只剩 5%
  * - 緞帶 Ri：體染色體顯性，腹鰭和交接器拉長；公魚實質不育，要用母緞帶 × 正常公
@@ -62,7 +62,7 @@ export interface GuppyPhenotype {
   finLength?: number;
 }
 
-/** 尾型：尾鰭分數越高越大越開，70 分以上展開到接近 180°（半月）。 */
+/** 尾型：尾鰭分數越高越大越開，70 分以上展開到接近 180°（大三角）。程式裡的 id 還是 halfmoon，只改顯示名稱（YenWel 2026-10-21：孔雀魚沒有「半月」這個品系，台灣叫大三角）。 */
 export function tailShape(tail: number): TailShape {
   return tail >= 70 ? 'halfmoon' : tail >= 40 ? 'delta' : 'round';
 }
@@ -82,7 +82,7 @@ export const GUPPY_FIN_STRAINS: Array<{ name: string; strain: number; fin: FinTr
   { name: '藍尾禮服大耳', strain: 3, fin: 'dumbo', price: 150 },
   { name: '藍尾禮服燕尾', strain: 3, fin: 'swallow', price: 180 },
   { name: '藍草尾雙劍', strain: 0, fin: 'sword', price: 120 },
-  { name: '全紅白子半月', strain: 2, fin: 'halfmoon', price: 160 },
+  { name: '全紅白子大三角', strain: 2, fin: 'halfmoon', price: 160 },
   { name: '藍尾禮服緞帶', strain: 3, fin: 'ribbon', price: 200 },
   { name: '藍草尾大C', strain: 0, fin: 'bigC', price: 380 },
 ];
@@ -256,7 +256,7 @@ export function finWords(p: GuppyPhenotype): string[] {
   if (p.swallow) out.push('燕尾');
   if (p.bigC) out.push('大C');
   else if (p.ribbon) out.push('緞帶');
-  if (!out.length && p.tailShape === 'halfmoon') out.push('半月');
+  if (!out.length && p.tailShape === 'halfmoon') out.push('大三角');
   return out;
 }
 
