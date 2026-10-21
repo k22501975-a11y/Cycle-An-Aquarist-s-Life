@@ -365,9 +365,9 @@ export class Guide {
       this.pill.replaceChildren(
         ownerPortrait('quest-avatar'),
         h('span.quest-step', {}, '目標'),
-        h('span.quest-title', { title }, title),
+        // 左上角只放一行（YenWel：太亂）：有下一步就只寫下一步（點了就帶過去），目標名字放在 title
+        this.step ? h('span.quest-hint.next', { title }, `下一步：${this.step.text} ›`) : h('span.quest-title', { title }, title),
         detail ? h('span.quest-progress', {}, detail) : '',
-        ...(this.step ? [h('span.quest-hint', {}, `下一步：${this.step.text} ›`)] : []),
       );
     } else {
       this.step = null;

@@ -1163,3 +1163,4 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 .qt-badge { font-size: 9px; top: -6px; }
 .qt-more { width: 40px; font-size: 11px; border-radius: 10px; }
 .qt-more small { display: none; }
+.quest-pill .quest-hint.next { display: block; font-size: 13px; font-weight: 700; color: #f3e3b8; min-width: 0; }
