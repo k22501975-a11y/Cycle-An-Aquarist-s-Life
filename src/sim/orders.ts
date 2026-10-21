@@ -72,6 +72,8 @@ export interface ShopOrder {
   gap?: boolean;
   /** 小孔雀單：只收這個時間（遊戲小時）以前出生的（出生滿幾天）。 */
   bornBy?: number;
+  /** 客人願意等幾天（魚還要長幾天才湊得齊的單，#281）；沒寫照種類的預設。 */
+  days?: number;
 }
 
 export interface OrderBoard {
@@ -151,23 +153,30 @@ export function daysUntilMatch(fish: Fish, o: ShopOrder): number | null {
   return fishMatchesOrder({ ...fish, lengthCm: Math.max(fish.lengthCm, target + 1e-6) }, o) ? days : null;
 }
 
-/**
- * 這張魚單在下架前湊不湊得齊（#281）：現在就符合的，加上照標準成長在期限內長得到的。
- * 湊不齊的單一掛上去就標「來不及」，還佔住欄位，所以不出這種單。slackDays 是至少要留幾天餘裕。插枝、螺、小孔雀單不在這裡管。
- */
-export function reachableInTime(tanks: TankState[], o: ShopOrder, slackDays = 0): boolean {
-  if (o.kind !== 'fish') return true;
-  const daysLeft = (orderExpiresHours(o) - tanks[0].hours) / 24 - slackDays;
-  let n = orderSupply(tanks, o);
+/** 照標準成長，要幾天才湊得齊這張魚單（現在就夠是 0；缸裡的魚怎麼長都湊不齊回傳 null）。插枝、螺、小孔雀單回傳 0。 */
+export function daysToFill(tanks: TankState[], o: ShopOrder): number | null {
+  if (o.kind !== 'fish') return 0;
+  const need = o.count - orderSupply(tanks, o);
+  if (need <= 0) return 0;
+  const days: number[] = [];
   for (const t of tanks) {
     for (const f of [...t.fish, ...(t.quarantine?.fish ?? [])]) {
-      if (n >= o.count) return true;
       if (!f.alive || fishMatchesOrder(f, o)) continue;
-      const days = daysUntilMatch(f, o);
-      if (days !== null && days <= daysLeft) n++;
+      const d = daysUntilMatch(f, o);
+      if (d !== null) days.push(d);
     }
   }
-  return n >= o.count;
+  if (days.length < need) return null;
+  return days.sort((a, b) => a - b)[need - 1];
+}
+
+/**
+ * 這張魚單在下架前湊不湊得齊（#281）：現在就符合的，加上照標準成長在期限內長得到的。
+ * 湊不齊的單一掛上去就標「來不及」，還佔住欄位，所以不出這種單。slackDays 是至少要留幾天餘裕。
+ */
+export function reachableInTime(tanks: TankState[], o: ShopOrder, slackDays = 0): boolean {
+  const days = daysToFill(tanks, o);
+  return days !== null && days <= (orderExpiresHours(o) - tanks[0].hours) / 24 - slackDays;
 }
 
 /** 這缸可以拿去交的螺（扁卷、囊螺只記數量；小蘋果螺也是）。 */
@@ -455,6 +464,8 @@ export function makeOrder(board: OrderBoard, hours: number, ctx?: OrderContext):
 
 /** 訂單掛幾天沒交就下架、換新的。 */
 export const ORDER_EXPIRE_DAYS = 7;
+/** 魚再長幾天才湊得齊的單，客人最多願意等幾天（#281）。 */
+export const FISH_ORDER_MAX_DAYS = 14;
 /** 小孔雀單多等幾天：出單時小魚常常還沒長到 1.2 cm，要給牠們時間長（mvp.md §4.4.2 第 4 點）。 */
 export const FRY_ORDER_EXPIRE_DAYS = 10;
 
@@ -473,7 +484,14 @@ function addOrder(state: TankState, board: OrderBoard, ctx: OrderContext): boole
   // 開局還沒有自家的魚，中魚單是「養大的目標」，照舊出（缸裡剪得出插枝、抓得到螺就會被換掉，見 swapInSmallOrder）
   const tanks = householdTanks(state);
   // 新單留一天餘裕：成長是照標準照顧估的，差幾個小時就變「來不及」
-  const live = (o: ShopOrder) => ctx.stage === 'start' || reachableInTime(tanks, o, 1);
+  const live = (o: ShopOrder) => {
+    if (ctx.stage === 'start' || reachableInTime(tanks, o, 1)) return true;
+    // 魚再長幾天就湊得齊的單：客人願意多等（最多 FISH_ORDER_MAX_DAYS 天），不要整張不出
+    const days = daysToFill(tanks, o);
+    if (days === null || days + 1 > FISH_ORDER_MAX_DAYS) return false;
+    o.days = Math.ceil(days + 1);
+    return true;
+  };
   let o = makeOrder(board, state.hours, ctx);
   let fallback: ShopOrder | null = live(o) ? o : null;
   for (let tries = 0; tries < 8; tries++) {
@@ -528,9 +546,9 @@ function swapDeadOrder(state: TankState, board: OrderBoard, ctx: OrderContext): 
 /** 連續幾天沒有真的收入（賣魚、賣插枝、交單），訂單板就保證出一張現在交得出來的小單（polish-to-9.md §4「收入空檔」）。 */
 export const INCOME_GAP_DAYS = 6;
 
-/** 這張單什麼時候下架（遊戲小時）：一般 ORDER_EXPIRE_DAYS 天、小孔雀單 FRY_ORDER_EXPIRE_DAYS 天、保底單 INCOME_GAP_DAYS 天。 */
+/** 這張單什麼時候下架（遊戲小時）：單上寫了要等幾天就照那個；一般 ORDER_EXPIRE_DAYS 天、小孔雀單 FRY_ORDER_EXPIRE_DAYS 天、保底單 INCOME_GAP_DAYS 天。 */
 export function orderExpiresHours(o: ShopOrder): number {
-  return o.postedHours + (o.gap ? INCOME_GAP_DAYS : o.kind === 'fry' ? FRY_ORDER_EXPIRE_DAYS : ORDER_EXPIRE_DAYS) * 24;
+  return o.postedHours + (o.days ?? (o.gap ? INCOME_GAP_DAYS : o.kind === 'fry' ? FRY_ORDER_EXPIRE_DAYS : ORDER_EXPIRE_DAYS)) * 24;
 }
 
 /** 保底單收的仔魚要出生滿幾天（剛生的魚苗店家不收，polish-to-9.md §4「第二次確認」）；大小不限。 */
