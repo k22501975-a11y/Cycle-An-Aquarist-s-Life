@@ -505,7 +505,7 @@ async function collect(deps: MarketDeps, o: MarketOrder, drip: boolean): Promise
       game.act((st) => receivePlants(st, v.item));
       toasts.show(`收到${o.title}，可以到商店的水草頁種下`);
     } else {
-      const fish = game.act((st) => receiveFish(st, v.item, { stress: v.stress, bagTemp: v.bagTemp, bagPh: v.bagPh, drip }));
+      const fish = game.act((st) => receiveFish(st, v.item, { stress: v.stress, bagTemp: v.bagTemp, bagPh: v.bagPh, drip }, o.id));
       const q = !!game.state.quarantine;
       toasts.show(
         fish

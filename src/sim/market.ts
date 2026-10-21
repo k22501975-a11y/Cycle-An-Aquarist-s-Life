@@ -1,3 +1,4 @@
+import { noteArrival } from './arrivals';
 import { addCuttings, BETTA_FEMALE_PRICE, economy, FISH_PRICES, fishBuybackPrice, guppyBuybackTier, JUVENILE_SHARE, PLANT_PRICES, plantBuybackPrice, sellableCuttings, STRAIN_TIER } from './economy';
 import { phenotype, strainName } from './genetics';
 import { hasVisible } from './processes/disease';
@@ -169,8 +170,9 @@ export function dumpShock(state: TankState, bagTemp: number, bagPh: number): num
 /**
  * 收貨：把買到的魚放進缸裡（有檢疫盒就先放檢疫盒）。
  * 魚在這邊是新的個體編號、自成一個血統；身上潛伏的病照樣帶過來。
+ * order 是市場訂單編號：有的話記一筆到貨紀錄，伺服器算賣家的 30 天存活率（arrivals.ts）。
  */
-export function receiveFish(state: TankState, item: Record<string, unknown>, arrival: Arrival): Fish | null {
+export function receiveFish(state: TankState, item: Record<string, unknown>, arrival: Arrival, order?: number): Fish | null {
   const species = item.species as FishSpeciesId;
   if (!(species in FISH_SPECIES)) return null;
   const sp = FISH_SPECIES[species];
@@ -213,6 +215,7 @@ export function receiveFish(state: TankState, item: Record<string, unknown>, arr
     fish.arrivedHours = state.hours;
     state.fish.push(fish);
   }
+  if (order !== undefined) noteArrival(state, fish, order);
   return fish;
 }
 

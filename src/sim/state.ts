@@ -241,6 +241,8 @@ export interface Fish {
   generation?: number;
   /** 在缸裡出生的時間（遊戲小時）；店裡買的、舊存檔沒有。 */
   bornHours?: number;
+  /** 從玩家市場買來的：哪一筆市場訂單（到貨存活追蹤，arrivals.ts）。 */
+  marketOrder?: number;
   /** 放進這一缸的時間（遊戲小時：買回來、從檢疫盒放出來、換缸）；早上報告只對剛來的魚說「適應新家」（#237）。缸裡生的、舊存檔沒有。 */
   arrivedHours?: number;
   /** 媽媽是哪尾（在缸裡出生的才有；長得像誰比較卡用，G2）。 */

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, simulate } from '../sim';
+import { addFish, marketItem, receiveFish, simulate } from '../sim';
 import { newGameState } from '../game/game';
 import { catchUp, parseSave, serializeSave } from '../game/save';
-import { advance, BadSave, inspect, verify } from './handlers';
+import { advance, arrivals, BadSave, inspect, verify } from './handlers';
 
 const HOUR_MS = 3_600_000;
 const T0 = 1_700_000_000_000;
@@ -92,5 +92,21 @@ describe('模擬小服務（L2）', () => {
 
   it('壞掉的存檔丟 BadSave', () => {
     expect(() => advance({ version: 3 }, T0)).toThrow(BadSave);
+  });
+
+  it('到貨追蹤：回傳買家這邊的魚還活著沒、死因算不算賣家的（帶病看伺服器的出貨資料）', () => {
+    const { state } = saveAt(T0);
+    const seller = newGameState(7);
+    const sold = addFish(seller, 'guppy', { carriesIch: false, sex: 'male' });
+    sold.ich = { stage: 'incubating', progress: 0 };
+    const item = marketItem(sold);
+    receiveFish(state, item, { stress: 0.3, bagTemp: state.water.tempC, bagPh: state.water.ph, drip: true }, 31);
+    const raw = JSON.parse(serializeSave(state, 7, T0));
+    const [got, missing] = arrivals(raw, [
+      { order: 31, item },
+      { order: 32, item: {} },
+    ]);
+    expect(got).toMatchObject({ order: 31, status: 'alive', sellerFault: false, survived: false });
+    expect(missing.status).toBe('unknown');
   });
 });
