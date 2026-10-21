@@ -27,6 +27,8 @@ export type NextTarget =
   | 'shop_plants' // 商店的水草頁
   | 'select' // 挑選面板（選育）
   | 'treat' // 治療
+  | 'mother' // 打開懷孕最久那尾母魚的卡片（看肚子、懷孕進度）
+  | 'scape' // 造景模式
   | 'test'; // 測水
 
 export interface NextStep {
@@ -47,7 +49,7 @@ export const GENERIC_STEP = '看看任務卡上的目標';
 function motherStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   if (tanks.some((t) => dueMothers(t).length > 0)) return tanks.some((t) => t.nurseryBox && dueMothers(t).length > 0) ? { text: '母魚快生了，放進育幼盒', target: 'nursery' } : { text: '母魚快生了，買個育幼盒', target: 'nursery' };
   const showing = living(tanks).some((f) => f.sex === 'female' && f.pregnancy >= BELLY_SHOWS && !isShrimpSpecies(f.species));
-  return showing ? { text: '母魚懷孕了，餵飽她等小魚', target: 'feed' } : null;
+  return showing ? { text: '母魚懷孕了，點她看看肚子', target: 'mother' } : null;
 }
 
 /** 每個目標在現在的狀況下要做的事。 */
@@ -55,8 +57,9 @@ function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
   const home = tanks[0];
   switch (goal.id) {
     case 'cycled':
-      // 養水是背景目標（U2）：店裡的母魚常常已經懷孕，這段時間指向第一窩小魚，不要只叫玩家等（g13 門檻 3）
-      return motherStep(tanks) ?? { text: '每天測水，等氨和亞硝都到 0', target: 'test' };
+      // 養水是背景目標（U2）：這段時間不要只叫玩家等（g13 門檻 3）。店裡的母魚常常已經懷孕，有就去看她；沒有就趁空造景。
+      // 不叫玩家多餵：新缸要少餵，懷孕母魚現實上也不用多餵（企劃 2026-10-21）
+      return motherStep(tanks) ?? { text: '趁養水，拖塊石頭或水草造景', target: 'scape' };
     case 'protect_fry':
       if (bredFry(tanks).length > 0) return { text: '小魚還小，一天餵兩次', target: 'feed' };
       return motherStep(tanks) ?? { text: '餵飽母魚，等她懷孕', target: 'feed' };
