@@ -18,6 +18,7 @@ export class Sheet {
   private render: (() => Node) | null = null;
   /** 會隨遊戲時間變化的面板（測試劑、觀察魚）才定時重繪；有輸入框的面板不重繪，以免打斷操作。 */
   private live = false;
+  private pendingClose: (() => void) | null = null;
   onClose: (() => void) | null = null;
   /** 開了一個面板（main 用來收掉餵食模式）。 */
   onOpen: (() => void) | null = null;
@@ -52,7 +53,10 @@ export class Sheet {
     if (fresh) this.panel.scrollTop = this.body.scrollTop = 0;
     this.backdrop.classList.add('open');
     this.panel.classList.add('open');
-    if (fresh) this.onOpen?.();
+    if (fresh) {
+      this.cancelCloseLater();
+      this.onOpen?.();
+    }
   }
 
   /** 重畫；內容跟畫面上的一模一樣就不換，免得按鈕在按下和放開之間被換掉而點不到（#144）。 */
@@ -66,16 +70,24 @@ export class Sheet {
 
   /** 這個面板過 ms 毫秒自己收（遊戲性評測第 14 輪 #257：測水結果看一眼就好，跟換水一樣）；這段時間點過面板就不收。 */
   closeLater(title: string, ms: number): void {
-    let touched = false;
-    const mark = () => (touched = true);
-    this.panel.addEventListener('pointerdown', mark);
-    window.setTimeout(() => {
-      this.panel.removeEventListener('pointerdown', mark);
-      if (!touched && this.isOpen && this.title.textContent === title) this.close();
+    this.cancelCloseLater();
+    const cancel = () => this.cancelCloseLater();
+    const timer = window.setTimeout(() => {
+      this.cancelCloseLater();
+      if (this.isOpen && this.title.textContent === title) this.close();
     }, ms);
+    this.panel.addEventListener('pointerdown', cancel);
+    this.pendingClose = () => (window.clearTimeout(timer), this.panel.removeEventListener('pointerdown', cancel));
+  }
+
+  /** 關掉或重開同名面板時取消上一次的自動收起，免得新開的面板被舊的計時器提早收掉。 */
+  private cancelCloseLater(): void {
+    this.pendingClose?.();
+    this.pendingClose = null;
   }
 
   close(): void {
+    this.cancelCloseLater();
     this.render = null;
     this.backdrop.classList.remove('open');
     this.panel.classList.remove('open');
