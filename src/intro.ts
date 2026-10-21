@@ -162,6 +162,7 @@ function build(short: boolean): HTMLElement {
       ${fish}
       <div class="intro-bubbles"><i></i><i></i><i></i><i></i><i></i><i></i></div>
     </div>
+    ${short ? '' : '<div class="intro-glow"></div>'}
     <div class="intro-title">
       <small>Cycle</small>
       <b>Aquarist's Life</b>

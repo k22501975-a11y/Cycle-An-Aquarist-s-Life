@@ -225,6 +225,8 @@ export class TankView {
   /** 大缸滑動時的位置條（固定在畫面上）。 */
   private readonly scrollBar = new Graphics();
   private readonly overlay = new Graphics();
+  /** 混濁和白濁的霧：畫在前排的魚後面，主角的魚不會一起變淡（畫面評測第 9 輪 #265）。 */
+  private readonly murk = new Graphics();
   private readonly vignette = new Sprite();
   /** 開缸演出：空缸時蓋住水的空氣色（畫在後景上、底沙下）、霧濁和倒沙（畫在最上面）、底沙由下往上露出的遮罩。 */
   private readonly setupBack = new Graphics();
@@ -351,6 +353,7 @@ export class TankView {
       this.gearGlow,
       this.foodLayer,
       this.feedFx,
+      this.murk,
       this.nurseryBack,
       this.frontFish,
       this.nurseryFront,
@@ -2130,27 +2133,31 @@ export class TankView {
 
   private drawOverlay(state: TankState): void {
     const { width, height, surface, bottom } = this.bounds;
-    const g = this.overlay.clear();
+    const m = this.murk.clear();
     // 混濁：有機物與細菌濃度高時水變黃綠（餵太多看得到，§6 P5）
     const turbidity = this.water.organic;
-    if (turbidity > 0.02) g.rect(0, 0, width, height).fill({ color: 0x8a8a3a, alpha: turbidity });
+    if (turbidity > 0.02) m.rect(0, 0, width, height).fill({ color: 0x8a8a3a, alpha: turbidity });
     // 新缸細菌白濁（g13 門檻 2）：水裡一層乳白的霧，中間最濃；氨 0.25 就看得出一點，換水後慢慢散
     const bloom = this.water.bloom;
     if (bloom > 0.01) {
       // 不是均勻一層（畫面評測第 8 輪）：缸中間最濃，靠水面和右邊過濾器出水口淡一點，水裡飄著細細的雜質
       const depth = bottom - surface;
       const a = Math.min(1, bloom * 3.5);
-      g.rect(0, surface, width, depth).fill({ color: 0xe9f0ec, alpha: 0.28 * a });
+      m.rect(0, surface, width, depth).fill({ color: 0xe9f0ec, alpha: 0.28 * a });
       for (let i = 0; i < 4; i++) {
         const k = 1 - i * 0.22;
-        g.ellipse(width * 0.44, surface + depth * 0.58, width * 0.5 * k, depth * 0.44 * k).fill({ color: 0xf2f5f0, alpha: 0.09 * a });
+        m.ellipse(width * 0.44, surface + depth * 0.58, width * 0.5 * k, depth * 0.44 * k).fill({ color: 0xf2f5f0, alpha: 0.09 * a });
       }
       for (let i = 0; i < 40; i++) {
         const x = ((i * 0.618 + this.time * 0.006 * (1 + (i % 3))) % 1) * width;
         const y = surface + depth * (0.15 + 0.75 * ((i * 0.377) % 1)) + Math.sin(this.time * 0.4 + i) * 6 * this.hs;
-        g.circle(x, y, (0.8 + (i % 3) * 0.5) * this.hs).fill({ color: 0xffffff, alpha: 0.35 * a });
+        m.circle(x, y, (0.8 + (i % 3) * 0.5) * this.hs).fill({ color: 0xffffff, alpha: 0.35 * a });
       }
     }
+    // 前排的魚只蓋一層很薄的霧，還是看得出在濁水裡
+    const g = this.overlay.clear();
+    const veil = Math.min(1, bloom * 3.5) * 0.08 + (turbidity > 0.02 ? turbidity * 0.25 : 0);
+    if (veil > 0.005) g.rect(0, surface, width, bottom - surface).fill({ color: turbidity > bloom ? 0x8a8a3a : 0xe9f0ec, alpha: veil });
     // 剛動過造景：攪起來的細沙讓水白濁，底下最濃，慢慢沉澱
     const silt = state.water.turbidity ?? 0;
     if (silt > 0.01) {

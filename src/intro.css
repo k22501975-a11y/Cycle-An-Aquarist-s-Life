@@ -14,6 +14,18 @@
 @keyframes intro-zoom { from { transform: scale(1); } to { transform: scale(3.4); } }
 @keyframes intro-fade-out { to { opacity: 0; visibility: hidden; } }
 
+/* 門裡的暖光放大到滿畫面，停一下全白，再淡成水缸的青色（畫面評測第 9 輪 #265） */
+.intro-glow { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(circle at 50% 62%, #fff3cf 0%, #ffd890 22%, rgba(255, 190, 110, 0) 60%); animation: intro-glow 1.5s ease-in-out 1.1s both; }
+@keyframes intro-glow {
+  0% { opacity: 0; transform: scale(0.4); }
+  38% { opacity: 1; transform: scale(1.6); background-color: rgba(255, 216, 144, 0.6); }
+  50% { opacity: 1; transform: scale(2.4); background-color: #fffaf0; }
+  63% { opacity: 1; transform: scale(2.4); background-color: #fffaf0; }
+  100% { opacity: 0; transform: scale(2.4); background-color: #8fd4d8; }
+}
+.intro-glow::after { content: ''; position: absolute; inset: 0; background: #fffaf0; opacity: 0; animation: intro-glow-white 1.5s ease-in-out 1.1s both; }
+@keyframes intro-glow-white { 0%, 38% { opacity: 0; background: #fffaf0; } 50%, 63% { opacity: 1; background: #fffaf0; } 100% { opacity: 0; background: #8fd4d8; } }
+
 /* 2. 店裡的缸：光從水面灑下來，鏡頭慢慢拉近 */
 .intro-tank { position: absolute; inset: 0; opacity: 0; animation: intro-fade-in 0.7s ease-out 1.6s both; }
 #intro.short .intro-tank { animation: intro-fade-in 0.35s ease-out 0s both; }

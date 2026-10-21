@@ -115,6 +115,7 @@ export function paintBackdrop(b: TankBounds, hs: number, pixelRatio = 1): Textur
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
+    paintFarPlants(ctx, w, bottom, hs, k);
     const fade = ctx.createLinearGradient(0, h * 0.45, 0, h);
     fade.addColorStop(0, 'rgba(20,90,110,0)');
     fade.addColorStop(1, 'rgba(10,60,80,0.28)');
@@ -123,6 +124,7 @@ export function paintBackdrop(b: TankBounds, hs: number, pixelRatio = 1): Textur
     return canvasTexture(canvas, false);
   }
 
+  paintFarPlants(ctx, w, bottom, hs, k);
   // 水的霧氣：越往下越濃
   const haze = ctx.createLinearGradient(0, h * 0.35, 0, h);
   haze.addColorStop(0, 'rgba(20,90,110,0)');
@@ -130,6 +132,37 @@ export function paintBackdrop(b: TankBounds, hs: number, pixelRatio = 1): Textur
   ctx.fillStyle = haze;
   ctx.fillRect(0, 0, w, h);
   return canvasTexture(canvas, false);
+}
+
+/**
+ * 遠處的水草剪影（畫面評測第 9 輪 #265）：只種一株草時缸不會是一整片水。
+ * 模糊、約 20% 不透明的深青色，看得出是遠景，不會被當成能點的水草。
+ */
+function paintFarPlants(ctx: Ctx, w: number, bottom: number, hs: number, k: number): void {
+  const rand = seeded(907);
+  ctx.save();
+  ctx.filter = `blur(${(3 * hs * k).toFixed(2)}px)`;
+  ctx.globalAlpha = 0.2;
+  ctx.lineCap = 'round';
+  // 幾叢高矮不一的草，左右兩邊高、中間矮，像造景的後景
+  for (let c = 0; c < 9; c++) {
+    const cx = w * (c / 8) + (rand() - 0.5) * w * 0.06;
+    const edge = Math.abs(cx / w - 0.5) * 2;
+    const tall = (70 + 120 * edge + rand() * 50) * hs;
+    const blades = 6 + Math.floor(rand() * 6);
+    ctx.strokeStyle = c % 2 ? '#0d4a4c' : '#14595a';
+    for (let i = 0; i < blades; i++) {
+      const x = cx + (rand() - 0.5) * 60 * hs;
+      const len = tall * (0.55 + rand() * 0.45);
+      const lean = (rand() - 0.5) * 0.5 * len;
+      ctx.lineWidth = (3 + rand() * 4) * hs;
+      ctx.beginPath();
+      ctx.moveTo(x, bottom + 10 * hs);
+      ctx.quadraticCurveTo(x + lean * 0.2, bottom - len * 0.5, x + lean, bottom - len);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
 }
 
 function rockPath(ctx: Ctx, x: number, y: number, s: number, pts: number[]): void {
