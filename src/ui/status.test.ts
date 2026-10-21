@@ -24,6 +24,19 @@ describe('waterCapsules', () => {
     state.hours += 50;
     expect(waterCapsules(state)[1].value).toBe('?');
   });
+
+  it('水變濁了，之前測的綠色讀數不算數，總結顯示待測（#265）', () => {
+    const state = tank();
+    useTestKit(state);
+    const okCaps = waterCapsules(state);
+    expect(waterSummary(okCaps).value).toBe('正常');
+    state.water.organicMg += state.equipment.tank.volumeL * 2;
+    expect(waterSummary(waterCapsules(state)).value).toBe('正常');
+    state.hours += 8;
+    const caps = waterCapsules(state);
+    expect(waterSummary(caps)).toEqual({ tone: 'unknown', value: '待測' });
+    expect(caps[1].title).toContain('該測了');
+  });
 });
 
 describe('clockLabel', () => {

@@ -1,5 +1,5 @@
 import type { ReportAction } from './morning-report';
-import { dueMothers, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading } from '../sim';
+import { dueMothers, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading, waterLook } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -29,6 +29,9 @@ export interface Capsule {
 /** 測試劑讀數多久之後視為不知道（遊戲小時）。 */
 export const TEST_FORGET_HOURS = 72;
 const TEST_STALE_HOURS = 24;
+/** 水看得出變濁（白濁＋黃濁）而且上次測水超過這麼久，綠色的讀數就不算數（畫面評測第 9 輪 #265）。 */
+const MURKY = 0.05;
+const MURKY_RETEST_HOURS = 6;
 
 function temperatureTone(state: TankState): Tone {
   const t = state.water.tempC;
@@ -50,13 +53,15 @@ export function waterCapsules(state: TankState): Capsule[] {
   const age = test ? state.hours - test.hours : Infinity;
   const known = age <= TEST_FORGET_HOURS;
   const stale = known && age > TEST_STALE_HOURS;
-  const title = !test ? '還沒測過，點「測試」用測試劑測水' : known ? `${Math.floor(age / 24) > 0 ? `${Math.floor(age / 24)} 天前` : '今天'}測的` : '太久沒測了，數值可能變了';
+  const look = waterLook(state);
+  const murky = known && age > MURKY_RETEST_HOURS && look.bloom + look.organic >= MURKY;
+  const title = murky ? '水變濁了，之前測的可能不準，該測了' : !test ? '還沒測過，點「測試」用測試劑測水' : known ? `${Math.floor(age / 24) > 0 ? `${Math.floor(age / 24)} 天前` : '今天'}測的` : '太久沒測了，數值可能變了';
   const row = (label: string, key: keyof TestKitReading) => {
     const v = test?.reading[key];
     caps.push({
       label,
       value: known && v !== undefined ? String(v) : '?',
-      tone: known && v !== undefined && !stale ? READING_TONES[key](v) : 'unknown',
+      tone: known && v !== undefined && !stale ? (murky && READING_TONES[key](v) === 'ok' ? 'unknown' : READING_TONES[key](v)) : 'unknown',
       stale,
       title,
     });
