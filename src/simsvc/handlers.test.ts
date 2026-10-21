@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, marketItem, receiveFish, simulate } from '../sim';
+import { addFish, economy, marketItem, receiveFish, simulate } from '../sim';
 import { newGameState } from '../game/game';
 import { catchUp, parseSave, serializeSave } from '../game/save';
 import { advance, arrivals, BadSave, inspect, verify } from './handlers';
@@ -31,6 +31,20 @@ describe('模擬小服務（L2）', () => {
     const { state, raw } = saveAt(T0);
     simulate(state, 7);
     expect(verify(raw, JSON.parse(serializeSave(state, 7, T0 + HOUR_MS)), HOUR_MS)).toEqual([]);
+  });
+
+  it('上傳檢查：把存檔裡的錢改大會被擋下，正常花錢、賺一點不會（錢的範圍，#76）', () => {
+    const { state, raw } = saveAt(T0);
+    simulate(state, 7);
+    economy(state).coins -= 300;
+    expect(verify(raw, JSON.parse(serializeSave(state, 7, T0 + HOUR_MS)), HOUR_MS)).toEqual([]);
+    economy(state).coins += 400;
+    expect(verify(raw, JSON.parse(serializeSave(state, 7, T0 + HOUR_MS)), HOUR_MS)).toEqual([]);
+    economy(state).coins += 99_999;
+    const problems = verify(raw, JSON.parse(serializeSave(state, 7, T0 + HOUR_MS)), HOUR_MS);
+    expect(problems.map((p) => p.code)).toEqual(['coins_jump']);
+    economy(state).coins = Number.NaN;
+    expect(verify(raw, JSON.parse(serializeSave(state, 7, T0 + HOUR_MS)), HOUR_MS).map((p) => p.code)).toEqual(['coins_jump']);
   });
 
   it('上傳檢查：把裝置時間往後調、遊戲時間跑得比伺服器快，會被擋下', () => {
