@@ -389,6 +389,18 @@ export function waterChangePanel({ game, sheet, toasts, sound, undoable }: Panel
   );
 }
 
+/**
+ * 一鍵換水（遊戲性評測第 14 輪 #257）：點工具列「換水」直接照建議的量換、新水對好溫度，缸裡演換水；
+ * 想自己調比例的到「設備與維護」裡的換水面板。
+ */
+export function quickWaterChange({ game, toasts, sound, undoable }: PanelContext): void {
+  const fraction = suggestedWaterChange(game.state);
+  // 第一次換水多說一次長按的捷徑（企劃 2026-10-21），之後不再出現
+  const hint = game.state.lastWaterChangeHours === undefined ? '（長按「換水」可以調比例）' : '';
+  doUndoable({ toasts, undoable }, () => game.act((st) => waterChange(st, fraction, { tempC: st.water.tempC })), `換了 ${Math.round(fraction * 100)}% 的水${hint}`);
+  sound?.('water');
+}
+
 const READING_ROWS: Array<{ key: keyof TestKitReading; label: string; short: string; unit: string; kit?: KitParam }> = [
   { key: 'ammonia', label: '氨 NH₃/NH₄⁺', short: '氨', unit: 'ppm', kit: 'ammonia' },
   { key: 'nitrite', label: '亞硝酸鹽 NO₂', short: '亞硝酸鹽', unit: 'ppm', kit: 'nitrite' },
@@ -1566,6 +1578,8 @@ export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: P
   return h(
     'div.stack',
     {},
+    h('h3', {}, '換水'),
+    row('ui/icon-waterchange.webp', h('div.item-main', {}, h('b', {}, '自己調換水量'), h('div.hint', {}, '工具列的「換水」照建議的量一鍵換；要換多換少在這裡調')), button('調整', () => sheet.open('換水', () => waterChangePanel({ game, sheet, toasts, undoable })))),
     h('h3', {}, '螺'),
     row('snail/snail-bladder.webp', h('div.item-main', {}, h('b', {}, s.snails ? `大螺 ${s.snails.snails.filter((x) => x.alive).length} 隻、小螺約 ${pestCount(s)} 隻` : '螺'), h('div.hint', {}, '卵塊、陷阱、手撈、除螺藥')), button('管理', () => sheet.open('螺', () => snailPanel({ game, sheet, toasts, undoable })))),
     h('h3', {}, '室溫與水位'),

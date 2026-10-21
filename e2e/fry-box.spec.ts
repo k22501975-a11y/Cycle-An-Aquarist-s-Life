@@ -28,7 +28,7 @@ test('只有一缸：仔魚可以撈進檢疫盒', async ({ page }) => {
     });
   });
   // 直接送 click 事件（同 flows/helpers 的作法）：慢的 CI 一幀要好幾秒，真的點擊會等輸入回應等到逾時
-  await page.locator('button.todo-btn').dispatchEvent('click');
+  await page.locator('button.bell-btn').dispatchEvent('click');
   await page.locator('.sheet.open button.todo-item.split', { hasText: '成魚會吃小魚' }).dispatchEvent('click');
   await page.locator('.sheet.open button', { hasText: '放進檢疫盒' }).dispatchEvent('click');
   await expect.poll(() => page.evaluate(() => (window as unknown as Cycle).cycle.game.state.quarantine?.fish.length ?? 0)).toBe(3);
@@ -57,7 +57,7 @@ test('母魚快生了：待辦一鍵買育幼盒並放進去', async ({ page }) 
       mom.pregnancy = 0.9;
     });
   });
-  await page.locator('button.todo-btn').dispatchEvent('click');
+  await page.locator('button.bell-btn').dispatchEvent('click');
   await page.locator('.sheet.open .todo-item.nursery button', { hasText: '去買育幼盒' }).dispatchEvent('click');
   await expect.poll(() => page.evaluate(() => (window as unknown as NurseryCycle).cycle.game.state.nurseryBox ?? false)).toBe(true);
   await expect.poll(() => page.evaluate(() => (window as unknown as NurseryCycle).cycle.game.state.fish.filter((f) => f.nursery).length)).toBe(1);

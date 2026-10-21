@@ -11,7 +11,7 @@ import type { QuickKind } from './quest-tray';
 /** 任務卡上「做好了」閃多久（design/tutorial-lines.md：3 秒後自己換成下一步）。 */
 const FLASH_MS = 3000;
 /** 老闆的一句提醒在畫面邊緣留多久。 */
-const TIP_MS = 14_000;
+const TIP_MS = 8_000;
 
 interface Page {
   text: string;
@@ -83,7 +83,9 @@ export class Guide {
   ) {
     this.progress = loadProgress(store);
     // 教學做完後點任務卡直接帶去做「下一步」（U1）；教學中點了再聽一次完整說明
-    this.pill.addEventListener('click', () => (this.tutorialOver && this.step && this.goNext ? this.goNext(this.step.target) : this.showQuest()));
+    this.pill.addEventListener('click', () =>
+      this.tucked ? this.untuck() : this.tutorialOver && this.step && this.goNext ? this.goNext(this.step.target) : this.showQuest(),
+    );
     // 對話框掛在 body：面板（商店等）開著時也在最上層，按鈕按得到
     host.append(this.pill, this.tray, this.tip);
     document.body.append(this.bubble);
@@ -115,6 +117,26 @@ export class Guide {
     return !this.tray.hidden;
   }
 
+  /** 圖卡收起來了：點任務卡再叫出來。 */
+  private get tucked(): boolean {
+    return !this.tray.hidden && this.tray.classList.contains('tucked');
+  }
+
+  /** 玩家點了缸（畫面評測第 8 輪 #252：圖卡不要一直蓋住左邊的缸）：先收起來，任務卡上留個記號。 */
+  tuckTray(): void {
+    if (this.tray.hidden) return;
+    this.tray.classList.add('tucked');
+    this.pill.classList.add('tray-tucked');
+    this.onLayout();
+  }
+
+  private untuck(): void {
+    if (!this.tray.classList.contains('tucked')) return;
+    this.tray.classList.remove('tucked');
+    this.pill.classList.remove('tray-tucked');
+    this.onLayout();
+  }
+
   /** 錢變了：圖卡上「錢不夠」的樣子要跟著變。 */
   refreshTray(): void {
     this.shownTray = '';
@@ -127,6 +149,7 @@ export class Guide {
     if ((tray ?? '') === this.shownTray) return;
     this.shownTray = tray ?? '';
     this.tray.hidden = !tray || !this.quickTray;
+    this.untuck();
     this.tray.replaceChildren(...(tray && this.quickTray ? [this.quickTray(tray)] : []));
   }
 

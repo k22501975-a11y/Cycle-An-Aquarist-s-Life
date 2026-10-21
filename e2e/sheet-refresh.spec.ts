@@ -12,7 +12,7 @@ test('面板內容沒變時不重畫，按鈕點得到', async ({ page }) => {
     (window as unknown as { cycle: { game: { clock: { timeScale: number } } } }).cycle.game.clock.timeScale = 0;
   });
   // 直接送 click 事件：CI 的軟體繪圖一幀要好幾秒，真的點擊會等輸入回應等到逾時（同 flows/helpers）
-  await page.locator('button.todo-btn').dispatchEvent('click');
+  await page.locator('button.bell-btn').dispatchEvent('click');
   const body = page.locator('.sheet.open .sheet-body');
   await expect(body.locator('button').first()).toBeVisible();
   await body.evaluate((el) => ((window as unknown as { firstBtn: Element }).firstBtn = el.querySelector('button')!));

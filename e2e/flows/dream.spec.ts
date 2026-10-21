@@ -36,7 +36,9 @@ test('重開遊戲後夢想魚膠囊馬上看得到', async ({ page }) => {
 test('第二缸選用途：繁殖缸或展示缸', async ({ page }) => {
   await startClean(page);
   await page.evaluate(() => (window as unknown as { cycle: { game: { actAll: (f: (t: { economy?: { coins: number } }[]) => void) => void } } }).cycle.game.actAll((t) => (t[0].economy!.coins = 20_000)));
-  await page.locator('button.tank-chip').click(NO_WAIT);
+  // 只有一缸時上方列不顯示缸切換（畫面評測第 8 輪），從選單進「我的水缸」
+  await page.locator('#hud button[aria-label="選單"]').click(NO_WAIT);
+  await page.locator('.sheet.open button.menu-tile', { hasText: '我的水缸' }).click(NO_WAIT);
   await page.locator('.sheet.open .shop-card', { hasText: '20L' }).first().locator('button', { hasText: '買' }).click(NO_WAIT);
   const panel = page.locator('.sheet.open .purpose-panel');
   await expect(panel).toBeVisible();

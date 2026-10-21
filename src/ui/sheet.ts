@@ -18,6 +18,7 @@ export class Sheet {
   private render: (() => Node) | null = null;
   /** 會隨遊戲時間變化的面板（測試劑、觀察魚）才定時重繪；有輸入框的面板不重繪，以免打斷操作。 */
   private live = false;
+  private pendingClose: (() => void) | null = null;
   onClose: (() => void) | null = null;
   /** 開了一個面板（main 用來收掉餵食模式）。 */
   onOpen: (() => void) | null = null;
@@ -52,7 +53,10 @@ export class Sheet {
     if (fresh) this.panel.scrollTop = this.body.scrollTop = 0;
     this.backdrop.classList.add('open');
     this.panel.classList.add('open');
-    if (fresh) this.onOpen?.();
+    if (fresh) {
+      this.cancelCloseLater();
+      this.onOpen?.();
+    }
   }
 
   /** 重畫；內容跟畫面上的一模一樣就不換，免得按鈕在按下和放開之間被換掉而點不到（#144）。 */
@@ -64,7 +68,26 @@ export class Sheet {
     this.body.replaceChildren(next);
   }
 
+  /** 這個面板過 ms 毫秒自己收（遊戲性評測第 14 輪 #257：測水結果看一眼就好，跟換水一樣）；這段時間點過面板就不收。 */
+  closeLater(title: string, ms: number): void {
+    this.cancelCloseLater();
+    const cancel = () => this.cancelCloseLater();
+    const timer = window.setTimeout(() => {
+      this.cancelCloseLater();
+      if (this.isOpen && this.title.textContent === title) this.close();
+    }, ms);
+    this.panel.addEventListener('pointerdown', cancel);
+    this.pendingClose = () => (window.clearTimeout(timer), this.panel.removeEventListener('pointerdown', cancel));
+  }
+
+  /** 關掉或重開同名面板時取消上一次的自動收起，免得新開的面板被舊的計時器提早收掉。 */
+  private cancelCloseLater(): void {
+    this.pendingClose?.();
+    this.pendingClose = null;
+  }
+
   close(): void {
+    this.cancelCloseLater();
     this.render = null;
     this.backdrop.classList.remove('open');
     this.panel.classList.remove('open');
@@ -152,9 +175,9 @@ export class Toasts {
     this.pop(text, tone, action);
   }
 
-  /** 只記進通知匣、不跳出來（老闆完整的話；任務卡上已經閃過短句）。 */
+  /** 只記進通知匣、不跳出來（老闆完整的話；任務卡上已經閃過短句）。不算沒看過：教學 5 分鐘鈴鐺就漲到 10，像有 10 件事沒做（#257）。 */
   log(text: string, tone: Tone = 'info'): void {
-    this.record(text, tone, undefined, true);
+    this.record(text, tone, undefined, false);
   }
 
   /** 打開通知匣：都算看過了。 */
@@ -229,12 +252,18 @@ export class Toasts {
     if (!sticky) this.arm(el, tone);
   }
 
-  /** 一般的停 4 秒；警告、壞消息要看清楚，停 6 秒。 */
+  /** 開面板時收掉畫面上的一般通知（畫面評測第 8 輪 #254：舊通知浮在商店標題上）；要處理的、剛跳出來的留著。 */
+  clear(): void {
+    const cur = this.current;
+    if (cur && !cur.sticky && performance.now() - cur.at > DIRECT_MS) cur.el.remove();
+  }
+
+  /** 一般的停 2.5 秒（畫面評測第 8 輪 #252）；警告、壞消息要看清楚，停 5 秒。 */
   private arm(el: HTMLElement, tone: Tone): void {
     window.clearTimeout(this.fadeTimer);
     window.clearTimeout(this.removeTimer);
     el.classList.remove('fade');
-    const stay = tone === 'info' ? 4000 : 6000;
+    const stay = tone === 'info' ? 2500 : 5000;
     this.fadeTimer = window.setTimeout(() => el.classList.add('fade'), stay);
     this.removeTimer = window.setTimeout(() => el.remove(), stay + 600);
   }
