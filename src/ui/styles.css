@@ -931,7 +931,8 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 /* 通知（YenWel：通知太亂）：一次一則、一行、前面一個圖示；其他進通知匣（鈴鐺數字） */
 .toasts { width: auto !important; max-width: min(92vw, 460px); align-items: center; }
 .toast { padding: 6px 8px 6px 6px; border-left-width: 1px; border-radius: 999px; gap: 8px !important; font-size: 13.5px; max-width: 100%; }
-.toast-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 最多兩行，不再截成「…可以調…」（v10 第 9 輪追蹤） */
+.toast-text { flex: 1; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .toast-icon { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 14px; color: #08202a; background: var(--ok); }
 .toast-icon::before { content: '✓'; }
 .toast.warn .toast-icon { background: var(--warn); }
@@ -1054,8 +1055,9 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 .pp-chooser { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 .pp-chooser-label { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--gold); color: var(--deep); font-weight: 700; font-size: 13px; }
 .pp-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px; }
-.pp-chip { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 66px; padding: 4px; border-radius: 10px; border: 1px solid rgba(227, 189, 109, 0.25); background: rgba(8, 30, 40, 0.5); font-size: 11px; line-height: 1.2; }
-.pp-chip img { width: 56px; height: 30px; object-fit: contain; }
+.pp-chip { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 84px; padding: 4px; border-radius: 10px; border: 1px solid rgba(227, 189, 109, 0.25); background: rgba(8, 30, 40, 0.5); font-size: 11px; line-height: 1.2; }
+/* 小圖放大（v10 截圖 11：40px 看不出雙劍、大耳和基本款的差別） */
+.pp-chip img { width: 76px; height: 42px; object-fit: contain; }
 .pp-chip.active { border-color: var(--gold); background: rgba(227, 189, 109, 0.18); color: var(--gold-bright); box-shadow: 0 0 0 2px rgba(227, 189, 109, 0.25); }
 .pp-row { margin-top: 10px; }
 .pp-row-head { display: flex; align-items: baseline; gap: 8px; }
@@ -1096,7 +1098,8 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 .qt-card.dream { border-color: rgba(255, 150, 120, 0.8); background: radial-gradient(circle at 50% 30%, rgba(255, 140, 110, 0.28), rgba(14, 22, 28, 0.92) 70%); }
 .qt-art { width: 64px; height: 40px; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)); }
 .qt-art.plant, .qt-art.stone { height: 44px; }
-.qt-name { font-weight: 700; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+/* 名稱最多兩行（v11 #279：「藍草尾一公兩母」被截成「藍草尾一…」） */
+.qt-name { font-weight: 700; max-width: 100%; overflow: hidden; text-align: center; line-height: 1.15; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .qt-sub { color: var(--muted); font-size: 9.5px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .qt-card .price-tag { font-size: 11px; }
 .qt-badge { position: absolute; top: -7px; left: 50%; transform: translateX(-50%); padding: 0 6px; border-radius: 999px; background: #e9785f; color: #fff; font-size: 9.5px; font-weight: 700; white-space: nowrap; }

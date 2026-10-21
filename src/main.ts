@@ -172,11 +172,17 @@ async function start(): Promise<void> {
   const undoable = (run: () => void, text: string, tone: 'warn' | 'info' = 'info') => {
     const before = structuredClone(game.state);
     run();
+    const until = performance.now() + 60_000;
     toasts.show(text, tone, {
       label: '復原',
       // 復原是把整缸換回操作前的樣子：隔太久再按會把這段時間發生的事一起抹掉，只給 1 分鐘（#273）
-      until: performance.now() + 60_000,
+      until,
       run: () => {
+        // 通知匣開著放超過 1 分鐘才按：按鈕還在，但不復原（架構審查 #277）
+        if (performance.now() >= until) {
+          toasts.show('已經超過 1 分鐘，不能復原了', 'warn');
+          return;
+        }
         game.restoreActive(before);
         toasts.show('已經復原');
       },

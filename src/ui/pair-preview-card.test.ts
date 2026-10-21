@@ -19,6 +19,7 @@ describe('配一對看看（P3）', () => {
   it('小魚的圖：母魚是素的、尾巴帶品系色，公魚照品系和鰭型', () => {
     expect(kidArt({ sex: 'female', name: '全紅', look: 2, fins: [], tailShape: 'round', pct: 50 })).toBe('fish/guppy-female-base-albino.webp');
     expect(kidArt({ sex: 'female', name: '藍草尾', look: 0, fins: [], tailShape: 'round', pct: 50 })).toBe('fish/guppy-female-base-blue.webp');
+    expect(kidArt({ sex: 'female', name: '藍尾禮服', look: 3, fins: [], tailShape: 'round', pct: 50 })).toBe('fish/guppy-female-base-tuxedo.webp');
     expect(kidArt({ sex: 'male', name: '藍草尾大C', look: 0, fins: ['大C'], tailShape: 'round', pct: 50 })).toBe('fish/guppy-male-bluegrass-bigc.webp');
     expect(kidArt({ sex: 'male', name: '藍草尾雙劍', look: 0, fins: ['雙劍'], tailShape: 'round', pct: 50 })).toBe('fish/guppy-male-bluegrass-sword3.webp');
     expect(kidArt({ sex: 'male', name: '藍尾禮服', look: 3, fins: ['燕尾'], tailShape: 'round', pct: 50 })).toBe('fish/guppy-male-tuxedo-swallow.webp');

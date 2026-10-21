@@ -1,10 +1,10 @@
 """母孔雀魚分品系：母魚身體一樣是灰金色，只有尾鰭（和一點背鰭）帶品系的顏色。
-藍：藍草尾、藍尾禮服（藍尾帶細黑點）；紅：紅蛇王；金：黃金蛇王；白子：全紅白子（淡紅尾、紅眼）。
+藍：藍草尾（藍尾帶細黑點）；禮服：藍尾禮服（純藍尾、後半身偏暗）；紅：紅蛇王；金：黃金蛇王；白子：全紅白子（淡紅尾、紅眼）。
 用法（repo 根目錄）：python3 scripts/art/guppy-females.py <輸出資料夾>"""
 import sys, colorsys, numpy as np
 from PIL import Image
 OUT = sys.argv[1]
-TINTS = {'blue': (212, 0.75, 1.0), 'red': (4, 0.85, 0.95), 'gold': (44, 0.85, 1.05), 'albino': (6, 0.6, 1.08)}
+TINTS = {'blue': (212, 0.75, 1.0), 'tuxedo': (214, 0.8, 0.95), 'red': (4, 0.85, 0.95), 'gold': (44, 0.85, 1.05), 'albino': (6, 0.6, 1.08)}
 
 def hsl_tint(rgb, hue, sat, light):
   r, g, b = [rgb[..., i] / 255 for i in range(3)]
@@ -50,6 +50,16 @@ def make(name, tint):
       dots += np.exp(-((xx - x) ** 2 + (yy - y) ** 2) / (r * r))
     d = np.clip(dots, 0, 1) * m * 0.75
     out[..., :3] *= (1 - d)[..., None]
+  if tint == 'tuxedo':
+    # 禮服母魚：後半身（尾柄往前約四成身長）偏暗，像公魚的黑外套淡淡一層
+    col = np.where(al[:, px] > 128)[0]
+    cy, ph = (col.min() + col.max()) / 2, (col.max() - col.min()) / 2
+    # 只蓋身體（尾柄往前慢慢變高的帶狀），不蓋背鰭、臀鰭
+    half = ph + (xx - px) * 0.2
+    band = np.clip((half - np.abs(yy - cy)) / 4, 0, 1)
+    body = np.clip((xx - (px - 6)) / 10, 0, 1) * np.clip((px + 0.42 * (W - px) - xx) / 22, 0, 1) * band
+    navy = np.array([20, 26, 48], np.float32)
+    out[..., :3] = out[..., :3] * (1 - 0.72 * body)[..., None] + navy * (0.72 * body)[..., None]
   if tint == 'albino':
     # 白子：眼睛是寶石紅（找右邊兩成裡最暗的地方當瞳孔）
     darkm = ((a[..., :3].mean(-1) < 60) & (al > 200)).astype(np.float32)

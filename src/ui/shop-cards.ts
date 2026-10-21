@@ -22,8 +22,8 @@ export function guppyArt(strain: number, fin?: string): string {
   return `fish/${base}${shape ? `-${shape}` : ''}.webp`;
 }
 
-/** 品系 → 母魚尾巴的顏色（scripts/art/guppy-females.py）：草尾、禮服是藍尾，蛇王金或紅，全紅白子淡紅尾紅眼。 */
-const FEMALE_STRAIN_TINT = ['blue', 'gold', 'albino', 'blue', 'red'];
+/** 品系 → 母魚尾巴的顏色（scripts/art/guppy-females.py）：草尾藍尾帶點、禮服純藍尾加暗後半身，蛇王金或紅，全紅白子淡紅尾紅眼。 */
+const FEMALE_STRAIN_TINT = ['blue', 'gold', 'albino', 'tuxedo', 'red'];
 
 export function femaleGuppyArt(strain: number): string {
   return `fish/guppy-female-base-${FEMALE_STRAIN_TINT[strain] ?? 'blue'}.webp`;

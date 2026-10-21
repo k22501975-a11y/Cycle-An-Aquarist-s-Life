@@ -124,6 +124,9 @@ describe('母孔雀魚分品系（#272）', () => {
     expect(femaleKey(P({ red: true }), true)).toBe('guppy-female-pregnant-red');
     expect(femaleKey(P({ gold: true }), false)).toBe('guppy-female-base-gold');
     expect(femaleKey(P({ red: true, albino: true }), false)).toBe('guppy-female-base-albino');
+    // 藍禮服母魚有自己的圖，不和藍草尾母一樣（v11 #279）
+    expect(femaleKey(P({ tuxedo: true }), false)).toBe('guppy-female-base-tuxedo');
+    expect(femaleKey(P({ grass: true }), false)).toBe('guppy-female-base-blue');
     for (const t of FEMALE_TINTS) expect(PAINTED[`guppy-female-base-${t}`].eating).toBe(`fish/guppy-female-base-${t}-eating.webp`);
   });
   it('鰭比較長的圖照基本款的大小算（span），半月、劍尾的圖比基本款寬', () => {
