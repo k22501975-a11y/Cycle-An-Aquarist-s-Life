@@ -22,6 +22,9 @@ interface Page {
   scape?: boolean;
 }
 
+/** 換任務自己展開圖卡後，這段時間內點缸不收（#275）。 */
+const TRAY_GRACE_MS = 1000;
+
 /**
  * 新手引導的介面：左上角的任務小卡，以及老闆說話的對話框。
  * 教學做完（或跳過）後，小卡改顯示接下來的目標（goals.ts，M19）。
@@ -113,6 +116,8 @@ export class Guide {
     return currentQuest(this.progress)?.quick ?? null;
   }
 
+  /** 換任務自己展開圖卡的時間（performance.now()）。 */
+  private openedAt = -Infinity;
   /** 上次畫的圖卡種類；refreshTray 會清掉 shownTray，靠這個分辨是不是真的換了任務。 */
   private trayKind = '';
 
@@ -126,8 +131,9 @@ export class Guide {
   }
 
   /** 玩家點了缸（畫面評測第 8 輪 #252：圖卡不要一直蓋住左邊的缸）：先收起來，任務卡上留個記號。 */
-  tuckTray(): void {
-    if (this.tray.hidden) return;
+  tuckTray(fromTap = false): void {
+    // 點缸收起時，剛因為換任務自己展開的那一下不算（點缸的那一下常常就是完成上一個任務的那一下）
+    if (this.tray.hidden || (fromTap && performance.now() - this.openedAt < TRAY_GRACE_MS)) return;
     this.tray.classList.add('tucked');
     this.pill.classList.add('tray-tucked');
     this.onLayout();
@@ -158,8 +164,11 @@ export class Guide {
     // 錢變了重畫（refreshTray）時保持玩家展開或收起的樣子
     const changed = (tray ?? '') !== this.trayKind;
     this.trayKind = tray ?? '';
-    if (this.tray.hidden || (changed && !this.tutorialOver)) this.untuck();
-    else if (changed) this.tuckTray();
+    if (this.tray.hidden) this.untuck();
+    else if (changed && !this.tutorialOver) {
+      this.untuck();
+      this.openedAt = performance.now();
+    } else if (changed) this.tuckTray();
   }
 
   get pillVisible(): boolean {
