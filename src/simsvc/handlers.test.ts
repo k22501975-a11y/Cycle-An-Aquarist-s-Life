@@ -73,6 +73,15 @@ describe('模擬小服務（L2）', () => {
     expect(verify(raw, JSON.parse(serializeSave(state, 7, T0)), 0)).toEqual([]);
   });
 
+  it('上傳檢查：憑空多出一條店裡買不到的好魚會被擋下；市場買到的（伺服器知道這份基因）照收（#76）', () => {
+    const { state, raw } = saveAt(T0);
+    const f = addFish(state, 'guppy', { carriesIch: false, sex: 'male' });
+    f.genome = { ...f.genome!, tail: 99 };
+    const next = JSON.parse(serializeSave(state, 7, T0));
+    expect(verify(raw, next, 0).map((p) => p.code)).toEqual(['genome_forged']);
+    expect(verify(raw, next, 0, [], [f.genome])).toEqual([]);
+  });
+
   it('上傳檢查：已經在市場出貨的魚又出現在存檔裡（拿出貨前的舊存檔上傳），會被擋下', () => {
     const { state, raw } = saveAt(T0);
     const sold = inspect(raw, state.fish[0].id).item!;

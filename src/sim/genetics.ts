@@ -179,6 +179,41 @@ function applyFin(rng: RngState, g: GuppyGenome, fin: FinTrait): void {
   if (fin === 'halfmoon') g.tail = Math.max(g.tail, 72);
 }
 
+/** 店魚尾鰭分數最高（45 + gaussian × 10，4.5 個標準差）。 */
+export const STORE_TAIL_MAX = 90;
+
+const samePair = (a: Pair | undefined, b: Pair | undefined) => (a ?? [0, 0])[0] === (b ?? [0, 0])[0] && (a ?? [0, 0])[1] === (b ?? [0, 0])[1];
+
+/**
+ * 這份基因是不是店裡買得到的（storeGenome 生得出來，或店裡懷孕母魚肚子裡的精子）：花紋要是某個品系的模板（白子可以多帶一個隱性），
+ * 鰭型最多一種（applyFin），尾鰭分數在店魚範圍內。伺服器檢查新出現的魚用（genome-check.ts）。
+ */
+export function couldBeStoreGenome(g: GuppyGenome): boolean {
+  if (!(g.tail >= 0 && g.tail <= STORE_TAIL_MAX)) return false;
+  if (g.fins !== undefined && !(g.fins >= 0 && g.fins <= 100)) return false;
+  const sex = g.y ? 'male' : 'female';
+  const strainOk = GUPPY_STRAINS.some((_, i) => {
+    const t = template(i, sex);
+    const albino = samePair(g.albino, t.albino) || (samePair(t.albino, [0, 0]) && samePair(g.albino, [0, 1]));
+    const y = !t.y ? !g.y : !!g.y && g.y.snake === t.y.snake && g.y.grass === t.y.grass;
+    return albino && samePair(g.gold, t.gold) && samePair(g.tuxedo, t.tuxedo) && samePair(g.red, t.red) && g.snakeX.join() === t.snakeX.join() && y;
+  });
+  if (!strainOk) return false;
+  const sword = g.y?.sword ?? 0;
+  const none = (k: 'swallow' | 'ribbon' | 'dumbo') => samePair(g[k], [0, 0]);
+  const only = (k: 'swallow' | 'ribbon' | 'dumbo' | null) => (['swallow', 'ribbon', 'dumbo'] as const).every((x) => x === k || none(x));
+  if (g.fins === undefined) {
+    // 沒有鰭型；或燕尾母魚肚子裡的精子（帶一個燕尾的正常公魚）
+    return sword === 0 && (only(null) || (only('swallow') && samePair(g.swallow, [1, 0])));
+  }
+  if (only('swallow') && samePair(g.swallow, [1, 1])) return sword === 0;
+  if (only('dumbo') && samePair(g.dumbo, [1, 1])) return sword === 0;
+  if (only('ribbon') && samePair(g.ribbon, [1, 0])) return sword === 0 && (g.fins <= BIG_C_FINS - 1 || g.fins >= BIG_C_FINS + 4);
+  if (!only(null)) return false;
+  // 劍尾（公魚 Y 上雙劍；母魚看不出來）、大三角（尾鰭至少 72）
+  return sex === 'female' || sword === 3 || (sword === 0 && g.tail >= 72);
+}
+
 /** 舊存檔的孔雀魚：照原本依編號輪替的外觀補上對應的基因，看起來不會變。 */
 export function legacyGenome(id: number, sex: 'male' | 'female'): GuppyGenome {
   const g = template(id, sex);

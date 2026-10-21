@@ -39,8 +39,8 @@ public class HttpSimClient implements SimClient {
     }
 
     @Override
-    public List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs, List<JsonNode> shipped) {
-        JsonNode r = call("/verify", Map.of("previous", previous, "next", next, "elapsedMs", elapsedMs, "shipped", shipped));
+    public List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs, List<JsonNode> shipped, List<JsonNode> received) {
+        JsonNode r = call("/verify", Map.of("previous", previous, "next", next, "elapsedMs", elapsedMs, "shipped", shipped, "received", received));
         List<Problem> out = new ArrayList<>();
         for (JsonNode p : r.path("problems")) out.add(new Problem(p.path("code").asText(), p.path("message").asText()));
         return out;

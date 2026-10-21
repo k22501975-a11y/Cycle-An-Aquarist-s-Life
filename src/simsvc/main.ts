@@ -69,7 +69,7 @@ function arrivalList(v: unknown): ArrivalQuery[] {
 
 const routes: Record<string, (body: Record<string, unknown>) => unknown> = {
   '/advance': (b) => advance(b.save, num(b, 'now')),
-  '/verify': (b) => ({ problems: verify(b.previous, b.next, num(b, 'elapsedMs'), shippedList(b.shipped)) }),
+  '/verify': (b) => ({ problems: verify(b.previous, b.next, num(b, 'elapsedMs'), shippedList(b.shipped), Array.isArray(b.received) ? b.received.filter((g) => !!g && typeof g === 'object') : []) }),
   '/inspect': (b) => inspect(b.save, num(b, 'fishId')),
   '/arrivals': (b) => ({ arrivals: arrivals(b.save, arrivalList(b.orders)) }),
 };

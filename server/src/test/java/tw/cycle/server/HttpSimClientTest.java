@@ -45,12 +45,12 @@ class HttpSimClientTest {
     @Test
     void 存檔太大模擬服務回413_當成存檔有問題() throws Exception {
         HttpSimClient sim = answering(413, "{\"message\":\"資料太大\"}");
-        assertThatThrownBy(() -> sim.verify(save(), save(), 1000, java.util.List.of())).isInstanceOf(HttpSimClient.BadSave.class);
+        assertThatThrownBy(() -> sim.verify(save(), save(), 1000, java.util.List.of(), java.util.List.of())).isInstanceOf(HttpSimClient.BadSave.class);
     }
 
     @Test
     void 模擬服務回500_當成服務掛了() throws Exception {
         HttpSimClient sim = answering(500, "oops");
-        assertThatThrownBy(() -> sim.verify(save(), save(), 1000, java.util.List.of())).isInstanceOf(SimClient.Unavailable.class);
+        assertThatThrownBy(() -> sim.verify(save(), save(), 1000, java.util.List.of(), java.util.List.of())).isInstanceOf(SimClient.Unavailable.class);
     }
 }

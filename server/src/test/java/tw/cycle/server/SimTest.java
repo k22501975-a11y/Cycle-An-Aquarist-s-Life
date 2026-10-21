@@ -42,6 +42,7 @@ class SimTest {
         final List<Long> verifiedElapsed = new ArrayList<>();
         final List<Long> advancedFrom = new ArrayList<>();
         final List<List<JsonNode>> verifiedShipped = new ArrayList<>();
+        final List<List<JsonNode>> verifiedReceived = new ArrayList<>();
         Inspect inspect = new Inspect(false, false, null);
         /** 到貨查詢：照收到的訂單回答；記下每次問了哪些訂單。 */
         java.util.function.Function<ArrivalQuery, Arrival> arrival = q -> new Arrival(q.order(), "unknown", false, false);
@@ -62,11 +63,12 @@ class SimTest {
         }
 
         @Override
-        public List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs, List<JsonNode> shipped) {
+        public List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs, List<JsonNode> shipped, List<JsonNode> received) {
             if (down) throw new Unavailable("down", null);
             if (unreadable) throw new HttpSimClient.BadSave("讀不出這份存檔");
             verifiedElapsed.add(elapsedMs);
             verifiedShipped.add(shipped);
+            verifiedReceived.add(received);
             // 假的：只要伺服器說有出貨的魚，就當成存檔裡又出現了
             if (!shipped.isEmpty()) return List.of(new Problem("shipped_fish", "#" + shipped.get(0).get("id") + " 已經在市場賣出了"));
             return problems;
@@ -121,6 +123,7 @@ class SimTest {
         sim.verifiedElapsed.clear();
         sim.advancedFrom.clear();
         sim.verifiedShipped.clear();
+        sim.verifiedReceived.clear();
         sim.inspect = new SimClient.Inspect(false, false, null);
         sim.arrival = q -> new SimClient.Arrival(q.order(), "unknown", false, false);
         sim.arrivalQueries.clear();
@@ -458,6 +461,21 @@ class SimTest {
         // 買家自己養死的那筆不算：1 筆有結果、0 筆存活
         assertThat(seen.get("survival").asDouble()).isEqualTo(0.0);
         assertThat(seen.get("sick").asBoolean()).isFalse();
+    }
+
+    @Test
+    void 上傳檢查時帶上市場買到的魚的基因_新出現的魚是這些就不是改出來的() throws Exception {
+        String me = player();
+        String buyer = player();
+        clock.advance(Duration.ofDays(3));
+        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        send(put("/api/save"), buyer, saveBody(0, false)).andExpect(status().isOk());
+        delivered(me, buyer, 7);
+        clock.advance(Duration.ofMinutes(5));
+        upload(buyer);
+        List<JsonNode> received = sim.verifiedReceived.get(sim.verifiedReceived.size() - 1);
+        assertThat(received).hasSize(1);
+        assertThat(received.get(0).get("tail").asInt()).isEqualTo(60);
     }
 
     @Test
