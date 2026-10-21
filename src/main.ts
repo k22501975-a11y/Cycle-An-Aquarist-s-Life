@@ -7,6 +7,7 @@ import { applySeason, blankGameState, Game } from './game/game';
 import { crisisText } from './game/crisis';
 import { setupPanel } from './ui/setup-panel';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
+import { catchUpSave } from './game/catchup-runner';
 import { menuTile, ownerImg } from './ui/art-icons';
 import { cloudTimeScale, SpeedControl } from './ui/speed-control';
 import { installCrashGuard } from './ui/crash';
@@ -84,18 +85,24 @@ async function start(): Promise<void> {
   const dock = document.getElementById('dock')!;
 
   const app = new Application();
-  await app.init({ resizeTo: stage, backgroundAlpha: 0, antialias: true, resolution: Math.min(2, window.devicePixelRatio), autoDensity: true });
-  stage.appendChild(app.canvas);
-
-  // 讀取存檔並補算離開期間的時間
+  // 讀取存檔
   const store = browserStore();
   const loaded = loadSave(store);
-  const saved = loaded.file;
-  if (saved) for (const t of [saved.state, ...(saved.tanks ?? [])]) applySeason(t);
-  const offline = saved ? catchUp(saved) : null;
+  if (loaded.file) for (const t of [loaded.file.state, ...(loaded.file.tanks ?? [])]) applySeason(t);
+  // 開機要等的三件事同時做（G6）：Pixi 初始化、下載這些缸畫得到的圖（Issue #81，其他的等主畫面出來後在背景載）、
+  // 補算離開期間的時間（離開久的在背景執行緒算，見 catchUpSave）
+  const before = loaded.file ? [loaded.file.state, ...(loaded.file.tanks ?? [])] : [];
+  const [, , caught] = await Promise.all([
+    app.init({ resizeTo: stage, backgroundAlpha: 0, antialias: true, resolution: Math.min(2, window.devicePixelRatio), autoDensity: true }),
+    loadPaintedArt(startupArt(before)),
+    loaded.file ? catchUpSave(loaded.file) : null,
+  ]);
+  stage.appendChild(app.canvas);
+  const saved = caught?.file ?? null;
+  const offline = caught?.offline ?? null;
   const game = new Game(saved?.state ?? blankGameState(), saved?.timeScale ?? 7, saved?.tanks ?? [], saved?.active ?? 0);
   for (const t of game.tanks) applySeason(t);
-  // 只先等這些缸畫得到的圖（Issue #81），其他的等主畫面出來後在背景載
+  // 補算期間才出現的（生了小魚、長出螺）和新遊戲的缸再補載，已經載過的不會重載
   await loadPaintedArt(startupArt(game.tanks));
   const extraTanks = () => ({ tanks: game.tanks.slice(1), active: game.active });
   const save = () => writeSave(store, game.tanks[0], game.clock.timeScale, Date.now(), extraTanks());
