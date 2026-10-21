@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { blankGameState } from './game';
 import {
   addFish,
-  addPlant,
+  buyPlant,
   applySetup,
   FISH_SPECIES,
   feed,
@@ -38,7 +38,8 @@ function cycleDays(choice: SetupChoice, roomC: number): number {
   s.environment.roomSwingC = 2;
   s.water.tempC = s.water.tempAvgC = roomC;
   expect(applySetup(s, choice)).toBeNull();
-  addPlant(s, 'anubias');
+  // 在店裡買的（第一株一定夾帶扁卷螺，polish-to-9.md §4）
+  buyPlant(s, 'anubias');
   for (const sex of ['male', 'female', 'female'] as const) addFish(s, 'guppy', { carriesIch: false, carries: [], sex });
   for (let d = 0; d < 14; d++) {
     feed(s, meal(s) * PINCH_MEALS);

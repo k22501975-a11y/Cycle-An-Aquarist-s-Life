@@ -1,4 +1,4 @@
-import type { FishSpeciesId, PlantSpeciesId } from '../sim';
+import { markDaily, type FishSpeciesId, type PlantSpeciesId } from '../sim';
 import { artImg, type ArtIcon } from './art-icons';
 import { CODEX, isUnlocked, type CodexCategory, type CodexEntry } from './codex';
 import { h } from './dom';
@@ -64,6 +64,8 @@ function pic(e: CodexEntry, cls: string): HTMLElement {
 /** 圖鑑：分類分頁（有圖），條目是圖卡，點進去看詳細；疾病沒遇過前顯示「？」。 */
 export function codexPanel(ctx: PanelContext, seen: Set<string>, category: CodexCategory = 'fish', entryId?: string): Node {
   const { sheet } = ctx;
+  // 每日小事「翻一頁圖鑑」
+  markDaily(ctx.game.tanks, 'codex');
   const go = (c: CodexCategory, id?: string) => sheet.open('圖鑑', () => codexPanel(ctx, seen, c, id));
   const tabs = iconTabs(TABS, category, (c) => go(c));
   const entry = entryId ? CODEX.find((e) => e.id === entryId) : undefined;

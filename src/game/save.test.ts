@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, feed } from '../sim';
+import { addFish, addPlant, economy, feed, simulate, snailState } from '../sim';
 import { blankGameState, newGameState } from './game';
-import { catchUp, clearSave, MAX_OFFLINE_HOURS, readSave, SAVE_KEY, writeSave, type KeyValueStore } from './save';
+import { catchUp, clearSave, MAX_OFFLINE_HOURS, parseSave, readSave, SAVE_KEY, serializeSave, writeSave, type KeyValueStore } from './save';
 
 function memoryStore(): KeyValueStore & { data: Map<string, string> } {
   const data = new Map<string, string>();
@@ -100,5 +100,36 @@ describe('離線補算', () => {
     writeSave(store, state, 7, 0);
     const result = catchUp(readSave(store)!, HOUR_MS);
     expect(result.events.some((e) => e.type === 'fish_died')).toBe(true);
+  });
+});
+
+describe('舊存檔遷移：搭便車的螺（polish-to-9.md §4）', () => {
+  /** 做一份舊版存檔：錢包沒有 plantBuys、螺沒有 pestsSeen。 */
+  const oldSave = (setup: (main: ReturnType<typeof newGameState>, second: ReturnType<typeof newGameState>) => void) => {
+    const main = newGameState(5);
+    const second = newGameState(6);
+    setup(main, second);
+    for (const t of [main, second]) {
+      delete economy(t).plantBuys;
+      if (t.snails) delete t.snails.pestsSeen;
+    }
+    const res = parseSave(serializeSave(main, 7, 1000, undefined, { tanks: [second], active: 0 }));
+    if (!res.ok) throw new Error(res.reason);
+    return res.file;
+  };
+
+  it('任一缸已經有水草：第一次必帶螺算用掉了；都沒有水草就還沒用', () => {
+    expect(economy(oldSave((_, second) => void addPlant(second, 'anubias')).state).plantBuys).toBe(1);
+    expect(economy(oldSave(() => {}).state).plantBuys).toBe(0);
+  });
+
+  it('缸裡已經有 5 隻以上的害蟲螺：直接當作看過了，讀檔後不會補記 pests_seen', () => {
+    const file = oldSave((_, second) => {
+      snailState(second).pests.ramshorn = 12;
+    });
+    const second = file.tanks![0];
+    expect(second.snails!.pestsSeen).toBe(true);
+    simulate(second, 24);
+    expect(second.events.some((e) => e.type === 'pests_seen')).toBe(false);
   });
 });

@@ -1,10 +1,10 @@
-import { isJuvenile, isLightOn, recordEvent, type Fish, type TankState } from './state';
+import { isJuvenile, isLightOn, noteAct, recordEvent, type Fish, type TankState } from './state';
 import { growthStage } from './growth';
 import { FISH_SPECIES, isShrimpSpecies, type FishSpeciesId, type PlantSpeciesId } from './species';
 import { phenotype, type GuppyPhenotype } from './genetics';
 import { updateOrders, type OrderBoard } from './orders';
 import type { GoalState } from './goals';
-import type { DailyState } from './daily';
+import type { DailyState, DailyTaskId } from './daily';
 
 /**
  * 經濟（GAME_DESIGN 第 7 節、market-and-breeding.md §3.1）：
@@ -112,6 +112,30 @@ export interface Economy {
   powerPending?: boolean;
   /** 今天的每日小事（F3）；舊存檔沒有，開完缸第一次更新時出題。 */
   daily?: DailyState;
+  /** 前兩天出過的小事（同一題 3 天內不重複出，U6）。 */
+  dailyRecent?: Array<{ day: number; ids: DailyTaskId[] }>;
+  /** 連續幾天開了小事寶箱、最後一次是第幾天（連續 7 天送大寶箱，U5）。 */
+  dailyStreak?: { count: number; lastDay: number };
+  /** 寶箱開出來、還沒擺進缸的石頭和沉木（HARDSCAPE 的 id）：到商店「設備」免費放進缸。 */
+  hardscapeBag?: string[];
+  /** 寶箱開出來、還沒倒的硝化菌液（瓶）。 */
+  bacteriaBottles?: number;
+  /** 寶箱開出來的飼料還能餵幾餐（週末結算飼料錢時先扣這個）。 */
+  freeMeals?: number;
+  /**
+   * 這個存檔在店裡買過幾次水草（所有缸合計；第一次必定夾帶扁卷螺，snails.ts plantHitchhikers）。
+   * 新遊戲從 0 開始；舊存檔沒有，讀檔時任一缸有水草就當作已經用掉第一次（migrateHousehold）。
+   */
+  plantBuys?: number;
+  /** 寶箱累計開出多少魚幣（第 60 天前上限 400，polish-to-9.md §4）。 */
+  chestCoins?: number;
+  /**
+   * 最後一次有真的收入（賣魚、賣插枝、交單、市場賣出）是第幾個遊戲天；寶箱魚幣不算。
+   * 訂單板的收入空檔保底用（polish-to-9.md §4「收入空檔」）；舊存檔沒有，第一次檢查時從那天開始算。
+   */
+  lastEarnedDay?: number;
+  /** 手上的插枝裡有幾株是寶箱來的：只能種，不能賣回店家、交單、上架或送人換錢（polish-to-9.md §4）。 */
+  chestCuttings?: Partial<Record<PlantSpeciesId, number>>;
   /** 已經套用到伺服器帳本的第幾筆（市場的收支，docs/ledger.md）；舊存檔沒有＝0。 */
   ledgerSeq?: number;
   /** 玩過幾次對水小遊戲（前幾次強制玩，F5）。 */
@@ -146,8 +170,23 @@ export function claimStarterPack(state: TankState, addGuppy: (state: TankState, 
   return true;
 }
 
+/** 共用同一個錢包的所有缸（linkTanks 登記，不進存檔）：訂單板這類全家共用的東西要一次看所有缸。 */
+const households = new WeakMap<Economy, TankState[]>();
+
+/** 登記共用這個錢包的缸（household.ts 的 linkTanks 每次連線時呼叫）。 */
+export function registerHousehold(tanks: TankState[]): void {
+  const wallet = tanks[0]?.economy;
+  if (wallet) households.set(wallet, [...tanks]);
+}
+
+/** 跟這缸共用錢包的所有缸（第一缸是主缸）；沒登記過（只有一缸、測試）就只有自己。 */
+export function householdTanks(state: TankState): TankState[] {
+  const list = state.economy && households.get(state.economy);
+  return list && list.includes(state) ? list : [state];
+}
+
 export function economy(state: TankState): Economy {
-  return (state.economy ??= { coins: STARTING_COINS, kwh: 0, lastBillHours: state.hours, sold: { day: -1, count: 0 }, cuttings: {} });
+  return (state.economy ??= { coins: STARTING_COINS, kwh: 0, lastBillHours: state.hours, sold: { day: -1, count: 0 }, cuttings: {}, plantBuys: 0 });
 }
 
 /**
@@ -158,8 +197,14 @@ export function applyLedger(state: TankState, entry: { delta: number; ledgerSeq:
   const e = economy(state);
   if (entry.ledgerSeq <= (e.ledgerSeq ?? 0)) return false;
   e.coins += entry.delta;
+  if (entry.delta > 0) noteEarned(state);
   e.ledgerSeq = entry.ledgerSeq;
   return true;
+}
+
+/** 記下今天有真的收入（訂單板看多久沒收入，orders.ts 的收入空檔保底）。寶箱魚幣不算。 */
+export function noteEarned(state: TankState): void {
+  economy(state).lastEarnedDay = Math.floor(state.hours / 24);
 }
 
 export function price(key: string): number {
@@ -200,7 +245,10 @@ export function updateEconomy(state: TankState, dt: number): void {
   e.kwh += (powerWatts(state) / 1000) * dt;
   if (state.hours - e.lastBillHours >= BILL_DAYS * 24) {
     const power = Math.round(e.kwh * KWH_PRICE);
-    const food = Math.round((e.meals ?? 0) * FOOD_PER_MEAL);
+    // 寶箱送的飼料先用掉，不收錢
+    const free = Math.min(e.meals ?? 0, e.freeMeals ?? 0);
+    if (free > 0) e.freeMeals = (e.freeMeals ?? 0) - free;
+    const food = Math.round(((e.meals ?? 0) - free) * FOOD_PER_MEAL);
     e.coins -= power + food;
     recordEvent(state, { type: 'power_bill', count: power, cause: String(food) });
     e.kwh = 0;
@@ -289,6 +337,7 @@ export function sellFish(state: TankState, fishId: number): number {
   state.fish = state.fish.filter((f) => f !== fish);
   const e = economy(state);
   e.coins += coins;
+  noteEarned(state);
   e.fishSold = (e.fishSold ?? 0) + 1;
   return coins;
 }
@@ -303,14 +352,27 @@ export function noteRaisedGone(state: TankState, fish: Fish): void {
   e.raisedGone = (e.raisedGone ?? 0) + 1;
 }
 
-/** 把手上的插枝全部賣掉（算一次），回傳拿到多少錢。 */
+/** 手上這種插枝有幾株是寶箱來的（不會比手上的多）。 */
+export function chestCuttingsOf(state: TankState, species: PlantSpeciesId): number {
+  const e = economy(state);
+  return Math.min(e.chestCuttings?.[species] ?? 0, e.cuttings[species] ?? 0);
+}
+
+/** 手上這種插枝可以換錢的株數（賣給店家、交單、上架、送人）：寶箱來的不算（polish-to-9.md §4）。 */
+export function sellableCuttings(state: TankState, species: PlantSpeciesId): number {
+  return Math.max(0, (economy(state).cuttings[species] ?? 0) - chestCuttingsOf(state, species));
+}
+
+/** 把手上的插枝全部賣掉（算一次），回傳拿到多少錢。寶箱來的不收，留在手上可以種。 */
 export function sellCuttings(state: TankState, species: PlantSpeciesId): number {
   const e = economy(state);
-  const n = e.cuttings[species] ?? 0;
+  const n = sellableCuttings(state, species);
   if (n <= 0 || !countSale(state)) return 0;
   const coins = n * plantBuybackPrice(species);
-  e.cuttings[species] = 0;
+  e.cuttings[species] = (e.cuttings[species] ?? 0) - n;
   e.coins += coins;
+  noteEarned(state);
+  noteAct(state, 'cutting');
   return coins;
 }
 
@@ -323,7 +385,11 @@ export function addCuttings(state: TankState, species: PlantSpeciesId, count: nu
 export function takeCutting(state: TankState, species: PlantSpeciesId): boolean {
   const e = economy(state);
   if ((e.cuttings[species] ?? 0) <= 0) return false;
+  // 先種寶箱來的（種下去就是缸裡的草了）
+  const chest = chestCuttingsOf(state, species);
+  if (chest > 0) e.chestCuttings![species] = chest - 1;
   e.cuttings[species]! -= 1;
+  noteAct(state, 'cutting');
   return true;
 }
 

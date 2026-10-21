@@ -4,19 +4,38 @@ import { h } from './dom';
 
 /**
  * 每日 3 件小事（F3）的畫面（#185）：左上角常駐一張小卡，三件事各一個圖示，做完打勾；
- * 三件都做完卡片發光，按寶箱領魚幣。早上報告卡也列出今天的三件。
+ * 三件都做完卡片發光，按寶箱領獎勵（魚幣、飼料、硝化菌液、石頭沉木或水草，U5）。早上報告卡也列出今天的三件。
  * 題目和判定在 sim/daily.ts，這裡只負責畫。
  */
 
-/** 每件事的圖示（找螺用螺的插畫）。 */
+/** 每件事的圖示（找螺用螺的插畫，造景、蝦、水草用各自的插畫）。 */
+const ART = `${import.meta.env.BASE_URL}art/`;
 const DAILY_ART: Record<DailyTaskId, string> = {
   test: artUrl('testkit'),
   feed: artUrl('feed'),
   water: artUrl('waterchange'),
-  trim: artUrl('trim'),
-  snail: `${import.meta.env.BASE_URL}art/snail/snail-bladder.webp`,
+  topup: artUrl('waterchange'),
+  nursery: `${ART}gear/nursery-box.webp`,
+  gear: artUrl('gear'),
   observe: artUrl('codex' satisfies ArtIcon),
+  snail: `${ART}snail/snail-bladder.webp`,
+  shrimp: `${ART}shrimp/shrimp-cherry-female.webp`,
+  plant: `${ART}scape/plant-anubias.webp`,
+  records: artUrl('records'),
+  codex: artUrl('codex'),
+  orders: artUrl('orders'),
   scape: artUrl('scape'),
+  scapePlant: `${ART}scape/plant-hydrocotyle.webp`,
+  scapeFlip: artUrl('scape'),
+  scapeLayer: artUrl('scape'),
+  scapeScale: artUrl('scape'),
+  scapePlace: `${ART}scape/wood-spider-1.webp`,
+  trim: artUrl('trim'),
+  cuttings: `${ART}scape/plant-moss.webp`,
+  clutch: `${ART}snail/snail-apple-eggs.webp`,
+  pests: artUrl('net'),
+  deadSnail: artUrl('net'),
+  rinse: `${ART}gear/sponge-filter.webp`,
 };
 
 /** 小卡上的短字（完整說明放 title 和早上報告卡）。 */
@@ -24,10 +43,28 @@ export const DAILY_SHORT: Record<DailyTaskId, string> = {
   test: '測一次水',
   feed: '餵一次飼料',
   water: '換一次水',
-  trim: '修剪水草',
-  snail: '找到螺點一下',
+  topup: '補蒸發的水',
+  nursery: '母魚進育幼盒',
+  gear: '看看設備',
   observe: '點一尾魚看看',
+  snail: '找到螺點一下',
+  shrimp: '點一隻蝦看看',
+  plant: '點一株水草看看',
+  records: '看水質趨勢',
+  codex: '翻一頁圖鑑',
+  orders: '看一眼訂單',
   scape: '移動一塊造景',
+  scapePlant: '幫水草換位置',
+  scapeFlip: '把造景翻面',
+  scapeLayer: '造景換一層',
+  scapeScale: '石頭調大調小',
+  scapePlace: '擺上新石頭',
+  trim: '修剪水草',
+  cuttings: '處理手上的插枝',
+  clutch: '摘掉螺卵',
+  pests: '撈一次小螺',
+  deadSnail: '撈出死螺',
+  rinse: '用缸水洗濾材',
 };
 
 export function dailyArt(id: DailyTaskId): string {

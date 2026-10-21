@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from './game';
-import { addFish, addFishToQuarantine, addHardscape, buyQuarantine, addPlant, CYCLE_DELAY_PER_BATCH_H, cycleConfirmed, FISH_SPECIES, feed, HARDSCAPE, isCycled, PINCH_MEALS, simulate, useTestKit, waterChange, type TankState } from '../sim';
+import { addFish, addFishToQuarantine, addHardscape, buyQuarantine, addPlant, buyPlant, CYCLE_DELAY_PER_BATCH_H, cycleConfirmed, FISH_SPECIES, feed, HARDSCAPE, isCycled, PINCH_MEALS, simulate, useTestKit, waterChange, type TankState } from '../sim';
 import { advanceQuest, currentQuest, newProgress, pendingTip, QUESTS } from '../ui/tutorial';
 
 /**
@@ -43,7 +43,8 @@ function baseline(seed: number): Pace {
     act(d);
     feed(s, meal(s) * PINCH_MEALS);
     act(d);
-    if (currentQuest(p)?.id === 'plant') addPlant(s, 'anubias');
+    // 在店裡買的（第一株一定夾帶扁卷螺，polish-to-9.md §4）
+    if (currentQuest(p)?.id === 'plant') buyPlant(s, 'anubias');
     act(d);
     if (currentQuest(p)?.id === 'test') useTestKit(s);
     act(d);

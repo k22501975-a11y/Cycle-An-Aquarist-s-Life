@@ -238,6 +238,7 @@ function releaseFry(state: TankState, mother: Fish): void {
     fry.acclimated = tankHabit(state);
     fry.growthRate = Math.min(1.4, Math.max(0.6, 1 + (nextRandom(state.rng) - 0.5) * 0.4));
     fry.guardian = mother.id;
+    fry.bornHours = state.hours;
     fry.generation = (mother.generation ?? 0) + 1;
     state.fish.push(fry);
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { DailyState } from '../sim';
-import { dailyDoneText } from './daily-card';
+import { DAILY_IDS, type DailyState } from '../sim';
+import { DAILY_SHORT, dailyArt, dailyDoneText } from './daily-card';
 
 const state = (done: boolean[]): DailyState => ({
   day: 3,
@@ -18,5 +18,15 @@ describe('每日小事的完成通知寫清楚還差哪件（#185）', () => {
   });
   it('三件都做完：叫玩家去開寶箱', () => {
     expect(dailyDoneText(state([true, true, true]), 'observe')).toContain('寶箱');
+  });
+});
+
+describe('題庫每一題都有小卡上的短字和圖示（polish-to-9.md U6）', () => {
+  it('短字不長、圖示有路徑', () => {
+    for (const id of DAILY_IDS) {
+      expect(DAILY_SHORT[id], id).toBeTruthy();
+      expect(DAILY_SHORT[id].length, id).toBeLessThanOrEqual(8);
+      expect(dailyArt(id), id).toMatch(/\.webp$/);
+    }
   });
 });

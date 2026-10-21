@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from './game';
-import { addFish, addPlant, feed, FISH_SPECIES, simulate, useTestKit, waterChange, type TankState } from '../sim';
+import { addFish, buyPlant, feed, FISH_SPECIES, simulate, useTestKit, waterChange, type TankState } from '../sim';
 
 /**
  * QA：照新手教學照顧的新缸，起始的一公兩母不該整缸死光。
@@ -18,7 +18,8 @@ interface Run {
 
 function followTutorial(seed: number): Run {
   const s = newGameState(seed);
-  addPlant(s, 'anubias');
+  // 在店裡買的（第一株一定夾帶扁卷螺，polish-to-9.md §4）
+  buyPlant(s, 'anubias');
   for (const sex of ['male', 'female', 'female'] as const) addFish(s, 'guppy', { sex });
   const alive = () => s.fish.filter((f) => f.alive);
   const meal = () => alive().reduce((mg, f) => mg + FISH_SPECIES[f.species].dailyFoodMg, 0) / 2;

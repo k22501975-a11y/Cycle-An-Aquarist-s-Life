@@ -51,6 +51,8 @@ export interface TankState {
   lastTrimHours?: number;
   /** 最近一次在造景模式移動石頭、沉木或水草的時間（每日小事用）。 */
   lastScapeHours?: number;
+  /** 其他動作最後一次的時間（每日小事判定用，DailyAct）。舊存檔沒有。 */
+  dailyActs?: Partial<Record<DailyAct, number>>;
   /** 蝦脫下來的殼（畫面上留在缸底一兩天）：哪隻蝦、什麼時候、脫完的體長。 */
   molts?: Array<{ id: number; hour: number; lengthCm: number }>;
   /** 魚幣、電費、手上的插枝。舊存檔沒有，第一次用到時給起始資金。 */
@@ -224,6 +226,8 @@ export interface Fish {
   lineage?: number;
   /** 第幾代（店裡買的是 0）。 */
   generation?: number;
+  /** 在缸裡出生的時間（遊戲小時）；店裡買的、舊存檔沒有。 */
+  bornHours?: number;
   /** 近交係數 0–1：同血統互配會升高，體質和尾鰭跟著退化。 */
   inbreeding?: number;
   /** 保底起步包送的魚：不能賣回店裡。 */
@@ -317,7 +321,9 @@ export type SimEventType =
   /** 阿德老闆送了育幼盒（subjectId 是快生的那尾母魚）。 */
   | 'nursery_gift'
   /** 育幼盒裡的小魚長夠大，放回主缸了（count 尾）。 */
-  | 'nursery_released';
+  | 'nursery_released'
+  /** 缸裡的害蟲小螺第一次多到看得見（count 是隻數）。 */
+  | 'pests_seen';
 
 export interface SimEvent {
   hours: number;
@@ -401,6 +407,17 @@ export function createTank(options: CreateTankOptions): TankState {
     algae: 0,
     events: [],
   };
+}
+
+/**
+ * 每日小事要看的動作（daily.ts）：補水、用缸水洗濾材、造景模式的各種擺法、處理插枝、摘螺卵、撈螺、放進育幼盒。
+ * 測水、餵食、換水、修剪、移動造景另外有 last*Hours。
+ */
+export type DailyAct = 'topup' | 'rinse' | 'scapeMove' | 'scapePlant' | 'scapeFlip' | 'scapeLayer' | 'scapeScale' | 'scapePlace' | 'cutting' | 'clutch' | 'pests' | 'deadSnail' | 'nursery';
+
+/** 記下玩家做了某個動作（每日小事用）。 */
+export function noteAct(state: TankState, act: DailyAct): void {
+  (state.dailyActs ??= {})[act] = state.hours;
 }
 
 export function recordEvent(state: TankState, event: Omit<SimEvent, 'hours'>): void {

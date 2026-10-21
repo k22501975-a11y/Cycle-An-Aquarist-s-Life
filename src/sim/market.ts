@@ -1,4 +1,4 @@
-import { addCuttings, BETTA_FEMALE_PRICE, economy, FISH_PRICES, fishBuybackPrice, guppyBuybackTier, JUVENILE_SHARE, PLANT_PRICES, plantBuybackPrice, STRAIN_TIER } from './economy';
+import { addCuttings, BETTA_FEMALE_PRICE, economy, FISH_PRICES, fishBuybackPrice, guppyBuybackTier, JUVENILE_SHARE, PLANT_PRICES, plantBuybackPrice, sellableCuttings, STRAIN_TIER } from './economy';
 import { phenotype, strainName } from './genetics';
 import { hasVisible } from './processes/disease';
 import { createFish } from './processes/population';
@@ -224,7 +224,8 @@ export function receivePlants(state: TankState, item: Record<string, unknown>): 
 /** 上架插枝：先從手上拿走（放在架上），下架或沒賣掉再拿回來。 */
 export function takeCuttingsForSale(state: TankState, species: PlantSpeciesId, count: number): boolean {
   const e = economy(state);
-  if (count <= 0 || (e.cuttings[species] ?? 0) < count) return false;
+  // 寶箱來的插枝不能上架換錢（polish-to-9.md §4）
+  if (count <= 0 || sellableCuttings(state, species) < count) return false;
   e.cuttings[species]! -= count;
   return true;
 }

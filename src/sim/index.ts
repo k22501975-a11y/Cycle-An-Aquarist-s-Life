@@ -12,6 +12,7 @@ export * from './season';
 export * from './quarantine';
 export * from './nursery';
 export * from './next-step';
+export * from './pair-preview';
 export * from './economy';
 export * from './orders';
 export * from './goals';
