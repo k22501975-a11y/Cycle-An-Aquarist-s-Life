@@ -674,6 +674,18 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .order-eta { display: inline-flex; align-items: center; padding: 1px 9px; border-radius: 999px; background: rgba(127, 196, 255, 0.12); border: 1px solid rgba(127, 196, 255, 0.35); color: #b5dcff; font-weight: 700; }
 .order-eta.now { color: var(--sage); background: rgba(155, 232, 168, 0.14); border-color: rgba(155, 232, 168, 0.5); }
 .order-eta.late { color: #e0b25c; background: rgba(224, 178, 92, 0.14); border-color: rgba(224, 178, 92, 0.55); }
+.order-card.blocked { border-color: rgba(224, 178, 92, 0.55); }
+.order-card.blocked .order-eta { font-size: 13px; color: #e0b25c; background: rgba(224, 178, 92, 0.14); border-color: rgba(224, 178, 92, 0.55); }
+.order-blocked { position: absolute; top: 6px; right: 8px; padding: 1px 8px; border-radius: 999px; background: rgba(224, 178, 92, 0.92); color: #2a1d08; font-size: 11.5px; font-weight: 800; }
+/* 目標單預告（#290）：半透明、虛線框，看得到但接不了 */
+.order-card.preview { opacity: 0.62; border-style: dashed; filter: saturate(0.75); pointer-events: none; }
+.order-card.preview .card-pic img { filter: grayscale(0.25); }
+.order-lock { position: absolute; top: 6px; right: 8px; padding: 1px 8px; border-radius: 999px; background: rgba(127, 196, 255, 0.85); color: #0d2235; font-size: 11.5px; font-weight: 800; }
+.order-preview-note { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; max-width: 100%; padding: 2px 10px; line-height: 1.4; border-radius: 999px; background: rgba(127, 196, 255, 0.12); border: 1px dashed rgba(127, 196, 255, 0.5); color: #b5dcff; font-size: 12px; font-weight: 700; }
+.order-preview-note i { font-style: normal; }
+/* 開局沒滿的格子（#290）：空的虛線格，一句話說之後會有客人 */
+.order-slot-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 150px; padding: 16px; border: 1.5px dashed rgba(255, 255, 255, 0.22); border-radius: 14px; color: var(--muted); text-align: center; font-size: 13px; line-height: 1.45; }
+.order-slot-empty i { font-style: normal; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; border: 1.5px dashed rgba(255, 255, 255, 0.28); font-size: 20px; color: rgba(255, 255, 255, 0.5); }
 .order-shared { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; color: #e0b25c; border: 1px dashed rgba(224, 178, 92, 0.6); }
 .order-shared::before { content: '⇄'; margin-right: 4px; }
 .order-actions { display: flex; gap: 6px; margin-top: auto; }

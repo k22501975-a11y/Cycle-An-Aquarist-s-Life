@@ -1,4 +1,4 @@
-import { compareOrders, dismissOrder, FIN_NAMES, fulfillOrder, markDaily, ORDER_STRAINS, orderBoard, orderRefusal, orderSupply, orderTitle, orderUnit, outlookDaysLine, outlookFishLine, type OrderOutlook, type ShopOrder, type TankState } from '../sim';
+import { compareOrders, dismissOrder, FIN_NAMES, fulfillOrder, markDaily, ORDER_BOARD_SIZE, ORDER_STRAINS, orderStarter, orderBoard, orderRefusal, orderSupply, orderTitle, orderUnit, outlookDaysLine, outlookFishLine, updateOrders, type OrderOutlook, type ShopOrder, type TankState } from '../sim';
 import { artUrl, ownerImg } from './art-icons';
 import { orderArt } from './order-alert';
 import { ownerMood } from './owner-mood';
@@ -44,17 +44,49 @@ function outlookRow(tanks: TankState[], o: ShopOrder, x: OrderOutlook | undefine
   );
 }
 
+/**
+ * 目標單預告（#290，mvp.md §4.4.5）：開局還沒有自家的魚時，第 2 格先讓玩家看到第一窩之後會開的單。
+ * 半透明、不能接、不會過期，所以沒有交貨、撕單和進度條。
+ */
+function previewCard(o: ShopOrder): HTMLElement {
+  const img = h('img', { src: ART + orderArt(o), alt: '', loading: 'lazy', draggable: 'false' });
+  img.addEventListener('error', () => img.remove());
+  const unit = orderUnit(o);
+  return h(
+    'div.shop-card.order-card.preview',
+    { 'aria-disabled': 'true' },
+    h('div.card-pic', {}, img, h('span.order-count', {}, `×${o.count}`), h('span.order-lock', {}, '預告')),
+    h(
+      'div.card-body',
+      {},
+      h('b.card-name', {}, orderTitle(o)),
+      conditionChips(o),
+      h('div.order-pay', {}, h('i.coin'), h('b', {}, String(o.unitPrice * o.count)), h('small', {}, `每${unit} ${o.unitPrice}`)),
+      h('div.order-preview-note', {}, h('i', {}, '🐟'), '生小魚之後就能接'),
+    ),
+  );
+}
+
+/** 開局訂單板沒滿的格子（#290）：空著，不拿交不出的單充數。 */
+function emptySlot(): HTMLElement {
+  return h('div.order-slot-empty', {}, h('i', {}, '＋'), h('span', {}, '生小魚後會有更多客人'));
+}
+
 function orderCard(ctx: PanelContext, o: ShopOrder, refresh: () => void, outlook?: OrderOutlook): HTMLElement {
+  if (o.preview) return previewCard(o);
   const { game, toasts } = ctx;
   const have = Math.min(orderSupply(game.tanks, o), o.count);
   const ready = have >= o.count;
   const img = h('img', { src: ART + orderArt(o), alt: '', loading: 'lazy', draggable: 'false' });
   img.addEventListener('error', () => img.remove());
   const unit = orderUnit(o);
+  // 交不出的單（#290 §4.4.5 第 5 點）：卡片標「交不出」，原因和預估時間一定要看得到。
+  // 期限內來不及的都標；估不出天數的只標魚（插枝、螺的起步單照規則交得出，還沒買水草時是「買第一株水草會附螺」）
+  const blocked = !ready && !!outlook && (outlook.late || (outlook.days === null && (o.kind === 'fish' || o.kind === 'fry')));
   return h(
-    `div.shop-card.order-card${ready ? '.ready' : ''}`,
+    `div.shop-card.order-card${ready ? '.ready' : ''}${blocked ? '.blocked' : ''}`,
     {},
-    h('div.card-pic', {}, img, h('span.order-count', {}, `×${o.count}`), ready ? h('span.order-ready', {}, '湊齊了') : null),
+    h('div.card-pic', {}, img, h('span.order-count', {}, `×${o.count}`), ready ? h('span.order-ready', {}, '湊齊了') : blocked ? h('span.order-blocked', {}, '交不出') : null),
     h(
       'div.card-body',
       {},
@@ -72,11 +104,14 @@ function orderCard(ctx: PanelContext, o: ShopOrder, refresh: () => void, outlook
             onclick: (e: MouseEvent) => {
               // 先記下按鈕位置：交貨後面板會重畫，按鈕就不在畫面上了
               const from = (e.currentTarget as Element).getBoundingClientRect();
+              const starter = orderStarter(game.tanks);
               const got = game.actAll((tanks) => fulfillOrder(tanks, o.id));
               if (got > 0) {
                 ctx.sound?.('buy');
                 ctx.reward?.(from, got, 'medium');
-                toasts.show(`交了「${orderTitle(o)}」，拿到 ${got} 元。明天會有新的單`);
+                // 開局的起步單交掉馬上補（§4.4.5），先補好再重畫，玩家才看得到新的那張
+                if (starter) game.act((st) => updateOrders(st));
+                toasts.show(`交了「${orderTitle(o)}」，拿到 ${got} 元。${starter ? '店家馬上補了一張新的單' : '明天會有新的單'}`);
               } else toasts.show(orderRefusal(game.tanks, o.id) ?? '交不了', 'warn');
               refresh();
             },
@@ -89,8 +124,9 @@ function orderCard(ctx: PanelContext, o: ShopOrder, refresh: () => void, outlook
             title: '換一張',
             'aria-label': '換一張',
             onclick: () => {
-              game.act((st) => dismissOrder(st, o.id));
-              toasts.show('撕掉這張單了，明天會補一張新的');
+              const starter = orderStarter(game.tanks);
+              game.act((st) => dismissOrder(st, o.id) && starter && updateOrders(st));
+              toasts.show(starter ? '撕掉這張單了，店家馬上補了一張新的' : '撕掉這張單了，明天會補一張新的');
               refresh();
             },
           },
@@ -110,12 +146,18 @@ export function ordersPanel(ctx: PanelContext): Node {
   const refresh = () => sheet.open('客人的訂單', () => ordersPanel(ctx));
   const anyReady = board.orders.some((o) => orderSupply(game.tanks, o) >= o.count);
   const outlooks = compareOrders(game.tanks);
+  const empty = orderStarter(game.tanks) ? Math.max(0, ORDER_BOARD_SIZE - board.orders.length) : 0;
   const say = board.orders.length === 0 ? '單都交完了。客人會陸續來，過幾天再來看看。' : anyReady ? '有單湊齊了，按「交貨」我就幫你包好送過去。' : '客人只收你自己繁殖的魚。照單子挑魚配對，養大就能交。';
   return h(
     'div.stack',
     {},
     h('div.owner-say', {}, ownerImg('owner-say-avatar', ownerMood(say)), h('span', {}, say)),
     board.done > 0 ? h('div.order-stats', {}, h('span', {}, `已交 ${board.done} 張`), h('span', {}, h('i.coin'), ` ${board.earned}`)) : null,
-    h('div.card-grid.order-grid', {}, ...board.orders.map((o) => orderCard(ctx, o, refresh, outlooks.find((x) => x.orderId === o.id)))),
+    h(
+      'div.card-grid.order-grid',
+      {},
+      ...board.orders.map((o) => orderCard(ctx, o, refresh, outlooks.find((x) => x.orderId === o.id))),
+      ...Array.from({ length: empty }, emptySlot),
+    ),
   );
 }
