@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stepTurn, turnScale, type TurnState } from './fish-motion';
+import { stepTurn, turnPose, turnScale, type TurnState } from './fish-motion';
 
 describe('轉身壓扁回彈', () => {
   it('往右游會轉成朝右，途中經過窄窄的側面，轉完稍微衝過頭再彈回', () => {
@@ -22,7 +22,7 @@ describe('轉身壓扁回彈', () => {
   });
 
   it('轉到一半身體窄、稍微變高；衝過頭時變扁', () => {
-    expect(Math.abs(turnScale(0).sx)).toBeCloseTo(0.15);
+    expect(Math.abs(turnScale(0).sx)).toBeCloseTo(0.3);
     expect(turnScale(0).sy).toBeGreaterThan(1);
     expect(turnScale(1).sy).toBeCloseTo(1);
     expect(turnScale(-1.1).sy).toBeLessThan(1);
@@ -57,5 +57,16 @@ describe('追飼料時不左右狂翻', () => {
     for (let i = 0; i < 30; i++) stepTurn(s, 10, 1 / 60);
     for (let i = 0; i < 24; i++) stepTurn(s, -80, 1 / 60);
     expect(s.f).toBeGreaterThan(0);
+  });
+});
+
+describe('轉身中段的側身（#265）', () => {
+  it('轉到一半才側傾、變暗，游正常時不動', () => {
+    expect(turnPose(1, 0)).toEqual({ bank: 0, shade: 0 });
+    const mid = turnPose(0, 8);
+    expect(mid.shade).toBeCloseTo(1);
+    expect(mid.bank).toBeCloseTo(0.3);
+    expect(turnPose(0, -8).bank).toBeCloseTo(-0.3);
+    expect(Math.abs(turnPose(0.5, 8).bank)).toBeLessThan(0.3);
   });
 });
