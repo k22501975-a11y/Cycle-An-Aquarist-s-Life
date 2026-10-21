@@ -57,6 +57,8 @@ export interface TankState {
   newTankSyndrome?: { startedHours?: number; fish?: number; totalMg?: number; prevented?: boolean };
   /** 早上報告已經說過哪些設備的後果（gear-notes.ts，polish-to-9.md G5）。舊存檔沒有。 */
   gearNotes?: string[];
+  /** 早上報告上次說老住戶「放鬆了」的時間（遊戲小時）：隔 3 天才再說一次（#237）。舊存檔沒有。 */
+  relaxedNoteHours?: number;
   /** 最近一次餵食、剪下插枝的時間（遊戲小時；每日小事用）。舊存檔沒有。 */
   lastFedHours?: number;
   lastTrimHours?: number;
@@ -239,6 +241,8 @@ export interface Fish {
   generation?: number;
   /** 在缸裡出生的時間（遊戲小時）；店裡買的、舊存檔沒有。 */
   bornHours?: number;
+  /** 放進這一缸的時間（遊戲小時：買回來、從檢疫盒放出來、換缸）；早上報告只對剛來的魚說「適應新家」（#237）。缸裡生的、舊存檔沒有。 */
+  arrivedHours?: number;
   /** 媽媽是哪尾（在缸裡出生的才有；長得像誰比較卡用，G2）。 */
   motherId?: number;
   /** 近交係數 0–1：同血統互配會升高，體質和尾鰭跟著退化。 */
