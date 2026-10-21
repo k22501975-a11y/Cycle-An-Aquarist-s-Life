@@ -1,4 +1,4 @@
-import type { AppleColor, FishSpeciesId, PlantSpeciesId, SnailKind } from '../sim';
+import type { AppleColor, FishSpeciesId, GuppyPhenotype, PlantSpeciesId, SnailKind } from '../sim';
 import { artImg, ownerImg, type ArtIcon } from './art-icons';
 import { h } from './dom';
 
@@ -12,10 +12,31 @@ const ART = `${import.meta.env.BASE_URL}art/`;
 /** 孔雀魚品系（GUPPY_STRAINS 的順序）對應的精繪圖。 */
 const GUPPY_STRAIN_ART = ['guppy-male-bluegrass', 'guppy-male-cobra', 'guppy-male-albino-red', 'guppy-male-tuxedo', 'guppy-male-redcobra'];
 
+/** 鰭型 → 整條魚圖的後綴（店裡的「雙劍」用雙劍圖；大耳沒有整條魚圖，用基本款）。 */
+const FIN_ART: Record<string, string> = { swallow: 'swallow', ribbon: 'ribbon', halfmoon: 'halfmoon', bigC: 'bigc', bigc: 'bigc', sword: 'sword3', sword1: 'sword1', sword2: 'sword2', sword3: 'sword3' };
+
 export function guppyArt(strain: number, fin?: string): string {
   const base = GUPPY_STRAIN_ART[strain] ?? GUPPY_STRAIN_ART[0];
-  const shape = fin === 'swallow' ? 'swallow' : fin === 'ribbon' ? 'ribbon' : fin === 'halfmoon' || fin === 'bigC' ? 'halfmoon' : '';
+  const shape = fin ? FIN_ART[fin] : undefined;
   return `fish/${base}${shape ? `-${shape}` : ''}.webp`;
+}
+
+/** 品系 → 母魚尾巴的顏色（scripts/art/guppy-females.py）：草尾、禮服是藍尾，蛇王金或紅，全紅白子淡紅尾紅眼。 */
+const FEMALE_STRAIN_TINT = ['blue', 'gold', 'albino', 'blue', 'red'];
+
+export function femaleGuppyArt(strain: number): string {
+  return `fish/guppy-female-base-${FEMALE_STRAIN_TINT[strain] ?? 'blue'}.webp`;
+}
+
+/** 照基因挑母魚圖（和缸裡 painted.ts 的 femaleTint 一樣）。 */
+export function femaleArtOf(p: GuppyPhenotype): string {
+  const tint = p.albino ? 'albino' : p.gold && !p.tuxedo ? 'gold' : p.red ? 'red' : 'blue';
+  return `fish/guppy-female-base-${tint}.webp`;
+}
+
+/** 照基因挑公魚的鰭型圖（和缸裡 phenotype-art.ts 的 wholeFin 同樣的先後）。 */
+export function maleFinOf(p: GuppyPhenotype): string | undefined {
+  return p.bigC ? 'bigc' : p.ribbon ? 'ribbon' : p.swallow ? 'swallow' : p.sword ? `sword${p.sword}` : p.tailShape === 'halfmoon' ? 'halfmoon' : undefined;
 }
 
 const SPECIES_ART: Record<FishSpeciesId, string> = {

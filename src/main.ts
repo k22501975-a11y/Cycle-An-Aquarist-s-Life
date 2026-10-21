@@ -47,7 +47,7 @@ import { Celebration, type CelebrateSpec } from './ui/celebrate';
 import { firstTime, loadMoments, type DeathAdviceCause, type MomentId } from './ui/moments';
 import { causeAdvice, HUNGER_LABEL, illnessOf, needsAdvice } from './ui/owner-advice';
 import { kickOwnerQueue, ownerGuide, ownerSay, setOwnerBlocker } from './ui/owner-ask';
-import { fryArt, guppyArt, plantArt } from './ui/shop-cards';
+import { fryArt, guppyArt, maleFinOf, plantArt } from './ui/shop-cards';
 import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
 import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt } from './ui/order-alert';
 import { flyCoins, rewardBurst } from './ui/coin-fly';
@@ -1708,11 +1708,10 @@ async function start(): Promise<void> {
     const [top, ...rest] = strains.check(game.tanks);
     if (!top) return;
     const p = sim.phenotype(top.fish.genome!);
-    const fin = p.bigC ? 'bigC' : p.swallow ? 'swallow' : p.ribbon ? 'ribbon' : p.tailShape === 'halfmoon' ? 'halfmoon' : undefined;
     if (top.tank === game.active) view.celebrate(top.fish.id);
     audio.play('fanfare', false);
     celebration.show({
-      art: guppyArt(sim.lookIndex(p), fin),
+      art: guppyArt(sim.lookIndex(p), maleFinOf(p)),
       src: view.portrait(top.fish) ?? undefined,
       title: `${tankPrefix(top.tank)}選育成功：${top.name}！`,
       sub: `自家繁殖第 ${top.fish.generation} 代・${sim.GUPPY_RARITY_LABELS[top.rarity]}・店家收購約 ${sim.fishBuybackPrice(top.fish)} 元`,

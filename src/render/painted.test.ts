@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, addPlant, addSnail, FISH_SPECIES, GUPPY_STRAINS, HARDSCAPE, lookVariant, PLANT_SPECIES, type FishSpeciesId, type GrowthStage, type PlantSpeciesId } from '../sim';
-import { ART_FILES, PAINTED, paintedKey, paintedTexture, SCENERY, sceneryImage, startupArt } from './painted';
+import { addFish, addPlant, addSnail, FISH_SPECIES, GUPPY_STRAINS, HARDSCAPE, lookVariant, PLANT_SPECIES, type FishSpeciesId, type GrowthStage, type GuppyPhenotype, type PlantSpeciesId } from '../sim';
+import { ART_FILES, FEMALE_TINTS, femaleKey, PAINTED, paintedKey, paintedTexture, SCENERY, sceneryImage, startupArt } from './painted';
 import { GUPPY_LOOKS } from './strains';
 
 describe('精繪素材對應', () => {
@@ -103,5 +103,20 @@ describe('開機只先載當前缸用到的圖（Issue #81）', () => {
     const b = newGameState(2);
     addFish(b, 'betta');
     expect(startupArt([a, b])).toContain('betta-female');
+  });
+});
+
+describe('母孔雀魚分品系（#272）', () => {
+  const P = (o: Partial<GuppyPhenotype>): GuppyPhenotype => ({ albino: false, gold: false, tuxedo: false, red: false, snake: false, grass: false, ...o });
+  it('尾巴照品系色，白子另外一張（紅眼）；懷孕的也有', () => {
+    expect(femaleKey(P({}), false)).toBe('guppy-female-base-blue');
+    expect(femaleKey(P({ red: true }), true)).toBe('guppy-female-pregnant-red');
+    expect(femaleKey(P({ gold: true }), false)).toBe('guppy-female-base-gold');
+    expect(femaleKey(P({ red: true, albino: true }), false)).toBe('guppy-female-base-albino');
+    for (const t of FEMALE_TINTS) expect(PAINTED[`guppy-female-base-${t}`].eating).toBe(`fish/guppy-female-base-${t}-eating.webp`);
+  });
+  it('鰭比較長的圖照基本款的大小算（span），半月、劍尾的圖比基本款寬', () => {
+    expect(PAINTED['guppy-male-bluegrass-halfmoon'].span).toBeGreaterThan(1);
+    expect(PAINTED['guppy-male-tuxedo-sword3'].span).toBeGreaterThan(1);
   });
 });

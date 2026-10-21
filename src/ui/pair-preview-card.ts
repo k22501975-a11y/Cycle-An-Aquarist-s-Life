@@ -1,6 +1,6 @@
 import { DREAM_FISH, GUPPY_FIN_STRAINS, GUPPY_STRAINS, previewShopPair, type FinTrait, type PreviewKid } from '../sim';
 import { h } from './dom';
-import { guppyArt } from './shop-cards';
+import { femaleGuppyArt, guppyArt } from './shop-cards';
 
 /**
  * 選魚當下就看得到後果（polish-to-9.md §6 P3）：商店孔雀魚頁最上面「配一對看看」，
@@ -22,9 +22,10 @@ export const GUPPY_PICKS: GuppyPick[] = [...GUPPY_STRAINS.map((name, strain) => 
 const pick = { mother: DREAM_FISH.parents.female, father: DREAM_FISH.parents.male };
 
 export function kidArt(k: PreviewKid): string {
-  // 母魚身上看不到品系的花色，畫面上都是素的母魚
-  if (k.sex === 'female') return 'fish/guppy-female-base.webp';
-  const shape = k.fins.includes('燕尾') ? 'swallow' : k.fins.includes('緞帶') || k.fins.includes('大C') ? 'ribbon' : k.tailShape === 'halfmoon' || k.fins.includes('半月') ? 'halfmoon' : undefined;
+  // 母魚身上是素的，只有尾巴帶品系的顏色
+  if (k.sex === 'female') return femaleGuppyArt(k.look);
+  const has = (f: string) => k.fins.includes(f);
+  const shape = has('大C') ? 'bigc' : has('緞帶') ? 'ribbon' : has('燕尾') ? 'swallow' : has('雙劍') ? 'sword3' : has('上劍') ? 'sword1' : has('下劍') ? 'sword2' : k.tailShape === 'halfmoon' || has('半月') ? 'halfmoon' : undefined;
   return guppyArt(k.look, shape);
 }
 
