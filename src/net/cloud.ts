@@ -30,11 +30,11 @@ export interface ServerAdvance extends CloudSave {
   births: number;
 }
 
-/** 上傳時伺服器的模擬檢查沒過（L2）：遊戲時間跑太快、魚的身分被改。 */
 /** 上傳的存檔跟伺服器帳本對不上（少了或多了市場收支，docs/ledger.md §3.4）：只能改用雲端那份。 */
 export const LEDGER_CODES = ['ledger_behind', 'ledger_ahead'];
 
-export const SAVE_CHECK_CODES = ['time_ahead', 'identity_changed', 'gift_removed', 'shipped_fish', ...LEDGER_CODES];
+/** 上傳時伺服器的模擬檢查沒過（L2）：遊戲時間跑太快、魚的身分被改、錢多出單機賺不到的數目。 */
+export const SAVE_CHECK_CODES = ['time_ahead', 'identity_changed', 'gift_removed', 'shipped_fish', 'coins_jump', ...LEDGER_CODES];
 
 export interface FriendInfo {
   username: string;

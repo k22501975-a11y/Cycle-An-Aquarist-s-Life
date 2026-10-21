@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addHardscape, addPlant, applySetup, buyQuarantine, checkGoals, goalState, GOALS, isCycled, powerOn, moveToQuarantine, recordEvent, economy, HARDSCAPE, createTank, feed, FILTERS, HEATERS, RECOMMENDED_SETUP, TANKS, useTestKit, waterChange } from '../sim';
+import { QUEST_REWARD_MAX, QUEST_REWARD_TOTAL, addFish, addHardscape, addPlant, applySetup, buyQuarantine, checkGoals, goalState, GOALS, isCycled, powerOn, moveToQuarantine, recordEvent, economy, HARDSCAPE, createTank, feed, FILTERS, HEATERS, RECOMMENDED_SETUP, TANKS, useTestKit, waterChange } from '../sim';
 import { advanceQuest, currentQuest, cycleProgress, FIRST_PESTS_TIP, loadProgress, newProgress, overloadWarning, pairProgress, pendingTip, questShopTab, QUESTS, saveProgress, TEST_AMMONIA_LINE, TIPS } from './tutorial';
 
 function tank() {
@@ -7,6 +7,11 @@ function tank() {
 }
 
 describe('新手引導任務', () => {
+  it('任務獎勵跟伺服器錢的範圍檢查（earn-cap.ts）對得上：改了獎勵要一起改', () => {
+    expect(QUESTS.reduce((n, q) => n + q.reward, 0)).toBe(QUEST_REWARD_TOTAL);
+    expect(Math.max(...QUESTS.map((q) => q.reward))).toBe(QUEST_REWARD_MAX);
+  });
+
   it('照順序一步步完成，每次只前進一步：開缸、挑魚對水、餵食排最前面（polish-to-9.md G7）', () => {
     const s = tank();
     economy(s).setupPending = true;

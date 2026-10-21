@@ -1,16 +1,16 @@
 import { catchUp, parseSave, serializeSave, type SaveFile } from '../game/save';
-import { DEFAULT_TIME_SCALE, marketItem, type Fish, type TankState } from '../sim';
+import { DEFAULT_TIME_SCALE, earnCap, economy, marketItem, type Fish, type TankState } from '../sim';
 
 /**
  * 伺服器權威模擬（L2）：Spring Boot 把存檔丟過來，這裡用跟遊戲同一份模擬程式計算。
  * - advance：離線補算到伺服器的現在時間（玩家改裝置時鐘也沒用）
  * - verify：上傳的存檔跟伺服器上一份比，遊戲時間不能跑得比現實快，已經存在的魚身分（基因、品種、性別）不能被改，
- *   已經在市場出貨的魚不能又出現
+ *   已經在市場出貨的魚不能又出現，錢不能多出單機賺不到的數目（earn-cap.ts）
  * - inspect：找出存檔裡的某一條魚（市場上架用伺服器這份的資料，不信任遊戲端送來的）
  */
 
 export interface Problem {
-  code: 'time_ahead' | 'identity_changed' | 'gift_removed' | 'shipped_fish';
+  code: 'time_ahead' | 'identity_changed' | 'gift_removed' | 'shipped_fish' | 'coins_jump';
   message: string;
 }
 
@@ -87,6 +87,15 @@ export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number
     if (!old) continue;
     if (!sameIdentity(old, f)) problems.push({ code: 'identity_changed', message: `#${f.id} 這條魚的身分（品種、性別或基因）跟伺服器上的不一樣` });
     if (old.gift && !f.gift) problems.push({ code: 'gift_removed', message: `#${f.id} 是老闆送的魚，不能改成可以賣` });
+  }
+
+  // 錢的範圍（#76）：市場的收支伺服器帳本已經寫進上一份了，多出來的只能是單機賺的
+  const coins = economy(next.state).coins;
+  const gained = coins - economy(prev.state).coins;
+  if (!Number.isFinite(coins)) problems.push({ code: 'coins_jump', message: '存檔裡的錢不是正常的數字' });
+  else if (gained > 0) {
+    const cap = earnCap(tanksOf(prev), tanksOf(next)).total;
+    if (gained > cap) problems.push({ code: 'coins_jump', message: `錢比伺服器上一份多了 ${Math.round(gained)}，這段時間最多只賺得到約 ${cap}` });
   }
 
   // 編號和身分都一樣才是同一條：新遊戲或換裝置從頭玩，編號會重來，同編號的是另一條魚
