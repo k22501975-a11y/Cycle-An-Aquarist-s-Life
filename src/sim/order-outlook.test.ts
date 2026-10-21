@@ -7,6 +7,8 @@ import {
   economy,
   FILTERS,
   FISH_SPECIES,
+  INCOME_GAP_DAYS,
+  ORDER_EXPIRE_DAYS,
   HEATERS,
   LIGHTS,
   orderBoard,
@@ -45,7 +47,7 @@ describe('訂單比較（polish-to-9.md G5）', () => {
     s.fish = [];
     const a = bred(s, adult * 0.6);
     const b = bred(s, adult * 0.6);
-    const small = bred(s, adult * 0.3);
+    const small = bred(s, adult * 0.45);
     const juvenile = order(1, { size: 'juvenile', count: 3 });
     const grown = order(2, { size: 'adult', count: 1 });
     orderBoard(s).orders = [juvenile, grown];
@@ -106,6 +108,27 @@ describe('訂單比較（polish-to-9.md G5）', () => {
     expect(x.days).toBe(0);
     expect(outlookDaysLine(x, o)).toBe('現在就能交');
     expect(outlookFishLine([a, b], x, o)).toBe('用第 1 缸 1 尾＋第 2 缸 2 尾');
+  });
+
+  it('估的天數比單子剩下的久就標來不及；保底單、小孔雀單照各自的期限算', () => {
+    const s = tank();
+    s.fish = [];
+    bred(s, adult * 0.3);
+    s.hours = 100;
+    const o = order(1, { size: 'juvenile', postedHours: s.hours });
+    const x = orderOutlook([s], o);
+    expect(x.daysLeft).toBe(ORDER_EXPIRE_DAYS);
+    expect(x.days).toBeGreaterThan(ORDER_EXPIRE_DAYS);
+    expect(x.late).toBe(true);
+    expect(outlookDaysLine(x, o)).toBe(`來不及（要養約 ${x.days} 天，單子剩 ${ORDER_EXPIRE_DAYS} 天）`);
+    // 掛了 3 天半的保底單只剩 2 天
+    const gap = orderOutlook([s], { ...o, gap: true, postedHours: s.hours - 84 });
+    expect(gap.daysLeft).toBe(INCOME_GAP_DAYS - 4);
+    // 快長到的魚趕得上
+    s.fish[0].lengthCm = adult * 0.49;
+    const soon = orderOutlook([s], o);
+    expect(soon.late).toBe(false);
+    expect(outlookDaysLine(soon, o)).toBe(`再養約 ${soon.days} 天`);
   });
 
   it('插枝單：手上不夠但修剪一下就夠，寫「修剪一下就能交」；不夠剪寫等水草長', () => {

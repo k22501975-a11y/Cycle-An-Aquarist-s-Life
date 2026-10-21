@@ -93,7 +93,7 @@ function outlookRow(tanks: TankState[], o: ShopOrder, x: OrderOutlook | undefine
   return h(
     'div.order-outlook',
     {},
-    h(`span.order-eta${x.days === 0 ? '.now' : ''}`, {}, h('i', {}, '⏱'), outlookDaysLine(x, o)),
+    h(`span.order-eta${x.days === 0 ? '.now' : x.late ? '.late' : ''}`, {}, h('i', {}, '⏱'), outlookDaysLine(x, o)),
     fish ? h('span.order-use', {}, fish) : null,
     x.sharesWith.length > 0 ? h('span.order-shared', {}, '跟另一張單搶同一批魚') : null,
   );

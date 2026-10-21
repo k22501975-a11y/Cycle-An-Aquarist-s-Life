@@ -462,6 +462,11 @@ function swapInSmallOrder(state: TankState, board: OrderBoard, ctx: OrderContext
 /** 連續幾天沒有真的收入（賣魚、賣插枝、交單），訂單板就保證出一張現在交得出來的小單（polish-to-9.md §4「收入空檔」）。 */
 export const INCOME_GAP_DAYS = 6;
 
+/** 這張單什麼時候下架（遊戲小時）：一般 ORDER_EXPIRE_DAYS 天、小孔雀單 FRY_ORDER_EXPIRE_DAYS 天、保底單 INCOME_GAP_DAYS 天。 */
+export function orderExpiresHours(o: ShopOrder): number {
+  return o.postedHours + (o.gap ? INCOME_GAP_DAYS : o.kind === 'fry' ? FRY_ORDER_EXPIRE_DAYS : ORDER_EXPIRE_DAYS) * 24;
+}
+
 /** 保底單收的仔魚要出生滿幾天（剛生的魚苗店家不收，polish-to-9.md §4「第二次確認」）；大小不限。 */
 export const GAP_FRY_MIN_DAYS = 7;
 const GAP_FRY_MIN_CM = 0.5;
@@ -553,7 +558,7 @@ export function updateOrders(state: TankState): void {
 
 function fillOrders(state: TankState, board: OrderBoard): void {
   // 太久沒人交的單，客人就不等了（不用玩家自己撕）；保底單掛 INCOME_GAP_DAYS 天
-  const expired = board.orders.filter((o) => state.hours - o.postedHours >= (o.gap ? INCOME_GAP_DAYS : o.kind === 'fry' ? FRY_ORDER_EXPIRE_DAYS : ORDER_EXPIRE_DAYS) * 24);
+  const expired = board.orders.filter((o) => state.hours >= orderExpiresHours(o));
   if (expired.length > 0) board.orders = board.orders.filter((o) => !expired.includes(o));
   if (board.orders.length >= ORDER_BOARD_SIZE) {
     if (board.lastChangeHours !== undefined && state.hours - board.lastChangeHours >= ORDER_GAP_HOURS && swapInSmallOrder(state, board, orderContext(state))) board.lastChangeHours = state.hours;

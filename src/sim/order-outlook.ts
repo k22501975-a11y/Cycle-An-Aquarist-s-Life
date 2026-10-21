@@ -1,8 +1,9 @@
 import { daysToLength } from './growth';
 import { tankLabel } from './household';
-import { FRY_ORDER_MIN_CM, fishMatchesOrder, matchingFish, orderBoard, orderSupply, orderUnit, trimmableCuttings, type ShopOrder } from './orders';
+import { BUYBACK_MIN_SIZE } from './economy';
+import { FRY_ORDER_MIN_CM, fishMatchesOrder, matchingFish, orderBoard, orderExpiresHours, orderSupply, orderUnit, trimmableCuttings, type ShopOrder } from './orders';
 import { FISH_SPECIES } from './species';
-import type { Fish, TankState } from './state';
+import { ADULT_SIZE, type Fish, type TankState } from './state';
 
 /**
  * 訂單比較（polish-to-9.md G5）：同時有 2 張以上的單時，每張卡標出「要用哪些魚、還要等幾天」，
@@ -22,6 +23,10 @@ export interface OrderOutlook {
   trim?: boolean;
   /** 整張單拿多少錢。 */
   coins: number;
+  /** 這張單還掛幾天（不到一天算 0）。 */
+  daysLeft: number;
+  /** 估的天數比單子剩下的久：等魚長大之前客人就不等了。 */
+  late: boolean;
   /** 跟這張搶同一批魚的其他單。 */
   sharesWith: number[];
 }
@@ -30,7 +35,7 @@ export interface OrderOutlook {
 function targetCm(fish: Fish, o: ShopOrder): number {
   const adult = FISH_SPECIES[fish.species].adultLengthCm;
   if (o.kind === 'fry') return o.minCm ?? FRY_ORDER_MIN_CM;
-  return adult * (o.size === 'adult' ? 0.75 : 0.5);
+  return adult * (o.size === 'adult' ? ADULT_SIZE : BUYBACK_MIN_SIZE);
 }
 
 /** 長到單上的大小就符合的魚要幾天（只差大小；其他條件不合、長不到那麼大的回傳 null）。 */
@@ -44,7 +49,8 @@ function daysUntilMatch(fish: Fish, o: ShopOrder): number | null {
 
 export function orderOutlook(tanks: TankState[], o: ShopOrder, keep: readonly number[] = []): OrderOutlook {
   const have = Math.min(o.count, orderSupply(tanks, o, keep));
-  const base = { orderId: o.id, have, coins: o.count * o.unitPrice, sharesWith: [] as number[] };
+  const hoursLeft = Math.max(0, orderExpiresHours(o) - tanks[0].hours);
+  const base = { orderId: o.id, have, coins: o.count * o.unitPrice, sharesWith: [] as number[], daysLeft: Math.floor(hoursLeft / 24), late: false };
   if (o.kind === 'cutting') {
     if (have >= o.count) return { ...base, fish: [], days: 0 };
     const more = tanks.reduce((n, t) => n + trimmableCuttings(t, o.plant!), 0);
@@ -65,7 +71,8 @@ export function orderOutlook(tanks: TankState[], o: ShopOrder, keep: readonly nu
   });
   later.sort((a, b) => a.days - b.days);
   const fish = [...now, ...later].slice(0, o.count);
-  return { ...base, fish, days: fish.length < o.count ? null : Math.max(0, ...fish.map((f) => f.days)) };
+  const days = fish.length < o.count ? null : Math.max(0, ...fish.map((f) => f.days));
+  return { ...base, fish, days, late: days !== null && days * 24 > hoursLeft };
 }
 
 /** 板上有 2 張以上的單才比較（一張單沒什麼好比）；回傳每張單的比較資料，順序跟板上一樣。 */
@@ -80,10 +87,11 @@ export function compareOrders(tanks: TankState[], keep: readonly number[] = []):
   return list;
 }
 
-/** 卡片上的「所需天數」：現在就能交／修剪一下就能交／再養約 N 天／估不出來的原因。 */
+/** 卡片上的「所需天數」：現在就能交／修剪一下就能交／再養約 N 天／來不及／估不出來的原因。 */
 export function outlookDaysLine(x: OrderOutlook, o: ShopOrder): string {
   if (x.trim) return '修剪一下就能交';
   if (x.days === 0) return '現在就能交';
+  if (x.late) return `來不及（要養約 ${x.days} 天，單子剩 ${x.daysLeft} 天）`;
   if (x.days !== null) return `再養約 ${x.days} 天`;
   if (o.kind === 'cutting') return '等水草長高再剪';
   if (o.kind === 'snail') return '等螺再多生一些';
