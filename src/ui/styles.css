@@ -668,10 +668,14 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .order-meter { position: relative; height: 18px; border-radius: 9px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
 .order-meter i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #5fb4af, var(--sage)); }
 .order-meter span { position: relative; display: block; text-align: center; font-size: 12px; line-height: 18px; color: var(--text); font-variant-numeric: tabular-nums; }
-.order-outlook { display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 12px; line-height: 1.4; color: var(--muted); }
-.order-outlook i { font-style: normal; margin-right: 2px; }
-.order-eta.now { color: var(--sage); }
-.order-shared, .order-eta.late { color: #e0b25c; }
+.order-outlook { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.order-outlook i { font-style: normal; margin-right: 3px; }
+/* 比較欄（G5）：天數做成徽章，能交是綠、來不及是琥珀，一眼比得出哪張先交 */
+.order-eta { display: inline-flex; align-items: center; padding: 1px 9px; border-radius: 999px; background: rgba(127, 196, 255, 0.12); border: 1px solid rgba(127, 196, 255, 0.35); color: #b5dcff; font-weight: 700; }
+.order-eta.now { color: var(--sage); background: rgba(155, 232, 168, 0.14); border-color: rgba(155, 232, 168, 0.5); }
+.order-eta.late { color: #e0b25c; background: rgba(224, 178, 92, 0.14); border-color: rgba(224, 178, 92, 0.55); }
+.order-shared { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; color: #e0b25c; border: 1px dashed rgba(224, 178, 92, 0.6); }
+.order-shared::before { content: '⇄'; margin-right: 4px; }
 .order-actions { display: flex; gap: 6px; margin-top: auto; }
 .order-actions .btn { min-height: 36px; padding: 4px 10px; }
 .order-actions .order-skip { flex: 0 0 40px; width: 40px; margin-top: 0; font-size: 17px; }
