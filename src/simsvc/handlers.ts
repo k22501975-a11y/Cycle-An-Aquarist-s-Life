@@ -1,5 +1,5 @@
 import { catchUp, parseSave, serializeSave, type SaveFile } from '../game/save';
-import { DEFAULT_TIME_SCALE, earnCap, economy, marketItem, type Fish, type TankState } from '../sim';
+import { arrivalStatus, carriedDiseases, DEFAULT_TIME_SCALE, earnCap, economy, marketItem, type ArrivalStatus, type Fish, type TankState } from '../sim';
 
 /**
  * 伺服器權威模擬（L2）：Spring Boot 把存檔丟過來，這裡用跟遊戲同一份模擬程式計算。
@@ -7,6 +7,7 @@ import { DEFAULT_TIME_SCALE, earnCap, economy, marketItem, type Fish, type TankS
  * - verify：上傳的存檔跟伺服器上一份比，遊戲時間不能跑得比現實快，已經存在的魚身分（基因、品種、性別）不能被改，
  *   已經在市場出貨的魚不能又出現，錢不能多出單機賺不到的數目（earn-cap.ts）
  * - inspect：找出存檔裡的某一條魚（市場上架用伺服器這份的資料，不信任遊戲端送來的）
+ * - arrivals：買家存檔裡市場買來的魚到貨後的狀況（賣家 30 天存活率，arrivals.ts）
  */
 
 export interface Problem {
@@ -142,4 +143,15 @@ export function inspect(raw: unknown, fishId: number): InspectResult {
   const fish = allFish(load(raw)).find((f) => f.id === fishId);
   if (!fish) return { found: false };
   return { found: true, alive: fish.alive, item: marketItem(fish) };
+}
+
+/** 一筆要查的市場訂單：訂單編號＋伺服器出貨時存的魚資料（帶不帶病看這份，不看買家存檔）。 */
+export interface ArrivalQuery {
+  order: number;
+  item: Record<string, unknown>;
+}
+
+/** 買家存檔裡這幾筆市場訂單的魚現在怎麼樣（到貨後 30 天存活、死因算不算賣家的）。 */
+export function arrivals(raw: unknown, orders: readonly ArrivalQuery[]): ArrivalStatus[] {
+  return arrivalStatus(tanksOf(load(raw)), orders.map((o) => ({ order: o.order, carried: carriedDiseases(o.item) })));
 }
