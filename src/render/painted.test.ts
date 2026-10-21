@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, addPlant, addSnail, FISH_SPECIES, HARDSCAPE, lookVariant, PLANT_SPECIES, type FishSpeciesId, type GrowthStage, type PlantSpeciesId } from '../sim';
+import { addFish, addPlant, addSnail, FISH_SPECIES, GUPPY_STRAINS, HARDSCAPE, lookVariant, PLANT_SPECIES, type FishSpeciesId, type GrowthStage, type PlantSpeciesId } from '../sim';
 import { ART_FILES, PAINTED, paintedKey, paintedTexture, SCENERY, sceneryImage, startupArt } from './painted';
 import { GUPPY_LOOKS } from './strains';
 
@@ -20,6 +20,14 @@ describe('精繪素材對應', () => {
     expect(paintedKey('guppy', 'male', variant('藍草尾'), false)).toBe('guppy-male-bluegrass');
     expect(paintedKey('guppy', 'male', variant('黃金蛇王'), false)).toBe('guppy-male-cobra');
     expect(paintedKey('guppy', 'male', variant('紅蛇王'), false)).toBe('guppy-male-redcobra');
+  });
+
+  it('店裡每個品系的中文名都對得到外觀和精繪圖（改名時兩邊漏改會被擋下來）', () => {
+    for (const strain of GUPPY_STRAINS) {
+      const i = GUPPY_LOOKS.findIndex((l) => l.strain === strain);
+      expect(i, strain).toBeGreaterThanOrEqual(0);
+      expect(paintedKey('guppy', 'male', i, false), strain).not.toBeNull();
+    }
   });
 
   it('母魚懷孕換成大肚子的圖，母蝦抱卵換成抱蛋的圖', () => {
