@@ -85,7 +85,11 @@ test('新手任務 1～9：照老闆的引導從新存檔玩得完，教學第 4
 
   // 4 種水草（#235）：任務卡下面點一株草
   await dismissGuide(page);
+  // 先點任務卡聽老闆說「到商店買幾株水草」，再直接點圖卡：說明要跟著收掉，種完不會又跳出來（體驗第 14 輪 #285）
+  await page.locator('.quest-pill').click(NO_WAIT);
+  await expect(page.locator('.owner.open')).toBeVisible();
   await trayCard(page);
+  await expect(page.locator('.owner.open')).toHaveCount(0);
   // P4：買了先拿在手上，進造景模式，拖到想種的位置
   await expect(page.locator('.scape-bar')).toBeVisible();
   const coach = page.locator('.scape-coach');
@@ -107,6 +111,7 @@ test('新手任務 1～9：照老闆的引導從新存檔玩得完，教學第 4
   // 放下去就自己收起造景模式，不用按「完成」
   await expect(page.locator('.scape-bar')).toBeHidden();
   await expect.poll(() => questNow(page)).toBe(4);
+  await expect(page.locator('.owner.open')).toHaveCount(0);
 
   // 5 測水
   await tool(page, '測試');

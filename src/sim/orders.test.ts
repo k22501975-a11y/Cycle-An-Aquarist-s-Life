@@ -40,6 +40,7 @@ import {
   SNAILS,
   INCOME_GAP_DAYS,
   incomeGapOrder,
+  reachableInTime,
   type Fish,
   type ShopOrder,
   type TankState,
@@ -274,6 +275,44 @@ describe('店家訂單板（M21）', () => {
       snailState(s).pests.bladder = 6;
       simulate(s, ORDER_GAP_HOURS + 1);
       expect(board.orders.some((o) => deliverableNow(s, o))).toBe(true);
+    });
+
+    it('仔魚才剛生：新出的魚單都要在期限內湊得齊，不會一掛上去就「來不及」（#281）', () => {
+      const s = tank(7);
+      simulate(s, 1);
+      const board = orderBoard(s);
+      board.orders = [];
+      const fry = brood(s, 12);
+      const seen = new Set<number>();
+      // 每小時看一次：剛掛上去的那一刻要湊得齊（之後魚沒吃飽長得慢，是另一回事）
+      for (let hour = 0; hour < 20 * 24; hour++) {
+        for (const o of board.orders) {
+          if (seen.has(o.id)) continue;
+          seen.add(o.id);
+          expect(reachableInTime([s], o), orderTitle(o)).toBe(true);
+        }
+        for (const f of fry) f.hunger = 0;
+        simulate(s, 1);
+      }
+      expect(orderContext(s).stage).not.toBe('start');
+      expect(seen.size).toBeGreaterThan(2);
+    });
+
+    it('板上掛著期限內湊不齊的中魚單：有別的單可以出時，隔天換掉最舊的那張，其他單不動（#281）', () => {
+      const s = tank(9);
+      simulate(s, 1);
+      const board = orderBoard(s);
+      brood(s, FRY_ORDER_MIN_BROOD + 4);
+      const small: ShopOrder = { id: 990, kind: 'fry', species: 'guppy', minCm: 1.2, count: 3, unitPrice: 10, postedHours: s.hours };
+      const dead = [0, 1].map((i) => ({ id: 980 + i, kind: 'fish', species: 'guppy', size: 'juvenile', count: 3, unitPrice: 45, postedHours: s.hours - i }) as ShopOrder);
+      board.orders = [dead[0], small, dead[1]];
+      board.lastChangeHours = s.hours;
+      snailState(s).pests.bladder = 12;
+      expect(dead.every((o) => !reachableInTime([s], o))).toBe(true);
+      simulate(s, ORDER_GAP_HOURS + 1);
+      expect(board.orders).toHaveLength(ORDER_BOARD_SIZE);
+      expect(board.orders[1]).toBe(small);
+      expect(board.orders.filter((o) => !reachableInTime([s], o)).length).toBeLessThan(2);
     });
 
     it('小孔雀單的數量：主缸裡的只算活得下來的一成五（草密多一點），盒子裡的算三成', () => {

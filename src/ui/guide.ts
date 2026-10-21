@@ -91,6 +91,14 @@ export class Guide {
     );
     // 對話框掛在 body：面板（商店等）開著時也在最上層，按鈕按得到
     host.append(this.pill, this.tray, this.tip);
+    // 點了圖卡（或「其他」去商店）就是照老闆說的去做了：把還開著的任務說明收掉，
+    // 不然種完草回來又看到「到商店買幾株水草」，任務也要等按掉才前進（體驗第 14 輪 #285）
+    this.tray.addEventListener('click', (e) => {
+      if (this.pages.length > 0 && e.target instanceof Element && e.target.closest('.qt-card, .qt-more')) {
+        this.pages = [];
+        this.renderBubble();
+      }
+    }, true);
     document.body.append(this.bubble);
     // 一次只出一個老闆對話框（G9）：問句跳出來時先收起，問句收掉再接著說
     onOwnerAskOpened(() => this.bubble.classList.remove('open'));
