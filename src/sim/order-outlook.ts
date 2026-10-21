@@ -1,9 +1,6 @@
-import { daysToLength } from './growth';
 import { tankLabel } from './household';
-import { BUYBACK_MIN_SIZE } from './economy';
-import { FRY_ORDER_MIN_CM, fishMatchesOrder, matchingFish, orderBoard, orderExpiresHours, orderSupply, orderUnit, trimmableCuttings, type ShopOrder } from './orders';
-import { FISH_SPECIES } from './species';
-import { ADULT_SIZE, type Fish, type TankState } from './state';
+import { daysUntilMatch, matchingFish, orderBoard, orderExpiresHours, orderSupply, orderUnit, trimmableCuttings, type ShopOrder } from './orders';
+import { type TankState } from './state';
 
 /**
  * 訂單比較（polish-to-9.md G5）：同時有 2 張以上的單時，每張卡標出「要用哪些魚、還要等幾天」，
@@ -29,22 +26,6 @@ export interface OrderOutlook {
   late: boolean;
   /** 跟這張搶同一批魚的其他單。 */
   sharesWith: number[];
-}
-
-/** 魚要長到多大這張單才收（中魚單是店家收購的大小，成魚單是成魚，小孔雀單看單上寫的）。 */
-function targetCm(fish: Fish, o: ShopOrder): number {
-  const adult = FISH_SPECIES[fish.species].adultLengthCm;
-  if (o.kind === 'fry') return o.minCm ?? FRY_ORDER_MIN_CM;
-  return adult * (o.size === 'adult' ? ADULT_SIZE : BUYBACK_MIN_SIZE);
-}
-
-/** 長到單上的大小就符合的魚要幾天（只差大小；其他條件不合、長不到那麼大的回傳 null）。 */
-function daysUntilMatch(fish: Fish, o: ShopOrder): number | null {
-  const target = targetCm(fish, o);
-  const days = daysToLength(fish, target);
-  if (!Number.isFinite(days)) return null;
-  // 假裝已經長到那麼大，其他條件（品系、公母、鰭型、健康）都合才算
-  return fishMatchesOrder({ ...fish, lengthCm: Math.max(fish.lengthCm, target + 1e-6) }, o) ? days : null;
 }
 
 export function orderOutlook(tanks: TankState[], o: ShopOrder, keep: readonly number[] = []): OrderOutlook {

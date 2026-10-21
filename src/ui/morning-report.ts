@@ -307,8 +307,9 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       const leafG = PLANT_SPECIES[p.species].cuttingMassG / LEAF_PER_CUTTING;
       return was !== undefined && Math.floor(p.biomassG / leafG) > Math.floor(was / leafG);
     });
-    if (leaf) push({ kind: 'new_leaf', tone: 'good', text: `${PLANT_SPECIES[leaf.species].name}長出新葉了`, plantId: leaf.id });
-    else if (plantsBefore > 0 && plantsNow >= plantsBefore * PLANT_GREW) push({ kind: 'plant_grew', tone: 'good', text: `水草長了一點（+${Math.round((plantsNow / plantsBefore - 1) * 100)}%）` });
+    // 水草長葉、長大幾乎天天有：算日常（info），不拿來當「有好消息」的開頭（#258）
+    if (leaf) push({ kind: 'new_leaf', tone: 'info', text: `${PLANT_SPECIES[leaf.species].name}長出新葉了`, plantId: leaf.id });
+    else if (plantsBefore > 0 && plantsNow >= plantsBefore * PLANT_GREW) push({ kind: 'plant_grew', tone: 'info', text: `水草長了一點（+${Math.round((plantsNow / plantsBefore - 1) * 100)}%）` });
     // 魚放鬆了：睡前睡後都活著的魚，平均壓力降了一截（壓力低就不躲、鰭張開）；發色真的變好才說顏色變亮。
     // 剛放進這缸 2 天內的魚才說「適應新家」；老住戶要昨晚真的緊張過（換缸、生病、水質）才說，不然天天都有這行（#237）
     const both = living.filter((f) => snap.fish.get(f.id)?.alive);

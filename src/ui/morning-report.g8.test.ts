@@ -26,7 +26,7 @@ describe('早上報告寫缸裡真的發生的事（polish-to-9.md G8）', () =>
     mom(s).pregnancy = 0.4;
     expect(item(reportAfter((x) => (mom(x).pregnancy = 0.55), s), 'belly')).toMatchObject({ tone: 'good', text: '母魚的肚子圓起來了，看得出懷孕', subjectId: mom(s).id });
     expect(item(reportAfter((x) => (mom(x).pregnancy = 0.7), s), 'belly')).toBeUndefined();
-    expect(item(reportAfter((x) => (mom(x).pregnancy = 0.9), s), 'belly')?.text).toBe('母魚肚子後面出現黑色胎斑，快生了');
+    expect(item(reportAfter((x) => (mom(x).pregnancy = 0.96), s), 'belly')?.text).toBe('母魚肚子後面出現黑色胎斑，快生了');
   });
 
   it('公魚追母魚：昨晚配對成功就寫一條，配圖用公魚', () => {
@@ -53,7 +53,7 @@ describe('早上報告寫缸裡真的發生的事（polish-to-9.md G8）', () =>
     const leafG = PLANT_SPECIES.anubias.cuttingMassG / 4;
     plant.biomassG = leafG * 3 - 0.05;
     const r = reportAfter(() => (plant.biomassG = leafG * 3 + 0.05), s);
-    expect(item(r, 'new_leaf')).toMatchObject({ tone: 'good', text: '小榕長出新葉了', plantId: plant.id });
+    expect(item(r, 'new_leaf')).toMatchObject({ tone: 'info', text: '小榕長出新葉了', plantId: plant.id });
     expect(item(r, 'plant_grew')).toBeUndefined();
     // 還在同一片葉子裡長：照舊寫長了幾 %
     plant.biomassG = leafG * 3 + 0.05;

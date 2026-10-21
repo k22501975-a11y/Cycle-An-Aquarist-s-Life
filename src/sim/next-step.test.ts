@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, buyTank, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, setTankPurpose, showingMother } from '.';
+import { addFish, buyTank, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, noteBellySeen, setTankPurpose, showingMother, simulate } from '.';
 
 describe('主畫面的下一步（U1）', () => {
   it('每個目標都說得出下一步，句子短', () => {
@@ -29,6 +29,24 @@ describe('主畫面的下一步（U1）', () => {
     expect(nextStep([s])).toMatchObject({ goal: 'cycled', text: '母魚懷孕了，點她看看肚子', target: 'mother' });
     mom.pregnancy = 0.95;
     expect(nextStep([s])).toMatchObject({ goal: 'cycled', text: '母魚快生了，買個育幼盒', target: 'nursery' });
+  });
+
+  it('點開母魚看過肚子，下一步換成倒數，不會一直叫你再點她（體驗第 14 輪 #282）', () => {
+    const s = newGameState(1);
+    const mom = addFish(s, 'guppy', { sex: 'female' });
+    mom.ageDays = 120;
+    mom.pregnancy = 0.6;
+    expect(nextStep([s])?.text).toBe('母魚懷孕了，點她看看肚子');
+    noteBellySeen(mom);
+    // 25°C、懷孕 28 天：還差 0.4 約 11 天
+    expect(nextStep([s])).toMatchObject({ text: '她大約 11 天後生，快生了會提醒你', target: 'mother' });
+    // 老闆送過育幼盒、這缸又沒有盒子：叫你先備好
+    economy(s).nurseryGifted = true;
+    expect(nextStep([s])).toMatchObject({ text: '她大約 11 天後生，先備好育幼盒', target: 'nursery' });
+    // 生完了，下一胎要重新看
+    mom.pregnancy = 0.999;
+    simulate(s, 2);
+    expect(mom.bellySeen).toBeUndefined();
   });
 
   it('懷孕的母魚在別缸也找得到，帶去看她要先切缸', () => {

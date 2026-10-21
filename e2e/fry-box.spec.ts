@@ -54,7 +54,7 @@ test('母魚快生了：待辦一鍵買育幼盒並放進去', async ({ page }) 
       sim.economy(s).coins = Math.max(sim.economy(s).coins, 500);
       sim.addFish(s, 'guppy', { carriesIch: false, sex: 'male', pregnant: false });
       const mom = sim.addFish(s, 'guppy', { carriesIch: false, sex: 'female', pregnant: false });
-      mom.pregnancy = 0.9;
+      mom.pregnancy = 0.96;
     });
   });
   await page.locator('button.bell-btn').dispatchEvent('click');
