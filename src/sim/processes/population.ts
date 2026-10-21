@@ -207,6 +207,7 @@ function breed(state: TankState, tf: number, dt: number): void {
       let r = nextRandom(state.rng) * weights.reduce((a, b) => a + b, 0);
       const father = males.find((_, i) => (r -= weights[i]) <= 0) ?? males[males.length - 1];
       if (father.genome) mother.sire = { genome: father.genome, lineage: father.lineage ?? father.id, inbreeding: father.inbreeding ?? 0 };
+      recordEvent(state, { type: 'mated', subjectId: mother.id, cause: String(father.id) });
     }
   }
 }

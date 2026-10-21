@@ -1,6 +1,7 @@
 import { crisisText, type Crisis } from '../game/crisis';
 import {
   cycleMaturity,
+  DUE_PREGNANCY,
   economy,
   FISH_SPECIES,
   HUNGRY,
@@ -11,8 +12,10 @@ import {
   MEASURED_PROBLEM_LEVEL,
   testWater,
   pestCount,
+  PLANT_SPECIES,
   takeGearNote,
   tankLabel,
+  usesNursery,
   youngGettingHungry,
   type FishSpeciesId,
   type SimEvent,
@@ -61,6 +64,11 @@ export type ReportKind =
   | 'fish_relaxed' // 魚放鬆了
   | 'ammonia' // 新缸開始出現氨
   | 'gear' // 開缸挑的設備造成的後果（G5）
+  | 'belly' // 母魚肚子變大、出現胎斑（G8：缸裡真的發生的事）
+  | 'courtship' // 公魚追母魚、配對成功（G8）
+  | 'fry_grew' // 小魚長到 1 公分、游出水草（G8）
+  | 'new_leaf' // 水草長出新葉（G8）
+  | 'rescued' // 測到氨或亞硝、換了水、讀數降下來（G8）
   | 'quiet';
 
 export interface ReportItem {
@@ -74,6 +82,8 @@ export interface ReportItem {
   subjectId?: number;
   /** 數量（生了幾尾、死了幾條）。 */
   count?: number;
+  /** 跟哪株水草有關（new_leaf 的配圖）。 */
+  plantId?: number;
 }
 
 export interface MorningReport {
@@ -90,6 +100,8 @@ export interface MorningReport {
 interface FishSnap {
   alive: boolean;
   juvenile: boolean;
+  lengthCm: number;
+  pregnancy: number;
   stress: number;
   colorBoost: number;
 }
@@ -107,6 +119,8 @@ interface TankSnap {
   plants: Map<number, number>;
   /** 測試劑讀到的總氨（mg/L）。 */
   ammonia: number;
+  /** 測試劑讀到的亞硝酸（mg/L）。 */
+  nitrite: number;
 }
 
 export interface Snapshot {
@@ -123,7 +137,7 @@ export function snapshot(tanks: TankState[]): Snapshot {
     tanks: tanks.map((t) => ({
       tank: t,
       events: t.events.at(-1),
-      fish: new Map(allFish(t).map((f) => [f.id, { alive: f.alive, juvenile: isJuvenile(f), stress: f.stress, colorBoost: f.colorBoost ?? 0 }])),
+      fish: new Map(allFish(t).map((f) => [f.id, { alive: f.alive, juvenile: isJuvenile(f), lengthCm: f.lengthCm, pregnancy: f.pregnancy, stress: f.stress, colorBoost: f.colorBoost ?? 0 }])),
       maturity: cycleMaturity(t),
       cycled: isCycled(t),
       algae: t.algae,
@@ -131,6 +145,7 @@ export function snapshot(tanks: TankState[]): Snapshot {
       orders: new Set(orderBoard(t).orders.map((o) => o.id)),
       plants: new Map(t.plants.map((p) => [p.id, p.biomassG])),
       ammonia: testWater(t).ammonia,
+      nitrite: testWater(t).nitrite,
     })),
   };
 }
@@ -203,6 +218,32 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     // 長大
     const grown = allFish(t).filter((f) => f.alive && !isJuvenile(f) && snap.fish.get(f.id)?.juvenile);
     if (grown.length > 0) push({ kind: 'grown', tone: 'good', text: `${grown.length} 尾小魚長大了，看得出公母`, action: 'fish', subjectId: grown[0].id, count: grown.length });
+    // 缸裡真的發生的事（polish-to-9.md G8）：母魚肚子變大、出現胎斑；公魚追母魚
+    const mom = allFish(t).find((f) => {
+      const was = snap.fish.get(f.id);
+      return f.alive && f.sex === 'female' && was && usesNursery(f.species) && bellyStage(f.pregnancy) > bellyStage(was.pregnancy);
+    });
+    if (mom)
+      push(
+        bellyStage(mom.pregnancy) === 2
+          ? { kind: 'belly', tone: 'good', text: '母魚肚子後面出現黑色胎斑，快生了', action: t.nurseryBox ? 'nursery' : 'fish', subjectId: mom.id }
+          : { kind: 'belly', tone: 'good', text: '母魚的肚子圓起來了，看得出懷孕', action: 'fish', subjectId: mom.id },
+      );
+    const swimOut = allFish(t).filter((f) => f.alive && (f.generation ?? 0) >= 1 && f.lengthCm >= FRY_SWIMS_OUT_CM && (snap.fish.get(f.id)?.lengthCm ?? FRY_SWIMS_OUT_CM) < FRY_SWIMS_OUT_CM);
+    if (swimOut.length > 0 && !isShrimpSpecies(swimOut[0].species))
+      push({ kind: 'fry_grew', tone: 'good', text: `${swimOut.length} 尾小魚長到 1 公分，開始游出水草搶飼料了`, action: 'fish', subjectId: swimOut[0].id, count: swimOut.length });
+    const mated = events.find((x) => x.type === 'mated');
+    if (mated) push({ kind: 'courtship', tone: 'good', text: '公魚整晚追著母魚跑，配對成功了，等下一窩', action: 'fish', subjectId: Number(mated.cause) || mated.subjectId });
+    // 你救回來了：測到氨或亞硝、測完換了水，讀數降下來（每缸說一次）
+    const test = t.lastTest;
+    const level = (r: { ammonia: number; nitrite: number }) => Math.max(r.ammonia, r.nitrite);
+    if (!t.rescueNoted && test && level(test.reading) >= MEASURED_PROBLEM_LEVEL && (t.lastWaterChangeHours ?? -1) >= test.hours) {
+      const now = testWater(t);
+      if (Math.min(level(snap), level(now)) < level(test.reading)) {
+        t.rescueNoted = true;
+        push({ kind: 'rescued', tone: 'good', text: `換完水，${test.reading.ammonia >= MEASURED_PROBLEM_LEVEL ? '氨' : '亞硝'}讀數降下來了：你救回來了`, action: 'test_water' });
+      }
+    }
     // 養水
     if (!snap.cycled && isCycled(t)) push({ kind: 'cycled', tone: 'good', text: '水養好了！硝化菌已經長起來，可以開始放魚', action: 'test_water' });
     else if (!isCycled(t)) {
@@ -236,7 +277,14 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       plantsBefore += was;
       plantsNow += p.biomassG;
     }
-    if (plantsBefore > 0 && plantsNow >= plantsBefore * PLANT_GREW) push({ kind: 'plant_grew', tone: 'good', text: `水草長了一點（+${Math.round((plantsNow / plantsBefore - 1) * 100)}%）` });
+    // 水草長出新葉（G8）：一片葉子算插枝重量的 1/LEAF_PER_CUTTING，有一株多長了一片就寫，這晚就不另外寫長了幾 %
+    const leaf = t.plants.find((p) => {
+      const was = snap.plants.get(p.id);
+      const leafG = PLANT_SPECIES[p.species].cuttingMassG / LEAF_PER_CUTTING;
+      return was !== undefined && Math.floor(p.biomassG / leafG) > Math.floor(was / leafG);
+    });
+    if (leaf) push({ kind: 'new_leaf', tone: 'good', text: `${PLANT_SPECIES[leaf.species].name}長出新葉了`, plantId: leaf.id });
+    else if (plantsBefore > 0 && plantsNow >= plantsBefore * PLANT_GREW) push({ kind: 'plant_grew', tone: 'good', text: `水草長了一點（+${Math.round((plantsNow / plantsBefore - 1) * 100)}%）` });
     // 魚放鬆了：睡前睡後都活著的魚，平均壓力降了一截（壓力低就不躲、鰭張開）；發色真的變好才說顏色變亮
     const both = living.filter((f) => snap.fish.get(f.id)?.alive);
     if (both.length > 0) {
@@ -292,6 +340,13 @@ function sickText(sick: SimEvent[], n: number): string {
 
 /** 水草合計長到睡前的幾倍才寫進報告（基本燈下莫絲一整天約長 1.5%，2% 就永遠不會出現）。 */
 const PLANT_GREW = 1.01;
+/** 一株插枝有幾片葉子（新葉的重量＝插枝重量 / 這個數；榕大約一週一片，G8）。 */
+const LEAF_PER_CUTTING = 4;
+/** 小魚長到這麼長，就會游出水草到水面搶飼料（G8 早上報告的小里程碑）。 */
+const FRY_SWIMS_OUT_CM = 1;
+/** 母魚肚子看得出來的懷孕程度（之後到 DUE_PREGNANCY 出現胎斑、快生了）。 */
+const BELLY_SHOWS = 0.5;
+const bellyStage = (pregnancy: number) => (pregnancy >= DUE_PREGNANCY ? 2 : pregnancy >= BELLY_SHOWS ? 1 : 0);
 /** 魚的平均壓力（0–1）一晚降多少才算「放鬆了」（新魚 0.5，第一天約降到 0.3～0.43）。 */
 const RELAXED_DROP = 0.05;
 

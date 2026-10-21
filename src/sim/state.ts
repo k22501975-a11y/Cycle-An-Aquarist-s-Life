@@ -43,6 +43,8 @@ export interface TankState {
   tempLog?: { hours: number; tempC: number }[];
   /** 最近一次換水的時間（遊戲小時）。 */
   lastWaterChangeHours?: number;
+  /** 早上報告說過「你救回來了」（測到氨或亞硝、換水、讀數降下來；每缸一次，G8）。 */
+  rescueNoted?: boolean;
   /**
    * 養水期延長：還在養水、水裡有氨時又放店裡的魚，硝化菌長好以後還要多撐 leftH 小時才算養好
    * （design/polish-to-9.md §4 教學順序）。addedHours 是最近一次延長的時間，同一批魚只算一次。
@@ -332,7 +334,9 @@ export type SimEventType =
   /** 育幼盒裡的小魚長夠大，放回主缸了（count 尾）。 */
   | 'nursery_released'
   /** 缸裡的害蟲小螺第一次多到看得見（count 是隻數）。 */
-  | 'pests_seen';
+  | 'pests_seen'
+  /** 公魚追到母魚、配對成功（subjectId 是母魚，cause 是公魚的 id；早上報告寫「公魚追母魚」，G8）。 */
+  | 'mated';
 
 export interface SimEvent {
   hours: number;

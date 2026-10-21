@@ -57,6 +57,8 @@ export function eventSound(type: SimEventType): SoundId {
     case 'nursery_released':
     case 'pests_seen':
       return 'quest';
+    case 'mated':
+      return 'birth';
   }
 }
 
