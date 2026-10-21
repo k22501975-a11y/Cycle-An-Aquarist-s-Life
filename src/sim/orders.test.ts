@@ -6,6 +6,7 @@ import {
   buyQuarantine,
   createTank,
   deliverableNow,
+  daysToFill,
   dismissOrder,
   economy,
   FILTERS,
@@ -374,6 +375,45 @@ describe('店家訂單板（M21）', () => {
       simulate(s, ORDER_GAP_HOURS + 1);
       expect(board.orders).toHaveLength(1);
       expect(deliverableNow(s, board.orders[0])).toBe(true);
+    });
+
+    it('估的天數每天上下跳一點，卡片的「交不出」不會跟著跳；標了一整天還是交不出就撤掉，板子沒滿也一樣（#299）', () => {
+      const s = tank(12);
+      simulate(s, 1);
+      const board = orderBoard(s);
+      brood(s, FRY_ORDER_MIN_BROOD + 4);
+      const f = addFish(s, 'guppy', { carriesIch: false, carries: [] });
+      f.lengthCm = 1.2;
+      f.generation = 1;
+      const o: ShopOrder = { id: 970, kind: 'fish', species: 'guppy', size: 'juvenile', count: 1, unitPrice: 45, postedHours: s.hours };
+      board.orders = [o];
+      board.lastChangeHours = s.hours;
+      const d = daysToFill([s], o)!;
+      expect(d).toBeGreaterThan(3);
+      const check = (days: number) => {
+        o.days = days;
+        board.fillCheckedHour = undefined;
+        updateOrders(s);
+        return orderOutlook([s], o).late;
+      };
+      expect(check(d - 0.5)).toBe(true);
+      // 差不到一天：還是標交不出，不會一下又寫「再養約 N 天」
+      expect(check(d + 0.5)).toBe(true);
+      expect(check(d - 0.2)).toBe(true);
+      // 多出一天以上才拿掉
+      expect(check(d + 1.5)).toBe(false);
+      expect(check(d + 0.5)).toBe(false);
+      expect(outlookDaysLine(orderOutlook([s], o), o)).toBe(`再養約 ${orderOutlook([s], o).days} 天`);
+      // 又交不出：掛一整天就撤掉（板上只有這一張，沒滿也撤）
+      expect(check(d - 0.5)).toBe(true);
+      s.hours += ORDER_GAP_HOURS - 1;
+      board.fillCheckedHour = undefined;
+      updateOrders(s);
+      expect(board.orders).toContain(o);
+      s.hours += 1;
+      board.fillCheckedHour = undefined;
+      updateOrders(s);
+      expect(board.orders).not.toContain(o);
     });
 
     it('小孔雀單的數量：主缸裡的只算活得下來的一成五（草密多一點），盒子裡的算三成', () => {
