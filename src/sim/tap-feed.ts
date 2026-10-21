@@ -46,11 +46,12 @@ export function tapFeed(state: TankState, food: { kind: FoodKind; grade: FoodGra
 export const CLEAR_ORGANIC_MG_PER_L = 0.4;
 
 /**
- * 水看起來有多濁（0～0.35，畫面疊一層黃綠色）：爛掉的飼料、糞便變成的有機物，加上氨。
+ * 水看起來有多濁（0～0.35，畫面疊一層黃綠色）：爛掉的飼料、糞便變成的有機物。
+ * 氨本身是透明的不算：新缸症候群的氨（polish-to-9.md §6.3）要靠測試劑才看得到，正常餵的新缸水還是清的。
  * 照缸的大小換算濃度，小缸餵太多濁得快。
  */
 export function cloudiness(state: TankState): number {
   // 一次餵三餐的量，當天就看得出來（約 0.13），隔天更濁（約 0.3）
   const organic = Math.max(0, state.water.organicMg / state.equipment.tank.volumeL - CLEAR_ORGANIC_MG_PER_L);
-  return Math.min(0.35, organic * 0.25 + state.water.tan / 20);
+  return Math.min(0.35, organic * 0.25);
 }

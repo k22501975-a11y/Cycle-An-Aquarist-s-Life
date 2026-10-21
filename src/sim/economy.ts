@@ -138,6 +138,10 @@ export interface Economy {
   chestCuttings?: Partial<Record<PlantSpeciesId, number>>;
   /** 已經套用到伺服器帳本的第幾筆（市場的收支，docs/ledger.md）；舊存檔沒有＝0。 */
   ledgerSeq?: number;
+  /** 夢想魚路線做到的步驟（§6 P2）；做到就不會倒退。 */
+  dreamSteps?: Array<'tank' | 'brood' | 'bred'>;
+  /** 已經選育出夢想魚。 */
+  dreamAchieved?: boolean;
   /** 玩過幾次對水小遊戲（前幾次強制玩，F5）。 */
   dripsDone?: number;
 }

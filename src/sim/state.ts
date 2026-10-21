@@ -46,6 +46,11 @@ export interface TankState {
    * （design/polish-to-9.md §4 教學順序）。addedHours 是最近一次延長的時間，同一批魚只算一次。
    */
   cycleDelay?: { leftH: number; addedHours: number };
+  /**
+   * 新缸症候群（design/polish-to-9.md §6「P6 實作確認」）：新建的缸是 {}，第一次放魚時記下開始時間、魚數和這一波
+   * 氨的總量（mg，菌夠多時是 0 並標成 prevented）。舊存檔沒有這個欄位，當作早就過了。
+   */
+  newTankSyndrome?: { startedHours?: number; fish?: number; totalMg?: number; prevented?: boolean };
   /** 最近一次餵食、剪下插枝的時間（遊戲小時；每日小事用）。舊存檔沒有。 */
   lastFedHours?: number;
   lastTrimHours?: number;
@@ -406,6 +411,7 @@ export function createTank(options: CreateTankOptions): TankState {
     plants: [],
     algae: 0,
     events: [],
+    newTankSyndrome: {},
   };
 }
 
