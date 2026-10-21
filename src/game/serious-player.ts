@@ -3,6 +3,7 @@ import {
   addCuttings,
   addFish,
   addPlant,
+  buyPlant,
   buybackRefusal,
   buyQuarantine,
   BOX_CAPACITY,
@@ -156,7 +157,8 @@ export function casualPlayer(seed: number, takeOrders: boolean, days = 90): { in
   s.environment.roomSwingC = 2;
   // 起始水溫也固定：newGameState 照現實日期給室溫當水溫，不固定的話結果會隨跑測試的日期、時間變
   s.water.tempC = s.water.tempAvgC = 25;
-  addPlant(s, 'anubias');
+  // 在店裡買的（第一株一定夾帶扁卷螺，polish-to-9.md §4）
+  buyPlant(s, 'anubias');
   for (const sex of ['male', 'female', 'female'] as const) addFish(s, 'guppy', { carriesIch: false, carries: [], sex, strain: 0 });
   const breeders = [...s.fish.map((f) => f.id)];
   const income: Record<number, number> = {};

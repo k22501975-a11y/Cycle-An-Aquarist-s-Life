@@ -1,4 +1,4 @@
-import { applyMedia, economy, isPlantSpecies, mediaAvailable, packMedia, PLANT_SPECIES, receiveCuttings, takeCuttingsForGift, type PlantSpeciesId } from '../sim';
+import { applyMedia, isPlantSpecies, mediaAvailable, packMedia, PLANT_SPECIES, receiveCuttings, sellableCuttings, takeCuttingsForGift, type PlantSpeciesId } from '../sim';
 import type { Game } from '../game/game';
 import type { CloudClient, FriendsOverview, Gift } from '../net/cloud';
 import { h } from './dom';
@@ -114,7 +114,6 @@ export function friendsPanel(deps: FriendsDeps): Node {
 /** 送禮：手上的插枝、成熟濾材。 */
 export function giftPanel(deps: FriendsDeps, to: string, sendLeft: number): Node {
   const { cloud, game, sheet, toasts } = deps;
-  const cuttings = economy(game.state).cuttings;
   const back = () => sheet.open('好友', () => friendsPanel(deps));
   const sendCuttings = async (species: PlantSpeciesId, count: number) => {
     if (!game.act((st) => takeCuttingsForGift(st, species, count))) return;
@@ -142,7 +141,8 @@ export function giftPanel(deps: FriendsDeps, to: string, sendLeft: number): Node
     toasts.show(`分了一份濾材給 ${to}，自己的過濾器少了一點菌`);
     back();
   };
-  const species = (Object.keys(PLANT_SPECIES) as PlantSpeciesId[]).filter((id) => (cuttings[id] ?? 0) > 0);
+  // 寶箱來的插枝不能送人（polish-to-9.md §4）
+  const species = (Object.keys(PLANT_SPECIES) as PlantSpeciesId[]).filter((id) => sellableCuttings(game.state, id) > 0);
   const media = mediaAvailable(game.state) > 0;
   return h(
     'div.stack',
@@ -151,7 +151,7 @@ export function giftPanel(deps: FriendsDeps, to: string, sendLeft: number): Node
     h('h3', {}, '水草插枝'),
     ...(species.length === 0 ? [h('p.hint', {}, '手上沒有插枝。修剪長滿的水草就會有。')] : []),
     ...species.map((id) => {
-      const n = cuttings[id] ?? 0;
+      const n = sellableCuttings(game.state, id);
       return h('div.item', {}, h('div', {}, h('b', {}, PLANT_SPECIES[id].name), h('div.hint', {}, `手上有 ${n} 株`)), h('div.row', {},
         h('button.btn', { onclick: () => sendCuttings(id, 1) }, '送 1'),
         n >= 3 ? h('button.btn', { onclick: () => sendCuttings(id, Math.min(n, 5)) }, `送 ${Math.min(n, 5)}`) : null));

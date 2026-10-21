@@ -1,6 +1,6 @@
 import { temperatureFactor } from './chemistry';
 import { nextRandom } from './random';
-import { recordEvent, type TankState } from './state';
+import { noteAct, recordEvent, type TankState } from './state';
 
 /**
  * 螺（design/snails.md）：清潔隊也是麻煩。
@@ -46,6 +46,10 @@ export interface SnailState {
   neriteEggs: number;
   /** 螺陷阱（放一片燙過的菜）：放下去的時間。 */
   trapHour?: number;
+  /** 舊版：這缸在店裡買過幾次水草（現在記在共用錢包的 plantBuys，整個存檔只算一次；只在讀舊存檔時看）。 */
+  plantBuys?: number;
+  /** 缸裡的害蟲小螺已經多到看得見了（第一次看見時記一筆 pests_seen）。 */
+  pestsSeen?: boolean;
 }
 
 export interface SnailSpec {
@@ -103,6 +107,24 @@ export function addSnail(state: TankState, kind: SnailKind, color?: AppleColor, 
   };
   s.snails.push(snail);
   return snail;
+}
+
+/** 店裡買的水草夾帶扁卷螺的機率（第一次買必定夾帶，polish-to-9.md §4「第二次確認」）；有檢疫盒先泡過低很多。 */
+export const PLANT_HITCHHIKE_CHANCE = 0.3;
+export const PLANT_HITCHHIKE_QUARANTINE = 0.08;
+/** 害蟲小螺多到這麼多隻才看得見（第一次看見老闆會說一句話；保底單收「小螺 5 隻」）。 */
+export const PESTS_VISIBLE = 5;
+
+/**
+ * 在店裡買了一株水草：整個存檔第一次買（first，次數記在共用錢包，見 actions.ts buyPlant）必定、之後 30%（有檢疫盒 8%）
+ * 夾帶 2～3 隻扁卷螺（「搭便車的螺」，卵小到看不到，會自己繁殖）。回傳夾帶了幾隻（沒有是 0）。
+ */
+export function plantHitchhikers(state: TankState, first: boolean): number {
+  const s = snailState(state);
+  if (!first && nextRandom(state.rng) >= (state.quarantine ? PLANT_HITCHHIKE_QUARANTINE : PLANT_HITCHHIKE_CHANCE)) return 0;
+  const n = 2 + Math.floor(nextRandom(state.rng) * 2);
+  s.pests.ramshorn += n;
+  return n;
 }
 
 /** 水草夾帶的害蟲小螺（卵小到看不到）：跟著新水草混進來。 */
@@ -176,6 +198,11 @@ export function updateSnails(state: TankState, dt: number): void {
     w.organicMg += dead * PESTS[k].bodyMassMg * 0.1;
     if (next < 0.5) next = 0;
     s.pests[k] = next;
+  }
+  // 第一次多到看得見：記一筆，讓老闆說一句話
+  if (!s.pestsSeen && s.pests.ramshorn + s.pests.bladder + s.pests.mts >= PESTS_VISIBLE) {
+    s.pestsSeen = true;
+    recordEvent(state, { type: 'pests_seen', count: Math.floor(s.pests.ramshorn + s.pests.bladder + s.pests.mts) });
   }
 
   // 刺客螺：吃其他螺（小螺先），沒得吃就餓
@@ -279,6 +306,7 @@ export function removeClutches(state: TankState): number {
   if (!s) return 0;
   const n = s.clutches.length;
   s.clutches = [];
+  if (n > 0) noteAct(state, 'clutch');
   return n;
 }
 
@@ -293,6 +321,7 @@ export function catchPests(state: TankState, lightsOn: boolean): number {
     s.pests[k] -= n;
     caught += n;
   }
+  noteAct(state, 'pests');
   return caught;
 }
 
@@ -301,6 +330,7 @@ export function setTrap(state: TankState): boolean {
   const s = snailState(state);
   if (s.trapHour !== undefined) return false;
   s.trapHour = state.hours;
+  noteAct(state, 'pests');
   return true;
 }
 
@@ -342,6 +372,7 @@ export function removeDeadSnails(state: TankState): number {
   if (!s) return 0;
   const dead = s.snails.filter((x) => !x.alive).length;
   s.snails = s.snails.filter((x) => x.alive);
+  if (dead > 0) noteAct(state, 'deadSnail');
   return dead;
 }
 

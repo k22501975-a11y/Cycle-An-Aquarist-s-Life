@@ -17,7 +17,7 @@ import {
   catchPests,
   collectTrap,
   doseMolluscicide,
-  hitchhike,
+  buyPlant as plantFromShop,
   isLightOn,
   PESTS,
   pestCount,
@@ -74,6 +74,8 @@ import {
   plantBuybackPrice,
   price,
   sellCuttings,
+  sellableCuttings,
+  chestCuttingsOf,
   sellFish,
   sellsLeftToday,
   spend,
@@ -81,6 +83,7 @@ import {
   buyQuarantine,
   HARDSCAPE,
   removeHardscape,
+  placeFromBag,
   replaceSubstrate,
   SUBSTRATES,
   doseAntibiotic,
@@ -243,7 +246,6 @@ function button(label: string, onclick: () => void, kind = ''): HTMLButtonElemen
 /** 上次選的飼料（同一次遊戲記住）。 */
 let feedChoice: { kind: FoodKind; grade: FoodGrade } = { ...DEFAULT_FOOD };
 
-/** 手指餵食一下撒多少：一餐的三分之一。 */
 /**
  * 手指餵食（P5）：點一下水面撒一小撮上次選的飼料（種類、等級在「進階」面板選），份量和扣錢照核心的 tapFeed。
  * 缸裡沒魚回傳 null。
@@ -906,8 +908,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       ctx,
       PLANT_PRICES[species],
       (st) => {
-        id = addPlant(st, species).id;
-        hitchhike(st, st.quarantine ? 0.08 : 0.25);
+        id = plantFromShop(st, species).id;
       },
       `買了一株${PLANT_SPECIES[species].name}`,
     );
@@ -1022,7 +1023,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       {},
       advice([
         '陰性草弱光就能長；陽性草需要強光加 CO₂。',
-        game.state.quarantine ? '新水草會先在檢疫盒泡過，比較不會夾帶小螺的卵。' : '新水草有時夾帶看不到的小螺卵，過幾週才發現缸裡多了螺。有檢疫盒的話會先泡過。',
+        game.state.quarantine ? '新水草會先在檢疫盒泡過，比較不會夾帶小螺的卵。' : '店裡的水草常夾帶看不到的扁卷螺卵（第一株幾乎一定有），過一陣子才發現缸裡多了螺。有檢疫盒的話會先泡過。',
       ]),
       cardGrid(
         ...(Object.keys(PLANT_SPECIES) as PlantSpeciesId[]).map((id) =>
@@ -1054,6 +1055,8 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     // 設備商品圖（art/gear/）；沒有圖的（控溫器）用設備圖示
     const item = (label: string, key: string, owned: boolean, buy: () => void, note = '', art?: string) =>
       shopCard({ art, icon: art ? undefined : 'gear', name: label, price: price(key), badge: owned ? '使用中' : undefined, note, actions: owned ? [] : [button('買', buy, 'small')], cls: owned ? '.owned' : '' });
+    const bottles = economy(game.state).bacteriaBottles ?? 0;
+    const bag = economy(game.state).hardscapeBag ?? [];
     const HARDSCAPE_ART: Record<string, string> = { seiryu: 'scape/rock-seiryu-1.webp', lava: 'gear/rock-lava.webp', slate: 'gear/rock-slate.webp', driftwood: 'scape/wood-spider-1.webp' };
     content = h(
       'div.stack',
@@ -1070,11 +1073,26 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
           // 無框的物件圖，跟旁邊的設備同一種畫法（畫面評測 V26）
           art: 'gear/bottle-bacteria.webp',
           name: '硝化菌液',
-          price: price('care:bacteria'),
+          price: bottles > 0 ? null : price('care:bacteria'),
           unit: '/瓶',
           chips: ['養水 1～3 天'],
-          note: '幫新缸加一小批硝化菌，要有魚或氨才長得起來',
-          actions: [button('倒一瓶', () => purchase(ctx, price('care:bacteria'), (st) => void addBottledBacteria(st), '倒了一瓶硝化菌液，過一兩天測測看'), 'small')],
+          note: bottles > 0 ? `手上有 ${bottles} 瓶寶箱開到的` : '幫新缸加一小批硝化菌，要有魚或氨才長得起來',
+          actions: [
+            button('倒一瓶', () => {
+              // 先倒寶箱開到的（不用錢）；按下去當下才讀手上的瓶數，面板開著時數字變了也不會算錯
+              const free = game.act((st) => {
+                const e = economy(st);
+                if ((e.bacteriaBottles ?? 0) <= 0) return false;
+                e.bacteriaBottles = e.bacteriaBottles! - 1;
+                addBottledBacteria(st);
+                return true;
+              });
+              if (free) {
+                toasts.show('倒了一瓶硝化菌液，過一兩天測測看');
+                sheet.refresh();
+              } else purchase(ctx, price('care:bacteria'), (st) => void addBottledBacteria(st), '倒了一瓶硝化菌液，過一兩天測測看');
+            }, 'small'),
+          ],
         }),
         ...Object.values(FILTERS).map((f) =>
           item(f.name, `filter:${f.id}`, eq.filter?.spec.id === f.id, () => {
@@ -1113,17 +1131,25 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       cardGrid(
         ...Object.values(HARDSCAPE).map((x) => {
           const count = (eq.hardscape ?? []).filter((y) => y.id === x.id).length;
+          const inHand = bag.filter((id) => id === x.id).length;
           const key = `hardscape:${x.id}`;
           return shopCard({
             art: HARDSCAPE_ART[x.id],
             name: x.name,
             price: price(key),
             unit: '/組',
-            badge: count > 0 ? `缸裡 ${count} 組` : undefined,
-            note: HARDSCAPE_NOTES[x.id],
+            badge: count > 0 ? `缸裡 ${count} 組` : inHand > 0 ? `手上 ${inHand}` : undefined,
+            note: inHand > 0 ? `手上有 ${inHand} 組寶箱開到的，免費放進缸` : HARDSCAPE_NOTES[x.id],
             actions: [
               x.kind === 'rock' ? button('白醋', () => toasts.show(x.fizzes ? `${x.name}冒出小氣泡：含碳酸鈣，會讓水變硬` : `${x.name}沒有反應：不會影響水質`, x.fizzes ? 'warn' : 'info'), 'small') : null,
               count > 0 ? button('拿出', () => game.act((st) => removeHardscape(st, x.id)), 'small') : null,
+              inHand > 0
+                ? button('放手上的', () => {
+                    if (game.act((st) => placeFromBag(st, x.id))) ctx.placeNew?.({ kind: 'hardscape', index: (game.state.equipment.hardscape ?? []).length - 1 });
+                    toasts.show(`放了一組${x.name}（寶箱開到的）`);
+                    sheet.refresh();
+                  }, 'small.primary')
+                : null,
               button('買一組', () => {
                 if (purchase(ctx, price(key), (st) => addHardscape(st, x), `買了一組${x.name}`)) ctx.placeNew?.({ kind: 'hardscape', index: (game.state.equipment.hardscape ?? []).length - 1 });
               }, 'small'),
@@ -1180,8 +1206,8 @@ function sellContent(ctx: PanelContext): Node {
   const groups = (Object.keys(FISH_SPECIES) as FishSpeciesId[])
     .map((id) => ({ id, fish: s.fish.filter((f) => f.species === id && !buybackRefusal(f)) }))
     .filter((g) => g.fish.length > 0);
-  const cuttings = economy(s).cuttings;
-  const cuttingIds = (Object.keys(cuttings) as PlantSpeciesId[]).filter((id) => (cuttings[id] ?? 0) > 0);
+  // 寶箱來的插枝不收（polish-to-9.md §4），只列賣得掉的
+  const cuttingIds = (Object.keys(economy(s).cuttings) as PlantSpeciesId[]).filter((id) => sellableCuttings(s, id) > 0);
   const priceRange = (fish: Fish[]) => {
     const p = fish.map(fishBuybackPrice);
     const lo = Math.min(...p);
@@ -1236,7 +1262,7 @@ function sellContent(ctx: PanelContext): Node {
       h(
         'div.item',
         {},
-        h('div', {}, h('b', {}, `${PLANT_SPECIES[id].name}插枝`), h('div.hint', {}, `${cuttings[id]} 株 · 每株 ${plantBuybackPrice(id)} 元`)),
+        h('div', {}, h('b', {}, `${PLANT_SPECIES[id].name}插枝`), h('div.hint', {}, `${sellableCuttings(s, id)} 株 · 每株 ${plantBuybackPrice(id)} 元${chestCuttingsOf(s, id) > 0 ? `（寶箱送的 ${chestCuttingsOf(s, id)} 株不收）` : ''}`)),
         button('全部賣掉', () => {
           const got = game.act((st) => sellCuttings(st, id));
           if (got > 0) {
@@ -1454,6 +1480,8 @@ export function quarantinePanel(ctx: PanelContext): Node {
 
 export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: PanelContext): Node {
   const s = game.state;
+  // 每日小事「看看過濾器和加熱棒」
+  markDaily(game.tanks, 'gear');
   const eq = s.equipment;
   // 每一列前面放那樣設備的商品圖（跟商店、圖鑑同一張），一眼看得出是哪個
   const pic = (art: string) => {

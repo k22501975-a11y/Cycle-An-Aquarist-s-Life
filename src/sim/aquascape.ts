@@ -1,6 +1,6 @@
 import { tankSize, type HardscapeSpec } from './equipment';
 import { PLANT_SPECIES } from './species';
-import type { Plant, TankState } from './state';
+import { noteAct, type Plant, type TankState } from './state';
 
 /**
  * 造景編輯（aquascape-editor.md）：石頭、沉木、水草擺在缸裡的哪裡。
@@ -144,6 +144,11 @@ export function placeHardscape(state: TankState, index: number, change: Partial<
   if (after.x !== before.x || after.layer !== before.layer || after.flip !== before.flip || after.scale !== before.scale) state.lastScapeHours = state.hours;
   const size = hardscapeSizeCm(list[index]);
   const movedCm = Math.abs(after.x - before.x) * tankSize(state.equipment.tank).w;
+  // 每日小事分得出是搬位置、換層、翻面還是縮放
+  if (movedCm > 1) noteAct(state, 'scapeMove');
+  if (after.layer !== before.layer) noteAct(state, 'scapeLayer');
+  if (!!after.flip !== !!before.flip) noteAct(state, 'scapeFlip');
+  if ((after.scale ?? 1) !== (before.scale ?? 1)) noteAct(state, 'scapeScale');
   const moved = movedCm > 1 || after.layer !== before.layer;
   if (!moved) {
     // 翻面、換角度：拿起來轉一下，攪起一點點沙
@@ -164,6 +169,8 @@ export function placePlant(state: TankState, plantId: number, change: Partial<Om
   plant.place = after;
   if (Math.abs(after.x - before.x) < 0.01 && after.layer === before.layer && after.flip === before.flip) return NONE;
   state.lastScapeHours = state.hours;
+  noteAct(state, 'scapePlant');
+  if (after.layer !== before.layer) noteAct(state, 'scapeLayer');
   // 拔起來重種：掉一些葉子
   plant.biomassG *= 0.95;
   return disturb(state, 0.06, 0.2);

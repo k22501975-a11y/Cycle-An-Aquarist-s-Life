@@ -47,6 +47,9 @@ export const DEATH_CAUSE_LABELS: Record<string, string> = {
  * 魚第一次餓死、病死時阿德老闆直接說原因和下次怎麼做（#169）：
  * 只看通知裡的「可能原因」玩家常常不知道下一步，餓死的人甚至不知道魚要一直餵。
  */
+/** 第一次在缸裡看到搭便車的扁卷螺，阿德老闆說的一句話（polish-to-9.md §4「第二次確認」）。 */
+export const FIRST_PESTS_LINE = '缸裡多了幾隻小扁卷螺，是跟著水草搭便車來的。牠們吃殘餌和藻，不多就不用管；店裡也收小螺，攢到 5 隻就能交單換錢。';
+
 export const DEATH_ADVICE: Record<DeathAdviceCause, string> = {
   starvation: '這條是餓死的。魚一天要吃一到兩餐，關掉遊戲時間也照樣在走。要出門好幾天，商店「設備」最下面的「出遠門」有假期飼料錠，常常不在家就裝自動餵食器。',
   ich: '這條是白點病死的。白點蟲會在水裡傳給其他魚：先下白點藥，把水溫慢慢調高一點，整個療程撐完，白點看不到了也要再下幾天。',
@@ -229,6 +232,8 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
       return { text: `育幼盒的 ${e.count ?? 0} 尾小魚長大，放回主缸了`, tone: 'info' };
     case 'trap_rotted':
       return { text: '螺陷阱的菜爛了，記得拿出來', tone: 'warn' };
+    case 'pests_seen':
+      return { text: `缸裡發現了 ${e.count ?? 5} 隻小螺，是跟著水草搭便車來的`, tone: 'info' };
   }
 }
 
