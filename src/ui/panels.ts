@@ -174,6 +174,7 @@ import {
   unplugHeater,
   trimPlant,
   waterChange,
+  suggestedWaterChange,
   type DripOutcome,
   type Fish,
   type FishSpeciesId,
@@ -364,7 +365,8 @@ export function waterChangePanel({ game, sheet, toasts, sound, undoable }: Panel
     PRESETS.forEach((p, i) => presetBtns[i].classList.toggle('active', p.pct === value));
   };
   slider.addEventListener('input', () => set(Number(slider.value)));
-  set(30);
+  // 量得到氨、亞硝時預設成換完讀數會掉一格的量（第 1 天讀 0.25 要換一半，#237）
+  set(Math.round(suggestedWaterChange(game.state) * 100));
   const temp = h('button.wc-temp.active', { type: 'button', 'aria-pressed': 'true' }, h('span.kit-thermo', { 'aria-hidden': 'true' }, h('i')), h('span', {}, h('b', {}, '新水對好溫度'), h('small', {}, '沒對溫，水溫驟變會讓魚緊迫')));
   temp.addEventListener('click', () => {
     matchTemp = !matchTemp;

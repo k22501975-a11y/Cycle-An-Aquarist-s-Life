@@ -129,6 +129,7 @@ export function moveFish(from: TankState, to: TankState, fishId: number): boolea
   from.fish = from.fish.filter((f) => f !== fish);
   // 從育幼盒撈出來換缸：到了新缸就是在缸裡游（#191）
   fish.nursery = undefined;
+  fish.arrivedHours = to.hours;
   to.fish.push(fish);
   return true;
 }

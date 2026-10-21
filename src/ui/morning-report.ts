@@ -8,10 +8,12 @@ import {
   isJuvenile,
   isShrimpSpecies,
   orderBoard,
+  BIG_WATER_CHANGE,
   MEASURED_PROBLEM_LEVEL,
   testWater,
   pestCount,
   lookalikeLine,
+  suggestedWaterChange,
   takeGearNote,
   takeLookalike,
   tankLabel,
@@ -232,7 +234,8 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     const ammonia = testWater(t).ammonia;
     const ammoniaCrisis = crisis?.reason === 'ammonia' && crisis.tank === index;
     if (!ammoniaCrisis && living.length > 0 && ammonia >= MEASURED_PROBLEM_LEVEL && snap.ammonia < MEASURED_PROBLEM_LEVEL)
-      push({ kind: 'ammonia', tone: 'warn', text: `氨 ${ammonia}，水開始髒了，換三成水`, action: 'water_change' });
+      // 換三成讀數掉不下來的話（第 1 天讀 0.25 時）叫玩家換一半，換完再測看得到變化（#237）
+      push({ kind: 'ammonia', tone: 'warn', text: `氨 ${ammonia}，水開始髒了，${suggestedWaterChange(t) === BIG_WATER_CHANGE ? '換一半的水' : '換三成水'}`, action: 'water_change' });
     // 水草長了一點（睡前就種著的那幾株，合計長了 1% 以上才寫；沒照光的晚上不會長）
     let plantsBefore = 0;
     let plantsNow = 0;
@@ -243,16 +246,24 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       plantsNow += p.biomassG;
     }
     if (plantsBefore > 0 && plantsNow >= plantsBefore * PLANT_GREW) push({ kind: 'plant_grew', tone: 'good', text: `水草長了一點（+${Math.round((plantsNow / plantsBefore - 1) * 100)}%）` });
-    // 魚放鬆了：睡前睡後都活著的魚，平均壓力降了一截（壓力低就不躲、鰭張開）；發色真的變好才說顏色變亮
+    // 魚放鬆了：睡前睡後都活著的魚，平均壓力降了一截（壓力低就不躲、鰭張開）；發色真的變好才說顏色變亮。
+    // 剛放進這缸 2 天內的魚才說「適應新家」；老住戶要昨晚真的緊張過（換缸、生病、水質）才說，不然天天都有這行（#237）
     const both = living.filter((f) => snap.fish.get(f.id)?.alive);
-    if (both.length > 0) {
-      const avg = (get: (f: (typeof both)[number]) => number) => both.reduce((a, f) => a + get(f), 0) / both.length;
-      const stressDrop = avg((f) => snap.fish.get(f.id)!.stress) - avg((f) => f.stress);
+    const newcomers = both.filter((f) => f.arrivedHours !== undefined && t.hours - f.arrivedHours <= SETTLING_HOURS);
+    const settling = newcomers.length > 0 ? newcomers : both;
+    if (settling.length > 0) {
+      const avg = (get: (f: (typeof settling)[number]) => number) => settling.reduce((a, f) => a + get(f), 0) / settling.length;
+      const was = avg((f) => snap.fish.get(f.id)!.stress);
+      const stressDrop = was - avg((f) => f.stress);
       // 畫面的發色加成以 0.25 為一級（tank-view.ts），有魚升了一級才看得出來
       const level = (x: number) => Math.round(x * 4);
-      const brighter = both.some((f) => level(f.colorBoost ?? 0) > level(snap.fish.get(f.id)!.colorBoost));
-      if (stressDrop >= RELAXED_DROP)
-        push({ kind: 'fish_relaxed', tone: 'good', text: brighter ? '魚放鬆了，顏色變亮' : '魚慢慢適應新家，放鬆了', action: 'fish', subjectId: both[0].id });
+      const brighter = settling.some((f) => level(f.colorBoost ?? 0) > level(snap.fish.get(f.id)!.colorBoost));
+      const residentQuiet = t.relaxedNoteHours !== undefined && t.hours - t.relaxedNoteHours < RESIDENT_RELAXED_GAP_HOURS;
+      if (stressDrop >= RELAXED_DROP && (newcomers.length > 0 || (was >= WAS_TENSE && !residentQuiet))) {
+        if (newcomers.length === 0) t.relaxedNoteHours = t.hours;
+        const text = newcomers.length > 0 ? (brighter ? '新來的魚放鬆了，顏色變亮' : '新來的魚慢慢適應新家，放鬆了') : brighter ? '魚不緊張了，顏色也變亮了' : '昨天緊張的魚放鬆了，鰭又張開了';
+        push({ kind: 'fish_relaxed', tone: 'good', text, action: 'fish', subjectId: settling[0].id });
+      }
     }
     // 開缸挑的設備有後果（G5）：第 3～10 天每天一句，每種設備只說一次
     const gear = takeGearNote(t);
@@ -306,6 +317,12 @@ function sickText(sick: SimEvent[], n: number): string {
 const PLANT_GREW = 1.01;
 /** 魚的平均壓力（0–1）一晚降多少才算「放鬆了」（新魚 0.5，第一天約降到 0.3～0.43）。 */
 const RELAXED_DROP = 0.05;
+/** 放進這缸多久以內算「新來的」（遊戲小時）。 */
+const SETTLING_HOURS = 48;
+/** 老住戶睡前平均壓力要到這麼高（換缸、生病、水質不好過）才算昨天緊張過。 */
+const WAS_TENSE = 0.25;
+/** 老住戶的「放鬆了」最少隔幾個遊戲小時才再說。 */
+const RESIDENT_RELAXED_GAP_HOURS = 72;
 
 const pct = (x: number) => `${Math.round(Math.min(1, x) * 100)}%`;
 
