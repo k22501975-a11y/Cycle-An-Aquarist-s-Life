@@ -1,5 +1,5 @@
 """孔雀魚鰭型圖：從 5 張基本款（public/art/fish/guppy-male-<花紋>.webp）用程式長出
-半月、緞帶、大C、上劍、下劍、雙劍。鰭的質感直接取自同一條魚的尾鰭，所以顏色和筆觸一致。
+大三角、緞帶、大C、上劍、下劍、雙劍。鰭的質感直接取自同一條魚的尾鰭，所以顏色和筆觸一致。
 用法（repo 根目錄）：python3 scripts/art/guppy-fins.py <輸出資料夾>
 會印出每張圖給 src/render/painted.ts 用的 span、tail、body。"""
 import sys, json, numpy as np
@@ -127,9 +127,11 @@ def finish(f, img, name):
   return spec
 
 def halfmoon(n):
-  """半月：尾柄開始像三角尾一樣展開，上下兩個尖角，後緣微彎的 D 形；尾長約和身體一樣。"""
+  """大三角（Delta；YenWel 2026-10-21：台灣沒有「半月」這個孔雀魚品系，改成大三角）：
+  從尾柄就寬寬地張開成大三角扇，張開接近直角以上，後緣幾乎是直的，尾柄不收窄；不是鬥魚那種 D 形半圓。
+  檔名和存檔裡的 id 還是 halfmoon（只改顯示名稱，舊存檔不用轉換）。"""
   f0 = Fish(n, 0, 0, 0)
-  R = 0.9 * f0.L; SP = 52; EXP = 0.12
+  R = 0.7 * f0.L; SP = 56; EXP = 0.9
   rmax = R / np.cos(np.radians(SP)) ** EXP
   padL = int(max(0, R + 14 - f0.ox)); half = rmax * np.sin(np.radians(SP))
   padT = int(max(0, half + 12 - f0.oy)); padB = int(max(0, f0.oy + half + 12 - f0.H0))
@@ -139,7 +141,7 @@ def halfmoon(n):
   dx = f.ox - xx; dy = f.oy - yy
   r = np.hypot(dx, dy); phi = np.degrees(np.arctan2(dy, dx))
   edge = R / np.cos(np.radians(np.clip(phi, -89, 89))) ** EXP
-  edge *= 1 + 0.025 * np.cos(np.radians(phi) * 16) ** 6   # 鰭條末端的小波浪
+  edge *= 1 + 0.018 * np.cos(np.radians(phi) * 16) ** 6   # 鰭條末端的小波浪
   t = np.where(phi >= 0, phi / SP * f.tu, phi / SP * (-f.td))
   Rsrc = np.interp(t, f.th, f.Rs)
   rs = np.clip(r / np.maximum(edge, 1), 0, 1) * Rsrc
@@ -149,8 +151,8 @@ def halfmoon(n):
   rays = 0.5 + 0.5 * np.sin(np.radians(phi) * 36)
   fold = 0.5 + 0.5 * np.sin(np.radians(phi) * 6 + 1.3)
   out[..., :3] *= (1 - 0.09 * rays * u - 0.12 * fold * u ** 1.5 + 0.05 * (1 - u))[..., None]
-  # 根部窄：上下緣從尾柄斜斜張開（像三角尾），不是一條直立的接縫
-  lim = SP * np.clip(0.5 + 0.5 * (r / (0.3 * R)), 0, 1)
+  # 尾柄不收窄：上下緣一出尾柄就張開
+  lim = SP * np.clip(0.8 + 0.2 * (r / (0.2 * R)), 0, 1)
   fade = np.clip((edge - r) / 3, 0, 1) * np.clip((lim + 1 - np.abs(phi)) / 4, 0, 1) * (1 - 0.3 * np.clip((u - 0.8) / 0.2, 0, 1))
   out[..., 3] *= fade
   out[(np.abs(phi) > SP + 2) | (xx > f.ox + 2)] = 0
@@ -165,17 +167,71 @@ def with_fins(n, name, padL, padT, padB, make):
   for layer in make(f): img = over(img, layer)
   return finish(f, img, name)
 
-def sword_layers(f, which):
-  out = []
-  for top in ([True] if which == 1 else [False] if which == 2 else [True, False]):
-    th = f.tu - 4 if top else f.td + 4
-    root = f.tailpt(th, 0.3); corner = f.tailpt(th, 1.0)
-    s = -1 if top else 1
-    tip = corner + np.array([-0.75 * f.Lt, s * 0.1 * f.Lt])
-    ctl = corner + np.array([-0.2 * f.Lt, s * 0.03 * f.Lt])
-    lo, hi = (th - 9, th + 1) if top else (th - 1, th + 9)
-    out.append(strip(f, root, ctl, tip, 0.2 * f.Lt, 0.03 * f.Lt, lo, hi, k0=0.3, k1=0.85, alpha=0.97, tipfade=0.2))
-  return out
+def sword(n, which):
+  """劍尾（YenWel 2026-10-21：「雙劍不是應該是尾巴雙劍」）：尾巴本身的上下緣長成劍，不是扇尾上黏細刺。
+  劍從尾柄寬寬地長出來，慢慢收尖，長度約一個身長，上下劍微微張開成 V；
+  中間是一段很短、凹進去的半透明鰭膜，只有淡淡的鰭條和幾個小點；劍的內側有一道深色邊。
+  which：1 上劍、2 下劍、3 雙劍。單劍的另一半是一片短短的圓尾。"""
+  f0 = Fish(n, 0, 0, 0)
+  RT = 0.95 * f0.L; PS = 11.0                     # 劍長、劍往外張的角度
+  padL = int(max(0, RT + 16 - f0.ox)); half = RT * np.tan(np.radians(PS)) + 0.3 * f0.L
+  padT = int(max(0, half - f0.oy)); padB = int(max(0, f0.oy + half - f0.H0))
+  f = Fish(n, padL, padT, padB)
+  H, W = f.a.shape[:2]
+  yy, xx = np.mgrid[:H, :W].astype(np.float32)
+  dx = f.ox - xx; dy = f.oy - yy
+  r = np.hypot(dx, dy); phi = np.degrees(np.arctan2(dy, dx))   # phi>0 是上半
+  sides = [1] if which == 1 else [-1] if which == 2 else [1, -1]
+  out = np.zeros((H, W, 4), np.float32)
+  # 中間的短鰭膜（凹口）：單劍時另一半是一片短圓尾
+  col_p = np.where(f.al0[:, f.px - f.padL] > 128)[0]; ph = (col_p.max() - col_p.min()) / 2
+  along = np.clip(dx, 0, None)                                             # 往後的距離
+  tp = np.tan(np.radians(PS))
+  spread = 0.22 * ph + along * tp                                           # 劍中線離中軸的距離
+  if which == 3:
+    rm = 0.34 * f.L * (0.72 + 0.28 * np.clip(np.abs(dy) / np.maximum(spread, 1), 0, 1) ** 2)   # 中間最短：凹進去
+    memb = np.clip((spread + 2 - np.abs(dy)) / 2, 0, 1)
+  else:
+    sd = sides[0]
+    lobe = ph + along * 0.85                                               # 對側：短短的圓尾
+    q = np.clip(-sd * dy / np.maximum(lobe, 1), 0, 1)
+    rm = 0.4 * f.L * np.sqrt(np.clip(1 - q ** 2, 0, 1)) + 0.05 * f.L
+    memb = np.where(sd * dy > 0, np.clip((spread + 2 - sd * dy) / 2, 0, 1), np.clip((lobe - np.abs(dy)) / 2, 0, 1))
+  memb = memb * np.clip((rm - along) / 3, 0, 1)
+  t = np.clip(dy / np.maximum(spread + 0.6 * ph, 1), -1, 1)
+  ts = np.where(t >= 0, t * f.tu, -t * f.td)
+  rsrc = np.interp(ts, f.th, f.Rs)
+  k = np.clip(along / np.maximum(rm, 1), 0, 1) * 0.9
+  m = bilinear(f.a, f.ox - np.cos(np.radians(ts)) * k * rsrc, f.oy - np.sin(np.radians(ts)) * k * rsrc)
+  rays = 0.5 + 0.5 * np.sin(np.radians(phi) * 40)
+  m[..., :3] *= (1 - 0.12 * rays)[..., None]
+  thin = 0.6 if which == 3 else 0.9                                        # 雙劍中間比較透明
+  m[..., 3] *= memb * thin * np.clip(1 - 0.4 * (along / np.maximum(rm, 1)) ** 2, 0, 1)
+  out = m
+  u = np.clip(along / RT, 0, 1)
+  for sd in sides:
+    # 劍的中線：從尾柄上（下）緣往後斜斜張開；寬度從尾柄的寬慢慢收到尖
+    off = spread
+    hw = (0.48 * ph + 0.03 * f.L) * (1 - u) ** 0.85 + 0.6
+    e = sd * dy - off                                                      # 正的是外側
+    v = np.clip(e / hw, -1.2, 1.2)                                         # +1 外緣、-1 內緣
+    inside = np.clip((hw - np.abs(e)) / 1.3, 0, 1) * (along < RT) * np.clip((along + 4) / 10, 0, 1)
+    tsrc = (f.tu - 4 if sd > 0 else f.td + 4) + v * 4 * sd
+    rs = np.interp(tsrc, f.th, f.Rs) * (0.3 + 0.62 * u)
+    col = bilinear(f.a, f.ox - np.cos(np.radians(tsrc)) * rs, f.oy - np.sin(np.radians(tsrc)) * rs)
+    rays = 0.5 + 0.5 * np.sin(v * np.pi * 3.5 + 0.6)
+    shade = 0.8 + 0.24 * (1 - np.clip(np.abs(v), 0, 1)) ** 0.7 + 0.06 * np.clip(v, 0, 1) - 0.08 * rays
+    col[..., :3] *= shade[..., None]
+    # 內側一道深色邊（照片裡劍的內緣是黑的）
+    ink = np.clip((-v - 0.5) / 0.3, 0, 1) * np.clip((along - 0.06 * RT) / (0.12 * RT), 0, 1)
+    col[..., :3] = col[..., :3] * (1 - 0.78 * ink)[..., None] + np.array([16, 14, 20]) * (0.78 * ink)[..., None]
+    col[..., 3] = 255 * inside * np.clip(col[..., 3] / 255 * 4, 0, 1) * 0.97 * np.clip((1 - u) / 0.06, 0, 1) ** 0.5
+    out = over(col, out)
+  out[xx > f.ox + 2] = 0
+  body = f.a.copy()
+  keep = np.clip((xx - (f.px - 16)) / 24, 0, 1)
+  body[..., 3] *= keep
+  return finish(f, over(body, out), f'sword{which}')
 
 def bigc_layers(f):
   out = []
@@ -200,13 +256,18 @@ def ribbon_layers(f):
     out.append(strip(f, root, ctl, tip, 0.065 * f.L, 0.03 * f.L, -10 + 6 * i, 10 + 6 * i, k0=0.35, k1=0.85, alpha=0.95, tipfade=0.3))
   return out
 
+# 只重畫某幾種：GUPPY_FINS=sword,halfmoon GUPPY_STRAINS=cobra python3 ...
+import os
+ONLY = set(filter(None, os.environ.get('GUPPY_FINS', '').split(',')))
+STRAINS = [x for x in STRAINS if not os.environ.get('GUPPY_STRAINS') or x in os.environ['GUPPY_STRAINS'].split(',')]
+def want(k): return not ONLY or k in ONLY
 specs = {}
 for n in STRAINS:
   f = Fish(n, 0, 0, 0)
-  specs[f'{n}-halfmoon'] = halfmoon(n)
-  for s in (1, 2, 3):
-    padT = 0 if s == 2 else int(max(0, 0.2 * f.Lt - f.top(f.xmin + 5) + f.top(f.xmin + 5)))
-    specs[f'{n}-sword{s}'] = with_fins(n, f'sword{s}', int(0.65 * f.Lt), 30, 30, lambda g, s=s: sword_layers(g, s))
-  specs[f'{n}-bigc'] = with_fins(n, 'bigc', int(0.7 * f.Lt), int(0.5 * f.L), int(0.5 * f.L), bigc_layers)
-  specs[f'{n}-ribbon'] = with_fins(n, 'ribbon', 0, 0, int(0.9 * f.L), ribbon_layers)
+  if want('halfmoon'): specs[f'{n}-halfmoon'] = halfmoon(n)
+  if want('sword'):
+    for s in (1, 2, 3):
+      specs[f'{n}-sword{s}'] = sword(n, s)
+  if want('bigc'): specs[f'{n}-bigc'] = with_fins(n, 'bigc', int(0.7 * f.Lt), int(0.5 * f.L), int(0.5 * f.L), bigc_layers)
+  if want('ribbon'): specs[f'{n}-ribbon'] = with_fins(n, 'ribbon', 0, 0, int(0.9 * f.L), ribbon_layers)
 print(json.dumps(specs, indent=1))

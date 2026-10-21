@@ -7,7 +7,7 @@ import { FIN_PARTS, paintedTexture, type PaintedRig } from './painted';
 import { patternBase, phenotypeRecipe, type ColorFamily } from './phenotype-art';
 
 /**
- * 鰭型在魚圖上補畫：整條魚圖已經畫了的鰭（緞帶、燕尾、半月）不重畫，
+ * 鰭型在魚圖上補畫：整條魚圖已經畫了的鰭（緞帶、燕尾、大三角）不重畫，
  * 其他的照基因畫成半透明、有鰭條和亮邊的鰭，色系跟著花紋；母魚的鰭比較淡。
  */
 export type FinLook = { traits: FinTraits; color: number; alpha: number; dumboArt: boolean; family: ColorFamily };
@@ -25,7 +25,7 @@ export function finTraitsOf(fish: Fish, painted: string | null): FinLook | null 
     dumbo: p.dumbo && !paintedTexture('fin-pectoral-dumbo'),
     bigC: male && p.bigC && !inArt('bigc'),
     sword: male && p.sword && !inArt(`sword${p.sword}`) ? p.sword : 0,
-    // 半月的尾巴只在花紋圖上補畫：別的鰭型圖已經有自己的尾巴，疊上去會變兩條尾巴
+    // 大三角的尾巴只在花紋圖上補畫：別的鰭型圖已經有自己的尾巴，疊上去會變兩條尾巴
     halfmoon: male && p.tailShape === 'halfmoon' && base === patternBase(base),
     length: p.finLength,
   };
@@ -213,16 +213,16 @@ export function drawFinOverlay(rig: FishRig | PaintedRig, fins: FinLook, rendere
   }
   const tex = fins.dumboArt ? paintedTexture(fins.family === 'blue' ? 'fin-pectoral-dumbo' : `fin-pectoral-dumbo~${fins.family}`) : null;
   if (tex) {
-    // 大耳的胸鰭圖：根部接在鰓後面、扇面往後下方張開，壓在身體下面（圖頭朝右，魚的圖層頭朝左，所以水平翻）
+    // 大耳的胸鰭（scripts/art/guppy-dumbo.py）：根部在鰓蓋正後方、身體前下方，扇面往後下方張開，
+    // 蓋在身體前面、半透明（YenWel 2026-10-21：舊的掛在肚子中間像第二條尾巴）。圖頭朝右，魚的圖層頭朝左，所以水平翻
     const fan = new Sprite(tex);
     const [ax, ay] = FIN_PARTS['fin-pectoral-dumbo'].anchor;
     fan.anchor.set(ax, ay);
-    const w = rig.lengthPx * 0.36;
+    const w = rig.lengthPx * 0.4;
     fan.scale.set(-w / tex.width, w / tex.width);
-    fan.position.set(body.x - body.rx * 0.5, body.y + body.ry * 0.45);
-    fan.rotation = 0.75;
-    fan.alpha = fins.color === FIN_COLORS.pale ? 0.55 : 0.92;
-    rig.addChildAt(fan, 0);
+    fan.position.set(body.x - body.rx * 0.5, body.y + body.ry * 0.25);
+    fan.alpha = fins.color === FIN_COLORS.pale ? 0.5 : 0.82;
+    rig.addChild(fan);
   }
 }
 

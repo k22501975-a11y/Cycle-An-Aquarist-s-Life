@@ -40,7 +40,7 @@ const COLORS: Array<[keyof GuppyPhenotype, string]> = [
   ['snake', '蛇王'],
   ['grass', '藍草尾'],
 ];
-const TAILS = { halfmoon: '半月尾', delta: '三角尾', round: '圓尾' } as const;
+const TAILS = { halfmoon: '大三角', delta: '扇尾', round: '圓尾' } as const;
 
 /** 看得出來的特徵：顏色、鰭型、尾型（沒有任何顏色基因的是「原生色」）。 */
 export function guppyTraits(p: GuppyPhenotype): Array<{ key: string; name: string }> {
@@ -111,7 +111,7 @@ export function takeLookalike(tanks: TankState[]): (LookalikeCard & { tank: numb
 
 const FROM: Record<TraitFrom, string> = { mother: '像媽媽', father: '像爸爸', both: '爸媽都有', hidden: '隔代冒出來' };
 
-/** 早上報告那一行，例如「小魚看得出像誰了！長大後比較像爸爸：禮服（像爸爸）、半月尾（像媽媽）」。 */
+/** 早上報告那一行，例如「小魚看得出像誰了！長大後比較像爸爸：禮服（像爸爸）、大三角（像媽媽）」。 */
 export function lookalikeLine(card: LookalikeCard): string {
   const who = card.looksLike === 'mother' ? '比較像媽媽' : card.looksLike === 'father' ? '比較像爸爸' : '爸媽各像一點';
   return `小魚看得出像誰了！長大後${who}：${card.traits.map((t) => `${t.name}（${FROM[t.from]}）`).join('、')}`;

@@ -71,7 +71,7 @@ export interface ShopPairPreview {
 /** 在商店挑一公一母（品系、鰭型）時的預覽。 */
 export function previewShopPair(mother: { strain: number; fin?: FinTrait }, father: { strain: number; fin?: FinTrait }): ShopPairPreview {
   const mom = typicalStoreGenome('female', mother.strain, mother.fin);
-  // 店裡配種用的公魚：鰭型只有劍尾、大耳、半月是公魚帶得了的（跟 addFish 一樣）
+  // 店裡配種用的公魚：鰭型只有劍尾、大耳、大三角是公魚帶得了的（跟 addFish 一樣）
   const storeFin = mother.fin === 'sword' || mother.fin === 'dumbo' || mother.fin === 'halfmoon' ? mother.fin : undefined;
   const storeSire = typicalStoreGenome('male', mother.strain, storeFin);
   const dad = typicalStoreGenome('male', father.strain, father.fin);
