@@ -127,11 +127,14 @@ export class Guide {
     if (this.tray.hidden) return;
     this.tray.classList.add('tucked');
     this.pill.classList.add('tray-tucked');
+    this.onLayout();
   }
 
   private untuck(): void {
+    if (!this.tray.classList.contains('tucked')) return;
     this.tray.classList.remove('tucked');
     this.pill.classList.remove('tray-tucked');
+    this.onLayout();
   }
 
   /** 錢變了：圖卡上「錢不夠」的樣子要跟著變。 */
