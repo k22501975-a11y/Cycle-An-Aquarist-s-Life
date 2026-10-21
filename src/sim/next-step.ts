@@ -1,5 +1,5 @@
 import { economy } from './economy';
-import { CALM_DAYS, goalState, nextGoals, raisedCount, type Goal } from './goals';
+import { CALM_DAYS, goalState, nextGoals, PURPOSE_GOAL_COUNT, raisedCount, type Goal } from './goals';
 import { growthStage } from './growth';
 import { newTankCost } from './household';
 import { dueMothers } from './nursery';
@@ -7,6 +7,7 @@ import { orderBoard, orderSupply } from './orders';
 import { hasVisible } from './processes/disease';
 import { isShrimpSpecies } from './species';
 import type { TankState } from './state';
+import { breedingTankRaised, displayTankHighPlants, purposeTanks } from './tank-purpose';
 
 /**
  * 主畫面的「下一步」（polish-to-9.md U1）：教學結束後，時鐘下方一直看得到現在該做什麼，點下去帶到要按的按鈕。
@@ -22,6 +23,8 @@ export type NextTarget =
   | 'sell' // 賣魚給店家
   | 'shop_tank' // 商店的魚缸頁
   | 'shop_fish' // 商店的魚頁
+  | 'shop_gear' // 商店的設備頁
+  | 'shop_plants' // 商店的水草頁
   | 'select' // 挑選面板（選育）
   | 'treat' // 治療
   | 'test'; // 測水
@@ -70,6 +73,13 @@ function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
       const g = goalState(tanks);
       const best = Math.max(0, ...tanks.map((t, i) => Math.floor((t.hours - (g.calmSince[i] ?? t.hours)) / 24)));
       return { text: `每天測水，${CALM_DAYS} 天沒警告（${Math.min(best, CALM_DAYS)}/${CALM_DAYS}）`, target: 'test' };
+    }
+    case 'breeding_tank':
+      return { text: `小魚搬去繁殖缸養大（${Math.min(PURPOSE_GOAL_COUNT.breeding, breedingTankRaised(tanks))}/${PURPOSE_GOAL_COUNT.breeding}）`, target: 'shop_tank' };
+    case 'display_tank': {
+      const lit = purposeTanks(tanks, 'display').some((t) => t.equipment.light?.spec.id === 'planted');
+      if (!lit) return { text: '展示缸換上水草燈', target: 'shop_gear' };
+      return { text: `展示缸種陽性草（${Math.min(PURPOSE_GOAL_COUNT.display, displayTankHighPlants(tanks))}/${PURPOSE_GOAL_COUNT.display}）`, target: 'shop_plants' };
     }
     case 'strain':
     case 'fins':

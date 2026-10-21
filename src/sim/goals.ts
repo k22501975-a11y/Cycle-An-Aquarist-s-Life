@@ -6,6 +6,7 @@ import { hasVisible } from './processes/disease';
 import { cycleMaturity, isCycled } from './processes/nitrogen';
 import { FISH_SPECIES, isShrimpSpecies, type FishSpeciesId } from './species';
 import { type Fish, type TankState } from './state';
+import { breedingTankRaised, displayTankHighPlants, purposeTanks } from './tank-purpose';
 
 /**
  * 新手教學之後的目標串（design/mvp.md §4.2，M19）：一次顯示 1～2 個，完成給魚幣或解鎖。
@@ -46,6 +47,8 @@ export interface Goal {
   detail?: (tanks: TankState[]) => string | null;
   /** 第一次提到這個目標時，老闆多說的幾句（例如養水要等多久、怎麼加快）。 */
   intro?: string[];
+  /** 現在跟玩家無關、先不列出來的目標（例如沒開繁殖缸就不出「繁殖缸」的目標）。 */
+  hidden?: (tanks: TankState[]) => boolean;
 }
 
 export interface GoalState {
@@ -106,6 +109,9 @@ export function cycleConfirmed(s: TankState): boolean {
   return !!r && living(s).length > 0 && r.ammonia === 0 && r.nitrite === 0 && s.hours - s.lastTest!.hours < 24 && isCycled(s);
 }
 
+/** 第二缸用途目標要做到幾個：繁殖缸養大幾尾、展示缸種活幾株陽性草。 */
+export const PURPOSE_GOAL_COUNT = { breeding: 10, display: 3 } as const;
+
 export const GOALS: Goal[] = [
   // 等養水（design/polish-to-9.md §4 U2）：以前是新手任務，要等它才結束教學；現在是教學後的第一個背景目標
   {
@@ -153,6 +159,25 @@ export const GOALS: Goal[] = [
     coins: 100,
     unlock: 'betta',
     check: (tanks) => tanks.length >= 2,
+  },
+  // 第二缸的用途（polish-to-9.md G4）：開缸卡選了哪一種，就多一個那種的目標；沒選就不出
+  {
+    id: 'breeding_tank',
+    title: `繁殖缸：在這缸養大 ${PURPOSE_GOAL_COUNT.breeding} 尾小魚`,
+    done: '繁殖缸上軌道了！小魚在這裡不會被大魚吃，養大了就能挑好的留種、交訂單。',
+    coins: 80,
+    hidden: (tanks) => purposeTanks(tanks, 'breeding').length === 0,
+    check: (tanks) => breedingTankRaised(tanks) >= PURPOSE_GOAL_COUNT.breeding,
+    progress: (tanks) => [Math.min(PURPOSE_GOAL_COUNT.breeding, breedingTankRaised(tanks)), PURPOSE_GOAL_COUNT.breeding],
+  },
+  {
+    id: 'display_tank',
+    title: `展示缸：種活 ${PURPOSE_GOAL_COUNT.display} 株陽性草`,
+    done: '展示缸長起來了！陽性草要強光，水草燈下長得又快又密，修剪下來的插枝還能交單。',
+    coins: 80,
+    hidden: (tanks) => purposeTanks(tanks, 'display').length === 0,
+    check: (tanks) => displayTankHighPlants(tanks) >= PURPOSE_GOAL_COUNT.display,
+    progress: (tanks) => [Math.min(PURPOSE_GOAL_COUNT.display, displayTankHighPlants(tanks)), PURPOSE_GOAL_COUNT.display],
   },
   {
     id: 'strain',
@@ -253,7 +278,7 @@ export function tankLock(tanks: TankState[], id: string): Unlock | null {
 /** 接下來要做的目標（一次 1～2 個）。 */
 export function nextGoals(tanks: TankState[], count = 2): Goal[] {
   const g = goalState(tanks);
-  return GOALS.filter((x) => !g.done.includes(x.id)).slice(0, count);
+  return GOALS.filter((x) => !g.done.includes(x.id) && !x.hidden?.(tanks)).slice(0, count);
 }
 
 /**

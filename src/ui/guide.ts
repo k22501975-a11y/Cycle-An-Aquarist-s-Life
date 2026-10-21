@@ -388,6 +388,8 @@ const NEXT_GLOW: Record<NextTarget, QuestTarget | null> = {
   orders: 'orders',
   sell: 'shop',
   shop_fish: 'shop',
+  shop_gear: 'shop',
+  shop_plants: 'shop',
   shop_tank: null,
   nursery: null,
   select: null,

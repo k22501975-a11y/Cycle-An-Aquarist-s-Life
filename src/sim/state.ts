@@ -20,6 +20,8 @@ export interface TankState {
   version: 1;
   /** 玩家幫這缸取的名字（多缸時顯示；沒取就叫「第 N 缸」）。 */
   label?: string;
+  /** 這缸的用途（第二缸起，tank-purpose.ts，polish-to-9.md G4）；沒選就沒有。 */
+  purpose?: 'breeding' | 'display';
   /** 已模擬的遊戲小時數。 */
   hours: number;
   rng: RngState;

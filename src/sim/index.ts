@@ -15,6 +15,7 @@ export * from './next-step';
 export * from './pair-preview';
 export * from './dream';
 export * from './gear-notes';
+export * from './tank-purpose';
 export * from './economy';
 export * from './orders';
 export * from './goals';

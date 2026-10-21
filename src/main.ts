@@ -1187,6 +1187,10 @@ async function start(): Promise<void> {
         return openShop('sell');
       case 'shop_fish':
         return openShop('fish');
+      case 'shop_gear':
+        return openShop('gear');
+      case 'shop_plants':
+        return openShop('plants');
       case 'shop_tank':
         return panelSheet('我的水缸', (p) => p.tanksPanel(ctx));
       case 'nursery':
