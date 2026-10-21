@@ -1089,7 +1089,7 @@ async function start(): Promise<void> {
     );
   const openInbox = () => {
     toasts.markRead();
-    sheet.open('通知', inboxSheet, { live: true });
+    sheet.open('通知', inboxSheet);
   };
   const bellBtn = h('button.hud-btn.bell-btn', { 'aria-label': '通知', onclick: openInbox }, icon(ICONS.bell), bellBadge);
   // 徽章只是一個小金點，不寫數字（紅底數字比紅色的魚還搶眼）
