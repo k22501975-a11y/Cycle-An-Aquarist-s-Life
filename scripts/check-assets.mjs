@@ -16,13 +16,22 @@ const RULES = {
   artExts: new Set(['.webp']),
   /** 主程式（入口 index-*.js）gzip 後上限 */
   mainJsGzipMax: 300 * KB,
-  /** 開機必載：入口加上它靜態 import 的 chunk（Vite manifest 的 imports）gzip 後合計上限 */
+  /** 開機必載：入口、它靜態 import 的 chunk、BOOT_DYNAMIC 列的 chunk，gzip 後合計上限 */
   bootJsGzipMax: 330 * KB,
   /** dist/assets 的 JS 全部 gzip 後合計上限（防膨脹：延後載入的 chunk、Worker 也算） */
   jsGzipMax: 520 * KB,
   /** 開機必載以外的單一 chunk（延後載入的面板、Worker）gzip 後上限：打開時不用等一大包 */
   lazyChunkGzipMax: 60 * KB,
 };
+
+/**
+ * 寫成 dynamic import、但開機一定會等它（或一開機就在背景載）的模組：不擋入口，卻一樣要下載，
+ * 所以算進「開機必載」。新增這種模組時要加進來（docs/performance-budget.md §3）。
+ */
+const BOOT_DYNAMIC = ['src/render/gl-renderer.ts', 'src/audio/engine.ts'];
+
+/** vite.config.ts 把 Vite manifest 移到 dist 外面，免得打進 APK */
+const MANIFEST_PATH = join('node_modules', '.cache', 'cycle-build', 'manifest.json');
 
 function walk(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -57,7 +66,7 @@ if (process.argv.includes('--dist')) {
     const kb = (n) => Math.round(n / KB);
     const gz = [...sizes.values()].reduce((s, n) => s + n, 0);
     // 入口和它靜態 import 的 chunk 從 Vite manifest 找（vite.config.ts 的 build.manifest）
-    const manifestPath = join('dist', '.vite', 'manifest.json');
+    const manifestPath = MANIFEST_PATH;
     const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : null;
     const entryKey = manifest && Object.keys(manifest).find((k) => manifest[k].isEntry && manifest[k].file.endsWith('.js'));
     if (!entryKey) {
@@ -71,6 +80,10 @@ if (process.argv.includes('--dist')) {
         for (const dep of manifest[key].imports ?? []) visit(dep);
       };
       visit(entryKey);
+      for (const src of BOOT_DYNAMIC) {
+        if (manifest[src]) visit(src);
+        else errors.push(`Vite manifest 裡找不到 ${src}：改名或刪掉了的話請更新 check-assets.mjs 的 BOOT_DYNAMIC`);
+      }
       const main = join('dist', manifest[entryKey].file);
       const mainGz = sizes.get(main) ?? 0;
       const bootGz = [...boot].reduce((s, f) => s + (sizes.get(f) ?? 0), 0);

@@ -1,6 +1,6 @@
 import { GlApplication } from './render/gl-app';
 import { introReady } from './intro';
-import { AudioEngine } from './audio/engine';
+import { LazyAudio } from './audio/lazy-audio';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
 import { eventSound, type SoundId } from './audio/sounds';
 import { applySeason, blankGameState, Game } from './game/game';
@@ -29,7 +29,7 @@ import { FpsMeter, formatFps } from './game/fps-meter';
 import { defaultQuality, isQuality, type Quality, QUALITY_LABELS, qualitySpec } from './render/quality';
 import { TankView } from './render/tank-view';
 import { SETUP_CAPTIONS, SETUP_ORDER, SETUP_PROMPTS, type SetupStep } from './render/setup-show';
-import { ScapeBar } from './ui/scape-bar';
+import type { ScapeBar } from './ui/scape-bar';
 import * as sim from './sim';
 import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, useTestKit } from './sim';
 import { h } from './ui/dom';
@@ -49,7 +49,7 @@ import { causeAdvice, HUNGER_LABEL, illnessOf, needsAdvice } from './ui/owner-ad
 import { kickOwnerQueue, ownerGuide, ownerSay, setOwnerBlocker } from './ui/owner-ask';
 import { fryArt, guppyArt, plantArt } from './ui/shop-cards';
 import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
-import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt, ordersPanel } from './ui/orders-panel';
+import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt } from './ui/order-alert';
 import { flyCoins, rewardBurst } from './ui/coin-fly';
 import type { ReportItem } from './ui/morning-report';
 import { loadCodexSeen, saveCodexSeen } from './ui/codex-seen';
@@ -86,6 +86,9 @@ async function start(): Promise<void> {
   const dock = document.getElementById('dock')!;
 
   const app = new GlApplication();
+  // 聲音合成引擎另外一包，跟 Pixi 初始化、存檔、圖片同時在背景下載（不佔入口大小，第一次點擊前也還不能出聲）
+  const audioEngine = import('./audio/engine');
+  audioEngine.catch(() => {}); // 載不到（網頁版離線）就沒有聲音，不算當機
   // 讀取存檔
   const store = browserStore();
   const loaded = loadSave(store);
@@ -125,7 +128,8 @@ async function start(): Promise<void> {
   };
   // 聲音：瀏覽器要等第一次點擊才能出聲
   let audioSettings = loadAudioSettings(store);
-  const audio = new AudioEngine(audioSettings);
+  const audio = new LazyAudio(audioSettings);
+  void audio.load(() => audioEngine);
   // 震動只跟著玩家的動作（模擬觸發的音效只出聲）
   document.addEventListener('pointerdown', () => (audio.unlock(), audio.noteInput()), { capture: true });
   document.addEventListener('keydown', () => (audio.unlock(), audio.noteInput()), { capture: true });
@@ -464,8 +468,8 @@ async function start(): Promise<void> {
       sim.markDaily(game.tanks, 'plant');
       panelSheet('水草', (p) => p.plantPanel(ctx, id), { live: true });
     },
-    onScapeSelect: (target) => scapeBar.select(target),
-    onScapeDrop: (target, x) => scapeBar.drop(target, x),
+    onScapeSelect: (target) => scapeBar?.select(target),
+    onScapeDrop: (target, x) => scapeBar?.drop(target, x),
     // 手指餵食（F6）：撒下去的第一口被誰吃到，在那尾魚頭上浮一行小字，看得出誰貪吃
     onFeedTap: () => onFeedTap(),
     onFirstBite: (id) => {
@@ -562,22 +566,25 @@ async function start(): Promise<void> {
   // 開缸演出（F1-b）在挑完設備、按下「開缸」後才演（見 openSetup）
   // 造景模式（aquascape-editor.md）：底部工具列換成造景操作列，在缸裡拖曳石頭、沉木、水草
   let scaping = false;
-  const scapeBar = new ScapeBar({
-    game,
-    toasts,
-    onChange: (edit) => view.setScapeEdit(edit),
-    onDone: () => leaveScape(),
-    openShop: (tab) => (leaveScape(), openShop(tab)),
-    onDrop: () => {
-      if (placingNew) {
-        placingNew = false;
-        window.setTimeout(() => scaping && leaveScape(), 700);
-      }
-      if (!scapeCoach) return;
-      firstTime(store, 'first_scape_drag');
-      stopCoach();
-    },
-  });
+  // 造景操作列跟其他面板一起延後載入（ui/deferred-ui.ts，開機閒下來就先載好）；第一次進造景模式才建立
+  let scapeBar: ScapeBar | null = null;
+  const makeScapeBar = (p: DeferredUi) =>
+    new p.ScapeBar({
+      game,
+      toasts,
+      onChange: (edit) => view.setScapeEdit(edit),
+      onDone: () => leaveScape(),
+      openShop: (tab) => (leaveScape(), openShop(tab)),
+      onDrop: () => {
+        if (placingNew) {
+          placingNew = false;
+          window.setTimeout(() => scaping && leaveScape(), 700);
+        }
+        if (!scapeCoach) return;
+        firstTime(store, 'first_scape_drag');
+        stopCoach();
+      },
+    });
   // 造景引導（F1-c）：第一次進造景模式，一隻手在石頭（或水草）上左右比劃「按住拖拖看」，拖過一次就不再出現
   let scapeCoach: { el: HTMLElement; raf: number } | null = null;
   const stopCoach = () => {
@@ -606,46 +613,51 @@ async function start(): Promise<void> {
   };
   /** 剛買的拿在手上：放下去就自動收起造景模式，不用再按「完成」（#235）。 */
   let placingNew = false;
-  const enterScape = () => {
+  /** then：進了造景模式之後要做的事（操作列還沒載好時，等載好再一起做）。 */
+  const enterScape = (then?: (bar: ScapeBar) => void) => {
     if (visiting) return;
-    placingNew = false;
-    sheet.close();
-    select(null);
-    scaping = true;
-    scapeBar.reset();
-    view.setScapeEdit(scapeBar.state);
-    document.body.classList.add('scaping');
-    stage.append(scapeBar.el);
-    requestAnimationFrame(() => measure());
-    startCoach();
+    withPanels((p) => {
+      if (visiting) return;
+      const bar = (scapeBar ??= makeScapeBar(p));
+      placingNew = false;
+      sheet.close();
+      select(null);
+      scaping = true;
+      bar.reset();
+      view.setScapeEdit(bar.state);
+      document.body.classList.add('scaping');
+      stage.append(bar.el);
+      requestAnimationFrame(() => measure());
+      startCoach();
+      then?.(bar);
+    });
   };
   const leaveScape = () => {
     scaping = false;
     view.setScapeEdit(null);
     document.body.classList.remove('scaping');
-    scapeBar.el.remove();
+    scapeBar?.el.remove();
     stopCoach();
     requestAnimationFrame(() => measure());
   };
-  ctx.openScape = enterScape;
+  ctx.openScape = () => enterScape();
   /** 每日小事的造景題（g13）：進造景模式就先選好一樣東西，不用在缸裡一格一格試點。 */
-  const enterScapeOn = (prefer: 'plant' | 'stone') => {
-    enterScape();
-    if (!scaping) return;
-    const st = game.state;
-    const stone = (st.equipment.hardscape ?? []).length > 0 ? ({ kind: 'hardscape', index: 0 } as const) : null;
-    const plant = st.plants[0] ? ({ kind: 'plant', id: st.plants[0].id } as const) : null;
-    const target = prefer === 'plant' ? (plant ?? stone) : (stone ?? plant);
-    if (target) scapeBar.focus(target);
-  };
+  const enterScapeOn = (prefer: 'plant' | 'stone') =>
+    enterScape((bar) => {
+      const st = game.state;
+      const stone = (st.equipment.hardscape ?? []).length > 0 ? ({ kind: 'hardscape', index: 0 } as const) : null;
+      const plant = st.plants[0] ? ({ kind: 'plant', id: st.plants[0].id } as const) : null;
+      const target = prefer === 'plant' ? (plant ?? stone) : (stone ?? plant);
+      if (target) bar.focus(target);
+    });
   // 剛買的石頭、水草（P4）：不是馬上種好，而是拿在手上，拖到缸裡想擺的位置放開
-  ctx.placeNew = (target) => {
-    enterScape();
-    stopCoach();
-    placingNew = true;
-    scapeBar.focus(target);
-    startCoach(target.kind === 'plant' ? '拖到想種的位置，放開就種下' : '拖到想擺的位置');
-  };
+  ctx.placeNew = (target) =>
+    enterScape((bar) => {
+      stopCoach();
+      placingNew = true;
+      bar.focus(target);
+      startCoach(target.kind === 'plant' ? '拖到想種的位置，放開就種下' : '拖到想擺的位置');
+    });
   // 手指餵食（P5）：按「餵食」進餵食模式，點水面哪裡飼料就從哪裡撒下去，魚過去搶；種類、等級收進「進階」
   let feedingMode = false;
   let fedThisRound = 0;
@@ -703,7 +715,9 @@ async function start(): Promise<void> {
     });
   sheet.onOpen = () => leaveFeeding();
   debugHandle.feeding = { start: startFeeding, leave: leaveFeeding };
-  debugHandle.scape = { enter: enterScape, leave: leaveScape, bar: scapeBar };
+  debugHandle.scape = { enter: enterScape, leave: leaveScape, get bar() {
+    return scapeBar;
+  } };
   // 畫質：低畫質關掉景深模糊、柔光，降低解析度與粒子數量
   const setQuality = (q: Quality) => {
     uiPrefs.quality = q;
@@ -1142,7 +1156,7 @@ async function start(): Promise<void> {
   const ordersBadge = h('span.badge');
   const ordersBtn = tool('orders', '訂單', '#f0c45a', () => {
     markOrdersSeen(store, seenOrders, game.state);
-    sheet.open('客人的訂單', () => ordersPanel(ctx));
+    panelSheet('客人的訂單', (p) => p.ordersPanel(ctx));
   });
   ordersBtn.append(ordersBadge);
   const renderOrders = () => {
@@ -1371,7 +1385,7 @@ async function start(): Promise<void> {
       plant: () => toasts.show('在缸裡點一株水草，看看長得好不好'),
       records: () => panelSheet('紀錄', (p) => p.recordsPanel(ctx)),
       codex: () => panelSheet('圖鑑', (p) => p.codexPanel(ctx, codexSeen)),
-      orders: () => sheet.open('客人的訂單', () => ordersPanel(ctx)),
+      orders: () => panelSheet('客人的訂單', (p) => p.ordersPanel(ctx)),
       scape: () => enterScapeOn('stone'),
       scapePlant: () => enterScapeOn('plant'),
       scapeFlip: () => enterScapeOn('stone'),
@@ -1425,7 +1439,7 @@ async function start(): Promise<void> {
     const stageRect = stage.getBoundingClientRect();
     const top = hud.getBoundingClientRect().bottom - stageRect.top;
     // 參觀時底部工具列藏起來，改留參觀列的空間
-    const bottom = visiting ? visitBar.offsetHeight + 24 : scaping ? scapeBar.el.offsetHeight + 24 : stageRect.bottom - tools.getBoundingClientRect().top;
+    const bottom = visiting ? visitBar.offsetHeight + 24 : scaping && scapeBar ? scapeBar.el.offsetHeight + 24 : stageRect.bottom - tools.getBoundingClientRect().top;
     view.setInsets({ top: Math.round(top), bottom: Math.round(bottom) });
     // 左上角只留一排小膠囊（YenWel：「太亂了很躁」「都看不到魚了」）：夢想魚｜任務｜今天的小事，缸要露出來
     let x = 14;
@@ -1913,7 +1927,7 @@ async function start(): Promise<void> {
       kickOwnerQueue();
       setupBtn.hidden = !sim.needsSetup(game.tanks[0]) || sheet.isOpen;
       checkDaily();
-      if (scaping) scapeBar.refresh();
+      if (scaping) scapeBar?.refresh();
       celebrateStrains();
       // 圖鑑條目在拆出去的檔案裡：背景載好之前先不檢查（下一次刷新再補，解鎖條件看的是缸的狀態和事件紀錄）
       for (const entry of deferredUi?.unlockCodex(codexSeen, game.state) ?? []) {
