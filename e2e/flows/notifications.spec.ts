@@ -3,10 +3,12 @@ import { startClean } from './helpers';
 
 test.use({ deviceScaleFactor: 1, actionTimeout: 20_000 });
 
-type Toasts = { show: (text: string, tone?: 'bad' | 'warn' | 'info') => void };
+type Toasts = { quietCount: boolean; show: (text: string, tone?: 'bad' | 'warn' | 'info') => void };
 const show = (page: import('@playwright/test').Page, list: Array<[string, ('bad' | 'warn' | 'info')?]>) =>
   page.evaluate((items) => {
     const toasts = (window as unknown as { cycle: { toasts: Toasts } }).cycle.toasts;
+    // 教學期間一般通知不算進鈴鐺（#257）；這裡測的是教學後的行為
+    toasts.quietCount = false;
     for (const [text, tone] of items) toasts.show(text, tone);
   }, list);
 

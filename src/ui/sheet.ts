@@ -107,6 +107,8 @@ export class Toasts {
   readonly inbox: Note[] = [];
   /** 還沒看過的則數（鈴鐺上的數字）。 */
   unread = 0;
+  /** 教學期間（#257）：只有壞消息和要處理的才算進鈴鐺的數字，其他照樣進通知匣但不算沒看過。 */
+  quietCount = false;
   /** 通知匣有變（main 更新鈴鐺）。 */
   onInbox: (() => void) | null = null;
   private lastInput = -Infinity;
@@ -184,7 +186,7 @@ export class Toasts {
     note.action = action ?? note.action;
     this.inbox.unshift(note);
     this.inbox.length = Math.min(this.inbox.length, INBOX_MAX);
-    if (unread) this.unread++;
+    if (unread && (!this.quietCount || !!action || tone === 'bad')) this.unread++;
     this.onInbox?.();
   }
 
