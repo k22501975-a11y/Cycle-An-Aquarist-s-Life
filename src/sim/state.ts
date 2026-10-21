@@ -230,13 +230,15 @@ export interface Fish {
   /** 基因（目前只有孔雀魚有）。 */
   genome?: GuppyGenome;
   /** 母魚儲存的精子：孔雀魚交配一次可以連生好幾胎，這是那條公魚的基因與血統。 */
-  sire?: { genome: GuppyGenome; lineage: number; inbreeding: number } | null;
+  sire?: { genome: GuppyGenome; lineage: number; inbreeding: number; /** 爸爸是缸裡哪尾（店裡買來就懷孕的沒有）。 */ id?: number } | null;
   /** 血統編號：店裡買的每條魚自成一個血統，子代跟著媽媽。 */
   lineage?: number;
   /** 第幾代（店裡買的是 0）。 */
   generation?: number;
   /** 在缸裡出生的時間（遊戲小時）；店裡買的、舊存檔沒有。 */
   bornHours?: number;
+  /** 媽媽是哪尾（在缸裡出生的才有；長得像誰比較卡用，G2）。 */
+  motherId?: number;
   /** 近交係數 0–1：同血統互配會升高，體質和尾鰭跟著退化。 */
   inbreeding?: number;
   /** 保底起步包送的魚：不能賣回店裡。 */
@@ -332,7 +334,9 @@ export type SimEventType =
   /** 育幼盒裡的小魚長夠大，放回主缸了（count 尾）。 */
   | 'nursery_released'
   /** 缸裡的害蟲小螺第一次多到看得見（count 是隻數）。 */
-  | 'pests_seen';
+  | 'pests_seen'
+  /** 自己繁殖的魚第一次賣掉或交單（subjectId 是那尾魚，value 是拿到的錢，cause 'order' 或 'shop'；G2 慶祝）。 */
+  | 'first_bred_sale';
 
 export interface SimEvent {
   hours: number;

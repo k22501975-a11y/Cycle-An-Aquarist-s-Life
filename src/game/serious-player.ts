@@ -57,7 +57,8 @@ export interface SeriousRun {
  * 錢夠又快滿了就加缸，分濾材過去、養好後移魚。新手任務獎勵共 800，簡化成第 10 天一次給；之後的目標（M19）照遊戲每天檢查、發獎勵。
  * takeOrders：每天修剪水草、先交訂單（湊單的魚留著不賣），湊不齊超過 10 天的單撕掉換新。
  */
-export function seriousPlayer(seed: number, strain: number, takeOrders = false): SeriousRun {
+/** days：玩幾天（預設 120）；onDay：每天結束時呼叫（劇本檢查早上報告之類的）。 */
+export function seriousPlayer(seed: number, strain: number, takeOrders = false, opts: { days?: number; onDay?: (tanks: TankState[], day: number) => void } = {}): SeriousRun {
   const home = newGameState(seed);
   const tanks: TankState[] = [home];
   linkTanks(tanks);
@@ -79,7 +80,7 @@ export function seriousPlayer(seed: number, strain: number, takeOrders = false):
   const orderIncome: Record<number, number> = {};
   let total = 0;
   let coins21 = 0;
-  for (let d = 1; d <= 120; d++) {
+  for (let d = 1; d <= (opts.days ?? 120); d++) {
     for (let k = 0; k < 2; k++) {
       for (const t of tanks) if (count(t) > 0) feed(t, meal(t));
       for (const t of tanks) simulate(t, 12);
@@ -148,6 +149,7 @@ export function seriousPlayer(seed: number, strain: number, takeOrders = false):
     }
     income[d] = total;
     orderIncome[d] = orderBoard(home).earned;
+    opts.onDay?.(tanks, d);
   }
   return { income, orders: orderIncome, coins21, tanks: tanks.length };
 }

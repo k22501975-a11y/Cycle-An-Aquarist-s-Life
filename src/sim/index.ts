@@ -14,6 +14,7 @@ export * from './nursery';
 export * from './next-step';
 export * from './pair-preview';
 export * from './dream';
+export * from './lookalike';
 export * from './gear-notes';
 export * from './tank-purpose';
 export * from './economy';

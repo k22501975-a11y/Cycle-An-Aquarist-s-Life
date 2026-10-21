@@ -1435,6 +1435,18 @@ async function start(): Promise<void> {
       });
       return;
     }
+    if (e.type === 'first_bred_sale') {
+      // 自己選育的魚第一次換到錢（polish-to-9.md G2）：專屬慶祝；賣給店家時一般的「第一筆收入」就不再演一次
+      if (e.cause === 'shop') firstTime(store, 'first_sale');
+      audio.play('fanfare', false);
+      celebration.show({
+        art: 'ui/icon-orders.webp',
+        title: '自己選育的魚賣出去了！',
+        sub: `${e.cause === 'order' ? '客人收下了你的魚' : '水族店收下了你的魚'}，拿到 ${e.value ?? 0} 元`,
+        owner: '從配對、等小魚轉色到挑魚，這尾是你一手養出來的。之後選得越好，客人出價越高。',
+      });
+      return;
+    }
     const msg = describeEvent(game.tanks[tank] ?? game.state, e);
     // 先收起來，這一幀跑完再同類合併成一則（快轉時一幀會冒出好幾筆同樣的事）
     if (msg) eventToasts.push({ key: `${tank}:${e.type}`, text: tankPrefix(tank) + msg.text, tone: msg.tone });
