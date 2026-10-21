@@ -105,7 +105,7 @@ button.todo-item.go:hover { color: var(--accent, #f0c96a); }
 .selcard .dead { color: var(--bad); margin: 6px 0; }
 .card-x { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; padding: 0; border: 1px solid rgba(243, 234, 216, 0.2); border-radius: 50%; background: transparent; font-size: 11px; line-height: 1; color: var(--muted); }
 .selcard.empty .card-x { display: none; }
-.tank-label { position: absolute; z-index: 3; left: calc(env(safe-area-inset-left) + 18px); color: rgba(243, 234, 216, 0.55); font-size: 11px; letter-spacing: 0.1em; pointer-events: none; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+.tank-label { position: absolute; z-index: 3; left: calc(env(safe-area-inset-left) + 18px); color: rgba(243, 234, 216, 0.55); font-size: 11px; letter-spacing: 0.1em; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); background: none; border: 0; padding: 4px 2px; cursor: pointer; }
 
 /* 寬螢幕：待辦卡｜按鈕列｜選取卡 */
 @media (min-width: 1000px) and (min-height: 560px) {
@@ -1080,3 +1080,28 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 /* 第二缸用途（G4）：推薦的那張亮一點 */
 .purpose-card.picked { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(227, 189, 109, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35); }
 .purpose-card .card-note { color: var(--text); }
+
+/* 任務卡下面的一鍵買（#235）：魚、水草、石頭直接點，不用繞商店 */
+.quest-tray { position: absolute; z-index: 5; left: calc(env(safe-area-inset-left) + 14px); animation: rise 0.25s ease-out; }
+.quest-tray[hidden] { display: none; }
+.scaping .quest-tray, .feeding .quest-tray, .setting-up .quest-tray { display: none !important; }
+.qt-row { display: flex; gap: 6px; align-items: stretch; }
+.qt-card { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; width: 82px; padding: 6px 4px 5px; border-radius: 12px; border: 1px solid rgba(240, 200, 120, 0.45); background: linear-gradient(180deg, rgba(28, 40, 48, 0.88), rgba(14, 22, 28, 0.92)); color: var(--text); font-size: 11px; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3); animation: quest-glow 1.6s ease-in-out infinite; }
+.qt-card:active { transform: scale(0.96); }
+.qt-card.short { opacity: 0.55; animation: none; }
+.qt-card.dream { border-color: rgba(255, 150, 120, 0.8); background: radial-gradient(circle at 50% 30%, rgba(255, 140, 110, 0.28), rgba(14, 22, 28, 0.92) 70%); }
+.qt-art { width: 64px; height: 40px; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)); }
+.qt-art.plant, .qt-art.stone { height: 44px; }
+.qt-name { font-weight: 700; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.qt-sub { color: var(--muted); font-size: 9.5px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.qt-card .price-tag { font-size: 11px; }
+.qt-badge { position: absolute; top: -7px; left: 50%; transform: translateX(-50%); padding: 0 6px; border-radius: 999px; background: #e9785f; color: #fff; font-size: 9.5px; font-weight: 700; white-space: nowrap; }
+.qt-more { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 52px; border-radius: 12px; border: 1px dashed rgba(243, 234, 216, 0.3); background: rgba(14, 22, 28, 0.7); color: var(--text); font-size: 12px; }
+.qt-more small { color: var(--muted); font-size: 10px; }
+/* 缸名牌：取名任務時發光，點了就地改名 */
+.tank-label.quest-target { color: #f3e3b8; font-size: 13px; padding: 6px 12px; border-radius: 999px; background: rgba(14, 22, 28, 0.75); border: 1px solid rgba(240, 200, 120, 0.6); animation: quest-glow 1.6s ease-in-out infinite; }
+.tank-rename { position: absolute; z-index: 8; left: calc(env(safe-area-inset-left) + 14px); display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 14px; animation: rise 0.2s ease-out; }
+.tank-rename-row { display: flex; gap: 6px; align-items: center; }
+.tank-rename-input { width: 160px; padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(240, 200, 120, 0.5); background: rgba(0, 0, 0, 0.35); color: var(--text); font-size: 14px; }
+.tank-rename-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.tank-rename-chips .chip { padding: 4px 10px; font-size: 12px; }

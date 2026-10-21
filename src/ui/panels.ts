@@ -195,7 +195,8 @@ import { ORDER_ICON, ordersPanel } from './orders-panel';
 import { BROOD_ISSUE_LABELS, DEATH_CAUSE_LABELS, fishName, SYMPTOM_LABELS } from './labels';
 import { artImg, ownerImg } from './art-icons';
 import { pairPreviewCard } from './pair-preview-card';
-import { advice, cardGrid, guppyArt, iconTabs, plantArt, priceTag, shopCard, snailArt, speciesArt } from './shop-cards';
+import { advice, cardGrid, guppyArt, HARDSCAPE_ART, iconTabs, plantArt, priceTag, shopCard, snailArt, speciesArt } from './shop-cards';
+import type { QuickPick } from './quest-tray';
 import type { Sheet, Toasts } from './sheet';
 import type { CelebrateSpec } from './celebrate';
 import type { MomentId } from './moments';
@@ -804,6 +805,89 @@ function purchase(ctx: PanelContext, cost: number, run: (st: TankState) => void,
 
 const yuan = (n: number) => `${n.toLocaleString('zh-TW')} 元`;
 
+// 新缸一次放太多魚：老闆提醒一次（每次開遊戲最多一次），玩家還是可以照買
+async function askOverload({ game }: PanelContext, count: number): Promise<boolean> {
+  const warning = overloadWarned ? null : overloadWarning(game.state, count);
+  if (!warning) return true;
+  overloadWarned = true;
+  return ownerAsk({ text: warning, yes: '照買', no: '先不要' });
+}
+
+type ReleaseArgs = [species: FishSpeciesId, count: number, art: string, name: string, cost: number, add: (st: TankState, drip: boolean | DripOutcome) => Fish[], done: string, tone?: 'info' | 'warn'];
+
+/**
+ * 放魚（F5）：滴水對水、又是自己玩（第一次一定要玩）就先開對水小遊戲，放魚時才付錢；
+ * 檢疫盒、直接倒、一鍵慢慢過水都直接買。add 拿到 drip（true／false 或小遊戲結果），回傳放進去的魚。
+ */
+async function releaseFishFor(ctx: PanelContext, back: () => void, ...[species, count, art, name, cost, add, done, tone = 'info']: ReleaseArgs): Promise<void> {
+  const { game, sheet, toasts } = ctx;
+  const play = !game.state.quarantine && shopDrip && (shopPlay || dripTutorialLeft(game.state) > 0);
+  if (!play) {
+    purchase(ctx, cost, (st) => void add(st, shopDrip), done, tone);
+    return;
+  }
+  if (economy(game.state).coins < cost) {
+    toasts.show(`錢不夠：要 ${cost} 元，現在有 ${economy(game.state).coins} 元`, 'warn');
+    return;
+  }
+  sheet.close();
+  const outcome = await openDripGame({ state: game.state, from: farmHabit(species), art, count, name, sound: ctx.sound });
+  if (!outcome) {
+    back();
+    return;
+  }
+  let ids: number[] = [];
+  const grade = dripGrade(outcome);
+  purchase(
+    ctx,
+    cost,
+    (st) => {
+      ids = add(st, outcome).map((f) => f.id);
+      recordDrip(st);
+    },
+    `${done.replace(/，慢慢滴水對水後放進缸裡$/, '')}，${grade === 'perfect' ? '對水對得剛好，牠一進缸就展開尾巴' : grade === 'good' ? '對好水放進缸裡' : '對水有點趕，牠嚇到了'}`,
+    grade === 'rushed' ? 'warn' : 'info',
+  );
+  ctx.welcome?.(ids, grade === 'perfect');
+}
+
+/**
+ * 任務卡下面那排一鍵買（#235）：前 5 分鐘不用開商店、切分頁、往下找，點一下就拿在手上拖進缸（水草、石頭），
+ * 或直接開始對水（魚）。想自己挑的人還是可以去商店。
+ */
+export async function quickBuy(ctx: PanelContext, pick: QuickPick): Promise<void> {
+  const { game } = ctx;
+  if (pick.kind === 'fish') {
+    const [male, female] = pick.strains;
+    if (!(await askOverload(ctx, 3))) return;
+    const quarantined = !!game.state.quarantine;
+    const cost = GUPPY_STRAIN_PRICES[male] + GUPPY_STRAIN_PRICES[female] * 2;
+    const name = male === female ? `${GUPPY_STRAINS[male]}孔雀魚` : `${GUPPY_STRAINS[male]}公魚和${GUPPY_STRAINS[female]}母魚`;
+    const add = quarantined ? addFishToQuarantine : addFish;
+    const sexes = [[male, 'male'], [female, 'female'], [female, 'female']] as const;
+    await releaseFishFor(
+      ctx,
+      () => undefined,
+      'guppy',
+      3,
+      guppyArt(male),
+      name,
+      cost,
+      (st, drip) => sexes.map(([strain, sex]) => add(st, 'guppy', { strain, sex, drip })),
+      quarantined ? `買了 3 隻${name}，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天` : `買了 3 隻${name}（1 公 2 母），慢慢滴水對水後放進缸裡`,
+    );
+    return;
+  }
+  if (pick.kind === 'plant') {
+    let id = -1;
+    const ok = purchase(ctx, PLANT_PRICES[pick.id], (st) => void (id = plantFromShop(st, pick.id).id), `買了一株${PLANT_SPECIES[pick.id].name}`);
+    if (ok && id >= 0) ctx.placeNew?.({ kind: 'plant', id });
+    return;
+  }
+  const x = HARDSCAPE[pick.id];
+  if (purchase(ctx, price(`hardscape:${x.id}`), (st) => addHardscape(st, x), `買了一組${x.name}`)) ctx.placeNew?.({ kind: 'hardscape', index: (game.state.equipment.hardscape ?? []).length - 1 });
+}
+
 export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
   const { game, sheet, toasts } = ctx;
   // 還沒開缸：設備在開缸時一次挑好，先在商店買會跟開缸重複扣錢（#154 審查）
@@ -822,47 +906,8 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
   );
   const wallet = h('div.wallet-bar', {}, h('span', {}, '錢包'), priceTag(coins));
 
-  // 新缸一次放太多魚：老闆提醒一次（每次開遊戲最多一次），玩家還是可以照買
-  const overloadOk = async (count: number): Promise<boolean> => {
-    const warning = overloadWarned ? null : overloadWarning(game.state, count);
-    if (!warning) return true;
-    overloadWarned = true;
-    return ownerAsk({ text: warning, yes: '照買', no: '先不要' });
-  };
-  /**
-   * 放魚（F5）：滴水對水、又是自己玩（第一次一定要玩）就先開對水小遊戲，放魚時才付錢；
-   * 檢疫盒、直接倒、一鍵慢慢過水都直接買。add 拿到 drip（true／false 或小遊戲結果），回傳放進去的魚。
-   */
-  const releaseFish = async (species: FishSpeciesId, count: number, art: string, name: string, cost: number, add: (st: TankState, drip: boolean | DripOutcome) => Fish[], done: string, tone: 'info' | 'warn' = 'info') => {
-    const play = !game.state.quarantine && shopDrip && (shopPlay || dripTutorialLeft(game.state) > 0);
-    if (!play) {
-      purchase(ctx, cost, (st) => void add(st, shopDrip), done, tone);
-      return;
-    }
-    if (economy(game.state).coins < cost) {
-      toasts.show(`錢不夠：要 ${cost} 元，現在有 ${economy(game.state).coins} 元`, 'warn');
-      return;
-    }
-    sheet.close();
-    const outcome = await openDripGame({ state: game.state, from: farmHabit(species), art, count, name, sound: ctx.sound });
-    if (!outcome) {
-      sheet.open('商店', () => shopPanel(ctx, 'fish'));
-      return;
-    }
-    let ids: number[] = [];
-    const grade = dripGrade(outcome);
-    purchase(
-      ctx,
-      cost,
-      (st) => {
-        ids = add(st, outcome).map((f) => f.id);
-        recordDrip(st);
-      },
-      `${done.replace(/，慢慢滴水對水後放進缸裡$/, '')}，${grade === 'perfect' ? '對水對得剛好，牠一進缸就展開尾巴' : grade === 'good' ? '對好水放進缸裡' : '對水有點趕，牠嚇到了'}`,
-      grade === 'rushed' ? 'warn' : 'info',
-    );
-    ctx.welcome?.(ids, grade === 'perfect');
-  };
+  const overloadOk = (count: number) => askOverload(ctx, count);
+  const releaseFish = (...args: ReleaseArgs) => releaseFishFor(ctx, () => sheet.open('商店', () => shopPanel(ctx, 'fish')), ...args);
   // sexes 有給就照順序決定每隻的公母（孔雀魚品系：公、母、一公兩母），沒給就隨機
   const buyFish = (species: FishSpeciesId, count: number, strain?: number, finStrain?: (typeof GUPPY_FIN_STRAINS)[number], sexes?: ('male' | 'female')[]) => async () => {
     if (!(await overloadOk(count))) return;
@@ -1075,7 +1120,6 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       shopCard({ art, icon: art ? undefined : 'gear', name: label, price: price(key), badge: owned ? '使用中' : undefined, note, actions: owned ? [] : [button('買', buy, 'small')], cls: owned ? '.owned' : '' });
     const bottles = economy(game.state).bacteriaBottles ?? 0;
     const bag = economy(game.state).hardscapeBag ?? [];
-    const HARDSCAPE_ART: Record<string, string> = { seiryu: 'scape/rock-seiryu-1.webp', lava: 'gear/rock-lava.webp', slate: 'gear/rock-slate.webp', driftwood: 'scape/wood-spider-1.webp' };
     content = h(
       'div.stack',
       {},
@@ -1720,7 +1764,7 @@ export function debugPanel({ game }: PanelContext): Node {
   );
 }
 
-/** 我的水缸：切換、加缸、收缸。缸位只看錢，但每多一缸就多一份要照顧的水。 */
+/** 兩種用途卡上的圖。 */
 const PURPOSE_ART: Record<TankPurpose, string> = { breeding: 'gear/nursery-box.webp', display: 'gear/led-planted.webp' };
 
 /**
@@ -1765,6 +1809,7 @@ export function tankPurposePanel(ctx: PanelContext): Node {
   );
 }
 
+/** 我的水缸：切換、加缸、收缸。缸位只看錢，但每多一缸就多一份要照顧的水。 */
 export function tanksPanel(ctx: PanelContext): Node {
   const { game, sheet, toasts } = ctx;
   const coins = economy(game.state).coins;

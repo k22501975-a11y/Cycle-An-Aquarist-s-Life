@@ -40,6 +40,7 @@ import { dreamCard, dreamStrip, dreamTeaser } from './ui/dream-card';
 import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
 import type { PanelContext, ShopTab } from './ui/panels';
 import { Guide } from './ui/guide';
+import { questTray } from './ui/quest-tray';
 import { FIRST_PESTS_TIP, FIRST_TANK_LINE, WELCOME_LINE } from './ui/tutorial';
 import { Celebration, type CelebrateSpec } from './ui/celebrate';
 import { firstTime, loadMoments, type DeathAdviceCause, type MomentId } from './ui/moments';
@@ -561,6 +562,10 @@ async function start(): Promise<void> {
     onDone: () => leaveScape(),
     openShop: (tab) => (leaveScape(), openShop(tab)),
     onDrop: () => {
+      if (placingNew) {
+        placingNew = false;
+        window.setTimeout(() => scaping && leaveScape(), 700);
+      }
       if (!scapeCoach) return;
       firstTime(store, 'first_scape_drag');
       stopCoach();
@@ -592,8 +597,11 @@ async function start(): Promise<void> {
     follow();
     scapeCoach = coach;
   };
+  /** 剛買的拿在手上：放下去就自動收起造景模式，不用再按「完成」（#235）。 */
+  let placingNew = false;
   const enterScape = () => {
     if (visiting) return;
+    placingNew = false;
     sheet.close();
     select(null);
     scaping = true;
@@ -613,10 +621,21 @@ async function start(): Promise<void> {
     requestAnimationFrame(() => measure());
   };
   ctx.openScape = enterScape;
+  /** 每日小事的造景題（g13）：進造景模式就先選好一樣東西，不用在缸裡一格一格試點。 */
+  const enterScapeOn = (prefer: 'plant' | 'stone') => {
+    enterScape();
+    if (!scaping) return;
+    const st = game.state;
+    const stone = (st.equipment.hardscape ?? []).length > 0 ? ({ kind: 'hardscape', index: 0 } as const) : null;
+    const plant = st.plants[0] ? ({ kind: 'plant', id: st.plants[0].id } as const) : null;
+    const target = prefer === 'plant' ? (plant ?? stone) : (stone ?? plant);
+    if (target) scapeBar.focus(target);
+  };
   // 剛買的石頭、水草（P4）：不是馬上種好，而是拿在手上，拖到缸裡想擺的位置放開
   ctx.placeNew = (target) => {
     enterScape();
     stopCoach();
+    placingNew = true;
     scapeBar.focus(target);
     startCoach(target.kind === 'plant' ? '拖到想種的位置，放開就種下' : '拖到想擺的位置');
   };
@@ -1164,13 +1183,44 @@ async function start(): Promise<void> {
   };
 
   // 水缸撐滿整個畫面；告訴畫面狀態列與按鈕列蓋住多少，魚就不會游到它們後面。
-  const tankLabel = h('div.tank-label');
+  // 缸名牌（#235）：點一下就地改名，不用開選單「我的水缸」；取名任務時發光
+  const tankLabel = h('button.tank-label', { onclick: () => renameInline() });
   stage.append(tankLabel);
+  const renameInline = () => {
+    if (visiting || stage.querySelector('.tank-rename')) return;
+    const st = game.state;
+    const close = () => form.remove();
+    const commit = (raw: string) => {
+      const name = raw.trim().slice(0, 12);
+      close();
+      if (!name || name === st.label) return;
+      game.actAll(() => (st.label = name));
+    };
+    const input = h('input.tank-rename-input', { value: st.label ?? '', placeholder: '幫這缸取個名字', maxLength: 12, enterKeyHint: 'done' }) as HTMLInputElement;
+    const chip = (name: string) => h('button.chip', { type: 'button', onclick: () => commit(name) }, name);
+    const form = h(
+      'form.tank-rename.glass',
+      { onsubmit: (e: Event) => (e.preventDefault(), commit(input.value)) },
+      h('div.tank-rename-row', {}, input, h('button.btn.small.primary', { type: 'submit' }, '好'), h('button.btn.small', { type: 'button', onclick: close }, '✕')),
+      h('div.tank-rename-chips', {}, ...['孔雀魚之家', '第一缸', '夢想魚基地'].map(chip)),
+    );
+    input.addEventListener('keydown', (e) => e.key === 'Escape' && close());
+    form.style.bottom = tankLabel.style.bottom;
+    stage.append(form);
+    input.focus();
+  };
   const guide = new Guide(stage, store, (id) => audio.play(id, false), () => requestAnimationFrame(() => measure()));
   // 老闆一次只說一件事（G9）：新手引導在說、慶祝卡（也有老闆的話）在演時，事件帶出來的老闆對話先排隊
   setOwnerBlocker(() => guide.talking || celebration.isOpen);
   guide.openShop = (tab) => openShop(tab);
   guide.openScape = () => enterScape();
+  guide.quickTray = (kind) =>
+    questTray(
+      kind,
+      game.state,
+      (pick) => withPanels((p) => void p.quickBuy(ctx, pick)),
+      () => openShop(kind === 'fish' ? 'fish' : kind === 'plant' ? 'plants' : 'gear'),
+    );
   guide.note = (text) => toasts.log(text);
   // 下一步（U1）：點任務卡帶到要做的地方
   guide.goNext = (target) => {
@@ -1205,6 +1255,23 @@ async function start(): Promise<void> {
     }
   };
   guide.cheer = (from, coins) => ctx.reward?.(from, coins, 'small');
+  // 餵食任務（#235）：放好魚就直接進餵食模式，點水面就撒，不用先找「餵食」；只自動一次，玩家收起來就照按鈕來
+  let autoFed = false;
+  const trayCoins = memo();
+  let naming = false;
+  const quickQuest = () => {
+    const q = guide.quick;
+    if (q === 'feed' && !autoFed && !feedingMode && !sheet.isOpen && !scaping && !guideHeld && !celebration.isOpen) {
+      autoFed = true;
+      startFeeding();
+    }
+    // 取名任務開始、結束：名牌換字要重排
+    if ((q === 'name') !== naming) {
+      naming = q === 'name';
+      measure();
+    }
+    if (guide.trayVisible && trayCoins(String(sim.economy(game.state).coins))) guide.refreshTray();
+  };
   let litTarget: HTMLElement | null = null;
   /** 任務要點的那顆按鈕發光；面板開著、在造景時先不亮。 */
   const lightTarget = () => {
@@ -1290,11 +1357,11 @@ async function start(): Promise<void> {
       records: () => panelSheet('紀錄', (p) => p.recordsPanel(ctx)),
       codex: () => panelSheet('圖鑑', (p) => p.codexPanel(ctx, codexSeen)),
       orders: () => sheet.open('客人的訂單', () => ordersPanel(ctx)),
-      scape: enterScape,
-      scapePlant: enterScape,
-      scapeFlip: enterScape,
-      scapeLayer: enterScape,
-      scapeScale: enterScape,
+      scape: () => enterScapeOn('stone'),
+      scapePlant: () => enterScapeOn('plant'),
+      scapeFlip: () => enterScapeOn('stone'),
+      scapeLayer: () => enterScapeOn('stone'),
+      scapeScale: () => enterScapeOn('stone'),
       scapePlace: () => openShop('gear'),
       trim: () => panelSheet('修剪水草', (p) => p.trimListPanel(ctx)),
       cuttings: () => openShop('plants'),
@@ -1349,7 +1416,10 @@ async function start(): Promise<void> {
     guide.pill.style.top = `${Math.round(top + 10 + dreamH)}px`;
     // 通知讓出任務卡的寬度
     document.body.style.setProperty('--pill-w', guide.pillVisible ? `${guide.pill.offsetWidth + 14}px` : '0px');
-    const pillH = guide.pillVisible ? guide.pill.offsetHeight + 8 : 0;
+    const pillH0 = guide.pillVisible ? guide.pill.offsetHeight + 8 : 0;
+    // 一鍵買的圖卡排在任務卡下面（#235）
+    guide.tray.style.top = `${Math.round(top + 10 + dreamH + pillH0)}px`;
+    const pillH = pillH0 + (guide.pillVisible && guide.trayVisible ? guide.tray.offsetHeight + 8 : 0);
     // 每日小事卡排在任務卡下面（#185）
     dailyHolder.style.top = `${Math.round(top + 10 + dreamH + pillH)}px`;
     const dailyH = dailyHolder.offsetHeight > 0 ? dailyHolder.offsetHeight + 8 : 0;
@@ -1361,8 +1431,10 @@ async function start(): Promise<void> {
     document.body.style.setProperty('--dock-top', `${Math.round(stageRect.bottom - dockTop - stageRect.top)}px`);
     tankLabel.style.bottom = `${Math.round(stageRect.bottom - dock.getBoundingClientRect().top + 8)}px`;
     const size = tankSize(game.state.equipment.tank);
-    const named = game.tanks.length > 1 ? `${sim.tankLabel(game.tanks, game.active)}・` : '';
-    tankLabel.textContent = `${named}${game.state.equipment.tank.name}・${size.w}×${size.h}×${size.d} cm`;
+    const named = game.tanks.length > 1 || game.state.label ? `${sim.tankLabel(game.tanks, game.active)}・` : '';
+    const naming = guide.quick === 'name';
+    tankLabel.classList.toggle('quest-target', naming);
+    tankLabel.textContent = naming ? '✎ 點這裡幫缸取名' : `${named}${game.state.equipment.tank.name}・${size.w}×${size.h}×${size.d} cm`;
   };
   new ResizeObserver(measure).observe(hud);
   new ResizeObserver(measure).observe(dock);
@@ -1806,6 +1878,7 @@ async function start(): Promise<void> {
       // 開缸演出和「你的第一個缸」卡片演完才讓老闆開口（「開缸」任務在演出一開始就完成，不能蓋在演出上，#171）
       if (!guideHeld) guide.update(game.state, game.tanks);
       lightTarget();
+      quickQuest();
       kickOwnerQueue();
       setupBtn.hidden = !sim.needsSetup(game.tanks[0]) || sheet.isOpen;
       checkDaily();
