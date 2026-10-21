@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GuppyPhenotype } from '../sim';
-import { parseRecipeKey, phenotypeRecipe, recipeKey, recolorPixel } from './phenotype-art';
+import { parseRecipeKey, phenotypeRecipe, recipeKey, recolorImage, recolorPixel } from './phenotype-art';
 
 const P = (o: Partial<GuppyPhenotype>): GuppyPhenotype => ({ albino: false, gold: false, tuxedo: false, red: false, snake: false, grass: false, ...o });
 
@@ -42,6 +42,15 @@ describe('依基因上色的公孔雀魚', () => {
     const recipe = phenotypeRecipe(P({ snake: true, red: true, albino: true }));
     const [r, g, b] = recolorPixel(0.05, 0.04, 0.04, recipe);
     expect((Math.max(r, g, b) + Math.min(r, g, b)) / 2).toBeGreaterThan(0.3);
+  });
+
+  it('白子的眼睛改成紅色，不是主色', () => {
+    const w = 20, h = 10, data = new Uint8ClampedArray(w * h * 4).fill(220);
+    const eye = (5 * w + 17) * 4;
+    data.set([10, 10, 12, 255], eye);
+    recolorImage(data, phenotypeRecipe(P({ snake: true, gold: true, albino: true })), w);
+    expect(data[eye]).toBeGreaterThan(100);
+    expect(data[eye + 1]).toBeLessThan(40);
   });
 });
 

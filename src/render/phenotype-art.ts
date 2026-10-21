@@ -120,8 +120,9 @@ export function recolorPixel(r: number, g: number, b: number, recipe: PhenotypeR
   return hslToRgb(h, Math.min(1, s), Math.min(1, l));
 }
 
-/** 整張圖（RGBA）就地改色。 */
-export function recolorImage(data: Uint8ClampedArray, recipe: PhenotypeRecipe): void {
+/** 整張圖（RGBA）就地改色。給了寬度時，白子的眼睛改成紅色（沒有黑色素，看得到血色）。 */
+export function recolorImage(data: Uint8ClampedArray, recipe: PhenotypeRecipe, width = 0): void {
+  const eye = recipe.albino && width > 0 ? eyePixels(data, width) : [];
   for (let i = 0; i < data.length; i += 4) {
     if (data[i + 3] === 0) continue;
     const [r, g, b] = recolorPixel(data[i] / 255, data[i + 1] / 255, data[i + 2] / 255, recipe);
@@ -129,4 +130,35 @@ export function recolorImage(data: Uint8ClampedArray, recipe: PhenotypeRecipe): 
     data[i + 1] = Math.round(g * 255);
     data[i + 2] = Math.round(b * 255);
   }
+  for (const [i, k] of eye) {
+    data[i] = 110 + 120 * k;
+    data[i + 1] = 8 + 30 * k;
+    data[i + 2] = 22 + 30 * k;
+  }
+}
+
+const lum = (d: Uint8ClampedArray, i: number) => (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11) / 255;
+
+/** 魚頭朝右：右邊 20% 最暗的點是瞳孔；回傳瞳孔附近暗像素的位置和亮度（0–1）。 */
+export function eyePixels(data: Uint8ClampedArray, width: number): [number, number][] {
+  const height = data.length / 4 / width;
+  let best = -1, bestL = 2;
+  for (let y = 0; y < height; y++) {
+    for (let x = Math.floor(width * 0.8); x < width; x++) {
+      const i = (y * width + x) * 4;
+      if (data[i + 3] < 200) continue;
+      const l = lum(data, i);
+      if (l < bestL) { bestL = l; best = i / 4; }
+    }
+  }
+  if (best < 0) return [];
+  const cx = best % width, cy = Math.floor(best / width), out: [number, number][] = [];
+  for (let y = Math.max(0, cy - 16); y <= Math.min(height - 1, cy + 16); y++) {
+    for (let x = Math.max(0, cx - 16); x <= Math.min(width - 1, cx + 16); x++) {
+      const i = (y * width + x) * 4;
+      const l = lum(data, i);
+      if ((x - cx) ** 2 + (y - cy) ** 2 <= 256 && data[i + 3] > 0 && l < 90 / 255) out.push([i, l / (90 / 255)]);
+    }
+  }
+  return out;
 }
