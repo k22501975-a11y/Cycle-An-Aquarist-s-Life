@@ -96,8 +96,8 @@ export async function dismissGuide(page: Page): Promise<void> {
 
 /** 關掉開著的面板。關掉的面板 DOM 還在（移到畫面外），只看開著的那個；有些操作做完面板會自己關。 */
 export async function closeSheet(page: Page): Promise<void> {
-  const close = page.locator('.sheet.open .sheet-close');
-  if (await close.count()) await close.first().dispatchEvent('click');
+  // 在頁面裡一次判斷加點擊：測水結果面板會自己收，先數再點的話中間可能剛好收掉而一直等不到按鈕
+  await page.evaluate(() => document.querySelector<HTMLElement>('.sheet.open .sheet-close')?.click());
   await expect(page.locator('.sheet.open')).toHaveCount(0);
 }
 
