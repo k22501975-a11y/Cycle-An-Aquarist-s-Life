@@ -5,7 +5,8 @@ import { h } from './dom';
 import { artImg, ownerImg } from './art-icons';
 import { ownerMood, type OwnerMood } from './owner-mood';
 import { kickOwnerQueue, onOwnerAskClosed, onOwnerAskOpened, ownerAskOpen } from './owner-ask';
-import { advanceQuest, currentQuest, loadProgress, newProgress, OWNER_NAME, pendingTip, QUESTS, questShopTab, saveProgress, type QuestShopTab, type QuestTarget, type TutorialProgress } from './tutorial';
+import { advanceQuest, currentQuest, loadProgress, newProgress, OWNER_NAME, pendingTip, QUESTS, questShopTab, saveProgress, type QuestQuick, type QuestShopTab, type QuestTarget, type TutorialProgress } from './tutorial';
+import type { QuickKind } from './quest-tray';
 
 /** 任務卡上「做好了」閃多久（design/tutorial-lines.md：3 秒後自己換成下一步）。 */
 const FLASH_MS = 3000;
@@ -57,6 +58,11 @@ export class Guide {
   cheer: ((from: DOMRect, coins: number) => void) | null = null;
   /** 點任務卡上的「下一步」（U1，教學做完後）：帶到要做的地方（main 接上）。 */
   goNext: ((target: NextTarget) => void) | null = null;
+  /** 任務卡下面一鍵買的圖卡（#235，main 接上：quest-tray.ts）。 */
+  quickTray: ((kind: QuickKind) => HTMLElement) | null = null;
+  /** 任務卡下面那排圖卡（教學要買魚、水草、石頭時才有）。 */
+  readonly tray = h('div.quest-tray', { hidden: true });
+  private shownTray = '';
   /** 現在的下一步（教學做完後，目標串的第一個還沒完成的目標要做什麼）。 */
   private step: NextStep | null = null;
   /** 情境提醒的小卡（畫面左下角）。 */
@@ -79,7 +85,7 @@ export class Guide {
     // 教學做完後點任務卡直接帶去做「下一步」（U1）；教學中點了再聽一次完整說明
     this.pill.addEventListener('click', () => (this.tutorialOver && this.step && this.goNext ? this.goNext(this.step.target) : this.showQuest()));
     // 對話框掛在 body：面板（商店等）開著時也在最上層，按鈕按得到
-    host.append(this.pill, this.tip);
+    host.append(this.pill, this.tray, this.tip);
     document.body.append(this.bubble);
     // 一次只出一個老闆對話框（G9）：問句跳出來時先收起，問句收掉再接著說
     onOwnerAskOpened(() => this.bubble.classList.remove('open'));
@@ -97,6 +103,31 @@ export class Guide {
     if (this.flash || this.pages.length > 0) return null;
     if (this.tutorialOver) return this.step ? NEXT_GLOW[this.step.target] : null;
     return currentQuest(this.progress)?.target ?? null;
+  }
+
+  /** 現在任務不用繞路的做法（#235）：main 照這個自動進餵食模式、讓缸的名牌發光。 */
+  get quick(): QuestQuick | null {
+    if (this.flash || this.pages.length > 0) return null;
+    return currentQuest(this.progress)?.quick ?? null;
+  }
+
+  get trayVisible(): boolean {
+    return !this.tray.hidden;
+  }
+
+  /** 錢變了：圖卡上「錢不夠」的樣子要跟著變。 */
+  refreshTray(): void {
+    this.shownTray = '';
+    this.renderTray();
+  }
+
+  private renderTray(): void {
+    const kind = this.quick;
+    const tray = kind === 'fish' || kind === 'plant' || kind === 'stone' ? kind : null;
+    if ((tray ?? '') === this.shownTray) return;
+    this.shownTray = tray ?? '';
+    this.tray.hidden = !tray || !this.quickTray;
+    this.tray.replaceChildren(...(tray && this.quickTray ? [this.quickTray(tray)] : []));
   }
 
   get pillVisible(): boolean {
@@ -312,6 +343,7 @@ export class Guide {
         h('span.quest-title', { title: text }, `✓ ${text}`),
         ...(coins > 0 ? [h('span.quest-coins', {}, h('i.coin'), `+${coins}`)] : []),
       );
+      this.renderTray();
       this.onLayout();
       return;
     }
@@ -356,6 +388,7 @@ export class Guide {
         this.meterEl,
       );
     }
+    this.renderTray();
     this.onLayout();
   }
 

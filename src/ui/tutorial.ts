@@ -33,6 +33,11 @@ export interface Quest {
   hint: string;
   /** 要點的按鈕（任務卡旁那顆會發光）。 */
   target?: QuestTarget;
+  /**
+   * 不用繞去商店、選單（#235：前 5 分鐘的點擊要落在缸上）：
+   * fish／plant／stone 在任務卡下面排一鍵買的圖卡；feed 直接進餵食模式；name 讓缸下面的名牌發光、點了就改名。
+   */
+  quick?: QuestQuick;
   /** 完成時老闆說的話（完整的進通知匣）。 */
   done: string;
   /** 完成時任務卡上閃一下的短句（design/tutorial-lines.md §1，3 秒後自己換成下一步）。 */
@@ -53,6 +58,8 @@ export interface Quest {
 }
 
 export type QuestShopTab = 'fish' | 'snails' | 'plants' | 'gear';
+
+export type QuestQuick = 'fish' | 'plant' | 'stone' | 'feed' | 'name';
 
 /** 任務要點的地方：工具列的按鈕或右上角的選單。 */
 export type QuestTarget = 'shop' | 'test' | 'feed' | 'water' | 'menu' | 'orders';
@@ -82,8 +89,8 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'fish',
-    hint: '去商店挑魚，推薦「一公兩母」',
-    target: 'shop',
+    hint: '挑一組魚，對好水放進缸',
+    quick: 'fish',
     doneShort: '魚放進去了',
     doneDialog: true,
     reward: 50,
@@ -100,8 +107,9 @@ export const QUESTS: Quest[] = [
   {
     id: 'feed',
     // 企劃原句是「點水面，飼料就掉在那裡」；現在要先按「餵食」進餵食模式，所以把按鈕也寫進去
-    hint: '點「餵食」，再點水面撒飼料',
+    hint: '點水面撒飼料',
     target: 'feed',
+    quick: 'feed',
     doneShort: '牠們搶得好開心！一天一小撮就夠',
     reward: 50,
     title: '餵一次飼料',
@@ -111,8 +119,8 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'plant',
-    hint: '買一株草，拖到缸裡想種的地方',
-    target: 'shop',
+    hint: '挑一株草，拖到缸裡想種的地方',
+    quick: 'plant',
     doneShort: '種好了，小魚以後能躲在這裡',
     reward: 50,
     title: '種下第一株水草',
@@ -148,8 +156,8 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'scape',
-    hint: '買一塊石頭或沉木，拖進缸裡',
-    target: 'shop',
+    hint: '挑一塊石頭或沉木，拖進缸裡',
+    quick: 'stone',
     doneShort: '有造景，魚也多了躲的地方',
     reward: 50,
     title: '擺一塊石頭或沉木',
@@ -161,13 +169,13 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'name',
-    hint: '幫這個缸取個名字',
-    target: 'menu',
+    hint: '點缸下面的名牌，取個名字',
+    quick: 'name',
     doneShort: '好名字！我會記住它',
     reward: 50,
     title: '幫你的缸取個名字',
     short: '幫缸取名',
-    lines: ['每個缸都值得一個名字。打開選單的「我的水缸」，按「改名」，例如「第一缸」「孔雀魚之家」。', '之後缸多了，靠名字就分得出哪缸是繁殖缸、哪缸是蝦缸。'],
+    lines: ['每個缸都值得一個名字。點缸下面的名牌，例如「第一缸」「孔雀魚之家」。', '之後缸多了，靠名字就分得出哪缸是繁殖缸、哪缸是蝦缸。'],
     done: '好名字！以後提醒你的時候，我會叫它的名字。',
     check: (s) => !!s.label,
   },
