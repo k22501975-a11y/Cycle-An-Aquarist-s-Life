@@ -49,6 +49,8 @@ export interface Swimmer {
   settled?: boolean;
   /** 這一格在水面啄了一下（畫面張嘴）。 */
   peck?: boolean;
+  /** 蝦爬上水草（#273）：x 草莖的位置、h 要爬多高、t 還要待幾秒、lift 現在離底沙多高（像素）。 */
+  climb?: { x: number; h: number; t: number; lift: number };
 }
 
 /** 蝦受驚彈開的時間（秒）。 */
@@ -65,7 +67,15 @@ export interface MotionContext {
   poke?: { x: number; y: number; age: number; seq: number };
   /** 水草的水平位置（像素）：待機時會游到草邊停一會兒。 */
   plants?: readonly number[];
+  /** 蝦能爬的草（#273）：草莖的水平位置、葉子頂端的高度（像素）。 */
+  perches?: ReadonlyArray<{ x: number; top: number }>;
 }
+
+/** 蝦爬草的速度（相對走路速度）、平均多久想爬一次（秒）。 */
+const CLIMB_SPEED = 0.9;
+const CLIMB_EVERY = 25;
+/** 蝦沒事自己往後彈一下（真的蝦偶爾會，#273），平均多久一次（秒）。 */
+const HOP_EVERY = 40;
 
 /** 魚的個性帶來的小行為（sim/personality.ts 的係數）。 */
 export interface FishMood {
@@ -126,6 +136,56 @@ export function crawlLane(id: number): number {
   return -2 + k * 11;
 }
 
+function nearestPerch(x: number, perches: ReadonlyArray<{ x: number; top: number }>, within: number): { x: number; top: number } | null {
+  let best = null, bd = within;
+  for (const q of perches) {
+    const d = Math.abs(q.x - x);
+    if (d < bd) { bd = d; best = q; }
+  }
+  return best;
+}
+
+/**
+ * 蝦爬草（#273）：先走到草莖下面，順著莖往上爬到一半左右，抱著葉子待一會兒再爬下來。
+ * 餓了又有飼料沉下來、或身體不舒服就提早下來。回傳 true 表示這一格已經處理完（還在草上）。
+ */
+function climbStep(s: Swimmer, c: NonNullable<Swimmer['climb']>, cond: FishCondition, ctx: MotionContext, speed: number, dt: number): boolean {
+  const { bounds, scale } = ctx;
+  const sinking = ctx.food.some((f) => f.y > bounds.bottom - (bounds.bottom - bounds.surface) * 0.4);
+  if ((cond.hungry && sinking) || cond.symptoms.some((x) => x === 'lethargic' || x === 'loss_of_balance' || x === 'gasping')) c.t = Math.min(c.t, 0);
+  const footY = (x: number) => floorAt(bounds, x) - Math.max(3 * scale, (cond.body?.halfH ?? 0) * 0.8);
+  if (c.lift <= 0 && Math.abs(c.x - s.x) > 2 * scale) {
+    if (c.t <= 0) {
+      s.climb = undefined;
+      return false;
+    }
+    // 走到草莖下面
+    s.vx = Math.sign(c.x - s.x) * speed;
+    s.vy = 0;
+    s.x += s.vx * dt;
+    s.y = footY(s.x) + crawlLane(s.id) * scale;
+    s.phase += dt * 5;
+    return true;
+  }
+  c.t -= dt;
+  const want = c.t > 0 ? c.h : 0;
+  const step = speed * CLIMB_SPEED * dt;
+  const before = c.lift;
+  c.lift = want > c.lift ? Math.min(want, c.lift + step) : Math.max(want, c.lift - step);
+  if (c.t <= 0 && c.lift <= 0) {
+    s.climb = undefined;
+    return false;
+  }
+  s.x += (c.x - s.x) * Math.min(1, dt * 4);
+  s.vx = 0;
+  s.vy = (before - c.lift) / Math.max(dt, 1e-6);
+  // 剛離開底沙那一段從沙上的那一排慢慢收到草莖上
+  const lane = crawlLane(s.id) * scale * Math.max(0, 1 - c.lift / (12 * scale));
+  s.y = footY(s.x) + lane - c.lift;
+  s.phase += dt * (2 + Math.abs(s.vy) / (4 * scale));
+  return true;
+}
+
 export function spawnSwimmer(id: number, species: FishSpeciesId, bounds: TankBounds, rand: () => number): Swimmer {
   const p = PROFILES[species];
   const y = p.crawler ? floorAt(bounds, bounds.width / 2) - 4 : bounds.surface + 30 + rand() * (bounds.bottom - bounds.surface - 60);
@@ -142,6 +202,7 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
 
   if (!cond.alive) {
     s.idle = undefined;
+    s.climb = undefined;
     // 死魚慢慢沉到底，停在底砂上。
     s.vx *= 0.95;
     s.vy = Math.min(s.vy + 4 * dt, 12 * scale);
@@ -166,7 +227,23 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
     s.y = floorAt(bounds, s.x) - Math.max(3 * scale, (cond.body?.halfH ?? 0) * 0.8) + crawlLane(s.id) * scale;
     return;
   }
+  if (p.crawler && s.climb && climbStep(s, s.climb, cond, ctx, speed, dt)) return;
   if (p.crawler) {
+    const perch = ctx.perches?.length && !cond.hungry && !sym.has('lethargic') && rand() < dt / CLIMB_EVERY ? nearestPerch(s.x, ctx.perches, 60 * scale) : null;
+    if (perch) {
+      const floor = floorAt(bounds, perch.x);
+      const tall = floor - perch.top;
+      // 太矮的草（前景草皮）不爬
+      if (tall > 24 * scale) {
+        s.climb = { x: perch.x + (rand() - 0.5) * 4 * scale, h: tall * (0.35 + 0.4 * rand()), t: 5 + rand() * 8, lift: 0 };
+        return;
+      }
+    }
+    if (rand() < dt / HOP_EVERY) {
+      s.startle = STARTLE_SECONDS;
+      s.vx = -(Math.sign(s.vx) || 1) * speed * 6;
+      return;
+    }
     for (const o of all) {
       if (PROFILES[o.species].crawler) continue;
       if (Math.abs(o.x - s.x) < 16 * scale && Math.abs(o.y - s.y) < 14 * scale && Math.abs(o.vx) > 10 * scale && rand() < dt * 4) {

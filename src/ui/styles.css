@@ -1252,6 +1252,8 @@ body.idle:not(.watching) #hud:has(.quest-target), body.idle:not(.watching) #dock
 body.watching #hud, body.watching #dock, body.watching .quest-pill, body.watching .quest-tray, body.watching .tank-label, body.watching .dream-holder, body.watching .daily-holder, body.watching .owner-tip, body.watching #stage .selcard { opacity: 0; pointer-events: none; }
 .watch-exit { position: fixed; z-index: 6; top: calc(env(safe-area-inset-top) + 10px); right: calc(env(safe-area-inset-right) + 12px); width: 40px; height: 40px; border-radius: 50%; display: none; place-items: center; background: rgba(8, 28, 38, 0.55); border: 1px solid var(--line); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 body.watching .watch-exit { display: grid; animation: rise 0.3s ease-out; }
+/* 觀賞模式只留魚：通知也收起來（還是進鈴鐺），只有壞消息照樣跳（#273） */
+body.watching .toast:not(.bad) { opacity: 0; pointer-events: none; }
 .watch-eye { width: 20px; height: 12px; border: 2px solid var(--text); border-radius: 50% / 60%; position: relative; }
 .watch-eye::after { content: ''; position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; border-radius: 50%; background: var(--text); transform: translate(-50%, -50%); }
 /* 老闆的提醒小卡縮成兩行以內（畫面評測第 8 輪：通知不要疊在缸上），點「為什麼？」才展開 */
