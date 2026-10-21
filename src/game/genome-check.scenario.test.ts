@@ -73,6 +73,14 @@ describe('新生魚的基因檢查（L2，#76）', () => {
     next = snap(days[a + 1]);
     const bought = addFish(next[0], 'guppy', { carriesIch: false, carries: [], pregnant: true, sex: 'female' });
     expect(forgedGenomes(prev, next)).toEqual([]);
+    // 第 0 代、尾鰭 90 以內，但花紋和鰭型疊滿（店裡沒有這種品系）：擋下；放進精子也一樣
+    const stacked = { albino: [1, 1], gold: [1, 1], tuxedo: [1, 1], red: [1, 1], snakeX: [1], y: { snake: 1, grass: 1, sword: 3 }, tail: 90, fins: 100, swallow: [1, 1], ribbon: [1, 1], dumbo: [1, 1] } as NonNullable<Fish['genome']>;
+    const fake = addFish(next[0], 'guppy', { carriesIch: false, carries: [], sex: 'male' });
+    fake.genome = stacked;
+    expect(forgedGenomes(prev, next).map((x) => x.id)).toEqual([fake.id]);
+    next[0].fish = next[0].fish.filter((x) => x !== fake);
+    bought.sire!.genome = stacked;
+    expect(forgedGenomes(prev, next).map((x) => x.id)).toEqual([bought.id]);
     // 母魚存的精子換成缸裡沒有、店裡也買不到的公魚
     bought.sire!.genome = { ...bought.sire!.genome, tail: 100 };
     expect(forgedGenomes(prev, next).map((x) => x.id)).toContain(bought.id);

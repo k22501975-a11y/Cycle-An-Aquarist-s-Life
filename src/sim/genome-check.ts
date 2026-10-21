@@ -1,4 +1,4 @@
-import { legacyGenome, type GuppyGenome, type Pair } from './genetics';
+import { couldBeStoreGenome, legacyGenome, type GuppyGenome, type Pair } from './genetics';
 import { type Fish, type TankState } from './state';
 
 /**
@@ -16,8 +16,6 @@ import { type Fish, type TankState } from './state';
 const TAIL_SD = 8;
 const FINS_SD = 12;
 export const GENOME_SIGMAS = 4.5;
-/** 店裡的魚尾鰭分數最高（storeGenome：45 + gaussian × 10）。 */
-export const STORE_TAIL_MAX = 90;
 /** 已經賣掉、存檔裡找不到的店魚當爸爸時，照這個尾鰭分數算（店魚的 2 個標準差；缸裡有更好的公魚就照那尾）。 */
 export const UNKNOWN_FATHER_TAIL = 65;
 /** 媽媽在上一份之後才出生、又在下一份之前死掉撈掉，至少要這麼多遊戲天（長大加懷孕）。 */
@@ -72,8 +70,8 @@ function quantOk(c: GuppyGenome, m: GuppyGenome, fatherTail: number, fatherFins:
   return c.fins <= fm + (45 - fm) * 0.4 + GENOME_SIGMAS * FINS_SD;
 }
 
-/** 店魚的範圍（storeGenome）：尾鰭分數不會太高。 */
-const storeOk = (g: GuppyGenome) => g.tail <= STORE_TAIL_MAX;
+/** 店魚生得出來的（storeGenome：品系模板、最多一種鰭型、尾鰭分數不會太高）。 */
+const storeOk = (g: GuppyGenome) => couldBeStoreGenome(g);
 
 /**
  * 兩份存檔之間新出現、或精子換了的孔雀魚，基因不可能的列出來。
