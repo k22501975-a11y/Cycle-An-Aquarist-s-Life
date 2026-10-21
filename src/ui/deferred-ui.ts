@@ -2,6 +2,8 @@
 // 開機後閒下來就先在背景載好，之後打開都是同步的；拆出來是為了主程式 gzip 300 KB 的上限（scripts/check-assets.mjs）
 export * from './panels';
 export { recordsPanel } from './records';
+export { ordersPanel } from './orders-panel';
+export { ScapeBar } from './scape-bar';
 export { codexPanel } from './codex-panel';
 export { unlockCodex } from './codex';
 export { morningCard } from './morning-card';

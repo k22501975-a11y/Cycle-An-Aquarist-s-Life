@@ -2,7 +2,7 @@ import { artUrl, ownerImg, type ArtIcon } from './art-icons';
 import { ownerMood } from './owner-mood';
 import { h } from './dom';
 import { lookalikeVisual } from './lookalike-card';
-import type { MorningReport, ReportItem, ReportKind } from './morning-report';
+import { isBadNews, type MorningReport, type ReportItem, type ReportKind } from './morning-report';
 
 /**
  * 「過一晚」醒來的早上報告卡（first-10-minutes.md F2）：阿德老闆一句話、一條一條的圖卡，
@@ -37,6 +37,7 @@ const KIND_ICON: Record<ReportKind, ArtIcon> = {
   new_leaf: 'trim',
   rescued: 'testkit',
   lookalike: 'owner',
+  observe: 'owner',
   quiet: 'owner',
 };
 
@@ -83,12 +84,14 @@ export interface MorningCardDeps {
 
 /** 老闆的開場白：照最要緊的那一條說。 */
 export function morningLine(report: MorningReport): string {
-  const top = report.items[0];
   if (report.stopped) return '半夜有狀況，我先把你叫起來了。先處理最上面那件！';
-  if (!top || top.kind === 'quiet') return '一夜平安，魚都睡得很好。';
-  if (top.tone === 'bad') return '昨晚出了點事，先看最上面那件。';
-  if (report.items.some((i) => i.tone === 'good')) return '有好消息！看看昨晚發生了什麼。';
-  return '早！昨晚的狀況幫你整理好了。';
+  // 照昨晚有沒有好事、壞事說（企劃 tutorial-lines.md §7，#258）；壞事本來就排在前面
+  const bad = report.items.some(isBadNews);
+  const good = report.items.some((i) => i.tone === 'good');
+  if (bad) return good ? '昨晚有點狀況，也有好消息。' : '昨晚有點狀況。';
+  if (good) return '有好消息！';
+  // 氨在升、藻變多、該餵了：死亡要有預警，不能寫「安靜」
+  return report.items.some((i) => i.tone === 'warn') ? '有件事要留意一下。' : '安靜的一晚。';
 }
 
 /**

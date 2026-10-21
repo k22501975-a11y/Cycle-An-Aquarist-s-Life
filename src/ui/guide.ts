@@ -451,6 +451,8 @@ const NEXT_GLOW: Record<NextTarget, QuestTarget | null> = {
   select: null,
   treat: null,
   mother: null,
+  fastest: null,
+  fry_box: null,
   scape: null,
 };
 
