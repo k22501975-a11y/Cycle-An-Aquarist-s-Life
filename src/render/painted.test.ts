@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, addPlant, addSnail, FISH_SPECIES, GUPPY_STRAINS, HARDSCAPE, lookVariant, PLANT_SPECIES, type FishSpeciesId, type GrowthStage, type GuppyPhenotype, type PlantSpeciesId } from '../sim';
+import { addFish, addPlant, addSnail, FISH_SPECIES, GUPPY_STRAINS, HARDSCAPE, lookVariant, phenotype, PLANT_SPECIES, type FishSpeciesId, type GrowthStage, type GuppyPhenotype, type PlantSpeciesId } from '../sim';
 import { ART_FILES, FEMALE_TINTS, femaleKey, PAINTED, paintedKey, paintedTexture, SCENERY, sceneryImage, startupArt } from './painted';
 import { GUPPY_LOOKS } from './strains';
 
@@ -96,6 +96,17 @@ describe('開機只先載當前缸用到的圖（Issue #81）', () => {
     expect(males.every((k) => k.startsWith(key)), males.join()).toBe(true);
     // 母魚、仔魚、幼魚的圖照樣都在（公魚之後生的小魚也看得到）
     for (const k of ['guppy-female-base', 'guppy-female-pregnant', 'guppy-fry', 'guppy-juvenile']) expect(need).toContain(k);
+  });
+
+  it('母孔雀魚只先載缸裡有的尾色（架構審查 #274）', () => {
+    const s = newGameState(1);
+    const female = addFish(s, 'guppy', { sex: 'female', strain: 2 });
+    const need = startupArt([s]);
+    const tint = femaleKey(phenotype(female.genome!), false).split('-').pop()!;
+    expect(tint).toBe('albino');
+    for (const k of [`guppy-female-base-${tint}`, `guppy-female-base-${tint}#eating`, `guppy-female-pregnant-${tint}`]) expect(need).toContain(k);
+    const females = [...need].filter((k) => /^guppy-female-(base|pregnant)-/.test(k));
+    expect(females.every((k) => k.includes(`-${tint}`)), females.join()).toBe(true);
   });
 
   it('其他缸（多缸）用到的圖也算進去', () => {

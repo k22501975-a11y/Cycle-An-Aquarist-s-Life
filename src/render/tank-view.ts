@@ -168,6 +168,8 @@ export interface TankViewEvents {
 /** 魚畫得比真實比例大一些（遊戲裡要看得清楚品系花紋）。 */
 // 魚再放大 1.2 倍（畫面評測第 9 輪 #265：孔雀魚只佔畫面寬 6%）；蝦不動，牠們走在沙面上
 const EXAGGERATION: Record<string, number> = { guppy: 2.16, zebrafish: 1.92, cherry_shrimp: 1.8, apisto: 1.8, betta: 1.8, crystal_shrimp: 1.8 };
+/** 蝦爬在草上身體立起來的角度（弧度，#273）。 */
+const CLIMB_TILT = 1.1;
 /** 後排的魚：淡一點、偏水色、微糊，但還認得出是魚（#265：原本 0.75 透明度加藍色，母孔雀魚遠看像影子）。 */
 const BACK_ALPHA = 0.88;
 /** 景深切換的門檻（有緩衝，避免在兩層之間跳來跳去）。 */
@@ -247,6 +249,8 @@ export class TankView {
   private quality: QualitySpec = qualitySpec('high', 2);
   private fish = new Map<number, FishView>();
   private plants = new Map<number, PlantView>();
+  /** 蝦能爬的草（#273）：每格畫草時更新。 */
+  private perches: Array<{ x: number; top: number }> = [];
   private food: FoodParticle[] = [];
   /** 上次撒飼料過了幾秒（魚搶食的熱度）；-1 還沒撒過。 */
   private dropT = -1;
@@ -1747,7 +1751,7 @@ export class TankView {
     g.clear();
     const s = view.swimmer;
     const scale = this.motionScale;
-    const speedRatio = Math.min(1, Math.abs(s.vx) / (10 * scale));
+    const speedRatio = Math.min(1, Math.hypot(s.vx, s.vy) / (10 * scale));
     rig.walk = fish.alive && !(s.startle! > 0) ? speedRatio : 0;
     if (!fish.alive) return;
     if (s.startle! > 0) {
@@ -1823,7 +1827,7 @@ export class TankView {
     const inBox = all.filter((s) => boxed.has(s.id));
     const box = nurseryRect(this.waterBounds);
     if (this.poke && (this.poke.age += dt) > POKE_SECONDS) this.poke = null;
-    const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food, frenzy: this.food.length ? frenzyLevel(this.dropT) : 0, poke: this.poke ?? undefined, plants: state.plants.map((pl) => plantPlacement(pl).x * this.waterBounds.width) };
+    const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food, frenzy: this.food.length ? frenzyLevel(this.dropT) : 0, poke: this.poke ?? undefined, plants: state.plants.map((pl) => plantPlacement(pl).x * this.waterBounds.width), perches: this.perches };
     for (const fish of state.fish) {
       const view = this.fish.get(fish.id)!;
       const { swimmer, rig } = view;
@@ -1886,7 +1890,10 @@ export class TankView {
         // 仰頭低頭照速度算，但平滑地跟上（約 0.2 秒），推擠、閃避時速度一格一格變也不會抖
         // 蝦停下來或在吃：低頭啄沙，一下一下點頭（畫面評測第 9 輪 #265）
         const graze = isShrimpSpecies(fish.species) && (swimmer.eating || Math.abs(swimmer.vx) < 3 * this.hs) ? -(0.16 + 0.08 * Math.max(0, Math.sin(this.time * 4.5 + fish.id))) : 0;
-        view.tilt += (swimTilt(swimmer) + graze - view.tilt) * Math.min(1, dt * 6);
+        // 爬在草上（#273）：身體立起來抱著草莖，頭朝上
+        const climbing = (swimmer.climb?.lift ?? 0) > 2 * this.hs;
+        const want = climbing ? CLIMB_TILT : swimTilt(swimmer) + graze;
+        view.tilt += (want - view.tilt) * Math.min(1, dt * 6);
         const tilt = symptoms.includes('loss_of_balance') ? 1.2 : view.tilt + 0.5 * sick.flash;
         rig.rotation = (facingLeft ? tilt : -tilt) + pose.bank;
         const clamped = symptoms.includes('clamped_fins');
@@ -1976,6 +1983,7 @@ export class TankView {
       }
     }
     const t = state.hours;
+    this.perches = [];
     for (const plant of state.plants) {
       let view = this.plants.get(plant.id);
       if (!view) {
@@ -2011,6 +2019,8 @@ export class TankView {
       const x = this.scape.dragX({ kind: 'plant', id: plant.id }) ?? this.bounds.width * place.x;
       view.holder.position.set(x, this.bounds.bottom + (14 + look.dy) * this.hs);
       view.holder.scale.set(place.flip ? -look.scale : look.scale, look.scale);
+      // 蝦爬得到的高度：圖上面留了搖擺的空間，葉子大概到圖高的七成（後景的草被前景擋住，不爬）
+      if (place.layer !== 'back') this.perches.push({ x, top: view.holder.y - view.rig!.mesh.texture.height * look.scale * 0.7 });
       // 水流造成的搖擺：根部不動、葉尖擺最多
       const tall = view.rig!.mesh.texture.height;
       // 過濾器開著水流比較強，靠近出水口的擺得最明顯（V2）

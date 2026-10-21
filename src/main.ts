@@ -31,7 +31,7 @@ import { TankView } from './render/tank-view';
 import { SETUP_CAPTIONS, SETUP_ORDER, SETUP_PROMPTS, type SetupStep } from './render/setup-show';
 import type { ScapeBar } from './ui/scape-bar';
 import * as sim from './sim';
-import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, useTestKit } from './sim';
+import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, useTestKit } from './sim';
 import { h } from './ui/dom';
 import { ICONS } from './ui/icons';
 import { DEATH_ADVICE, describeEvent, FIRST_PESTS_LINE, firstDeathOwnerLine, fishName, fishStrain, pluralEventText } from './ui/labels';
@@ -53,7 +53,7 @@ import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt } from './ui/order
 import { flyCoins, rewardBurst } from './ui/coin-fly';
 import type { ReportItem } from './ui/morning-report';
 import { loadCodexSeen, saveCodexSeen } from './ui/codex-seen';
-import { Sheet, Toasts } from './ui/sheet';
+import { Sheet, Toasts, actionLive } from './ui/sheet';
 import { clockLabel, householdTodos, waterCapsules, waterSummary, type Todo } from './ui/status';
 import { cornerRect, pickCorner, type Corner, type Rect } from './ui/dodge';
 import './ui/styles.css';
@@ -174,6 +174,8 @@ async function start(): Promise<void> {
     run();
     toasts.show(text, tone, {
       label: '復原',
+      // 復原是把整缸換回操作前的樣子：隔太久再按會把這段時間發生的事一起抹掉，只給 1 分鐘（#273）
+      until: performance.now() + 60_000,
       run: () => {
         game.restoreActive(before);
         toasts.show('已經復原');
@@ -1096,7 +1098,7 @@ async function start(): Promise<void> {
               {},
               h('i.toast-icon', { 'aria-hidden': 'true' }),
               h('span', {}, n.text, n.count > 1 ? h('b.toast-count', {}, ` ×${n.count}`) : null),
-              n.action ? h('button.btn.small', { onclick: () => (sheet.close(), n.action!.run()) }, n.action.label) : h('small', {}, ago(n.at)),
+              actionLive(n.action) ? h('button.btn.small', { onclick: () => (sheet.close(), n.action!.run()) }, n.action.label) : h('small', {}, ago(n.at)),
             ),
           )),
       h('button.btn', { onclick: () => panelSheet('紀錄', (p) => p.recordsPanel(ctx, 'events')) }, '看事件紀錄'),
@@ -1551,11 +1553,10 @@ async function start(): Promise<void> {
     stage.style.setProperty('--dock-top', `${Math.round(stageRect.bottom - dockTop - stageRect.top)}px`);
     document.body.style.setProperty('--dock-top', `${Math.round(stageRect.bottom - dockTop - stageRect.top)}px`);
     tankLabel.style.bottom = `${Math.round(stageRect.bottom - dock.getBoundingClientRect().top + 8)}px`;
-    const size = tankSize(game.state.equipment.tank);
-    const named = game.tanks.length > 1 || game.state.label ? `${sim.tankLabel(game.tanks, game.active)}・` : '';
     const naming = guide.quick === 'name';
     tankLabel.classList.toggle('quest-target', naming);
-    tankLabel.textContent = naming ? '✎ 點這裡幫缸取名' : `${named}${game.state.equipment.tank.name}・${size.w}×${size.h}×${size.d} cm`;
+    // 只留缸名（點了改名）；型號和尺寸在設備面板看得到，放這裡一長串字壓在沙上（#273）
+    tankLabel.textContent = naming ? '✎ 點這裡幫缸取名' : `✎ ${sim.tankLabel(game.tanks, game.active)}`;
   };
   new ResizeObserver(measure).observe(hud);
   new ResizeObserver(measure).observe(dock);

@@ -96,7 +96,8 @@ export class Sheet {
 }
 
 type Tone = 'bad' | 'warn' | 'info';
-type ToastAction = { label: string; run: () => void };
+/** until：按鈕過了這個時間（performance.now()）就不能按了，例如「復原」只在剛做完的一陣子有效（#273）。 */
+type ToastAction = { label: string; run: () => void; until?: number };
 type ToastArgs = [text: string, tone?: Tone, action?: ToastAction];
 
 /** 通知匣的一則：同樣的字合成一則、記次數。 */
@@ -114,13 +115,18 @@ const SEVERITY: Record<Tone, number> = { info: 0, warn: 1, bad: 2 };
 /** 玩家剛按過東西（這段時間內的通知是對那一下的回應）。 */
 const DIRECT_MS = 1500;
 const INBOX_MAX = 40;
+/** 有按鈕的通知在畫面上停多久（#273）。 */
+const STICKY_MS = 8000;
+
+/** 按鈕還能不能按（「復原」過期了就只留字）。 */
+export const actionLive = (a: ToastAction | undefined, now = performance.now()): a is ToastAction => !!a && (a.until === undefined || now < a.until);
 
 /**
  * 通知（YenWel：「通知太亂，文字一直跳出來」）：
  * - 畫面上同一時間最多一則，一行、前面一個圖示；新的換掉舊的，同樣的字合成「×2」。
  * - 玩家剛按的東西的回應、壞消息、要處理的（有按鈕）才跳；其他（今天的小事、畫質調整、自己發生的好事）
  *   只進通知匣，鈴鐺上的數字加一，想看再點開。
- * - 有「去處理」按鈕的要等玩家點掉或處理掉才收（U3）。
+ * - 有按鈕的（復原、去處理）多停一會兒（8 秒）再自己收進鈴鐺，按鈕在通知匣裡還按得到（#273：以前一直掛著，連觀賞模式也是）。
  */
 export class Toasts {
   private readonly host = h('div.toasts');
@@ -223,7 +229,7 @@ export class Toasts {
         cur.el.classList.remove('bump');
         void cur.el.offsetWidth;
         cur.el.classList.add('bump');
-        if (!cur.sticky) this.arm(cur.el, tone);
+        this.arm(cur.el, tone, cur.sticky);
         return;
       }
       // 正在等玩家處理的不讓自己冒出來的一般通知蓋掉（一般的已經在通知匣裡）；
@@ -249,7 +255,7 @@ export class Toasts {
     this.current = { el, text, count: 1, sticky, tone, at: performance.now() };
     window.clearTimeout(this.fadeTimer);
     window.clearTimeout(this.removeTimer);
-    if (!sticky) this.arm(el, tone);
+    this.arm(el, tone, sticky);
   }
 
   /** 開面板時收掉畫面上的一般通知（畫面評測第 8 輪 #254：舊通知浮在商店標題上）；要處理的、剛跳出來的留著。 */
@@ -258,12 +264,12 @@ export class Toasts {
     if (cur && !cur.sticky && performance.now() - cur.at > DIRECT_MS) cur.el.remove();
   }
 
-  /** 一般的停 2.5 秒（畫面評測第 8 輪 #252）；警告、壞消息要看清楚，停 5 秒。 */
-  private arm(el: HTMLElement, tone: Tone): void {
+  /** 一般的停 2.5 秒（畫面評測第 8 輪 #252）；警告、壞消息要看清楚，停 5 秒；有按鈕的停 8 秒（#273）。 */
+  private arm(el: HTMLElement, tone: Tone, sticky = false): void {
     window.clearTimeout(this.fadeTimer);
     window.clearTimeout(this.removeTimer);
     el.classList.remove('fade');
-    const stay = tone === 'info' ? 2500 : 5000;
+    const stay = sticky ? STICKY_MS : tone === 'info' ? 2500 : 5000;
     this.fadeTimer = window.setTimeout(() => el.classList.add('fade'), stay);
     this.removeTimer = window.setTimeout(() => el.remove(), stay + 600);
   }
