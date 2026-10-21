@@ -1174,3 +1174,14 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
   .caps { flex: 1 0 auto; gap: 4px; }
   .cap { padding: 2px 5px; }
 }
+/* 很矮的橫向手機（高不到 400，例如 740×360）：面板標題列壓扁，商店一屏看得到整張卡和購買鈕 */
+@media (orientation: landscape) and (max-height: 400px) {
+  .sheet-head { padding-top: 8px; padding-bottom: 6px; gap: 10px; }
+  .sheet-title { font-size: 18px; }
+  .sheet-title::after { margin-top: 4px; }
+  .sheet-icon { width: 30px; height: 30px; }
+  .sheet-close { width: 30px; height: 30px; }
+  .shop-banner { padding: 3px 6px 3px 12px; }
+  .shop-banner > b { font-size: 13px; }
+  .card-pic { height: 62px; padding: 4px 8px; }
+}
