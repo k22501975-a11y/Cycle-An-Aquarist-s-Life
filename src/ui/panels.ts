@@ -59,6 +59,11 @@ import {
   unlockHint,
   moveFish,
   newTankCost,
+  purposeCost,
+  setTankPurpose,
+  suggestPurpose,
+  TANK_PURPOSES,
+  type TankPurpose,
   removeTank,
   removeTankRefusal,
   slotPrice,
@@ -1714,6 +1719,50 @@ export function debugPanel({ game }: PanelContext): Node {
 }
 
 /** 我的水缸：切換、加缸、收缸。缸位只看錢，但每多一缸就多一份要照顧的水。 */
+const PURPOSE_ART: Record<TankPurpose, string> = { breeding: 'gear/nursery-box.webp', display: 'gear/led-planted.webp' };
+
+/**
+ * 第二缸的用途（G4）：繁殖缸或展示缸兩張卡擇一，標「推薦」的照現在缸裡的狀況和錢；可以先跳過，之後在「我的水缸」再選。
+ * 選了：缸沒取名就用用途當名字、目標串多一個那種用途的目標，接著帶去商店買必買的東西。
+ */
+export function tankPurposePanel(ctx: PanelContext): Node {
+  const { game, sheet, toasts } = ctx;
+  const coins = economy(game.state).coins;
+  const pick = suggestPurpose(game.tanks, coins);
+  const now = game.state.purpose;
+  const choose = (id: TankPurpose) => {
+    const spec = TANK_PURPOSES[id];
+    game.actAll(() => setTankPurpose(game.state, id));
+    ctx.sound?.('quest');
+    const need = spec.items.filter((x) => x.required).map((x) => x.label).join('、');
+    toasts.show(`這缸當${spec.title}：先買${need}`);
+    sheet.open('商店', () => shopPanel(ctx, spec.items.find((x) => x.required)?.key.startsWith('plant:') ? 'plants' : 'gear'));
+  };
+  const card = (id: TankPurpose) => {
+    const spec = TANK_PURPOSES[id];
+    const required = spec.items.filter((x) => x.required);
+    const later = spec.items.filter((x) => !x.required);
+    return shopCard({
+      art: PURPOSE_ART[id],
+      name: spec.title,
+      price: purposeCost(id),
+      unit: ' 起',
+      badge: now === id ? '現在' : id === pick ? '推薦' : undefined,
+      chips: [...required.map((x) => `${x.label} ${x.price}`), ...later.map((x) => `之後：${x.label}`)],
+      note: spec.pitch,
+      actions: [button(now === id ? '就這樣' : '選這個', () => (now === id ? sheet.close() : choose(id)), id === pick ? 'primary' : '')],
+      cls: `.purpose-card${id === pick ? '.picked' : ''}`,
+    });
+  };
+  return h(
+    'div.stack.purpose-panel',
+    {},
+    h('p.hint', {}, `${tankLabel(game.tanks, game.active)}：選一個用途，會多一個這缸的目標。錢包 ${yuan(coins)}`),
+    cardGrid(card('breeding'), card('display')),
+    h('div.row', {}, button('先跳過，之後在「我的水缸」選', () => sheet.close())),
+  );
+}
+
 export function tanksPanel(ctx: PanelContext): Node {
   const { game, sheet, toasts } = ctx;
   const coins = economy(game.state).coins;
@@ -1762,6 +1811,12 @@ export function tanksPanel(ctx: PanelContext): Node {
               '分濾材過來',
             )
           : null,
+        i > 0
+          ? button(t.purpose ? TANK_PURPOSES[t.purpose].title : '選用途', () => {
+              game.switchTo(i);
+              sheet.open('這缸拿來做什麼？', () => tankPurposePanel(ctx));
+            })
+          : null,
         button('改名', () => {
           const name = prompt('幫這缸取個名字（例如：繁殖缸、紅蛇王專缸）', t.label ?? '')?.trim();
           if (name === undefined) return;
@@ -1799,7 +1854,8 @@ export function tanksPanel(ctx: PanelContext): Node {
       ctx.sound?.('buy');
       game.switchTo(game.tanks.indexOf(tank));
       toasts.show(`架好了新的${set.tank.name}（${yuan(cost)}）。新缸要先養水，硝化菌長起來才能放魚`);
-      sheet.close();
+      // 第二缸起（G4）：先問這缸拿來做什麼，可以跳過
+      sheet.open('這缸拿來做什麼？', () => tankPurposePanel(ctx));
     };
     return shopCard({
       art: 'gear/tank-empty.webp',
