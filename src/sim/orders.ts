@@ -91,6 +91,8 @@ export interface OrderBoard {
   earned: number;
   /** 上次檢查收入空檔保底是第幾個遊戲小時（每小時最多查一次，離線補算比較快）。 */
   gapCheckedHour?: number;
+  /** 上次補單、撤交不出的單是第幾個遊戲小時（要算缸裡湊不湊得齊，每小時最多算一次；交單、撕單後清掉，下一次更新就補）。 */
+  fillCheckedHour?: number;
 }
 
 export function orderBoard(state: TankState): OrderBoard {
@@ -281,6 +283,7 @@ export function fulfillOrder(tanks: TankState[], orderId: number, keep: readonly
   board.done += 1;
   board.earned += coins;
   board.lastChangeHours = state.hours;
+  board.fillCheckedHour = undefined;
   return coins;
 }
 
@@ -292,6 +295,7 @@ export function dismissOrder(state: TankState, orderId: number): boolean {
   board.orders = board.orders.filter((x) => x.id !== orderId || x.preview);
   if (board.orders.length === before) return false;
   board.lastChangeHours = state.hours;
+  board.fillCheckedHour = undefined;
   return true;
 }
 
@@ -760,6 +764,10 @@ function fillOrders(state: TankState, board: OrderBoard): void {
   // 太久沒人交的單，客人就不等了（不用玩家自己撕）；保底單掛 INCOME_GAP_DAYS 天
   const expired = board.orders.filter((o) => state.hours >= orderExpiresHours(o));
   if (expired.length > 0) board.orders = board.orders.filter((o) => !expired.includes(o));
+  // 下面要算缸裡湊不湊得齊（orderContext、reachableInTime），很花時間：每個遊戲小時最多算一次，離線補算和快轉才不會變慢
+  const hour = Math.floor(state.hours);
+  if (expired.length === 0 && board.fillCheckedHour === hour) return;
+  board.fillCheckedHour = hour;
   const ctx = orderContext(state);
   if (ctx.stage === 'start') return fillStarterBoard(state, board, ctx);
   if (board.orders.some((o) => o.preview)) promotePreview(state, board, ctx);

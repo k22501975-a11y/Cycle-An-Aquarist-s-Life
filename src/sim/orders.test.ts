@@ -47,6 +47,8 @@ import {
   type Fish,
   type ShopOrder,
   type TankState,
+  orderOutlook,
+  outlookDaysLine,
 } from './index';
 
 const tank = (seed = 3) => createTank({ tank: TANKS.std40, filter: FILTERS.hangOn, heater: { spec: HEATERS.h50, targetC: 25 }, light: { spec: LIGHTS.basic }, seed, matureMedia: true });
@@ -80,6 +82,14 @@ describe('店家訂單板（M21）', () => {
     expect(starter.count * starter.unitPrice).toBeGreaterThanOrEqual(40);
     expect(preview).toMatchObject({ kind: 'fry', preview: true });
     expect(board.orders.some((o) => o.kind === 'fish')).toBe(false);
+    // 卡片上不寫「等螺再多生一些」：還沒買水草就說買第一株會附螺；買了之後寫還要幾天
+    expect(outlookDaysLine(orderOutlook([s], starter), starter)).toBe('買第一株水草會附螺，養幾天就夠');
+    s.snails ??= { snails: [], pests: { ramshorn: 0, bladder: 0, mts: 0 }, clutches: [], appleYoung: 0, neriteEggs: 0 };
+    s.snails.pests.ramshorn = 3;
+    const x = orderOutlook([s], starter);
+    expect(x.days).toBeGreaterThan(0);
+    expect(x.late).toBe(false);
+    expect(outlookDaysLine(x, starter)).toBe(`小螺還在生，約 ${x.days} 天`);
     // 預告卡不能交、撕不掉、不會過期
     expect(orderRefusal([s], preview.id)).toBe('生小魚之後就能接');
     expect(dismissOrder(s, preview.id)).toBe(false);
@@ -206,6 +216,7 @@ describe('店家訂單板（M21）', () => {
       const board = orderBoard(s);
       board.orders = [];
       board.lastChangeHours = undefined;
+      board.fillCheckedHour = undefined;
       updateOrders(s);
       return board.orders;
     };
