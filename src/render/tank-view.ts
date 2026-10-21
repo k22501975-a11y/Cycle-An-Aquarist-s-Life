@@ -1,4 +1,4 @@
-import { BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
+import { BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Texture, TilingSprite } from 'pixi.js';
 import { waterLook, isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, personalitySpec, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { newToneFrame, PaintedRig, paintedArtVersion, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
@@ -74,6 +74,24 @@ const TUBES: Array<{ param: KitParam; label: string }> = [
   { param: 'nitrite', label: '亞硝' },
   { param: 'nitrate', label: '硝酸' },
 ];
+/**
+ * 試管下面的小字：用 Canvas 畫成貼圖，不用 Pixi 的 Text（Text 只有這裡用，整套文字排版約 8 KB gzip，
+ * docs/performance-budget.md §3）。畫成 2 倍解析度，跟原本 Text 在手機上一樣清楚。
+ */
+function tubeLabelTexture(text: string): Texture {
+  const scale = 2;
+  const font = "600 12px system-ui, sans-serif";
+  const probe = makeCanvas(1, 1).ctx;
+  probe.font = font;
+  const w = Math.ceil(probe.measureText(text).width) + 4;
+  const { canvas, ctx } = makeCanvas(w, 16, scale);
+  ctx.font = font;
+  ctx.fillStyle = '#eaf6f8';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText(text, w / 2, 1);
+  return canvasTexture(canvas, false, scale);
+}
 const CUTTING_SECONDS = 2.6;
 
 interface FishView {
@@ -1150,7 +1168,7 @@ export class TankView {
     if (this.testT >= 0 && this.testReading) {
       if (this.tubeLabels.children.length === 0) {
         for (const tb of TUBES) {
-          const label = new Text({ text: tb.label, style: { fill: 0xeaf6f8, fontSize: 12, fontWeight: '600', fontFamily: 'system-ui, sans-serif' } });
+          const label = new Sprite(tubeLabelTexture(tb.label));
           label.anchor.set(0.5, 0);
           this.tubeLabels.addChild(label);
         }
@@ -1167,7 +1185,7 @@ export class TankView {
         g.roundRect(x - tw / 2, y0 + th - liquid, tw, liquid, tw / 2).fill({ color, alpha: 0.92 * tube.alpha });
         g.roundRect(x - tw / 2, y0, tw, th, tw / 2).stroke({ color: 0xffffff, alpha: 0.75 * tube.alpha, width: 1.5 * hs });
         g.rect(x - tw / 2 + 3 * hs, y0 + 6 * hs, 2.5 * hs, th - 16 * hs).fill({ color: 0xffffff, alpha: 0.35 * tube.alpha });
-        const label = this.tubeLabels.children[i] as Text;
+        const label = this.tubeLabels.children[i] as Sprite;
         label.position.set(x, y0 + th + 6 * hs);
         label.scale.set(Math.max(0.8, hs));
         label.alpha = tube.alpha;
