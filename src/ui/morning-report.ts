@@ -1,6 +1,7 @@
 import { crisisText, type Crisis } from '../game/crisis';
 import {
   cycleMaturity,
+  BELLY_SHOWS,
   DUE_PREGNANCY,
   economy,
   FISH_SPECIES,
@@ -367,8 +368,6 @@ const PLANT_GREW = 1.01;
 const LEAF_PER_CUTTING = 4;
 /** 小魚長到這麼長，就會游出水草到水面搶飼料（G8 早上報告的小里程碑）。 */
 const FRY_SWIMS_OUT_CM = 1;
-/** 母魚肚子看得出來的懷孕程度（之後到 DUE_PREGNANCY 出現胎斑、快生了）。 */
-const BELLY_SHOWS = 0.5;
 const bellyStage = (pregnancy: number) => (pregnancy >= DUE_PREGNANCY ? 2 : pregnancy >= BELLY_SHOWS ? 1 : 0);
 /** 魚的平均壓力（0–1）一晚降多少才算「放鬆了」（新魚 0.5，第一天約降到 0.3～0.43）。 */
 const RELAXED_DROP = 0.05;

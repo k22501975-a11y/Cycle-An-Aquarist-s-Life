@@ -2,7 +2,7 @@ import { economy } from './economy';
 import { CALM_DAYS, goalState, nextGoals, PURPOSE_GOAL_COUNT, raisedCount, type Goal } from './goals';
 import { growthStage } from './growth';
 import { newTankCost } from './household';
-import { dueMothers } from './nursery';
+import { BELLY_SHOWS, dueMothers } from './nursery';
 import { orderBoard, orderSupply } from './orders';
 import { hasVisible } from './processes/disease';
 import { isShrimpSpecies } from './species';
@@ -43,18 +43,23 @@ const bredFry = (tanks: TankState[]) => living(tanks).filter((f) => (f.generatio
 /** 沒寫到的目標用的保底句。 */
 export const GENERIC_STEP = '看看任務卡上的目標';
 
+/** 母魚快生了（要育幼盒）或肚子看得出懷孕時的下一步；都沒有回傳 null。 */
+function motherStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
+  if (tanks.some((t) => dueMothers(t).length > 0)) return tanks.some((t) => t.nurseryBox && dueMothers(t).length > 0) ? { text: '母魚快生了，放進育幼盒', target: 'nursery' } : { text: '母魚快生了，買個育幼盒', target: 'nursery' };
+  const showing = living(tanks).some((f) => f.sex === 'female' && f.pregnancy >= BELLY_SHOWS && !isShrimpSpecies(f.species));
+  return showing ? { text: '母魚懷孕了，餵飽她等小魚', target: 'feed' } : null;
+}
+
 /** 每個目標在現在的狀況下要做的事。 */
 function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
   const home = tanks[0];
   switch (goal.id) {
     case 'cycled':
-      return { text: '每天測水，等氨和亞硝都到 0', target: 'test' };
-    case 'protect_fry': {
+      // 養水是背景目標（U2）：店裡的母魚常常已經懷孕，這段時間指向第一窩小魚，不要只叫玩家等（g13 門檻 3）
+      return motherStep(tanks) ?? { text: '每天測水，等氨和亞硝都到 0', target: 'test' };
+    case 'protect_fry':
       if (bredFry(tanks).length > 0) return { text: '小魚還小，一天餵兩次', target: 'feed' };
-      const due = tanks.some((t) => dueMothers(t).length > 0);
-      if (due) return tanks.some((t) => t.nurseryBox && dueMothers(t).length > 0) ? { text: '母魚快生了，放進育幼盒', target: 'nursery' } : { text: '母魚快生了，買個育幼盒', target: 'nursery' };
-      return { text: '餵飽母魚，等她懷孕', target: 'feed' };
-    }
+      return motherStep(tanks) ?? { text: '餵飽母魚，等她懷孕', target: 'feed' };
     case 'raise5':
       return { text: `小魚一天餵兩次，養到轉色（${Math.min(5, raisedCount(tanks))}/5）`, target: 'feed' };
     case 'sale': {

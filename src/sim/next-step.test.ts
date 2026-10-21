@@ -19,6 +19,18 @@ describe('主畫面的下一步（U1）', () => {
     expect(nextStep([s])).toBeNull();
   });
 
+  it('還在養水時，母魚看得出懷孕就指向第一窩小魚（g13 門檻 3）', () => {
+    const s = newGameState(1);
+    const mom = addFish(s, 'guppy', { sex: 'female' });
+    mom.ageDays = 120;
+    mom.pregnancy = 0.3;
+    expect(nextStep([s])).toMatchObject({ goal: 'cycled', target: 'test' });
+    mom.pregnancy = 0.6;
+    expect(nextStep([s])).toMatchObject({ goal: 'cycled', text: '母魚懷孕了，餵飽她等小魚', target: 'feed' });
+    mom.pregnancy = 0.95;
+    expect(nextStep([s])).toMatchObject({ goal: 'cycled', text: '母魚快生了，買個育幼盒', target: 'nursery' });
+  });
+
   it('跟著缸裡的狀況變：母魚快生了、錢夠不夠買第二缸', () => {
     const s = newGameState(1);
     expect(nextStep([s])).toMatchObject({ goal: 'cycled', target: 'test' });
