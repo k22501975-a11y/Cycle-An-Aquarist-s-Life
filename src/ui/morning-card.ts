@@ -83,13 +83,26 @@ export interface MorningCardDeps {
 }
 
 /** 老闆的開場白：照最要緊的那一條說。 */
+/** 好消息的早上照最要緊的那件換開頭（體驗第 14 輪：天天「有好消息！」看膩了，#258）；沒列到的用「有好消息！」。 */
+const GOOD_LINE: Partial<Record<ReportKind, string>> = {
+  birth: '昨晚生小魚了！',
+  belly: '母魚那邊有動靜了！',
+  courtship: '昨晚公魚很努力喔！',
+  grown: '小魚長大了！',
+  fry_grew: '小魚又長大一點了！',
+  lookalike: '小魚越來越像爸媽了！',
+  cycled: '水養好了，好消息！',
+  rescued: '你救回來了！',
+  fish_relaxed: '魚慢慢習慣新家了。',
+};
+
 export function morningLine(report: MorningReport): string {
   if (report.stopped) return '半夜有狀況，我先把你叫起來了。先處理最上面那件！';
   // 照昨晚有沒有好事、壞事說（企劃 tutorial-lines.md §7，#258）；壞事本來就排在前面
   const bad = report.items.some(isBadNews);
-  const good = report.items.some((i) => i.tone === 'good');
+  const good = report.items.find((i) => i.tone === 'good');
   if (bad) return good ? '昨晚有點狀況，也有好消息。' : '昨晚有點狀況。';
-  if (good) return '有好消息！';
+  if (good) return GOOD_LINE[good.kind] ?? '有好消息！';
   // 氨在升、藻變多、該餵了：死亡要有預警，不能寫「安靜」
   return report.items.some((i) => i.tone === 'warn') ? '有件事要留意一下。' : '安靜的一晚。';
 }
