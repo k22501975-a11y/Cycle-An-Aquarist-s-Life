@@ -1764,7 +1764,7 @@ export function debugPanel({ game }: PanelContext): Node {
   );
 }
 
-/** 我的水缸：切換、加缸、收缸。缸位只看錢，但每多一缸就多一份要照顧的水。 */
+/** 兩種用途卡上的圖。 */
 const PURPOSE_ART: Record<TankPurpose, string> = { breeding: 'gear/nursery-box.webp', display: 'gear/led-planted.webp' };
 
 /**
@@ -1809,6 +1809,7 @@ export function tankPurposePanel(ctx: PanelContext): Node {
   );
 }
 
+/** 我的水缸：切換、加缸、收缸。缸位只看錢，但每多一缸就多一份要照顧的水。 */
 export function tanksPanel(ctx: PanelContext): Node {
   const { game, sheet, toasts } = ctx;
   const coins = economy(game.state).coins;
