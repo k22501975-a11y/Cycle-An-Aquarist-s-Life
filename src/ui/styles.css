@@ -668,10 +668,14 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .order-meter { position: relative; height: 18px; border-radius: 9px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
 .order-meter i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #5fb4af, var(--sage)); }
 .order-meter span { position: relative; display: block; text-align: center; font-size: 12px; line-height: 18px; color: var(--text); font-variant-numeric: tabular-nums; }
-.order-outlook { display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 12px; line-height: 1.4; color: var(--muted); }
-.order-outlook i { font-style: normal; margin-right: 2px; }
-.order-eta.now { color: var(--sage); }
-.order-shared, .order-eta.late { color: #e0b25c; }
+.order-outlook { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.order-outlook i { font-style: normal; margin-right: 3px; }
+/* 比較欄（G5）：天數做成徽章，能交是綠、來不及是琥珀，一眼比得出哪張先交 */
+.order-eta { display: inline-flex; align-items: center; padding: 1px 9px; border-radius: 999px; background: rgba(127, 196, 255, 0.12); border: 1px solid rgba(127, 196, 255, 0.35); color: #b5dcff; font-weight: 700; }
+.order-eta.now { color: var(--sage); background: rgba(155, 232, 168, 0.14); border-color: rgba(155, 232, 168, 0.5); }
+.order-eta.late { color: #e0b25c; background: rgba(224, 178, 92, 0.14); border-color: rgba(224, 178, 92, 0.55); }
+.order-shared { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; color: #e0b25c; border: 1px dashed rgba(224, 178, 92, 0.6); }
+.order-shared::before { content: '⇄'; margin-right: 4px; }
 .order-actions { display: flex; gap: 6px; margin-top: auto; }
 .order-actions .btn { min-height: 36px; padding: 4px 10px; }
 .order-actions .order-skip { flex: 0 0 40px; width: 40px; margin-top: 0; font-size: 17px; }
@@ -1105,3 +1109,58 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 .tank-rename-input { width: 160px; padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(240, 200, 120, 0.5); background: rgba(0, 0, 0, 0.35); color: var(--text); font-size: 14px; }
 .tank-rename-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .tank-rename-chips .chip { padding: 4px 10px; font-size: 12px; }
+/* 長得像誰（G2）：早上報告裡爸媽和小魚並排，特徵標跟誰的 */
+.morning-body { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.la { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 12px; background: radial-gradient(ellipse at 50% 40%, rgba(120, 220, 230, 0.16), rgba(0, 0, 0, 0.12) 75%); }
+.la-row { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.la-fish { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 6px 2px; border-radius: 10px; border: 1px solid transparent; }
+.la-fish img { width: 64px; height: 40px; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45)); }
+.la-fish img.albino { filter: saturate(0.75) brightness(1.18) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45)); }
+.la-fish figcaption { font-size: 11px; color: var(--muted); }
+.la-fish.mom figcaption { color: #f2a7c0; }
+.la-fish.dad figcaption { color: #8cc8ff; }
+.la-fish.won { border-color: rgba(240, 200, 120, 0.5); background: rgba(240, 200, 120, 0.08); }
+.la-fish.kid img { width: 84px; height: 52px; }
+.la-fish.kid figcaption { color: var(--gold); font-weight: 700; }
+.la-plus, .la-arrow { color: var(--muted); font-size: 14px; }
+.la-traits { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.la-trait { display: inline-flex; align-items: baseline; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid rgba(243, 234, 216, 0.2); background: rgba(255, 255, 255, 0.05); }
+.la-trait small { font-size: 10px; opacity: 0.8; }
+.la-trait.mother { border-color: rgba(242, 167, 192, 0.6); color: #f6c2d4; }
+.la-trait.father { border-color: rgba(140, 200, 255, 0.6); color: #b5dcff; }
+.la-trait.both { border-color: rgba(190, 170, 255, 0.6); color: #d6ccff; }
+.la-trait.hidden { border-color: rgba(240, 200, 120, 0.8); color: var(--gold); background: rgba(240, 200, 120, 0.12); }
+/*
+ * 左上角收成一排小膠囊（YenWel 2026-10-21：「太亂了很躁」「都看不到魚了」）：
+ * 夢想魚只剩剪影和三個點，任務只剩老闆小頭像和一行短標題（點了聽完整說明），今天的小事點了才展開。
+ */
+.dream-strip { padding: 3px 10px 3px 4px; gap: 6px; height: 38px; }
+.dream-strip .dream-mini { width: 38px; height: 22px; }
+.dream-strip-label { display: none; }
+.quest-pill { flex-direction: row; align-items: center; gap: 8px; min-height: 38px; height: 38px; padding: 0 12px 0 40px; border-radius: 999px; max-width: min(230px, 34vw); overflow: hidden; }
+.quest-avatar { left: 4px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; }
+.quest-pill .quest-step, .quest-pill .quest-hint, .quest-pill .quest-progress { display: none; }
+.quest-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.quest-pill .quest-meter { position: absolute; left: 40px; right: 14px; bottom: 4px; width: auto; min-width: 0; height: 3px; margin: 0; }
+.quest-pill .quest-coins { flex: none; }
+.daily-holder:not(.open) .daily { width: auto; height: 38px; padding: 0 12px; justify-content: center; border-radius: 999px; }
+.daily-holder:not(.open) .daily-task { display: none; }
+.daily-holder:not(.open) .daily-chest { margin: 0; padding: 3px 10px; font-size: 12px; }
+.daily-holder:not(.open) .daily.ready { flex-direction: row; align-items: center; gap: 8px; }
+.daily-head { cursor: pointer; gap: 8px; }
+.daily-head b::after { content: ' ▾'; color: var(--muted); letter-spacing: 0; }
+.daily-holder.open .daily-head b::after { content: ' ▴'; }
+.daily-holder.open .daily { width: min(220px, 40vw); }
+.daily-holder:not(.open) .daily-head b { font-size: 0; letter-spacing: 0; }
+.daily-holder:not(.open) .daily-head b::after { content: '小事 ▾'; font-size: 12.5px; color: var(--gold); letter-spacing: 0.08em; }
+/* 一鍵買的圖卡也縮小：只留圖、名字、價錢 */
+.qt-row { gap: 5px; }
+.qt-card { width: 66px; padding: 4px 3px 4px; border-radius: 10px; font-size: 10.5px; animation: none; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); }
+.qt-card:first-child { animation: quest-glow 1.6s ease-in-out infinite; }
+.qt-card .qt-sub { display: none; }
+.qt-art, .qt-art.plant, .qt-art.stone { width: 50px; height: 30px; }
+.qt-card .price-tag { font-size: 10px; transform: scale(0.9); }
+.qt-badge { font-size: 9px; top: -6px; }
+.qt-more { width: 40px; font-size: 11px; border-radius: 10px; }
+.qt-more small { display: none; }
+.quest-pill .quest-hint.next { display: block; font-size: 13px; font-weight: 700; color: #f3e3b8; min-width: 0; }
