@@ -32,6 +32,12 @@ public final class MarketRules {
     public static final int MAX_CUTTINGS = 5;
     /** 到貨死亡率超過這個比例（至少 5 筆）就在商品頁警示。 */
     public static final double DOA_WARNING = 0.15;
+    /** 到貨 30 天存活率低於這個比例（至少 5 筆有結果）就在商品頁警示：常有魚到貨後發病死掉。 */
+    public static final double SURVIVAL_WARNING = 0.8;
+    /** 到貨後幾天（現實）內的訂單才在買家上傳存檔時查（遊戲 30 天約現實 4.3 天，留寬一點）；之後還查不到就不再查。 */
+    public static final int ARRIVAL_CHECK_DAYS = 14;
+    /** 一次上傳最多查幾筆。 */
+    public static final int ARRIVAL_BATCH = 50;
 
     /** 包裝：價錢（買家付）、運輸死亡風險倍數、到貨時的緊迫。 */
     public record Packaging(int cost, double risk, double stress) {}

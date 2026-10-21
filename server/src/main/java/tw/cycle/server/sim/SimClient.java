@@ -22,11 +22,22 @@ public interface SimClient {
     /** 在存檔裡找一條魚；item 是市場用的魚資料。 */
     Inspect inspect(JsonNode save, long fishId);
 
+    /**
+     * 買家存檔裡市場買來的魚到貨後的狀況（src/sim/arrivals.ts）：order 是市場訂單編號，item 是伺服器出貨的那份魚資料
+     * （看出貨時帶著什麼病，不信買家的）。
+     */
+    List<Arrival> arrivals(JsonNode save, List<ArrivalQuery> orders);
+
     record Advance(JsonNode save, double hours, boolean capped, int deaths, int births) {}
 
     record Problem(String code, String message) {}
 
     record Inspect(boolean found, boolean alive, JsonNode item) {}
+
+    record ArrivalQuery(long order, JsonNode item) {}
+
+    /** status：alive、died、gone、unknown（存檔裡查不到）。survived 是活過 30 天；sellerFault 是死於出貨時就帶著的病。 */
+    record Arrival(long order, String status, boolean survived, boolean sellerFault) {}
 
     /** 模擬服務沒開或連不上。 */
     class Unavailable extends RuntimeException {

@@ -113,6 +113,14 @@ public class SaveController {
         }
         save.update(file.path("savedAt").asLong(), file.path("version").asInt(), data, now);
         saves.save(save);
+        // 對得上的存檔才拿來查市場買來的魚活得怎樣（賣家的 30 天存活率）；查不了不影響上傳
+        if (problems.isEmpty()) {
+            try {
+                market.recordArrivals(accountId, file);
+            } catch (SimClient.Unavailable | HttpSimClient.BadSave e) {
+                log.warn("查不了到貨存活：{}", e.getMessage());
+            }
+        }
         out.put("revision", save.getRevision());
         out.put("savedAt", save.getSavedAt());
         return out;

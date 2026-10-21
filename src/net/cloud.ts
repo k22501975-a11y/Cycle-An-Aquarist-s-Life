@@ -73,6 +73,10 @@ export interface MarketSeller {
   doaRate: number;
   /** 到貨死亡率偏高。 */
   warning: boolean;
+  /** 到貨 30 天存活率（買家自己養死、賣掉的不算）；還沒有結果是 null，舊伺服器沒有這欄。 */
+  survival?: number | null;
+  /** 常有魚到貨後發病死掉（死於出貨時就帶著的病）。 */
+  sick?: boolean;
 }
 
 export interface MarketListing {

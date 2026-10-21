@@ -52,6 +52,15 @@ public class HttpSimClient implements SimClient {
         return new Inspect(r.path("found").asBoolean(), r.path("alive").asBoolean(), r.path("item"));
     }
 
+    @Override
+    public List<Arrival> arrivals(JsonNode save, List<ArrivalQuery> orders) {
+        JsonNode r = call("/arrivals", Map.of("save", save, "orders", orders));
+        List<Arrival> out = new ArrayList<>();
+        for (JsonNode a : r.path("arrivals"))
+            out.add(new Arrival(a.path("order").asLong(), a.path("status").asText(), a.path("survived").asBoolean(), a.path("sellerFault").asBoolean()));
+        return out;
+    }
+
     private JsonNode call(String path, Map<String, Object> body) {
         if (!enabled()) throw new Unavailable("沒有設定模擬服務", null);
         try {
