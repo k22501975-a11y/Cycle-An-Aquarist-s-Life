@@ -9,6 +9,17 @@ import { freeAmmonia, hasVisible, isCycled, observeSymptoms, tankStarted, sexVis
 
 export const OWNER_NAME = '阿德老闆';
 
+/** 開缸 4 步做完、「你的第一個缸」卡片上老闆說的話（design/tutorial-lines.md §3：下一個任務就是挑魚，不能叫玩家先別放魚）。 */
+export const FIRST_TANK_LINE = '缸開好了！挑幾條魚住進來吧。';
+/** 測水任務測到氨時，任務卡上閃的那句。 */
+export const TEST_AMMONIA_LINE = '測到氨了！先換三成的水';
+/** 教學最後一個任務做完：不跳對話框，任務卡閃這句（§1）。 */
+export const TUTORIAL_DONE_LINE = '新手引導完成！接下來追夢想魚吧';
+/** 開遊戲的歡迎（前 5 分鐘兩個對話框之一，§2）。 */
+export const WELCOME_LINE = '歡迎！這個空缸送你。挑好設備，開你的第一個缸吧！';
+/** 第一次發現搭便車的螺（#213）：一行提示，完整說明放「為什麼？」（§5）。 */
+export const FIRST_PESTS_TIP = '咦，草上有小螺搭便車！牠們會幫忙吃剩飼料';
+
 export interface Quest {
   id: string;
   title: string;
@@ -24,8 +35,10 @@ export interface Quest {
   target?: QuestTarget;
   /** 完成時老闆說的話（完整的進通知匣）。 */
   done: string;
-  /** 完成時任務卡上閃一下的短句。 */
+  /** 完成時任務卡上閃一下的短句（design/tutorial-lines.md §1，3 秒後自己換成下一步）。 */
   doneShort: string;
+  /** 照完成當下的缸況換一句（例如測到氨就叫玩家先換水）；沒有就用 doneShort。 */
+  doneShortFor?: (state: TankState) => string | null;
   /** 完成時要老闆當面說、按掉才繼續（前 5 分鐘只有第一次放魚）。 */
   doneDialog?: boolean;
   check: (state: TankState) => boolean;
@@ -54,7 +67,7 @@ const living = (s: TankState) => s.fish.filter((f) => f.alive);
 export const QUESTS: Quest[] = [
   {
     id: 'setup',
-    hint: '在開缸面板挑好設備，按「開缸」',
+    hint: '挑設備，或按「推薦組合」',
     doneShort: '缸開好了',
     reward: 50,
     title: '開缸：挑魚缸和設備',
@@ -63,13 +76,13 @@ export const QUESTS: Quest[] = [
       '歡迎！我是隔壁水族館的阿德。這個空缸送你，設備就用起始資金自己挑吧。',
       '過濾器決定硝化菌住多少、燈決定能種什麼草、底沙會影響水質。每張卡都寫了好處和代價；拿不定主意就按「推薦組合」。',
     ],
-    done: '缸開好了！空缸看起來冷清，先挑幾條魚住進來吧。',
+    done: FIRST_TANK_LINE,
     // 按下「開機」才算開好缸（#204），付錢裝設備還不算
     check: (s) => tankStarted(s),
   },
   {
     id: 'fish',
-    hint: '點「商店」買 2～3 條孔雀魚',
+    hint: '去商店挑魚，推薦「一公兩母」',
     target: 'shop',
     doneShort: '魚放進去了',
     doneDialog: true,
@@ -80,15 +93,16 @@ export const QUESTS: Quest[] = [
       '到「商店」挑魚吧，新手推薦孔雀魚「一公兩母」。店裡的魚耐得住還在養水的新缸，別一次放太多就好。',
       '魚店的水和你缸裡的水不一樣：用滴管一滴一滴把缸水滴進袋子，讓牠們慢慢適應，這叫「對水」。',
     ],
-    done: '歡迎新住民！硝化菌要靠魚的排泄物才長得起來，接下來幾天就是「養水」。牠們剛運到會有點緊張，過一陣子就會放鬆了。',
+    done: '歡迎新住民！剛到會有點緊張，過一陣子就放鬆了。接下來幾天是「養水」，每天測一次水就好。',
     check: (s) => living(s).length > 0,
     shopTab: 'fish',
   },
   {
     id: 'feed',
-    hint: '點「餵食」再點水面撒飼料',
+    // 企劃原句是「點水面，飼料就掉在那裡」；現在要先按「餵食」進餵食模式，所以把按鈕也寫進去
+    hint: '點「餵食」，再點水面撒飼料',
     target: 'feed',
-    doneShort: '餵好了',
+    doneShort: '牠們搶得好開心！一天一小撮就夠',
     reward: 50,
     title: '餵一次飼料',
     lines: ['點「餵食」。新缸期間少量就好，吃不完的飼料會爛掉變成更多氨。'],
@@ -97,9 +111,9 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'plant',
-    hint: '點「商店」買一株水草',
+    hint: '買一株草，拖到缸裡想種的地方',
     target: 'shop',
-    doneShort: '種好了',
+    doneShort: '種好了，小魚以後能躲在這裡',
     reward: 50,
     title: '種下第一株水草',
     lines: ['到「商店」買幾株水草種下去吧。水草會吸收養分，讓新缸穩定得快一點，也是小魚躲藏的地方。'],
@@ -110,9 +124,11 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'test',
-    hint: '點「測試」量一次水',
+    hint: '點「測試」看看水質',
     target: 'test',
-    doneShort: '測好了：氨和亞硝要是 0',
+    doneShort: '氨和亞硝都要是 0，魚才安全',
+    // 新缸症候群（#223）第 1 天早上通常測得到氨：直接叫玩家換水，下一個任務剛好就是換水
+    doneShortFor: (s) => ((s.lastTest?.reading.ammonia ?? 0) > 0 ? TEST_AMMONIA_LINE : null),
     reward: 50,
     title: '用測試劑測一次水',
     lines: ['魚看不見的東西才最危險。點「測試」用測試劑量一下水質。', '上面那排膠囊就是你測到的數值；沒測過的會顯示「?」，太久沒測也會變回「?」。'],
@@ -121,9 +137,9 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'water',
-    hint: '點「換水」換掉三成的水',
+    hint: '點「換水」，換掉三成',
     target: 'water',
-    doneShort: '換好水了',
+    doneShort: '換水能把毒素稀釋掉',
     reward: 50,
     title: '換一次水',
     lines: ['先試一次換水，熟悉操作：點「換水」換掉三成左右的水。新水的溫度要和缸水差不多，魚才不會受驚。', '新缸前幾天氨和亞硝酸鹽可能會冒出來，這叫「新缸症候群」。之後測到它們不是 0，就像這樣換水把毒素稀釋掉。'],
@@ -132,9 +148,9 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'scape',
-    hint: '商店「設備」買石頭或沉木',
+    hint: '買一塊石頭或沉木，拖進缸裡',
     target: 'shop',
-    doneShort: '有造景了',
+    doneShort: '有造景，魚也多了躲的地方',
     reward: 50,
     title: '擺一塊石頭或沉木',
     short: '擺石頭',
@@ -145,9 +161,9 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'name',
-    hint: '選單「我的水缸」幫缸取名',
+    hint: '幫這個缸取個名字',
     target: 'menu',
-    doneShort: '取好名字了',
+    doneShort: '好名字！我會記住它',
     reward: 50,
     title: '幫你的缸取個名字',
     short: '幫缸取名',
@@ -157,9 +173,8 @@ export const QUESTS: Quest[] = [
   },
   {
     id: 'babies',
-    hint: '母魚肚子鼓起來就快生了',
-    doneShort: '第一窩要來了',
-    doneDialog: true,
+    hint: '看看母魚的肚子，鼓起來了嗎？',
+    doneShort: TUTORIAL_DONE_LINE,
     reward: 150,
     title: '看看母魚有沒有懷孕',
     short: '母魚懷孕',
@@ -206,7 +221,10 @@ function waterChoking(s: TankState): boolean {
 
 export interface Tip {
   id: string;
+  /** 完整的說明：沒有 short 的直接顯示；有 short 的放在點「為什麼？」展開。 */
   text: string;
+  /** 一行提示（design/tutorial-lines.md §4，≤ 24 字）：小卡上先只顯示這句。 */
+  short?: string;
   check: (state: TankState) => boolean;
 }
 
@@ -214,17 +232,21 @@ export interface Tip {
 export const TIPS: Tip[] = [
   {
     id: 'ammonia',
+    short: '測到氨了！先換三成的水，少餵一點',
     text: '測到氨了！氨對魚很毒。先換三成的水，接下來幾天少餵一點，每天測一次。',
-    check: (s) => (s.lastTest?.reading.ammonia ?? 0) >= 0.5 && s.hours - (s.lastTest?.hours ?? -999) < 2,
+    // 新缸症候群（#223）第一次讀到的就是 0.25，早上報告也從 0.25 開始叫人換水
+    check: (s) => (s.lastTest?.reading.ammonia ?? 0) >= 0.25 && s.hours - (s.lastTest?.hours ?? -999) < 2,
   },
   {
     id: 'nitrite',
-    text: '亞硝酸鹽冒出來了，代表第二種硝化菌還在長。繼續換水撐過去，大概再一兩週就會降下來。',
-    check: (s) => (s.lastTest?.reading.nitrite ?? 0) >= 0.5 && s.hours - (s.lastTest?.hours ?? -999) < 2,
+    short: '亞硝冒出來了，再換幾次水就會降',
+    text: '亞硝酸鹽冒出來了，代表第二種硝化菌還在長。繼續換水撐過去，過幾天就會降下來。',
+    check: (s) => (s.lastTest?.reading.nitrite ?? 0) >= 0.25 && s.hours - (s.lastTest?.hours ?? -999) < 2,
   },
   // 還在養水、氨不歸零時又放魚（polish-to-9.md §4）：魚撐得住，老闆提醒一次養水會多拖一天
   {
     id: 'cycling_fish',
+    short: '缸還在養水，每天測一次，看到氨就換水',
     text: '缸還在養水，水裡的氨還沒歸零就放了新魚。店裡的魚撐得住，別擔心；不過廢物一下變多，養水大概要多等一天。這幾天每天測水，看到氨或亞硝酸鹽就換三成的水。',
     check: (s) => (s.cycleDelay?.leftH ?? 0) > 0,
   },
@@ -266,11 +288,13 @@ export const TIPS: Tip[] = [
   },
   {
     id: 'alkaline',
+    short: 'pH 8 左右是台灣自來水的正常值，不用調',
     text: '新缸測到 pH 8 左右是正常的，台灣的自來水大多偏鹼。孔雀魚、米蝦都養得很好，重點是穩定，不用加藥去調；買魚時選「滴水對水」讓牠們慢慢適應就好。',
     check: (s) => (s.lastTest?.reading.ph ?? 0) >= 8 && s.hours - (s.lastTest?.hours ?? -999) < 2,
   },
   {
     id: 'pair',
+    short: '都是同性別，不會生小魚；補一條異性的吧',
     text: '缸裡的孔雀魚都是同一種性別，這樣不會生小魚。公魚尾巴大、顏色鮮豔，母魚比較大隻、顏色淡。到商店補一條另一種性別的，或買「一公兩母」。',
     check: (s) => {
       const adults = living(s).filter((f) => f.species === 'guppy' && sexVisible(f));
