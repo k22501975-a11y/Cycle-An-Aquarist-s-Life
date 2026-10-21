@@ -427,6 +427,8 @@ const NEXT_GLOW: Record<NextTarget, QuestTarget | null> = {
   nursery: null,
   select: null,
   treat: null,
+  mother: null,
+  scape: null,
 };
 
 function goalDoneText(g: Goal): string {

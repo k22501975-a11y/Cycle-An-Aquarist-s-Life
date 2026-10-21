@@ -1259,6 +1259,14 @@ async function start(): Promise<void> {
         return select(sick()?.id ?? null);
       case 'select':
         return select(showy()?.id ?? null);
+      case 'mother': {
+        // 母魚可能在別缸：先切過去再打開她的卡片（跟下一步的判斷用同一個函式）
+        const mom = sim.showingMother(game.tanks);
+        if (mom) game.switchTo(mom.tank);
+        return select(mom?.fish.id ?? null);
+      }
+      case 'scape':
+        return enterScape();
     }
   };
   guide.cheer = (from, coins) => ctx.reward?.(from, coins, 'small');

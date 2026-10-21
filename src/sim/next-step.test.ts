@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, buyTank, economy, GENERIC_STEP, GOALS, goalState, LIGHTS, nextStep, PURPOSE_GOAL_COUNT, setTankPurpose } from '.';
+import { addFish, buyTank, economy, GENERIC_STEP, GOALS, goalState, LIGHTS, nextStep, PURPOSE_GOAL_COUNT, setTankPurpose, showingMother } from '.';
 
 describe('主畫面的下一步（U1）', () => {
   it('每個目標都說得出下一步，句子短', () => {
@@ -19,9 +19,34 @@ describe('主畫面的下一步（U1）', () => {
     expect(nextStep([s])).toBeNull();
   });
 
+  it('還在養水時不只叫玩家等：母魚看得出懷孕就去看她，沒有就造景（g13 門檻 3）', () => {
+    const s = newGameState(1);
+    const mom = addFish(s, 'guppy', { sex: 'female' });
+    mom.ageDays = 120;
+    mom.pregnancy = 0.3;
+    expect(nextStep([s])).toMatchObject({ goal: 'cycled', target: 'scape' });
+    mom.pregnancy = 0.6;
+    expect(nextStep([s])).toMatchObject({ goal: 'cycled', text: '母魚懷孕了，點她看看肚子', target: 'mother' });
+    mom.pregnancy = 0.95;
+    expect(nextStep([s])).toMatchObject({ goal: 'cycled', text: '母魚快生了，買個育幼盒', target: 'nursery' });
+  });
+
+  it('懷孕的母魚在別缸也找得到，帶去看她要先切缸', () => {
+    const s = newGameState(1);
+    const other = newGameState(2);
+    const shrimp = addFish(other, 'cherry_shrimp', { sex: 'female' });
+    shrimp.pregnancy = 0.9;
+    expect(showingMother([s, other])).toBeNull();
+    const mom = addFish(other, 'guppy', { sex: 'female' });
+    mom.ageDays = 120;
+    mom.pregnancy = 0.6;
+    expect(showingMother([s, other])).toEqual({ tank: 1, fish: mom });
+    expect(nextStep([s, other])).toMatchObject({ target: 'mother' });
+  });
+
   it('跟著缸裡的狀況變：母魚快生了、錢夠不夠買第二缸', () => {
     const s = newGameState(1);
-    expect(nextStep([s])).toMatchObject({ goal: 'cycled', target: 'test' });
+    expect(nextStep([s])).toMatchObject({ goal: 'cycled', target: 'scape' });
     goalState([s]).done.push('cycled');
     expect(nextStep([s])).toMatchObject({ goal: 'protect_fry', target: 'feed' });
     const mom = addFish(s, 'guppy', { sex: 'female' });
