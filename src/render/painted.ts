@@ -77,16 +77,17 @@ export const PAINTED: Record<string, PaintedSpec> = {
 
 /**
  * 緞帶、燕尾、半月的整條魚圖（5 種花紋各一張，art/fish/fins/）。
- * 緞帶下面多一大片垂下來的帶子，身體在圖裡偏上；半月的尾巴大，身體偏下。
+ * 緞帶下面多一大片垂下來的帶子，身體在圖裡偏上。
+ * 燕尾、半月是從基本款的圖用程式改尾巴做的（品系對照 design/guppy-strain-audit.md）：身體位置照基本款換算。
  */
 function finArt(): Record<string, PaintedSpec> {
   const bodyY: Record<string, [number, number, number]> = {
     // 花紋：緞帶、燕尾、半月的身體中心 y（相對圖高）
-    bluegrass: [-0.05, 0.03, 0.12],
-    cobra: [-0.05, 0.03, 0.1],
-    'albino-red': [-0.2, 0, 0.1],
-    tuxedo: [-0.18, 0.05, 0.09],
-    redcobra: [-0.24, 0.01, 0.13],
+    bluegrass: [-0.05, -0.086, -0.039],
+    cobra: [-0.05, -0.036, -0.028],
+    'albino-red': [-0.2, 0.173, 0.113],
+    tuxedo: [-0.18, -0.163, -0.096],
+    redcobra: [-0.24, 0.199, 0.111],
   };
   const out: Record<string, PaintedSpec> = {};
   for (const [pat, ys] of Object.entries(bodyY)) {
