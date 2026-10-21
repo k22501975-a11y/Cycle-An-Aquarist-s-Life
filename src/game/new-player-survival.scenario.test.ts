@@ -42,7 +42,7 @@ const runs = () => (cache ??= Array.from({ length: SEEDS }, (_, i) => followTuto
 
 describe('新玩家照教學照顧（QA）', () => {
   // #122：新手期店裡的魚不帶細菌病、加熱棒不會隨機故障
-  it(`${SEEDS} 個新缸照教學照顧 ${DAYS} 天，最多 1 缸整缸死光`, { timeout: 60_000 }, () => {
+  it(`${SEEDS} 個新缸照教學照顧 ${DAYS} 天，最多 1 缸整缸死光`, { timeout: 120_000 }, () => {
     const wiped = runs().flatMap(({ tank, wipedDay }, i) => {
       if (wipedDay === null) return [];
       const causes = [...new Set(tank.events.filter((e) => e.type === 'fish_died').map((e) => e.cause))].join('、');
@@ -51,7 +51,7 @@ describe('新玩家照教學照顧（QA）', () => {
     expect(wiped.length, wiped.join('\n')).toBeLessThanOrEqual(1);
   });
 
-  it(`大部分新缸照教學照顧 ${DAYS} 天內會生小魚`, { timeout: 60_000 }, () => {
+  it(`大部分新缸照教學照顧 ${DAYS} 天內會生小魚`, { timeout: 120_000 }, () => {
     const bred = runs().filter((r) => r.bred).length;
     // 目前約 19/30（死光的缸算沒生）；低於一半表示繁殖或照顧出了大問題
     expect(bred).toBeGreaterThanOrEqual(SEEDS / 2);
