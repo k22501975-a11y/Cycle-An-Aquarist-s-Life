@@ -1,6 +1,7 @@
 import {
   applyLedger,
   economy,
+  sellableCuttings,
   findListedFish,
   FISH_SPECIES,
   listedFish,
@@ -362,13 +363,14 @@ function shopView(deps: MarketDeps, mine: MarketMine): Node[] {
         );
       }),
     );
+    // 寶箱來的插枝不能上架（polish-to-9.md §4）
     const cuttings = economy(game.state).cuttings;
-    const plants = (Object.keys(cuttings) as PlantSpeciesId[]).filter((id) => (cuttings[id] ?? 0) > 0);
+    const plants = (Object.keys(cuttings) as PlantSpeciesId[]).filter((id) => sellableCuttings(game.state, id) > 0);
     if (plants.length) {
       out.push(h('h3', {}, '水草插枝'));
       out.push(
         ...plants.map((id) =>
-          h('div.item', {}, h('div', {}, h('b', {}, `${PLANT_SPECIES[id].name}插枝`), h('div.hint', {}, `手上有 ${cuttings[id]} 株`)),
+          h('div.item', {}, h('div', {}, h('b', {}, `${PLANT_SPECIES[id].name}插枝`), h('div.hint', {}, `可以上架 ${sellableCuttings(game.state, id)} 株`)),
             h('button.btn', { onclick: () => sheet.open('上架', () => listPlantPanel(deps, id)) }, '上架')),
         ),
       );
@@ -437,7 +439,7 @@ export function listFishPanel(deps: MarketDeps, picked: Fish): Node {
 
 export function listPlantPanel(deps: MarketDeps, species: PlantSpeciesId): Node {
   const { cloud, game, sheet, toasts } = deps;
-  const have = economy(game.state).cuttings[species] ?? 0;
+  const have = sellableCuttings(game.state, species);
   const count = Math.min(have, 5);
   const submit = async (price: number) => {
     const min = minPlantPrice(species, count);

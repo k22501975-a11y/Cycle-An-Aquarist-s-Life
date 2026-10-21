@@ -32,7 +32,7 @@ import * as sim from './sim';
 import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, tankSize, useTestKit } from './sim';
 import { h } from './ui/dom';
 import { ICONS } from './ui/icons';
-import { DEATH_ADVICE, describeEvent, firstDeathOwnerLine, fishName, fishStrain, pluralEventText } from './ui/labels';
+import { DEATH_ADVICE, describeEvent, FIRST_PESTS_LINE, firstDeathOwnerLine, fishName, fishStrain, pluralEventText } from './ui/labels';
 import { mergeEventToasts, type EventToast } from './ui/notify-gate';
 import { personaChip } from './ui/persona';
 import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
@@ -428,6 +428,7 @@ async function start(): Promise<void> {
   const select = (id: number | null) => {
     selected = id;
     if (id !== null) sim.markDaily(game.tanks, 'observe');
+    if (id !== null && game.state.fish.some((f) => f.id === id && sim.isShrimpSpecies(f.species))) sim.markDaily(game.tanks, 'shrimp');
     view.selectFish(id);
     selCard.classList.toggle('open', id !== null);
     renderSelCard();
@@ -440,7 +441,11 @@ async function start(): Promise<void> {
     onSelectFish: (id) => (id !== null && audio.buzz('tap'), select(id)),
     // 在缸裡點到螺：打開螺的面板（每日小事「找到螺點一下」也就做完了）
     onTapSnail: () => (audio.buzz('tap'), sheet.open('螺', () => snailPanel(ctx))),
-    onSelectPlant: (id) => (audio.buzz('tap'), sheet.open('水草', () => plantPanel(ctx, id), { live: true })),
+    onSelectPlant: (id) => {
+      audio.buzz('tap');
+      sim.markDaily(game.tanks, 'plant');
+      sheet.open('水草', () => plantPanel(ctx, id), { live: true });
+    },
     onScapeSelect: (target) => scapeBar.select(target),
     onScapeDrop: (target, x) => scapeBar.drop(target, x),
     // 手指餵食（F6）：撒下去的第一口被誰吃到，在那尾魚頭上浮一行小字，看得出誰貪吃
@@ -1087,21 +1092,47 @@ async function start(): Promise<void> {
   stage.append(dailyHolder);
   const dailyChanged = memo();
   const claimDailyChest = () => {
-    const coins = game.actAll((tanks) => sim.claimDaily(tanks));
-    if (!coins) return;
+    const got = game.actAll((tanks) => sim.claimDaily(tanks));
+    if (!got) return;
     audio.play('fanfare');
-    ctx.reward?.(dailyHolder.getBoundingClientRect(), coins, 'small');
-    toasts.show(`寶箱裡有 ${coins} 魚幣`);
+    if (got.coins > 0) ctx.reward?.(dailyHolder.getBoundingClientRect(), got.coins, 'small');
+    // 寶箱獎勵池（U5）：開到東西要說放在哪裡
+    // 大寶箱是一件造景物加一株水草
+    const where = got.plantId ? '，到商店「設備」免費擺進缸、「水草」免費種下' : got.item === 'hardscape' ? '，到商店「設備」免費擺進缸' : got.item === 'plant' ? '，到商店「水草」免費種下' : got.item === 'bacteria' ? '，到商店「設備」免費倒' : got.item === 'food' ? '，週末結算時先用它' : '';
+    toasts.show(`${got.big ? `連續 ${sim.BIG_CHEST_DAYS} 天做完小事，大寶箱！` : ''}寶箱裡有：${got.text}${where}`);
     renderDaily();
   };
   const goDaily = (id: sim.DailyTaskId) => {
-    if (id === 'test') testBtn.click();
-    else if (id === 'feed') sheet.open('餵食', () => feedPanel(ctx));
-    else if (id === 'water') sheet.open('換水', () => waterChangePanel(ctx));
-    else if (id === 'trim') sheet.open('修剪水草', () => trimListPanel(ctx));
-    else if (id === 'snail') sheet.open('螺', () => snailPanel(ctx));
-    else if (id === 'scape') enterScape();
-    else toasts.show('在缸裡點一尾魚，看看牠今天怎麼樣');
+    const maintenance = () => sheet.open('設備與維護', () => maintenancePanel(ctx));
+    const snails = () => sheet.open('螺', () => snailPanel(ctx));
+    const go: Record<sim.DailyTaskId, () => void> = {
+      test: () => testBtn.click(),
+      feed: () => sheet.open('餵食', () => feedPanel(ctx)),
+      water: () => sheet.open('換水', () => waterChangePanel(ctx)),
+      topup: maintenance,
+      nursery: () => sheet.open('育幼盒', () => nurseryPanel(ctx)),
+      gear: maintenance,
+      observe: () => toasts.show('在缸裡點一尾魚，看看牠今天怎麼樣'),
+      snail: snails,
+      shrimp: () => toasts.show('在缸裡點一隻蝦，看看牠今天怎麼樣'),
+      plant: () => toasts.show('在缸裡點一株水草，看看長得好不好'),
+      records: () => sheet.open('紀錄', () => recordsPanel(ctx)),
+      codex: () => sheet.open('圖鑑', () => codexPanel(ctx, codexSeen)),
+      orders: () => sheet.open('客人的訂單', () => ordersPanel(ctx)),
+      scape: enterScape,
+      scapePlant: enterScape,
+      scapeFlip: enterScape,
+      scapeLayer: enterScape,
+      scapeScale: enterScape,
+      scapePlace: () => openShop('gear'),
+      trim: () => sheet.open('修剪水草', () => trimListPanel(ctx)),
+      cuttings: () => openShop('plants'),
+      clutch: snails,
+      pests: snails,
+      deadSnail: snails,
+      rinse: maintenance,
+    };
+    go[id]();
   };
   const renderDaily = () => {
     const d = sim.dailyTasks(game.tanks);
@@ -1170,6 +1201,8 @@ async function start(): Promise<void> {
   let nurseryGiftTank: number | null = null;
   /** 過一晚時第一次死魚：報告卡關掉後阿德老闆再來安慰（U4）。 */
   let firstDeathLine: string | null = null;
+  /** 第一次在缸裡看到搭便車的螺（polish-to-9.md §4）：過一晚的話等報告卡關掉再說。 */
+  let firstPestsLine: string | null = null;
   /** 第一次有母魚快生了，老闆送育幼盒，一個步驟帶玩家把她放進去（mvp.md §4.4.2 第 2 點）。 */
   const nurseryGuide = async (tank: number) => {
     const t = game.tanks[tank] ?? game.state;
@@ -1201,6 +1234,11 @@ async function start(): Promise<void> {
       const t = game.tanks[tank] ?? game.state;
       const line = firstDeathOwnerLine(e, [...t.fish, ...(t.quarantine?.fish ?? [])].find((f) => f.id === e.subjectId));
       if (game.sleeping || sleepingNow) firstDeathLine = line;
+      else void ownerSay(line);
+    }
+    if (e.type === 'pests_seen' && firstTime(store, 'first_pests')) {
+      const line = FIRST_PESTS_LINE;
+      if (game.sleeping || sleepingNow) firstPestsLine = line;
       else void ownerSay(line);
     }
     // 過一晚的時候不跳提示，早上報告會一條一條列出來
@@ -1405,6 +1443,10 @@ async function start(): Promise<void> {
         if (firstDeathLine !== null) {
           void ownerSay(firstDeathLine);
           firstDeathLine = null;
+        }
+        if (firstPestsLine !== null) {
+          void ownerSay(firstPestsLine);
+          firstPestsLine = null;
         }
       });
       shade.setAttribute('aria-hidden', 'false');

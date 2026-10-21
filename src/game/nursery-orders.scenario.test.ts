@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from './game';
+import { doDailyTask } from './daily-player';
 import {
   addCuttings,
   addFish,
-  addPlant,
+  buyPlant,
   claimDaily,
   economy,
   dailyTasks,
@@ -11,7 +12,6 @@ import {
   feed,
   fulfillOrder,
   isJuvenile,
-  markDaily,
   moveDueToNursery,
   orderBoard,
   orderContext,
@@ -36,17 +36,20 @@ import {
 const alive = (s: TankState) => s.fish.filter((f) => f.alive);
 const meal = (s: TankState) => alive(s).reduce((a, f) => a + FISH_SPECIES[f.species].dailyFoodMg, 0) / 2;
 
-function run(seed: number, noBox = false, days = 37): { first: number; earned: Record<number, number>; gift: number } {
+function run(seed: number, noBox = false, days = 37): { first: number; firstRegular: number; earned: Record<number, number>; gift: number } {
   const s = newGameState(seed);
   const tanks = [s];
   s.environment.roomTempC = 25;
   s.environment.roomSwingC = 2;
   s.water.tempC = s.water.tempAvgC = 25;
-  addPlant(s, 'anubias');
+  // 在店裡買的（第一株一定夾帶扁卷螺，polish-to-9.md §4）
+  buyPlant(s, 'anubias');
   for (const sex of ['male', 'female', 'female'] as const) addFish(s, 'guppy', { carriesIch: false, carries: [], sex });
   const breeders = s.fish.map((f) => f.id);
   if (noBox) economy(s).nurseryGifted = true;
   let first = Infinity;
+  // 不算收入空檔保底單（polish-to-9.md §4）的第一張：保底單有沒有盒子都一樣會出，比盒子的效果要看一般單
+  let firstRegular = Infinity;
   let gift = Infinity;
   const earned: Record<number, number> = {};
   for (let d = 1; d <= days; d++) {
@@ -61,9 +64,8 @@ function run(seed: number, noBox = false, days = 37): { first: number; earned: R
     const r = useTestKit(s);
     const tasks = dailyTasks(tanks)?.tasks.map((t) => t.id) ?? [];
     if (r.ammonia > 0 || r.nitrite > 0 || tasks.includes('water')) waterChange(s, 0.3);
-    if (tasks.includes('trim')) for (const p of s.plants) addCuttings(s, p.species, trimPlant(s, p.id));
-    if (tasks.includes('observe')) markDaily(tanks, 'observe');
-    if (tasks.includes('snail')) markDaily(tanks, 'snail');
+    updateDaily(tanks);
+    for (const t of dailyTasks(tanks)?.tasks ?? []) if (!t.done) doDailyTask(tanks, t.id);
     updateDaily(tanks);
     claimDaily(tanks);
     // 分缸提示說成魚會吃小魚：撈進育幼盒
@@ -73,11 +75,14 @@ function run(seed: number, noBox = false, days = 37): { first: number; earned: R
     const keep = Math.max(0, ...board.orders.filter((o) => o.kind === 'fish' && o.size === 'juvenile').map((o) => o.count));
     for (const o of [...board.orders]) {
       if (o.kind === 'fry' && orderContext(s).fry - o.count < keep) continue;
-      if (fulfillOrder(tanks, o.id, breeders) > 0) first = Math.min(first, d);
+      if (fulfillOrder(tanks, o.id, breeders) > 0) {
+        first = Math.min(first, d);
+        if (!o.gap) firstRegular = Math.min(firstRegular, d);
+      }
     }
     earned[d] = orderBoard(s).earned;
   }
-  return { first, earned, gift };
+  return { first, firstRegular, earned, gift };
 }
 
 const median = (xs: number[]) => {
@@ -91,11 +96,11 @@ describe('育幼盒驗收劇本（mvp.md §4.4.2 第 5 點）', () => {
     const seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     const box = seeds.map((seed) => run(seed));
     const none = seeds.map((seed) => run(seed, true));
-    const dbg = JSON.stringify({ box: box.map((r) => [r.first, r.earned[37]]), none: none.map((r) => [r.first, r.earned[37]]) });
+    const dbg = JSON.stringify({ box: box.map((r) => [r.first, r.firstRegular, r.earned[37]]), none: none.map((r) => [r.first, r.firstRegular, r.earned[37]]) });
     expect(box.every((r) => r.gift < Infinity), dbg).toBe(true);
     expect.soft(median(box.map((r) => r.first)), dbg).toBeLessThanOrEqual(20);
     expect.soft(median(box.map((r) => r.earned[37])), dbg).toBeGreaterThanOrEqual(300);
     expect.soft(median(box.map((r) => r.earned[37])), dbg).toBeGreaterThan(median(none.map((r) => r.earned[37])) * 1.5);
-    expect.soft(median(box.map((r) => r.first)), dbg).toBeLessThan(median(none.map((r) => (r.first === Infinity ? 99 : r.first))));
+    expect.soft(median(box.map((r) => r.firstRegular)), dbg).toBeLessThan(median(none.map((r) => (r.firstRegular === Infinity ? 99 : r.firstRegular))));
   }, 180_000);
 });

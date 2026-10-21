@@ -1,4 +1,4 @@
-import type { TankState } from '../sim';
+import { markDaily, type TankState } from '../sim';
 import { lineChart } from './charts';
 import { h } from './dom';
 import { describeEvent } from './labels';
@@ -73,6 +73,8 @@ function eventLog(state: TankState): Node {
 
 export function recordsPanel(ctx: PanelContext, tab: 'water' | 'events' = 'water'): Node {
   const { game, sheet } = ctx;
+  // 每日小事「看一次水質趨勢」
+  markDaily(game.tanks, 'records');
   const tabs = iconTabs(
     [
       { id: 'water' as const, label: '水質趨勢', icon: 'testkit' as const },
