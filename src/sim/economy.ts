@@ -269,11 +269,14 @@ export function sellsLeftToday(state: TankState): number {
 }
 
 /** 水族店收這條魚嗎？只收活的成魚，看起來有病的不收。 */
+/** 店家收購（和中魚單）最小要長到成魚體長的這個比例。 */
+export const BUYBACK_MIN_SIZE = 0.5;
+
 export function buybackRefusal(fish: Fish): string | null {
   if (!fish.alive) return '死魚不收';
   if (fish.gift) return '老闆送的魚不能賣回去';
   if (fish.listing) return '已經在市場上架了';
-  if (fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * 0.5) return '還太小，店家不收';
+  if (fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * BUYBACK_MIN_SIZE) return '還太小，店家不收';
   if (fish.ich.stage === 'visible' || (fish.infections ?? []).some((i) => i.stage === 'visible') || fish.health < 0.6) return '看起來生病了，店家不收';
   return null;
 }

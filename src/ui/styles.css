@@ -668,6 +668,10 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .order-meter { position: relative; height: 18px; border-radius: 9px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
 .order-meter i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #5fb4af, var(--sage)); }
 .order-meter span { position: relative; display: block; text-align: center; font-size: 12px; line-height: 18px; color: var(--text); font-variant-numeric: tabular-nums; }
+.order-outlook { display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.order-outlook i { font-style: normal; margin-right: 2px; }
+.order-eta.now { color: var(--sage); }
+.order-shared, .order-eta.late { color: #e0b25c; }
 .order-actions { display: flex; gap: 6px; margin-top: auto; }
 .order-actions .btn { min-height: 36px; padding: 4px 10px; }
 .order-actions .order-skip { flex: 0 0 40px; width: 40px; margin-top: 0; font-size: 17px; }
