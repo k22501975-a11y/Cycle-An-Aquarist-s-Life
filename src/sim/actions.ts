@@ -151,6 +151,9 @@ export interface AddFishOptions {
 /** 店家的孔雀魚母魚幾乎都已經懷孕（和公魚混養）；櫻花蝦母蝦偶爾抱卵。 */
 /** 店裡的母魚、母蝦已經懷孕的機率：孔雀魚母魚跟公魚養在一起，買回來的大多已經懷孕（design/mvp.md §4.6）。 */
 const STORE_PREGNANT_CHANCE: Partial<Record<FishSpeciesId, number>> = { guppy: 0.9, cherry_shrimp: 0.2, crystal_shrimp: 0.15 };
+/** 店裡已懷孕的母魚懷孕到哪裡（0–1，1 就生）。 */
+const PREGNANT_FROM = 0.3;
+const PREGNANT_TO = 0.9;
 
 /** 店家魚帶白點蟲的機率：教學一次買一公兩母，沒檢疫時約 27% 會帶進來（polish-to-9.md §4：前 30 天 ≤ 1/3）。 */
 const STORE_ICH_CHANCE = 0.1;
@@ -185,7 +188,9 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
   if (fish.sex === 'female' && sp.breeding) {
     const pregnant = options.pregnant ?? nextRandom(state.rng) < (STORE_PREGNANT_CHANCE[species] ?? 0);
     if (pregnant) {
-      fish.pregnancy = 0.05 + 0.85 * nextRandom(state.rng);
+      // 店家挑來賣的是看得出懷孕的母魚（懷孕後半段才有胎斑），所以起點落在 0.3～0.9：買回來 3～20 天內生第一胎。
+      // 以前 0.05～0.9，兩條母魚都要等快 3 週才生的種子約 1/5，新手任務「母魚懷孕」和第 60 天收入都卡在運氣上
+      fish.pregnancy = PREGNANT_FROM + (PREGNANT_TO - PREGNANT_FROM) * nextRandom(state.rng);
       // 在店裡跟同品系的公魚配過
       // 鰭型品系在店裡是用帶因的正常公魚配的（緞帶、燕尾公魚配不了）
       if (fish.genome) {
