@@ -135,6 +135,8 @@ function start(): void {
   const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   root = build(short || reduce);
   root.classList.add('gate');
+  // 停在開始畫面時先把店面的四張圖載好，按「開始」那一刻不會一片空白再一張張冒出來（架構審查 #271）
+  if (!(short || reduce)) for (const name of ['night', 'doorl', 'doorr', 'front']) new Image().src = `${ART}intro/shop-${name}.webp`;
   document.body.append(root);
   const btn = root.querySelector<HTMLButtonElement>('.intro-start');
   btn?.focus({ preventScroll: true });

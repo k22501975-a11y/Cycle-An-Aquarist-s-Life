@@ -29,6 +29,15 @@ export function wholeFin(p: GuppyPhenotype): WholeFin | null {
 }
 
 /** 去掉鰭型後綴，回到花紋圖本身。 */
+/** 母魚尾巴的顏色（scripts/art/guppy-females.py）：藍、紅、金，白子另外是紅眼。 */
+export const FEMALE_TINTS = ['blue', 'red', 'gold', 'albino'] as const;
+export type FemaleTint = (typeof FEMALE_TINTS)[number];
+
+/** 母魚用哪個顏色：白子是淡紅尾紅眼，其他照花紋的色系（草尾、禮服的母魚是藍尾）。 */
+export function femaleTint(p: GuppyPhenotype): FemaleTint {
+  return p.albino ? 'albino' : phenotypeRecipe(p).to;
+}
+
 export function patternBase(base: string): string {
   for (const f of WHOLE_FINS) if (base.endsWith(`-${f}`)) return base.slice(0, -f.length - 1);
   return base;
