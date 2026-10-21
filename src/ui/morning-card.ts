@@ -34,6 +34,7 @@ const KIND_ICON: Record<ReportKind, ArtIcon> = {
   fry_grew: 'feed',
   new_leaf: 'trim',
   rescued: 'testkit',
+  lookalike: 'owner',
   quiet: 'owner',
 };
 

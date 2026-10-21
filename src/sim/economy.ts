@@ -1,7 +1,7 @@
 import { isJuvenile, isLightOn, noteAct, recordEvent, type Fish, type TankState } from './state';
 import { growthStage } from './growth';
 import { FISH_SPECIES, isShrimpSpecies, type FishSpeciesId, type PlantSpeciesId } from './species';
-import { phenotype, type GuppyPhenotype } from './genetics';
+import { phenotype, type GuppyGenome, type GuppyPhenotype } from './genetics';
 import { updateOrders, type OrderBoard } from './orders';
 import type { GoalState } from './goals';
 import type { DailyState, DailyTaskId } from './daily';
@@ -88,6 +88,15 @@ export interface Economy {
   meals?: number;
   /** 阿德老闆送過育幼盒了（第一次有母魚快生時送一次，nursery.ts）。 */
   nurseryGifted?: boolean;
+  /**
+   * 還沒出過「長得像誰」比較卡前（G2，lookalike.ts），最近幾窩孔雀魚的爸媽基因（爸媽之後賣掉、死掉也比得了）；
+   * 出過卡就清掉、改記 lookalikeShown。
+   */
+  broodLog?: Array<{ motherId: number; fatherId?: number; hours: number; mother: GuppyGenome; father: GuppyGenome }>;
+  /** 「長得像誰」比較卡出過了（整個存檔一次）。 */
+  lookalikeShown?: boolean;
+  /** 自己繁殖的魚第一次賣掉或交單了（G2 的慶祝只演一次）。 */
+  firstBredSale?: boolean;
   /** 上次領保底起步包的時間（遊戲小時）。 */
   starterPackHours?: number;
   /** 下一個新缸用的 id 區段（每缸的魚和水草 id 從不同區段開始，魚換缸也不會撞號）。 */
@@ -269,11 +278,14 @@ export function sellsLeftToday(state: TankState): number {
 }
 
 /** 水族店收這條魚嗎？只收活的成魚，看起來有病的不收。 */
+/** 店家收購（和中魚單）最小要長到成魚體長的這個比例。 */
+export const BUYBACK_MIN_SIZE = 0.5;
+
 export function buybackRefusal(fish: Fish): string | null {
   if (!fish.alive) return '死魚不收';
   if (fish.gift) return '老闆送的魚不能賣回去';
   if (fish.listing) return '已經在市場上架了';
-  if (fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * 0.5) return '還太小，店家不收';
+  if (fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * BUYBACK_MIN_SIZE) return '還太小，店家不收';
   if (fish.ich.stage === 'visible' || (fish.infections ?? []).some((i) => i.stage === 'visible') || fish.health < 0.6) return '看起來生病了，店家不收';
   return null;
 }
@@ -343,7 +355,17 @@ export function sellFish(state: TankState, fishId: number): number {
   e.coins += coins;
   noteEarned(state);
   e.fishSold = (e.fishSold ?? 0) + 1;
+  noteBredSale(state, fish, coins, 'shop');
   return coins;
+}
+
+/** 賣掉或交出一尾魚時呼叫：自己繁殖的第一次，記一筆 first_bred_sale 給畫面演慶祝（polish-to-9.md G2）。 */
+export function noteBredSale(state: TankState, fish: Fish, coins: number, via: 'order' | 'shop'): void {
+  if ((fish.generation ?? 0) < 1) return;
+  const e = economy(state);
+  if (e.firstBredSale) return;
+  e.firstBredSale = true;
+  recordEvent(state, { type: 'first_bred_sale', subjectId: fish.id, value: coins, cause: via });
 }
 
 /**

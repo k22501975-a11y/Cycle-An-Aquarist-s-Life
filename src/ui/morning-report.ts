@@ -13,11 +13,14 @@ import {
   testWater,
   pestCount,
   PLANT_SPECIES,
+  lookalikeLine,
   takeGearNote,
+  takeLookalike,
   tankLabel,
   usesNursery,
   youngGettingHungry,
   type FishSpeciesId,
+  type LookalikeCard,
   type SimEvent,
   type TankState,
 } from '../sim';
@@ -69,6 +72,7 @@ export type ReportKind =
   | 'fry_grew' // 小魚長到 1 公分、游出水草（G8）
   | 'new_leaf' // 水草長出新葉（G8）
   | 'rescued' // 測到氨或亞硝、換了水、讀數降下來（G8）
+  | 'lookalike' // 第一窩小魚轉色，長得像誰（G2）
   | 'quiet';
 
 export interface ReportItem {
@@ -84,6 +88,8 @@ export interface ReportItem {
   count?: number;
   /** 跟哪株水草有關（new_leaf 的配圖）。 */
   plantId?: number;
+  /** kind 'lookalike' 的比較卡資料：爸爸、媽媽、小魚的外觀和每個特徵跟誰的。 */
+  lookalike?: LookalikeCard;
 }
 
 export interface MorningReport {
@@ -303,6 +309,12 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     const fresh = orderBoard(t).orders.filter((o) => !snap.orders.has(o.id)).length;
     if (fresh > 0 && index === 0) push({ kind: 'orders', tone: 'info', text: `阿德那邊來了 ${fresh} 張新訂單`, action: 'orders', count: fresh });
   });
+  // 自己繁殖的小魚第一次轉色：長得像誰（G2），整個存檔只出一次
+  const look = takeLookalike(tanks);
+  if (look) {
+    const where = tanks.length > 1 ? `${tankLabel(tanks, look.tank)}：` : '';
+    items.push({ kind: 'lookalike', tank: look.tank, tone: 'good', text: where + lookalikeLine(look), action: 'fish', subjectId: look.childId, lookalike: look });
+  }
   if (items.length === 0) items.push({ kind: 'quiet', tank: 0, tone: 'info', text: '昨晚很平靜，魚都在水草裡睡覺' });
   items.sort((a, b) => (a.kind === 'crisis' ? -1 : b.kind === 'crisis' ? 1 : TONE_ORDER[a.tone] - TONE_ORDER[b.tone]));
   const day = Math.floor(tanks[0].hours / 24) + 1;

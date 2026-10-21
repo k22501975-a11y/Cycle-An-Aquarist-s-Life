@@ -59,6 +59,8 @@ export function eventSound(type: SimEventType): SoundId {
       return 'quest';
     case 'mated':
       return 'birth';
+    case 'first_bred_sale':
+      return 'buy';
   }
 }
 

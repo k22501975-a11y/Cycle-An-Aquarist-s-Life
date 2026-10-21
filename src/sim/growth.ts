@@ -94,6 +94,15 @@ export function daysUntilSexVisible(fish: Fish): number {
   return Math.max(1, Math.ceil(Math.log((max - fish.lengthCm) / Math.max(0.001, max - target)) / k));
 }
 
+/** 標準照顧下幾天長到 targetCm（已經夠大回傳 0；長不到那麼大，例如長不大的魚，回傳 Infinity）。 */
+export function daysToLength(fish: Fish, targetCm: number): number {
+  if (fish.lengthCm >= targetCm) return 0;
+  const max = maxLengthCm(fish);
+  if (targetCm >= max) return Infinity;
+  const k = Math.log(10) / FISH_SPECIES[fish.species].daysToAdult;
+  return Math.ceil(Math.log((max - fish.lengthCm) / Math.max(0.001, max - targetCm)) / k);
+}
+
 /** 長得快慢的環境係數（0–1.2），面板也拿來說明「為什麼長不大」。 */
 export interface GrowthFactors {
   food: number;

@@ -9,6 +9,7 @@ import { tankHabit } from '../acclimation';
 import { guardedPredationFactor, isParentalSpawner } from '../parental';
 import { bettaAggression } from '../betta';
 import { nurseryBirth } from '../nursery';
+import { noteBrood } from '../lookalike';
 import { childInbreeding, cross, matingSuccess, type GuppyGenome } from '../genetics';
 
 /**
@@ -206,7 +207,7 @@ function breed(state: TankState, tf: number, dt: number): void {
       const weights = males.map((m, i) => (0.5 + (m.genome?.tail ?? 50) / 100) * fertility[i]);
       let r = nextRandom(state.rng) * weights.reduce((a, b) => a + b, 0);
       const father = males.find((_, i) => (r -= weights[i]) <= 0) ?? males[males.length - 1];
-      if (father.genome) mother.sire = { genome: father.genome, lineage: father.lineage ?? father.id, inbreeding: father.inbreeding ?? 0 };
+      if (father.genome) mother.sire = { genome: father.genome, lineage: father.lineage ?? father.id, inbreeding: father.inbreeding ?? 0, id: father.id };
       recordEvent(state, { type: 'mated', subjectId: mother.id, cause: String(father.id) });
     }
   }
@@ -233,6 +234,7 @@ export function giveBirth(state: TankState, mother: Fish, population: number): F
     // 剛出生的魚習慣出生缸的水（design/acclimation.md §1）
     fry.acclimated = tankHabit(state);
     fry.bornHours = state.hours;
+    fry.motherId = mother.id;
     fry.growthRate = Math.min(1.4, Math.max(0.6, 1 + (nextRandom(state.rng) + nextRandom(state.rng) + nextRandom(state.rng) - 1.5) * 0.4));
     if (mother.genome && sire) {
       fry.genome = cross(state.rng, mother.genome, sire.genome, fry.sex, inbreeding);
@@ -245,6 +247,7 @@ export function giveBirth(state: TankState, mother: Fish, population: number): F
     state.fish.push(fry);
     born.push(fry);
   }
+  if (mother.genome && sire) noteBrood(state, mother, sire);
   recordEvent(state, { type: 'fry_born', subjectId: mother.id, count: n });
   return born;
 }
