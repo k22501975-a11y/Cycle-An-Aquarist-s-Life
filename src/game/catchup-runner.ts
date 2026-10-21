@@ -14,10 +14,17 @@ export async function catchUpSave(file: SaveFile, now = Date.now()): Promise<{ f
   if (hours < WORKER_MIN_HOURS || typeof Worker === 'undefined') return { file, offline: catchUp(file, now) };
   try {
     const out = await new Promise<{ file: SaveFile; hours: number; capped: boolean; counts: number[] }>((resolve, reject) => {
-      const worker = new Worker(new URL('./catchup-worker.ts', import.meta.url), { type: 'module' });
+      // 跟推播預測共用同一個 Worker 檔（sim-worker.ts），這裡開一個用完就關
+      const worker = new Worker(new URL('./sim-worker.ts', import.meta.url), { type: 'module' });
       worker.onmessage = (e) => (worker.terminate(), resolve(e.data));
       worker.onerror = (e) => (worker.terminate(), reject(e));
-      worker.postMessage({ file, now });
+      try {
+        worker.postMessage({ file, now });
+      } catch (err) {
+        // 存檔複製不過去（DataCloneError）：關掉 Worker，退回主執行緒算
+        worker.terminate();
+        reject(err);
+      }
     });
     const all = [out.file.state, ...(out.file.tanks ?? [])];
     const byTank = all.map((t, i) => t.events.slice(Math.max(0, t.events.length - out.counts[i])));
