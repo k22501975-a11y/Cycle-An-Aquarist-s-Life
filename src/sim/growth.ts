@@ -25,9 +25,11 @@ export const SHRIMP_STAGE_LABELS: Record<GrowthStage, string> = { ...STAGE_LABEL
  * 各階段的體長上限（相對成體體長）。照標準照顧的成長曲線，孔雀魚大約是：
  * 仔魚到第 14 天（1.5 cm）、幼魚到第 35 天（2.4 cm）、轉色期到第 60 天（3 cm）、亞成魚到第 100 天。
  */
+/** 孔雀魚長到頂的這個比例進轉色期（目標「養大 5 條」就數到這裡）。 */
+export const COLORING_AT = 0.59;
 const FISH_STAGES: Array<[GrowthStage, number]> = [
   ['fry', 0.375],
-  ['juvenile', 0.59],
+  ['juvenile', COLORING_AT],
   ['coloring', 0.75],
   ['subadult', 0.88],
 ];

@@ -1,6 +1,6 @@
 import { economy } from './economy';
 import { CALM_DAYS, goalState, nextGoals, PURPOSE_GOAL_COUNT, raisedCount, type Goal } from './goals';
-import { growthStage } from './growth';
+import { COLORING_AT, daysToLength, growthStage, maxLengthCm } from './growth';
 import { newTankCost } from './household';
 import { BELLY_SHOWS, dueMothers } from './nursery';
 import { orderBoard, orderSupply } from './orders';
@@ -28,6 +28,8 @@ export type NextTarget =
   | 'select' // 挑選面板（選育）
   | 'treat' // 治療
   | 'mother' // 打開懷孕最久那尾母魚的卡片（看肚子、懷孕進度）
+  | 'fastest' // 打開最快轉色那尾小魚的卡片
+  | 'fry_box' // 打開育幼盒（把主缸的小魚撈進去）
   | 'scape' // 造景模式
   | 'test'; // 測水
 
@@ -57,6 +59,33 @@ export function showingMother(tanks: TankState[]): { tank: number; fish: Fish } 
   return best;
 }
 
+/** 「養大 5 條」幾天沒前進就換說法（企劃 tutorial-lines.md §7）。 */
+export const RAISE_STUCK_HOURS = 72;
+
+/** 還沒轉色的自家小魚裡最快轉色的那尾、在第幾缸、還差幾天（標準照顧估算）；沒有回傳 null。 */
+export function fastestColoring(tanks: TankState[]): { tank: number; fish: Fish; days: number } | null {
+  let best: { tank: number; fish: Fish; days: number } | null = null;
+  tanks.forEach((t, tank) =>
+    t.fish.forEach((fish) => {
+      if (!fish.alive || (fish.generation ?? 0) < 1 || isShrimpSpecies(fish.species)) return;
+      const days = daysToLength(fish, maxLengthCm(fish) * COLORING_AT);
+      if (days > 0 && Number.isFinite(days) && (!best || days < best.days)) best = { tank, fish, days };
+    }),
+  );
+  return best;
+}
+
+/** 「養大 5 條」卡超過 3 天：主缸小魚最近被吃就叫玩家撈進育幼盒，不然說最快那尾還差幾天。 */
+function raiseStuckStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
+  const since = goalState(tanks).raised?.[1];
+  const now = tanks[0].hours;
+  if (since === undefined || now - since <= RAISE_STUCK_HOURS) return null;
+  const eaten = tanks.some((t) => t.fish.some((f) => f.alive && !f.nursery && (f.generation ?? 0) >= 1 && growthStage(f) === 'fry') && t.events.some((e) => e.type === 'fry_eaten' && t.hours - e.hours <= RAISE_STUCK_HOURS));
+  if (eaten) return { text: '小魚在主缸會被吃，撈進育幼盒', target: 'fry_box' };
+  const fast = fastestColoring(tanks);
+  return fast ? { text: `最快轉色的那尾，還差約 ${fast.days} 天`, target: 'fastest' } : null;
+}
+
 /** 母魚快生了（要育幼盒）或肚子看得出懷孕時的下一步；都沒有回傳 null。 */
 function motherStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   if (tanks.some((t) => dueMothers(t).length > 0)) return tanks.some((t) => t.nurseryBox && dueMothers(t).length > 0) ? { text: '母魚快生了，放進育幼盒', target: 'nursery' } : { text: '母魚快生了，買個育幼盒', target: 'nursery' };
@@ -75,7 +104,7 @@ function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
       if (bredFry(tanks).length > 0) return { text: '小魚還小，一天餵兩次', target: 'feed' };
       return motherStep(tanks) ?? { text: '餵飽母魚，等她懷孕', target: 'feed' };
     case 'raise5':
-      return { text: `小魚一天餵兩次，養到轉色（${Math.min(5, raisedCount(tanks))}/5）`, target: 'feed' };
+      return raiseStuckStep(tanks) ?? { text: `小魚一天餵兩次，養到轉色（${Math.min(5, raisedCount(tanks))}/5）`, target: 'feed' };
     case 'sale': {
       const ready = orderBoard(home).orders.some((o) => orderSupply(tanks, o) >= o.count);
       return ready ? { text: '有訂單交得出貨，去交貨', target: 'orders' } : { text: '賣一尾魚，或看看訂單板', target: 'sell' };

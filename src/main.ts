@@ -1279,6 +1279,13 @@ async function start(): Promise<void> {
         if (mom) game.switchTo(mom.tank);
         return select(mom?.fish.id ?? null);
       }
+      case 'fry_box':
+        return panelSheet('育幼盒', (p) => p.nurseryPanel(ctx));
+      case 'fastest': {
+        const fast = sim.fastestColoring(game.tanks);
+        if (fast) game.switchTo(fast.tank);
+        return select(fast?.fish.id ?? null);
+      }
       case 'scape':
         return enterScape();
     }

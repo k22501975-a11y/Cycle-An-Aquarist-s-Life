@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, buyTank, economy, GENERIC_STEP, GOALS, goalState, LIGHTS, nextStep, PURPOSE_GOAL_COUNT, setTankPurpose, showingMother } from '.';
+import { addFish, buyTank, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, setTankPurpose, showingMother } from '.';
 
 describe('主畫面的下一步（U1）', () => {
   it('每個目標都說得出下一步，句子短', () => {
@@ -76,5 +76,34 @@ describe('主畫面的下一步（U1）', () => {
     expect(nextStep(tanks)).toMatchObject({ goal: 'display_tank', target: 'shop_gear' });
     tanks[1].equipment.light = { spec: LIGHTS.planted, startHour: 10, photoperiodHours: 8 };
     expect(nextStep(tanks)).toMatchObject({ goal: 'display_tank', target: 'shop_plants', text: `展示缸種陽性草（0/${PURPOSE_GOAL_COUNT.display}）` });
+  });
+});
+
+describe('「養大 5 條」卡超過 3 天（#258）', () => {
+  function stuck() {
+    const s = newGameState(1);
+    goalState([s]).done.push('cycled', 'protect_fry');
+    const fry = addFish(s, 'guppy', { sex: 'male' });
+    fry.generation = 1;
+    fry.lengthCm = 0.8;
+    checkGoals([s], false);
+    return { s, fry };
+  }
+
+  it('3 天內照舊；之後說最快轉色那尾還差幾天，點了開她的卡', () => {
+    const { s, fry } = stuck();
+    expect(nextStep([s])?.target).toBe('feed');
+    s.hours += RAISE_STUCK_HOURS + 1;
+    const step = nextStep([s]);
+    expect(step).toMatchObject({ goal: 'raise5', target: 'fastest' });
+    expect(step!.text).toMatch(/^最快轉色的那尾，還差約 \d+ 天$/);
+    expect(fastestColoring([s])?.fish).toBe(fry);
+  });
+
+  it('主缸小魚最近有被吃：叫玩家撈進育幼盒', () => {
+    const { s } = stuck();
+    s.hours += RAISE_STUCK_HOURS + 1;
+    s.events.push({ hours: s.hours - 10, type: 'fry_eaten', count: 2 });
+    expect(nextStep([s])).toMatchObject({ text: '小魚在主缸會被吃，撈進育幼盒', target: 'fry_box' });
   });
 });

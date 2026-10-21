@@ -59,6 +59,8 @@ export interface GoalState {
   cured?: boolean;
   /** 每缸（用缸在清單裡的位置）最近一次有警告的時間（遊戲小時）。收掉缸、位置變了就重算。 */
   calmSince: Record<number, number>;
+  /** 「養大 5 條」上次數字變動：[幾條, 遊戲小時]（卡太久下一步改說還差幾天，#258）。 */
+  raised?: [number, number];
 }
 
 const living = (t: TankState) => t.fish.filter((f) => f.alive);
@@ -295,6 +297,10 @@ export function checkGoals(tanks: TankState[], tutorialDone = true): Goal[] {
   tanks.forEach((t, i) => {
     if (tankAlarm(t) || g.calmSince[i] === undefined) g.calmSince[i] = t.hours;
   });
+  if (!g.done.includes('raise5')) {
+    const n = raisedCount(tanks);
+    if (g.raised?.[0] !== n) g.raised = [n, tanks[0].hours];
+  }
   if (!tutorialDone) return [];
   const done: Goal[] = [];
   for (const goal of nextGoals(tanks, GOALS.length)) {
