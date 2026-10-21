@@ -122,6 +122,24 @@ export async function tapTool(page: Page, name: string): Promise<void> {
   await btn.click(NO_WAIT);
 }
 
+/** 點任務卡下面的一鍵買圖卡；換任務時圖卡先收著（#265），要先點任務卡展開。 */
+export async function trayCard(page: Page, text?: string): Promise<void> {
+  const card = page.locator('.quest-tray .qt-card', text ? { hasText: text } : {}).first();
+  await card.waitFor({ state: 'attached' });
+  // 換任務的瞬間圖卡會重畫、重新收起來：沒點到就再展開一次
+  for (let i = 0; i < 5; i++) {
+    const tucked = page.locator('.quest-pill.tray-tucked');
+    if (await tucked.count()) await tucked.click(NO_WAIT);
+    try {
+      await card.click({ ...NO_WAIT, timeout: 3000 });
+      return;
+    } catch {
+      /* 再試一次 */
+    }
+  }
+  await card.click(NO_WAIT);
+}
+
 /** 在開著的面板裡點一個按鈕。 */
 export async function sheetButton(page: Page, text: string): Promise<void> {
   await page.locator('.sheet.open button', { hasText: text }).first().click(NO_WAIT);

@@ -300,7 +300,7 @@ function derivedTexture(key: string): Texture | null {
   const { canvas, ctx } = makeCanvas(img.width, img.height);
   ctx.drawImage(img, 0, 0);
   const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  recolorImage(data.data, recipe);
+  recolorImage(data.data, recipe, canvas.width);
   ctx.putImageData(data, 0, 0);
   const tex = canvasTexture(canvas);
   textures.set(key, tex);

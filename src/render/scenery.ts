@@ -616,11 +616,19 @@ export function paintVignette(w: number, h: number): Texture {
   g.addColorStop(1, 'rgba(0,15,25,0.6)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, cw, ch);
+  // 上亮下深：水面附近透一點光，越往缸底越暗，前後才有距離感（畫面評測第 9 輪 #265）
+  const v = ctx.createLinearGradient(0, 0, 0, ch);
+  v.addColorStop(0, 'rgba(235,250,255,0.07)');
+  v.addColorStop(0.35, 'rgba(235,250,255,0)');
+  v.addColorStop(0.7, 'rgba(0,20,30,0)');
+  v.addColorStop(1, 'rgba(0,20,30,0.2)');
+  ctx.fillStyle = v;
+  ctx.fillRect(0, 0, cw, ch);
   // 前面的玻璃：左上到右下兩道很淡的斜光（畫面評測第 8 輪：缸要有前後景深）
   ctx.save();
   ctx.translate(cw * 0.3, 0);
   ctx.rotate(-0.5);
-  for (const [x, w, a] of [[0, 0.16, 0.06], [0.22, 0.05, 0.05]]) {
+  for (const [x, w, a] of [[0, 0.16, 0.12], [0.22, 0.05, 0.1]]) {
     const band = ctx.createLinearGradient(x * cw, 0, (x + w) * cw, 0);
     band.addColorStop(0, 'rgba(255,255,255,0)');
     band.addColorStop(0.5, `rgba(255,255,255,${a})`);

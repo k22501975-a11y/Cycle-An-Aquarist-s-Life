@@ -113,6 +113,9 @@ export class Guide {
     return currentQuest(this.progress)?.quick ?? null;
   }
 
+  /** 上次畫的圖卡種類；refreshTray 會清掉 shownTray，靠這個分辨是不是真的換了任務。 */
+  private trayKind = '';
+
   get trayVisible(): boolean {
     return !this.tray.hidden;
   }
@@ -149,8 +152,13 @@ export class Guide {
     if ((tray ?? '') === this.shownTray) return;
     this.shownTray = tray ?? '';
     this.tray.hidden = !tray || !this.quickTray;
-    this.untuck();
     this.tray.replaceChildren(...(tray && this.quickTray ? [this.quickTray(tray)] : []));
+    // 換任務時圖卡先收著，任務卡上亮個記號，點了才展開（畫面評測第 9 輪 #265：不要每換一個任務就蓋住左邊的缸）
+    // 錢變了重畫（refreshTray）時保持玩家展開或收起的樣子
+    const changed = (tray ?? '') !== this.trayKind;
+    this.trayKind = tray ?? '';
+    if (this.tray.hidden) this.untuck();
+    else if (changed) this.tuckTray();
   }
 
   get pillVisible(): boolean {
