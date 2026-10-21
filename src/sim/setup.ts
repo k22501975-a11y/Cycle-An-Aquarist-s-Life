@@ -91,7 +91,7 @@ const HEATER_CARDS: Card[] = [
 ];
 
 const LIGHT_CARDS: Card[] = [
-  { id: 'basic', name: LIGHTS.basic.name, art: 'gear/led-basic.webp', pro: '便宜、不太長藻，榕、莫絲這類陰性草夠用', con: '光不夠，陽性草（矮珍珠、紅蝴蝶）長不好' },
+  { id: 'basic', name: LIGHTS.basic.name, art: 'gear/led-basic.webp', pro: '便宜、不太長藻，小榕、莫絲這類陰性草夠用', con: '光不夠，陽性草（矮珍珠、紅蝴蝶）長不好' },
   { id: 'planted', name: LIGHTS.planted.name, art: 'gear/led-planted.webp', pro: '陽性草長得又密又紅', con: '貴、會讓水溫高一點，光強容易長藻，最好配 CO₂' },
 ];
 

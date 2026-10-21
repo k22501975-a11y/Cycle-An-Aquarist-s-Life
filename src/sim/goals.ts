@@ -20,7 +20,7 @@ export type Unlock = 'betta' | 'crystal_shrimp' | 'std90' | 'selection' | 'strai
 
 export const UNLOCK_LABELS: Record<Unlock, string> = {
   betta: '商店開始賣鬥魚',
-  crystal_shrimp: '商店開始賣水晶蝦',
+  crystal_shrimp: '商店開始賣紅白水晶蝦',
   std90: '可以加買 90L 中型缸',
   selection: '解鎖挑選面板說明',
   strain_codex: '圖鑑多了品系頁',

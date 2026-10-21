@@ -33,7 +33,7 @@ export function chargeMeal(state: TankState, units = 1): void {
   e.meals = (e.meals ?? 0) + units;
 }
 
-/** 店價：品系孔雀魚在台灣約 50～100 元一隻、斑馬魚 20 元、櫻花蝦 25 元、半月鬥魚公魚約 250 元、水晶紅蝦（入門等級）約 120 元。 */
+/** 店價：品系孔雀魚在台灣約 50～100 元一隻、斑馬魚 20 元、極火蝦 25 元、半月鬥魚公魚約 250 元、水晶紅蝦（入門等級）約 120 元。 */
 export const FISH_PRICES: Record<FishSpeciesId, number> = { guppy: 60, zebrafish: 20, cherry_shrimp: 25, apisto: 180, betta: 250, crystal_shrimp: 120 };
 /** 鬥魚母魚短鰭、不起眼，比公魚便宜很多。 */
 export const BETTA_FEMALE_PRICE = 100;

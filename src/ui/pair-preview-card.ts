@@ -5,7 +5,7 @@ import { guppyArt } from './shop-cards';
 /**
  * 選魚當下就看得到後果（polish-to-9.md §6 P3）：商店孔雀魚頁最上面「配一對看看」，
  * 挑一尾母魚、一尾公魚，馬上看到 2～3 尾小魚的顏色、尾形和機率（十顆點表示）。
- * 預設是夢想魚配方（白子全紅母 × 紅蛇王公），點孫代那排就看得到白子紅蛇王的影子。
+ * 預設是夢想魚配方（全紅白子母 × 紅蛇王公），點孫代那排就看得到白子紅蛇王的影子。
  */
 
 const ART = `${import.meta.env.BASE_URL}art/`;
@@ -18,7 +18,7 @@ export interface GuppyPick {
 
 export const GUPPY_PICKS: GuppyPick[] = [...GUPPY_STRAINS.map((name, strain) => ({ name, strain })), ...GUPPY_FIN_STRAINS.map((f) => ({ name: f.name, strain: f.strain, fin: f.fin }))];
 
-/** 預設夢想魚的配方：白子全紅母、紅蛇王公。 */
+/** 預設夢想魚的配方：全紅白子母、紅蛇王公。 */
 const pick = { mother: DREAM_FISH.parents.female, father: DREAM_FISH.parents.male };
 
 export function kidArt(k: PreviewKid): string {

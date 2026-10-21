@@ -295,7 +295,7 @@ describe('收入空檔保底（polish-to-9.md §4）', () => {
     board.lastChangeHours = s.hours;
     return board;
   };
-  /** 一株長到剪得下 2 株插枝的榕（自己缸裡長出來的）。 */
+  /** 一株長到剪得下 2 株插枝的小榕（自己缸裡長出來的）。 */
   const grown = (s: TankState) => addPlant(s, 'anubias', 20);
 
   it(`連續 ${INCOME_GAP_DAYS} 天沒有賣東西或交單，板上換一張用缸裡長出來的東西就交得出來的小單；交了就重算`, () => {

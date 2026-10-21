@@ -81,14 +81,14 @@ export type FinTrait = 'swallow' | 'ribbon' | 'dumbo' | 'sword' | 'halfmoon' | '
 export const GUPPY_FIN_STRAINS: Array<{ name: string; strain: number; fin: FinTrait; price: number }> = [
   { name: '藍尾禮服大耳', strain: 3, fin: 'dumbo', price: 150 },
   { name: '藍尾禮服燕尾', strain: 3, fin: 'swallow', price: 180 },
-  { name: '藍草雙劍', strain: 0, fin: 'sword', price: 120 },
-  { name: '白子全紅半月', strain: 2, fin: 'halfmoon', price: 160 },
+  { name: '藍草尾雙劍', strain: 0, fin: 'sword', price: 120 },
+  { name: '全紅白子半月', strain: 2, fin: 'halfmoon', price: 160 },
   { name: '藍尾禮服緞帶', strain: 3, fin: 'ribbon', price: 200 },
-  { name: '藍草大C', strain: 0, fin: 'bigC', price: 380 },
+  { name: '藍草尾大C', strain: 0, fin: 'bigC', price: 380 },
 ];
 
 /** 店裡常見的五個品系（順序和畫面的品系外觀表一致）。 */
-export const GUPPY_STRAINS = ['藍草', '黃金蛇王', '白子全紅', '藍尾禮服', '紅蛇王'] as const;
+export const GUPPY_STRAINS = ['藍草尾', '黃金蛇王', '全紅白子', '藍尾禮服', '紅蛇王'] as const;
 /** 各品系的店價（台灣水族館行情，元）。 */
 export const GUPPY_STRAIN_PRICES = [60, 120, 100, 60, 80];
 
@@ -269,9 +269,10 @@ function baseStrainName(p: GuppyPhenotype): string {
   const pre = p.albino ? '白子' : '';
   const color = p.red ? '紅' : '藍';
   if (p.snake) return `${pre}${p.gold ? '黃金' : color}蛇王`;
-  if (p.grass) return `${pre}${p.gold ? '黃金' : ''}${color}草`;
+  if (p.grass) return `${pre}${p.gold ? '黃金' : ''}${color}草尾`;
   if (p.tuxedo) return `${pre}${color}尾禮服`;
-  return `${pre}${p.gold ? '黃金' : ''}全${color}`;
+  // 台灣店家寫「全紅白子」：白子放後面（design/naming.md）
+  return `${p.gold ? '黃金' : ''}全${color}${pre}`;
 }
 
 /** 對應到畫面上最接近的品系外觀（GUPPY_STRAINS 的索引）。 */

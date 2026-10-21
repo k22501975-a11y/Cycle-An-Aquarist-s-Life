@@ -83,7 +83,7 @@ describe('鬥魚', () => {
 });
 
 describe('水晶蝦', () => {
-  it('27°C 以上撐不住，櫻花蝦沒事', () => {
+  it('27°C 以上撐不住，極火蝦沒事', () => {
     const t = tank();
     t.equipment.heater = { spec: HEATERS.h100, targetC: 29, broken: false, stuckOn: false } as never;
     t.water.tempC = t.water.tempAvgC = 29;

@@ -59,7 +59,7 @@ export function sizeRatio(fish: Fish): number {
   return Math.min(1, fish.lengthCm / FISH_SPECIES[fish.species].adultLengthCm);
 }
 
-/** 各種水草讓仔魚躲的效果：莫絲、矮珍珠、牛毛氈這種又密又低的草最好躲，大葉子的榕最差。 */
+/** 各種水草讓仔魚躲的效果：莫絲、矮珍珠、牛毛氈這種又密又低的草最好躲，大葉子的小榕最差。 */
 const HIDING_WEIGHT: Partial<Record<string, number>> = { moss: 3, glosso: 3, eleocharis: 3, hydrocotyle: 1.5, rotala: 1, anubias: 0.4 };
 /** 躲藏係數上限：草再密，成魚吃仔魚的機率也只降到原本的三成（design/mvp.md §4.3）。 */
 export const MAX_HIDING = 0.7;

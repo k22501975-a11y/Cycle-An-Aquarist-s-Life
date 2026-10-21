@@ -373,7 +373,7 @@ function sickText(sick: SimEvent[], n: number): string {
 
 /** 水草合計長到睡前的幾倍才寫進報告（基本燈下莫絲一整天約長 1.5%，2% 就永遠不會出現）。 */
 const PLANT_GREW = 1.01;
-/** 一株插枝有幾片葉子（新葉的重量＝插枝重量 / 這個數；榕大約一週一片，G8）。 */
+/** 一株插枝有幾片葉子（新葉的重量＝插枝重量 / 這個數；小榕大約一週一片，G8）。 */
 const LEAF_PER_CUTTING = 4;
 /** 小魚長到這麼長，就會游出水草到水面搶飼料（G8 早上報告的小里程碑）。 */
 const FRY_SWIMS_OUT_CM = 1;

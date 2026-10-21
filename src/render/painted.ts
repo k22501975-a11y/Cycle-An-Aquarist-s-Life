@@ -68,7 +68,7 @@ export const PAINTED: Record<string, PaintedSpec> = {
   'betta-male-blue': { file: 'fish/betta-male-blue.webp', tail: 0.42, swing: 0.1, body: { x: 0.16, y: 0.0, rx: 0.22, ry: 0.1 } },
   'betta-fry': { file: 'fish/betta-fry.webp', tail: 0.3, swing: 0.14, body: { x: 0.2, y: 0.0, rx: 0.3, ry: 0.06 } },
   'betta-female': { file: 'fish/betta-female.webp', tail: 0.24, swing: 0.1, body: { x: 0.1, y: 0.0, rx: 0.3, ry: 0.11 } },
-  // 水晶蝦：紅白相間（和櫻花蝦同樣的姿勢與身體範圍）
+  // 水晶蝦：紅白相間（和極火蝦同樣的姿勢與身體範圍）
   'shrimp-crystal-male': { file: 'shrimp/shrimp-crystal-male.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
   'shrimp-crystal-female': { file: 'shrimp/shrimp-crystal-female.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
   'shrimp-crystal-berried': { file: 'shrimp/shrimp-crystal-berried.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY, eggs: true },
@@ -101,9 +101,9 @@ function finArt(): Record<string, PaintedSpec> {
 
 /** 品系名稱 → 素材。沒列到的品系用程式繪製版。 */
 const GUPPY_MALE_ART: Record<string, string> = {
-  藍草: 'guppy-male-bluegrass',
+  藍草尾: 'guppy-male-bluegrass',
   黃金蛇王: 'guppy-male-cobra',
-  白子全紅: 'guppy-male-albino-red',
+  全紅白子: 'guppy-male-albino-red',
   藍尾禮服: 'guppy-male-tuxedo',
   紅蛇王: 'guppy-male-redcobra',
 };

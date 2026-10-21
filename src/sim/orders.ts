@@ -21,9 +21,9 @@ export const ORDER_GAP_HOURS = 24;
 
 /** 訂單看的品系外觀（只有公魚看得出來）。 */
 export const ORDER_STRAINS = {
-  grass: { name: '藍草', test: (p: GuppyPhenotype) => p.grass && !p.snake },
+  grass: { name: '藍草尾', test: (p: GuppyPhenotype) => p.grass && !p.snake },
   goldSnake: { name: '黃金蛇王', test: (p: GuppyPhenotype) => p.snake && p.gold },
-  albinoRed: { name: '白子全紅', test: (p: GuppyPhenotype) => p.albino && p.red && !p.snake && !p.grass && !p.tuxedo },
+  albinoRed: { name: '全紅白子', test: (p: GuppyPhenotype) => p.albino && p.red && !p.snake && !p.grass && !p.tuxedo },
   tuxedo: { name: '禮服', test: (p: GuppyPhenotype) => p.tuxedo && !p.snake && !p.grass },
   redSnake: { name: '紅蛇王', test: (p: GuppyPhenotype) => p.snake && !p.gold },
 } as const;

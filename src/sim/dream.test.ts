@@ -10,13 +10,13 @@ const mature = (f: ReturnType<typeof addFish>) => {
 describe('夢想魚與 3 步路線（P2）', () => {
   it('夢想魚配方的爸媽品系都找得到（品系改名時一鍵買和配對預覽不會壞）', () => {
     expect(GUPPY_STRAINS[DREAM_FISH.parents.male]).toBe('紅蛇王');
-    expect(GUPPY_STRAINS[DREAM_FISH.parents.female]).toBe('白子全紅');
+    expect(GUPPY_STRAINS[DREAM_FISH.parents.female]).toBe('全紅白子');
   });
 
   it('夢想魚店裡買不到，照配方兩代做得出來', () => {
     expect(GUPPY_STRAINS).not.toContain(DREAM_FISH.name);
     const rng = { seed: 7 };
-    const mom = storeGenome(rng, 'female', GUPPY_STRAINS.indexOf('白子全紅'));
+    const mom = storeGenome(rng, 'female', GUPPY_STRAINS.indexOf('全紅白子'));
     const dad = storeGenome(rng, 'male', GUPPY_STRAINS.indexOf('紅蛇王'));
     let hits = 0;
     for (let i = 0; i < 400; i++) {
@@ -49,7 +49,7 @@ describe('夢想魚與 3 步路線（P2）', () => {
     expect(dreamRoute([s]).steps[1].done).toBe(true);
 
     // 店裡也賣的品系不算自己選育
-    const plain = mature(addFish(s, 'guppy', { sex: 'male', strain: GUPPY_STRAINS.indexOf('藍草') }));
+    const plain = mature(addFish(s, 'guppy', { sex: 'male', strain: GUPPY_STRAINS.indexOf('藍草尾') }));
     plain.generation = 1;
     expect(dreamRoute([s]).steps[2].done).toBe(false);
 

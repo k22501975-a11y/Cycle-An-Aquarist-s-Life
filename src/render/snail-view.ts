@@ -6,7 +6,7 @@ import { floorY, type SubstrateLook } from './substrate';
 
 /**
  * 螺（design/snails.md §5）：大螺在沙面、缸壁上慢慢爬；害蟲小螺照數量畫（最多 60 隻），
- * 餵太多時一眼看得到滿缸都是；尖螺白天躲在沙裡，關燈才爬出來。
+ * 餵太多時一眼看得到滿缸都是；馬來螺白天躲在沙裡，關燈才爬出來。
  * 蘋果螺卵塊黏在水面上方的缸壁，斑馬螺的白色卵點黏在沙面上。
  */
 
@@ -149,7 +149,7 @@ export class SnailView {
 
   private syncPests(state: TankState, scene: SnailScene): void {
     const p = state.snails?.pests;
-    // 照比例分配畫幾隻（尖螺白天只看得到一兩成）
+    // 照比例分配畫幾隻（馬來螺白天只看得到一兩成）
     const visible = (k: PestKind) => (p ? p[k] * (k === 'mts' && scene.lit ? 0.1 : 1) : 0);
     const total = (['ramshorn', 'bladder', 'mts'] as PestKind[]).reduce((a, k) => a + visible(k), 0);
     const shown = Math.min(MAX_PESTS, Math.round(total));
@@ -168,7 +168,7 @@ export class SnailView {
         const sprite = new Sprite(tex);
         sprite.anchor.set(0.5, 0.9);
         const seed = i * 17 + k.length * 101;
-        // 多半在沙面和下半缸的玻璃上，少數爬到上面；尖螺晚上從沙裡鑽出來貼著沙面
+        // 多半在沙面和下半缸的玻璃上，少數爬到上面；馬來螺晚上從沙裡鑽出來貼著沙面
         const glass = hash(seed) < (k === 'mts' ? 0.3 : 0.45) ? 0.5 + 0.5 * Math.sqrt(hash(seed * 3)) : null;
         // 在玻璃上的偏向缸的兩側（後面的玻璃角落）
         const u = glass === null ? hash(seed * 7) : (hash(seed * 7) < 0.5 ? 0.12 : 0.88) + (hash(seed * 19) - 0.5) * 0.3;

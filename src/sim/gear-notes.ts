@@ -57,7 +57,7 @@ const NOTES: Record<GearNoteKey, (s: TankState) => string | null> = {
   light: (s) => {
     const l = s.equipment.light;
     if (!l || s.plants.length === 0) return null;
-    return l.spec.id === 'planted' ? '水草燈光線強，水草長得快，陽性草也種得起來' : '基本燈光線柔，榕和莫絲這種陰性草長得好，陽性草會長不起來';
+    return l.spec.id === 'planted' ? '水草燈光線強，水草長得快，陽性草也種得起來' : '基本燈光線柔，小榕和莫絲這種陰性草長得好，陽性草會長不起來';
   },
   air: (s) => {
     const a = s.equipment.airPump;

@@ -4,7 +4,7 @@ import { noteAct, recordEvent, type TankState } from './state';
 
 /**
  * 螺（design/snails.md）：清潔隊也是麻煩。
- * 買來的螺（蘋果螺、斑馬螺、刺客螺）逐隻模擬；跟著水草混進來的害蟲小螺（扁卷、囊螺、尖螺）
+ * 買來的螺（蘋果螺、斑馬螺、刺客螺）逐隻模擬；跟著水草混進來的害蟲小螺（扁卷、囊螺、馬來螺）
  * 只記數量。小螺吃殘餌和有機物，餵太多就爆量，少餵自然變少，數量直接反映有沒有餵太多。
  */
 
@@ -73,11 +73,11 @@ export const PESTS: Record<PestKind, { name: string; growthPerDay: number; daily
   ramshorn: { name: '扁卷螺', growthPerDay: 0.1, dailyFoodMg: 1.5, bodyMassMg: 40 },
   // 囊螺：一隻就能生，最典型的爆螺
   bladder: { name: '囊螺', growthPerDay: 0.16, dailyFoodMg: 1.2, bodyMassMg: 30 },
-  // 尖螺：住在底沙裡，晚上才出來
-  mts: { name: '尖螺', growthPerDay: 0.07, dailyFoodMg: 1, bodyMassMg: 40 },
+  // 馬來螺：住在底沙裡，晚上才出來
+  mts: { name: '馬來螺', growthPerDay: 0.07, dailyFoodMg: 1, bodyMassMg: 40 },
 };
 
-export const APPLE_COLOR_LABELS: Record<AppleColor, string> = { gold: '金', blue: '藍', purple: '紫', ivory: '象牙' };
+export const APPLE_COLOR_LABELS: Record<AppleColor, string> = { gold: '黃金', blue: '藍', purple: '紫', ivory: '象牙' };
 
 /** 一缸頂多這麼多隻大蘋果螺（再多的小螺留在數量裡）。 */
 const MAX_APPLES = 30;
@@ -310,7 +310,7 @@ export function removeClutches(state: TankState): number {
   return n;
 }
 
-/** 手撈：只抓得到看得見的（尖螺白天躲在沙裡）。回傳抓了幾隻。 */
+/** 手撈：只抓得到看得見的（馬來螺白天躲在沙裡）。回傳抓了幾隻。 */
 export function catchPests(state: TankState, lightsOn: boolean): number {
   const s = state.snails;
   if (!s) return 0;

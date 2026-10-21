@@ -862,7 +862,7 @@ export async function quickBuy(ctx: PanelContext, pick: QuickPick): Promise<void
     if (!(await askOverload(ctx, 3))) return;
     const quarantined = !!game.state.quarantine;
     const cost = GUPPY_STRAIN_PRICES[male] + GUPPY_STRAIN_PRICES[female] * 2;
-    const name = male === female ? `${GUPPY_STRAINS[male]}孔雀魚` : `${GUPPY_STRAINS[male]}公魚和${GUPPY_STRAINS[female]}母魚`;
+    const name = male === female ? `${GUPPY_STRAINS[male]}孔雀` : `${GUPPY_STRAINS[male]}公魚和${GUPPY_STRAINS[female]}母魚`;
     const add = quarantined ? addFishToQuarantine : addFish;
     const sexes = [[male, 'male'], [female, 'female'], [female, 'female']] as const;
     await releaseFishFor(
@@ -912,7 +912,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
   const buyFish = (species: FishSpeciesId, count: number, strain?: number, finStrain?: (typeof GUPPY_FIN_STRAINS)[number], sexes?: ('male' | 'female')[]) => async () => {
     if (!(await overloadOk(count))) return;
     const quarantined = !!game.state.quarantine;
-    const name = finStrain ? `${finStrain.name}孔雀魚` : strain !== undefined ? `${GUPPY_STRAINS[strain]}孔雀魚` : FISH_SPECIES[species].name;
+    const name = finStrain ? `${finStrain.name}孔雀` : strain !== undefined ? `${GUPPY_STRAINS[strain]}孔雀` : FISH_SPECIES[species].name;
     const each = finStrain ? finStrain.price : strain !== undefined ? GUPPY_STRAIN_PRICES[strain] : FISH_PRICES[species];
     const males = sexes?.filter((x) => x === 'male').length ?? 0;
     const sexNote = !sexes ? '' : males === count ? '（公）' : males === 0 ? '（母）' : `（${males} 公 ${count - males} 母）`;
@@ -1022,7 +1022,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       advice([
         game.state.quarantine ? `新買的魚會先放進檢疫盒，觀察 ${QUARANTINE_DAYS} 天沒問題再移到主缸。` : '店裡的魚可能帶著白點蟲或其他病，直接放進主缸可能傳染整缸。商店的「設備」可以買檢疫盒。',
         '新缸還沒養好水就放太多魚，會氨中毒。',
-        '孔雀魚和櫻花蝦會自己繁殖，但成魚會吃仔魚和仔蝦，水草種密一點才躲得掉。斑馬魚會輕微咬孔雀魚公魚的長尾巴。',
+        '孔雀魚和極火蝦會自己繁殖，但成魚會吃仔魚和仔蝦，水草種密一點才躲得掉。斑馬魚會輕微咬孔雀魚公魚的長尾巴。',
         '鬥魚會到水面吸空氣，不怕缺氧；但兩尾公鬥魚不能同缸，公鬥魚也會去咬孔雀魚公魚的長尾巴，約三成的鬥魚會獵蝦。水晶蝦很嬌貴：要偏酸的軟水、水溫 24°C 以下，26°C 以上很危險，夏天要開冷氣。',
         FEATURES.apisto ? '鳳尾短鯛會自己帶小孩：要有石頭或沉木當洞穴、水溫 25°C 以上。護幼中的母魚會趕走靠近的魚，缸小的話其他魚會很緊張。' : null,
         `孔雀魚（pH ${FISH_SPECIES.guppy.phSurvive.min}–${FISH_SPECIES.guppy.phSurvive.max} 都能慢慢適應）照品系賣。同品系配對生出來的大多一樣；不同品系混養會生出各種組合，也可能冒出藏在基因裡的白子。`,
@@ -1036,10 +1036,10 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       h('h3', {}, '孔雀魚品系'),
       cardGrid(
         ...GUPPY_STRAINS.map((strain, i) =>
-          shopCard({ art: guppyArt(i), name: strain, price: GUPPY_STRAIN_PRICES[i], unit: '/隻', chips: guppyChips, actions: guppyActions(i) }),
+          shopCard({ art: guppyArt(i), name: `${strain}孔雀`, price: GUPPY_STRAIN_PRICES[i], unit: '/隻', chips: guppyChips, actions: guppyActions(i) }),
         ),
         ...GUPPY_FIN_STRAINS.map((fs) =>
-          shopCard({ art: guppyArt(fs.strain, fs.fin), name: fs.name, price: fs.price, unit: '/隻', chips: ['鰭型品系'], actions: guppyActions(undefined, fs) }),
+          shopCard({ art: guppyArt(fs.strain, fs.fin), name: `${fs.name}孔雀`, price: fs.price, unit: '/隻', chips: ['鰭型品系'], actions: guppyActions(undefined, fs) }),
         ),
       ),
       h('h3', {}, '其他魚蝦'),
@@ -1953,7 +1953,7 @@ export function snailPanel(ctx: PanelContext): Node {
     .map((k) => [k, living.filter((x) => x.kind === k).length] as const)
     .filter(([, n]) => n > 0)
     .map(([k, n]) => `${SNAILS[k].name} ${n} 隻`);
-  // 尖螺白天躲在沙裡：玩家只看得到一兩成
+  // 馬來螺白天躲在沙裡：玩家只看得到一兩成
   const pests = PEST_ORDER.map((k) => [k, Math.round(pestCount(st, k) * (k === 'mts' && lit ? 0.1 : 1))] as const).filter(([, n]) => n > 0);
   const young = Math.round(s?.appleYoung ?? 0);
   const trapAge = s?.trapHour !== undefined ? st.hours - s.trapHour : null;
@@ -1969,7 +1969,7 @@ export function snailPanel(ctx: PanelContext): Node {
         'div',
         {},
         h('b', {}, counts.length ? counts.join('、') : '沒有養螺'),
-        h('div.hint', {}, pests.length ? `看得到的小螺：${pests.map(([k, n]) => `${PESTS[k].name} ${n}`).join('、')}${lit && pestCount(st, 'mts') > 0 ? '（尖螺白天躲在沙裡，關燈才爬出來）' : ''}` : '沒看到害蟲小螺'),
+        h('div.hint', {}, pests.length ? `看得到的小螺：${pests.map(([k, n]) => `${PESTS[k].name} ${n}`).join('、')}${lit && pestCount(st, 'mts') > 0 ? '（馬來螺白天躲在沙裡，關燈才爬出來）' : ''}` : '沒看到害蟲小螺'),
         young > 0 ? h('div.hint', {}, `剛孵出的小蘋果螺約 ${young} 隻`) : null,
         bloom !== 'none' ? h('div.warn-text', {}, bloom === 'plague' ? '滿缸都是小螺！一定是餵太多了' : '小螺變多了，少餵一點') : null,
       ),
@@ -1979,7 +1979,7 @@ export function snailPanel(ctx: PanelContext): Node {
       : null,
     dead > 0 ? h('div.item', {}, h('div', {}, h('b.warn-text', {}, `死掉的大螺 ${dead} 隻`), h('div.hint', {}, '大螺死了很快就爛，水會臭、氨會升高')), button('撈出來', act((x) => `撈出 ${removeDeadSnails(x)} 隻死螺`), 'primary')) : null,
     pestCount(st) > 0 || young > 0
-      ? h('div.item', {}, h('div', {}, h('b', {}, '手撈小螺'), h('div.hint', {}, '只抓得到看得見的，一次大約四分之一；尖螺要關燈後撈')), button('撈', act((x) => `撈掉 ${catchPests(x, isLightOn(x))} 隻小螺`)))
+      ? h('div.item', {}, h('div', {}, h('b', {}, '手撈小螺'), h('div.hint', {}, '只抓得到看得見的，一次大約四分之一；馬來螺要關燈後撈')), button('撈', act((x) => `撈掉 ${catchPests(x, isLightOn(x))} 隻小螺`)))
       : null,
     h(
       'div.item',

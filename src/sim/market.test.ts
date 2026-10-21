@@ -42,7 +42,7 @@ describe('玩家市場', () => {
   it('名稱寫出品系、公母和懷孕；最低售價是店家收購價，建議價約店價', () => {
     const t = tank();
     const male = healthyGuppy(t);
-    expect(listingTitle(male)).toBe('藍草孔雀魚 公');
+    expect(listingTitle(male)).toBe('藍草尾孔雀魚 公');
     const mom = healthyGuppy(t, 'female');
     expect(listingTitle(mom)).toMatch(/孔雀魚 母（懷孕）$/);
     expect(minFishPrice(male)).toBeGreaterThan(0);
