@@ -1388,7 +1388,8 @@ async function start(): Promise<void> {
   for (const type of ['pointerdown', 'keydown', 'wheel']) window.addEventListener(type, stayAwake, { capture: true, passive: true });
   stayAwake();
   const setWatching = (on: boolean) => document.body.classList.toggle('watching', on);
-  stage.addEventListener('pointerdown', (e) => e.target instanceof HTMLCanvasElement && guide.tuckTray());
+  // 餵食模式點水面是在撒飼料，不是要收圖卡（#275 第 16 輪：餵完第 3 下剛好換任務，圖卡一展開就被收掉）
+  stage.addEventListener('pointerdown', (e) => e.target instanceof HTMLCanvasElement && !feedingMode && guide.tuckTray());
   stage.addEventListener('dblclick', (e) => {
     if (e.target instanceof HTMLCanvasElement && !feedingMode && !scaping && !sheet.isOpen) setWatching(!document.body.classList.contains('watching'));
   });

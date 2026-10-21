@@ -75,8 +75,13 @@ test('新手任務 1～9：照老闆的引導從新存檔玩得完，教學第 4
   const box = (await page.locator('#stage canvas').boundingBox())!;
   await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.45);
   await expect.poll(() => gameState<number>(page, 's.water.foodMg')).toBeGreaterThan(0);
-  await page.locator('.feed-bar button', { hasText: '好了' }).click(NO_WAIT);
   await expect.poll(() => questNow(page)).toBe(3);
+  // 第一下就完成任務、換成種草，玩家還在撒剩下兩下：餵食時點水面不算要收圖卡，餵完圖卡就在（#275 第 16 輪）
+  // 圖卡在餵食中就展開了（餵食時先藏著），接著再撒兩下
+  await expect(page.locator('.quest-tray:not([hidden])')).toHaveCount(1);
+  for (const x of [0.45, 0.5]) await page.mouse.click(box.x + box.width * x, box.y + box.height * 0.45);
+  await expect(page.locator('.feed-bar')).toBeHidden({ timeout: 15_000 });
+  await expect(page.locator('.quest-tray .qt-card').first()).toBeVisible();
 
   // 4 種水草（#235）：任務卡下面點一株草
   await dismissGuide(page);
