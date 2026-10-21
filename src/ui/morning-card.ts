@@ -1,6 +1,7 @@
 import { artUrl, ownerImg, type ArtIcon } from './art-icons';
 import { ownerMood } from './owner-mood';
 import { h } from './dom';
+import { lookalikeVisual } from './lookalike-card';
 import type { MorningReport, ReportItem, ReportKind } from './morning-report';
 
 /**
@@ -131,7 +132,9 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
       `button.morning-item.${item.tone}`,
       { type: 'button', disabled: !go, onclick: go },
       h('span.morning-pic', {}, img, item.count && item.count > 1 ? h('b.morning-count', {}, `×${item.count}`) : null),
-      reportText(item.text),
+      // 長得像誰（G2）：文字下面多爸媽和小魚並排的比較圖
+      // 特徵跟誰的已經畫成小標，文字只留到冒號前（「小魚看得出像誰了！長大後比較像爸爸」）
+      item.lookalike ? h('span.morning-body', {}, reportText(item.text.includes('：') ? item.text.slice(0, item.text.lastIndexOf('：')) : item.text), lookalikeVisual(item.lookalike)) : reportText(item.text),
       item.action ? h('span.morning-go', {}, ACTION_LABEL[item.action], ' ›') : null,
     );
   };

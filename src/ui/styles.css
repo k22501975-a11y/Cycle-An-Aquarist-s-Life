@@ -1105,3 +1105,24 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 .tank-rename-input { width: 160px; padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(240, 200, 120, 0.5); background: rgba(0, 0, 0, 0.35); color: var(--text); font-size: 14px; }
 .tank-rename-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .tank-rename-chips .chip { padding: 4px 10px; font-size: 12px; }
+/* 長得像誰（G2）：早上報告裡爸媽和小魚並排，特徵標跟誰的 */
+.morning-body { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.la { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 12px; background: radial-gradient(ellipse at 50% 40%, rgba(120, 220, 230, 0.16), rgba(0, 0, 0, 0.12) 75%); }
+.la-row { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.la-fish { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 6px 2px; border-radius: 10px; border: 1px solid transparent; }
+.la-fish img { width: 64px; height: 40px; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45)); }
+.la-fish img.albino { filter: saturate(0.75) brightness(1.18) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45)); }
+.la-fish figcaption { font-size: 11px; color: var(--muted); }
+.la-fish.mom figcaption { color: #f2a7c0; }
+.la-fish.dad figcaption { color: #8cc8ff; }
+.la-fish.won { border-color: rgba(240, 200, 120, 0.5); background: rgba(240, 200, 120, 0.08); }
+.la-fish.kid img { width: 84px; height: 52px; }
+.la-fish.kid figcaption { color: var(--gold); font-weight: 700; }
+.la-plus, .la-arrow { color: var(--muted); font-size: 14px; }
+.la-traits { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.la-trait { display: inline-flex; align-items: baseline; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid rgba(243, 234, 216, 0.2); background: rgba(255, 255, 255, 0.05); }
+.la-trait small { font-size: 10px; opacity: 0.8; }
+.la-trait.mother { border-color: rgba(242, 167, 192, 0.6); color: #f6c2d4; }
+.la-trait.father { border-color: rgba(140, 200, 255, 0.6); color: #b5dcff; }
+.la-trait.both { border-color: rgba(190, 170, 255, 0.6); color: #d6ccff; }
+.la-trait.hidden { border-color: rgba(240, 200, 120, 0.8); color: var(--gold); background: rgba(240, 200, 120, 0.12); }
