@@ -2,7 +2,7 @@ import { economy } from './economy';
 import { CALM_DAYS, goalState, nextGoals, PURPOSE_GOAL_COUNT, raisedCount, type Goal } from './goals';
 import { COLORING_AT, daysToLength, growthStage, maxLengthCm } from './growth';
 import { newTankCost } from './household';
-import { BELLY_SHOWS, dueMothers } from './nursery';
+import { BELLY_SHOWS, daysToBirth, dueMothers } from './nursery';
 import { orderBoard, orderSupply } from './orders';
 import { hasVisible } from './processes/disease';
 import { isShrimpSpecies } from './species';
@@ -89,7 +89,14 @@ function raiseStuckStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
 /** 母魚快生了（要育幼盒）或肚子看得出懷孕時的下一步；都沒有回傳 null。 */
 function motherStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   if (tanks.some((t) => dueMothers(t).length > 0)) return tanks.some((t) => t.nurseryBox && dueMothers(t).length > 0) ? { text: '母魚快生了，放進育幼盒', target: 'nursery' } : { text: '母魚快生了，買個育幼盒', target: 'nursery' };
-  return showingMother(tanks) ? { text: '母魚懷孕了，點她看看肚子', target: 'mother' } : null;
+  const mom = showingMother(tanks);
+  if (!mom) return null;
+  if (!mom.fish.bellySeen) return { text: '母魚懷孕了，點她看看肚子', target: 'mother' };
+  // 看過肚子了：換成倒數，不要一直叫玩家做已經做過的事（#282）
+  const days = Math.max(1, Math.round(daysToBirth(tanks[mom.tank], mom.fish) ?? 1));
+  const t = tanks[mom.tank];
+  if (t.nurseryBox || !economy(tanks[0]).nurseryGifted) return { text: `她大約 ${days} 天後生，快生了會提醒你`, target: 'mother' };
+  return { text: `她大約 ${days} 天後生，先備好育幼盒`, target: 'nursery' };
 }
 
 /** 每個目標在現在的狀況下要做的事。 */

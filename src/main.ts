@@ -458,6 +458,8 @@ async function start(): Promise<void> {
   const select = (id: number | null) => {
     selected = id;
     if (id !== null) sim.markDaily(game.tanks, 'observe');
+    const picked = id === null ? undefined : game.state.fish.find((f) => f.id === id);
+    if (picked) sim.noteBellySeen(picked);
     if (id !== null && game.state.fish.some((f) => f.id === id && sim.isShrimpSpecies(f.species))) sim.markDaily(game.tanks, 'shrimp');
     view.selectFish(id);
     selCard.classList.toggle('open', id !== null);

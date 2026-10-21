@@ -186,6 +186,7 @@ function breed(state: TankState, tf: number, dt: number): void {
       mother.pregnancy += (dt / 24 / sp.breeding.gestationDays) * Math.sqrt(tf);
       if (mother.pregnancy >= 1) {
         mother.pregnancy = 0;
+        delete mother.bellySeen;
         const fry = giveBirth(state, mother, living.length);
         if (mother.nursery) nurseryBirth(state, mother, fry);
       }

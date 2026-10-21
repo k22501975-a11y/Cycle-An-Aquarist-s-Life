@@ -62,7 +62,7 @@ describe('育幼盒（mvp.md §4.4.2，#187）', () => {
     const s = tank(1);
     adults(s, 1, 'male');
     const [mom] = adults(s, 1, 'female');
-    mom.pregnancy = 0.84;
+    mom.pregnancy = 0.93;
     days(s, 1);
     expect(s.nurseryBox).toBe(true);
     const gift = s.events.filter((e) => e.type === 'nursery_gift');

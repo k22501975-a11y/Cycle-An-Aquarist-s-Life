@@ -1,3 +1,4 @@
+import { temperatureFactor } from './chemistry';
 import { economy } from './economy';
 import { isParentalSpawner } from './parental';
 import { FISH_SPECIES, isShrimpSpecies, type FishSpeciesId } from './species';
@@ -14,10 +15,22 @@ import { isJuvenile, noteAct, recordEvent, type Fish, type TankState } from './s
 export const NURSERY_FRY_CAPACITY = 30;
 /** 小魚長到這麼大就放回主缸（成魚吞不下）。 */
 export const NURSERY_RELEASE_CM = 1.6;
-/** 母魚懷孕到這個程度就算「快生了」（肚子很鼓、看得到胎點）。 */
-export const DUE_PREGNANCY = 0.85;
+/** 母魚懷孕到這個程度就算「快生了」（肚子很鼓、看得到胎點）：25°C 約生前 2 天（#282：0.85 時早了 5 天）。 */
+export const DUE_PREGNANCY = 0.94;
 /** 母魚肚子看得出來的懷孕程度（之後到 DUE_PREGNANCY 出現胎斑、快生了）。 */
 export const BELLY_SHOWS = 0.5;
+
+/** 這尾母魚大約還要幾天生（照現在的水溫，跟模擬裡懷孕進度的速度一樣）；沒懷孕或不會生小魚的回傳 null。 */
+export function daysToBirth(state: TankState, fish: Fish): number | null {
+  const breeding = FISH_SPECIES[fish.species].breeding;
+  if (!breeding || fish.pregnancy <= 0) return null;
+  return ((1 - fish.pregnancy) * breeding.gestationDays) / Math.sqrt(temperatureFactor(state.water.tempC));
+}
+
+/** 玩家點開了這尾母魚的卡片：肚子看得出懷孕的話，記下這一胎看過了（#282）。 */
+export function noteBellySeen(fish: Fish): void {
+  if (fish.alive && fish.sex === 'female' && fish.pregnancy >= BELLY_SHOWS) fish.bellySeen = true;
+}
 
 /** 會直接生小魚、可以用育幼盒的魚（孔雀魚這類；蝦、短鯛、鬥魚不用）。 */
 export function usesNursery(species: FishSpeciesId): boolean {
