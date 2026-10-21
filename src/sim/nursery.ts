@@ -16,6 +16,8 @@ export const NURSERY_FRY_CAPACITY = 30;
 export const NURSERY_RELEASE_CM = 1.6;
 /** 母魚懷孕到這個程度就算「快生了」（肚子很鼓、看得到胎點）。 */
 export const DUE_PREGNANCY = 0.85;
+/** 母魚肚子看得出來的懷孕程度（之後到 DUE_PREGNANCY 出現胎斑、快生了）。 */
+export const BELLY_SHOWS = 0.5;
 
 /** 會直接生小魚、可以用育幼盒的魚（孔雀魚這類；蝦、短鯛、鬥魚不用）。 */
 export function usesNursery(species: FishSpeciesId): boolean {

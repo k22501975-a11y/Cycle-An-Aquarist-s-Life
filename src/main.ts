@@ -1259,6 +1259,10 @@ async function start(): Promise<void> {
         return select(sick()?.id ?? null);
       case 'select':
         return select(showy()?.id ?? null);
+      case 'mother':
+        return select(game.state.fish.filter((f) => f.alive && f.sex === 'female').sort((a, b) => b.pregnancy - a.pregnancy)[0]?.id ?? null);
+      case 'scape':
+        return enterScape();
     }
   };
   guide.cheer = (from, coins) => ctx.reward?.(from, coins, 'small');
