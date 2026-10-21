@@ -55,3 +55,23 @@ export function cloudiness(state: TankState): number {
   const organic = Math.max(0, state.water.organicMg / state.equipment.tank.volumeL - CLEAR_ORGANIC_MG_PER_L);
   return Math.min(0.35, organic * 0.25);
 }
+
+/** 缸裡看得到的水況（g13 門檻 2：測水、換水、過一晚 3 秒內在缸裡看得到變化）。畫面每格讀，換水前後的過渡畫面自己做。 */
+export interface WaterLook {
+  /** 細菌白濁（0～0.25，乳白霧）：跟著真的氨、亞硝走，測到 0.25 就看得出一點，0 就沒有；換水立刻稀釋。 */
+  bloom: number;
+  /** 爛飼料、糞便的黃褐濁，就是 cloudiness()。 */
+  organic: number;
+  /** 魚覺得水不舒服（0～1）：鰭稍微收、游得慢一點。只是表現，不扣健康、不算症狀（企劃 2026-10-21）。 */
+  uneasy: number;
+}
+
+/** 氨＋亞硝每 1 ppm 疊多少白濁：0.25 約 0.075、0.5 約 0.15。 */
+const BLOOM_PER_PPM = 0.3;
+/** 白濁到這麼濃，早上報告第一次說明「新缸常見的細菌白濁」。 */
+export const BLOOM_NOTE = 0.05;
+
+export function waterLook(state: TankState): WaterLook {
+  const ppm = state.water.tan + state.water.no2;
+  return { bloom: Math.min(0.25, ppm * BLOOM_PER_PPM), organic: cloudiness(state), uneasy: Math.min(1, ppm) };
+}
