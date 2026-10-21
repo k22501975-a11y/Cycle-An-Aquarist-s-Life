@@ -39,6 +39,7 @@ import { personaChip } from './ui/persona';
 import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
 import type { PanelContext, ShopTab } from './ui/panels';
 import { Guide } from './ui/guide';
+import { FIRST_PESTS_TIP, FIRST_TANK_LINE, WELCOME_LINE } from './ui/tutorial';
 import { Celebration, type CelebrateSpec } from './ui/celebrate';
 import { firstTime, loadMoments, type DeathAdviceCause, type MomentId } from './ui/moments';
 import { causeAdvice, HUNGER_LABEL, illnessOf, needsAdvice } from './ui/owner-advice';
@@ -480,7 +481,7 @@ async function start(): Promise<void> {
       save();
       setupPrompt.remove();
       document.body.classList.remove('setting-up');
-      moment('first_tank', { art: 'gear/tank-empty.webp', title: '你的第一個缸', sub: '水注滿、設備也開機了', owner: '接下來種一株草、放兩三條魚，硝化菌就會跟著長起來。' });
+      moment('first_tank', { art: 'gear/tank-empty.webp', title: '你的第一個缸', sub: '水注滿、設備也開機了', owner: FIRST_TANK_LINE });
       // 「你的第一個缸」卡片關掉後老闆才開口，不然對話框會從卡片後面露出來（#171）
       celebration.whenClear(() => {
         guideHeld = false;
@@ -1223,7 +1224,7 @@ async function start(): Promise<void> {
       'div.setup-welcome.glass',
       { role: 'status', onclick: close },
       ownerImg('setup-welcome-avatar'),
-      h('p', {}, h('b', {}, '阿德老闆　'), '歡迎！我是隔壁水族館的阿德，這個空缸送你。先挑設備，開你的第一個缸吧！'),
+      h('p', {}, h('b', {}, '阿德老闆　'), WELCOME_LINE),
     );
     document.body.append(welcome);
     window.setTimeout(close, 5000);
@@ -1390,9 +1391,9 @@ async function start(): Promise<void> {
       else void ownerSay(line);
     }
     if (e.type === 'pests_seen' && firstTime(store, 'first_pests')) {
-      const line = FIRST_PESTS_LINE;
-      if (game.sleeping || sleepingNow) firstPestsLine = line;
-      else void ownerSay(line);
+      // 不是危機，不跳對話框：一行提示，點「為什麼？」看完整說明（design/tutorial-lines.md §5）
+      if (game.sleeping || sleepingNow) firstPestsLine = FIRST_PESTS_LINE;
+      else guide.showTip(FIRST_PESTS_TIP, FIRST_PESTS_LINE);
     }
     // 過一晚的時候不跳提示，早上報告會一條一條列出來
     if (game.sleeping) return;
@@ -1602,7 +1603,7 @@ async function start(): Promise<void> {
           firstDeathLine = null;
         }
         if (firstPestsLine !== null) {
-          void ownerSay(firstPestsLine);
+          guide.showTip(FIRST_PESTS_TIP, firstPestsLine);
           firstPestsLine = null;
         }
       });

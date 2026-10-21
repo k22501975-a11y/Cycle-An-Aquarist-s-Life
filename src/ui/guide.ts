@@ -7,8 +7,8 @@ import { ownerMood, type OwnerMood } from './owner-mood';
 import { kickOwnerQueue, onOwnerAskClosed, onOwnerAskOpened, ownerAskOpen } from './owner-ask';
 import { advanceQuest, currentQuest, loadProgress, newProgress, OWNER_NAME, pendingTip, QUESTS, questShopTab, saveProgress, type QuestShopTab, type QuestTarget, type TutorialProgress } from './tutorial';
 
-/** 任務卡上「做好了」閃多久。 */
-const FLASH_MS = 2600;
+/** 任務卡上「做好了」閃多久（design/tutorial-lines.md：3 秒後自己換成下一步）。 */
+const FLASH_MS = 3000;
 /** 老闆的一句提醒在畫面邊緣留多久。 */
 const TIP_MS = 14_000;
 
@@ -127,7 +127,13 @@ export class Guide {
         return;
       }
       this.note?.(text);
-      this.showFlash(done.doneShort, paid);
+      const short = done.doneShortFor?.(state) ?? null;
+      // 任務卡已經說了「測到氨了！先換水」，同一句的情境提醒就不再跳
+      if (short && done.id === 'test' && !this.progress.seenTips.includes('ammonia')) {
+        this.progress.seenTips.push('ammonia');
+        this.save();
+      }
+      this.showFlash(short ?? done.doneShort, paid);
       return;
     }
     const goals = checkGoals(tanks, this.tutorialOver);
@@ -143,7 +149,7 @@ export class Guide {
       this.progress.seenTips.push(tip.id);
       this.save();
       this.sound('open');
-      this.showTip(tip.text);
+      this.showTip(tip.short ?? tip.text, tip.short ? tip.text : undefined);
     }
   }
 
@@ -160,15 +166,30 @@ export class Guide {
     if (coins > 0) this.cheer?.(this.pill.getBoundingClientRect(), coins);
   }
 
-  /** 老闆的一句提醒：畫面左下角一張小卡，不擋缸，點 ✕ 或過一陣子自己收；也進通知匣。 */
-  showTip(text: string): void {
-    const body = text.replace(new RegExp(`^${OWNER_NAME}[：:]\\s*`), '');
-    this.note?.(`${OWNER_NAME}：${body}`);
+  /**
+   * 老闆的一句提醒：畫面左下角一張小卡，不擋缸，點 ✕ 或過一陣子自己收；也進通知匣。
+   * why：完整的說明（design/tutorial-lines.md §4）。小卡先只放一行，點「為什麼？」才展開；通知匣存完整的那段。
+   */
+  showTip(text: string, why?: string): void {
+    const strip = (t: string) => t.replace(new RegExp(`^${OWNER_NAME}[：:]\\s*`), '');
+    const body = strip(text);
+    this.note?.(`${OWNER_NAME}：${why ? strip(why) : body}`);
     const close = () => {
       window.clearTimeout(this.tipTimer);
       this.tip.classList.remove('open');
     };
-    this.tip.replaceChildren(ownerPortrait('tip-avatar', ownerMood(body)), h('p.tip-text', {}, body), h('button.tip-close', { 'aria-label': '收起', onclick: close }, '✕'));
+    const line = h('p.tip-text', {}, body);
+    const expand = () => {
+      line.textContent = strip(why ?? text);
+      this.tip.classList.add('why');
+      whyBtn.remove();
+      // 展開了在讀：重新計時，不要讀到一半就收掉
+      window.clearTimeout(this.tipTimer);
+      this.tipTimer = window.setTimeout(close, TIP_MS);
+    };
+    const whyBtn = h('button.tip-why', { onclick: expand }, '為什麼？');
+    this.tip.classList.remove('why');
+    this.tip.replaceChildren(ownerPortrait('tip-avatar', ownerMood(why ?? body)), h('div.tip-body', {}, line, why ? whyBtn : ''), h('button.tip-close', { 'aria-label': '收起', onclick: close }, '✕'));
     this.tip.classList.add('open');
     window.clearTimeout(this.tipTimer);
     this.tipTimer = window.setTimeout(close, TIP_MS);
