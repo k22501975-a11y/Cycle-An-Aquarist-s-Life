@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HUNGRY } from '../sim';
 import { biteMotion } from './feeding';
-import { hungerLook, spawnSwimmer, stepTurn, swimTilt, updateSwimmer, type TurnState } from './fish-motion';
+import { crawlLane, hungerLook, spawnSwimmer, stepTurn, swimTilt, updateSwimmer, type TurnState } from './fish-motion';
 
 /** 一條餓的孔雀魚追一顆停在水中的飼料：數牠 10 秒內翻面幾次。 */
 function chase(): number {
@@ -97,7 +97,9 @@ describe('不貼缸壁疊成一排', () => {
     const bounds = { width: 600, height: 400, surface: 30, bottom: 340 };
     const s = spawnSwimmer(1, 'cherry_shrimp', bounds, rand);
     for (let i = 0; i < 300; i++) updateSwimmer(s, [s], { alive: true, hungry: false, symptoms: [], body: { halfLen: 14, halfH: 8 } }, { bounds, scale: 1, food: [] }, 1 / 60, rand);
-    expect(s.y + 8 * 0.8).toBeLessThanOrEqual(bounds.bottom + 0.01);
+    // 每隻蝦走在沙面的不同排（畫面評測第 8 輪），往前那幾排還是在看得到的沙面上，不會陷進去
+    expect(s.y + 8 * 0.8).toBeLessThanOrEqual(bounds.bottom + crawlLane(1) + 0.01);
+    expect(crawlLane(1)).toBeLessThanOrEqual(9);
   });
 });
 

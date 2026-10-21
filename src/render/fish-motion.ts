@@ -117,6 +117,15 @@ function intruderNear(mom: Swimmer, all: Swimmer[], radius: number): Swimmer | n
   return best;
 }
 
+/**
+ * 蝦走在底沙的哪一排（畫面評測第 8 輪：六隻蝦同一個高度排成一直線很不自然）：
+ * 每隻照編號固定一個前後位置，往下（靠近玩家、走在沙的前緣）最多約 9 px，往上（後面）約 2 px。
+ */
+export function crawlLane(id: number): number {
+  const k = (Math.imul(id + 1, 2654435761) >>> 0) / 4294967296;
+  return -2 + k * 11;
+}
+
 export function spawnSwimmer(id: number, species: FishSpeciesId, bounds: TankBounds, rand: () => number): Swimmer {
   const p = PROFILES[species];
   const y = p.crawler ? floorAt(bounds, bounds.width / 2) - 4 : bounds.surface + 30 + rand() * (bounds.bottom - bounds.surface - 60);
@@ -154,7 +163,7 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
     s.startle = Math.max(0, s.startle! - dt);
     s.vx *= Math.pow(0.02, dt);
     s.x = Math.min(bounds.width - 16 * scale, Math.max(16 * scale, s.x + s.vx * dt));
-    s.y = floorAt(bounds, s.x) - Math.max(3 * scale, (cond.body?.halfH ?? 0) * 0.8);
+    s.y = floorAt(bounds, s.x) - Math.max(3 * scale, (cond.body?.halfH ?? 0) * 0.8) + crawlLane(s.id) * scale;
     return;
   }
   if (p.crawler) {
@@ -388,7 +397,7 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   s.x = Math.min(bounds.width - edge, Math.max(edge, s.x + s.vx * dt));
   const wantY = s.y + s.vy * dt;
   s.y = p.crawler
-    ? floorAt(bounds, s.x) - Math.max(3 * scale, halfH * 0.8)
+    ? floorAt(bounds, s.x) - Math.max(3 * scale, halfH * 0.8) + crawlLane(s.id) * scale
     : Math.min(Math.max(bounds.surface + 4, floorAt(bounds, s.x) - Math.max(3 * scale, halfH)), Math.max(bounds.surface + 4 + halfH * 0.3, wantY));
   // 頂到水面或底沙：往那邊的速度歸零，不然速度一直朝牆、位置被夾住，頭一直朝下（或朝上）抖
   if (!p.crawler && Math.abs(s.y - wantY) > 1e-6 && Math.sign(s.vy) === Math.sign(wantY - s.y)) s.vy = 0;
