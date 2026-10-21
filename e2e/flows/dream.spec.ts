@@ -23,6 +23,15 @@ test('夢想魚路線與配一對看看', async ({ page }) => {
   await expect(pp.locator('.pp-row-head').first()).toContainText('全紅白子 × 藍草尾');
 });
 
+/** #256：重開遊戲後夢想魚膠囊一進來就在，不用先做一個動作。 */
+test('重開遊戲後夢想魚膠囊馬上看得到', async ({ page }) => {
+  await startClean(page);
+  await expect(page.locator('.dream-strip')).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  await page.reload();
+  await expect(page.locator('.dream-strip')).toBeVisible();
+});
+
 /** G4：買第二缸後先問這缸拿來做什麼；選了缸就有名字，接著到商店買必買的東西。 */
 test('第二缸選用途：繁殖缸或展示缸', async ({ page }) => {
   await startClean(page);
