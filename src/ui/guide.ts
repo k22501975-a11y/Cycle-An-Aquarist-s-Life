@@ -131,9 +131,9 @@ export class Guide {
   }
 
   /** 玩家點了缸（畫面評測第 8 輪 #252：圖卡不要一直蓋住左邊的缸）：先收起來，任務卡上留個記號。 */
-  tuckTray(): void {
-    // 剛因為換任務自己展開的那一下不算（點缸的那一下常常就是完成上一個任務的那一下）
-    if (this.tray.hidden || performance.now() - this.openedAt < TRAY_GRACE_MS) return;
+  tuckTray(fromTap = false): void {
+    // 點缸收起時，剛因為換任務自己展開的那一下不算（點缸的那一下常常就是完成上一個任務的那一下）
+    if (this.tray.hidden || (fromTap && performance.now() - this.openedAt < TRAY_GRACE_MS)) return;
     this.tray.classList.add('tucked');
     this.pill.classList.add('tray-tucked');
     this.onLayout();
