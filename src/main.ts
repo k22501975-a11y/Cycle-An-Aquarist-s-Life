@@ -1736,6 +1736,9 @@ async function start(): Promise<void> {
         window.setTimeout(() => shade.remove(), 450);
         sleepingNow = false;
         celebration.release();
+        // 報告說的那條魚、那株草在缸裡亮一下，一眼找得到是誰
+        const about = report.items.find((i) => game.tanks[i.tank] === game.state && (i.subjectId !== undefined || i.plantId !== undefined));
+        if (about) view.spotlight(about.subjectId !== undefined ? 'fish' : 'plant', about.subjectId ?? about.plantId!);
         if (nurseryGiftTank !== null) {
           const tank = nurseryGiftTank;
           nurseryGiftTank = null;
