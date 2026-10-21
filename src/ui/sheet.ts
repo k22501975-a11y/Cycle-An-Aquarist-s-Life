@@ -86,6 +86,8 @@ export interface Note {
   at: number;
 }
 
+const SEVERITY: Record<Tone, number> = { info: 0, warn: 1, bad: 2 };
+
 /** 玩家剛按過東西（這段時間內的通知是對那一下的回應）。 */
 const DIRECT_MS = 1500;
 const INBOX_MAX = 40;
@@ -110,7 +112,7 @@ export class Toasts {
   private lastInput = -Infinity;
   /** 擋重複、純告知限頻（#212）：被擋下的不跳，只進通知匣。 */
   private readonly gate = new NotifyGate();
-  private current: { el: HTMLElement; text: string; count: number; sticky: boolean } | null = null;
+  private current: { el: HTMLElement; text: string; count: number; sticky: boolean; tone: Tone; at: number } | null = null;
   private fadeTimer = 0;
   private removeTimer = 0;
 
@@ -163,9 +165,15 @@ export class Toasts {
   private route(text: string, tone: Tone = 'info', action?: ToastAction): void {
     const now = performance.now();
     const direct = now - this.lastInput < DIRECT_MS;
-    const popNow = this.gate.accept(text, tone, !!action, now, direct) && (direct || !!action || tone === 'bad');
-    this.record(text, tone, action, !popNow);
-    if (popNow) this.pop(text, tone, action, direct);
+    // 畫面上同一句還在：直接加「×2」，不管閘門（不會多跳一則，只是數字變）
+    const same = this.current?.el.isConnected && this.current.text === text;
+    const popNow = same || (this.gate.accept(text, tone, !!action, now, direct) && (direct || !!action || tone === 'bad'));
+    // 剛跳出來的那則（還不到 DIRECT_MS）不被差不多同時冒出來、沒那麼要緊的蓋掉：
+    // 玩家按了之後剛好有別的事（例如畫質自動調整）也算在「剛按過」裡，不能把真正的回應換掉
+    const cur = this.current;
+    const fresh = !same && cur?.el.isConnected && now - cur.at < DIRECT_MS && !action && SEVERITY[tone] < SEVERITY[cur.tone];
+    this.record(text, tone, action, !popNow || !!fresh);
+    if (popNow && !fresh) this.pop(text, tone, action, direct);
   }
 
   private record(text: string, tone: Tone, action: ToastAction | undefined, unread: boolean): void {
@@ -213,7 +221,7 @@ export class Toasts {
       el.classList.add('sticky');
     }
     this.host.replaceChildren(el);
-    this.current = { el, text, count: 1, sticky };
+    this.current = { el, text, count: 1, sticky, tone, at: performance.now() };
     window.clearTimeout(this.fadeTimer);
     window.clearTimeout(this.removeTimer);
     if (!sticky) this.arm(el, tone);
