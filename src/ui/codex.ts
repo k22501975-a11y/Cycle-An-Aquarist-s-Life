@@ -1,4 +1,3 @@
-import type { KeyValueStore } from '../game/save';
 import { AIR_PUMPS, CHILLERS, CO2_KITS, FANS, FILTERS, HARDSCAPE, SUBSTRATES, FISH_SPECIES, HEATERS, LIGHTS, observeSymptoms, PLANT_SPECIES, TANKS, type HardscapeSpec, type SubstrateSpec, type Symptom, type TankState } from '../sim';
 
 /**
@@ -195,24 +194,8 @@ const DISEASES: CodexEntry[] = [
 
 export const CODEX: CodexEntry[] = [...fishEntries(), ...plantEntries(), ...gearEntries(), ...DISEASES];
 
-export const CODEX_KEY = 'cycle.codex.v1';
-
-export function loadCodexSeen(store: KeyValueStore): Set<string> {
-  try {
-    const raw = JSON.parse(store.getItem(CODEX_KEY) ?? '[]');
-    return new Set(Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : []);
-  } catch {
-    return new Set();
-  }
-}
-
-export function saveCodexSeen(store: KeyValueStore, seen: Set<string>): void {
-  try {
-    store.setItem(CODEX_KEY, JSON.stringify([...seen]));
-  } catch {
-    // 存不了就算了
-  }
-}
+// 已解鎖清單的讀寫在 codex-seen.ts（主程式開機就要，條目資料用到才載入）
+export { CODEX_KEY, loadCodexSeen, saveCodexSeen } from './codex-seen';
 
 /** 檢查有沒有新解鎖的疾病條目，回傳新解鎖的。 */
 export function unlockCodex(seen: Set<string>, state: TankState): CodexEntry[] {

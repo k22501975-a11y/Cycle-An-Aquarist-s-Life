@@ -4,7 +4,7 @@ import { freeAmmoniaFraction, temperatureFactor } from '../chemistry';
 import { DEFAULT_BREEDING_CONDITION, DEFAULT_NUTRITION, foodLots, foodQuality, nutritionFactor, pruneFood } from '../food';
 import { chance } from '../random';
 import { FISH_SPECIES, type FishSpecies } from '../species';
-import { recordEvent, type Fish, type TankState } from '../state';
+import { recordEvent, type Fish, type IchCause, type TankState } from '../state';
 import { diseaseStress, progressInfections, spreadInfections } from './disease';
 import { cycleMaturity } from './nitrogen';
 import { sizeRatio } from './population';
@@ -216,8 +216,8 @@ export const STRESS_CAUSE_LABELS: Record<StressKey, string> = {
 };
 
 /**
- * 這尾魚最可能的壓力來源，由大到小（只列夠明顯的）。給診斷畫面、老闆台詞、生病事件用。
- * 免疫力被壓低時白點蟲才會上身，所以這也是「為什麼會生病」的答案。
+ * 這尾魚最可能的壓力來源，由大到小（只列夠明顯的）。給診斷畫面、老闆台詞用。
+ * 壓力壓低免疫力，有誘因、白點蟲上身時壓力大的魚比較容易中。
  */
 export function likelyCauses(state: TankState, fish: Fish, census?: TankCensus): { key: StressKey; label: string; weight: number }[] {
   const s = computeStressors(state, fish, census);
@@ -254,6 +254,49 @@ function computeDamage(state: TankState, fish: Fish, sp: FishSpecies): Damage[] 
   return damage;
 }
 
+/** 早上報告、老闆說的白點病原因。 */
+export const ICH_CAUSE_LABELS: Record<IchCause, string> = {
+  temp_swing: '一天內水溫差了 3°C 以上',
+  new_fish: '新魚沒先檢疫就放進缸裡，把白點蟲帶進來',
+  crowding: '魚太多，超過這缸的建議量',
+};
+
+/** 24 小時內水溫差多少算誘因。 */
+export const ICH_SWING_C = 3;
+/** 有溫差或太擠時，缸裡潛伏的白點蟲每小時上身的機率（溫差撐一天約三成會發）。 */
+const LATENT_ICH_PER_HOUR = 0.015;
+
+/** 最近 24 小時的水溫差（溫度計每個整點的記錄加上現在的水溫）。 */
+export function tempSwing24(state: TankState): number {
+  let lo = state.water.tempC;
+  let hi = lo;
+  const log = state.tempLog ?? [];
+  for (let i = log.length - 1; i >= 0 && log[i].hours > state.hours - 24; i--) {
+    lo = Math.min(lo, log[i].tempC);
+    hi = Math.max(hi, log[i].tempC);
+  }
+  return hi - lo;
+}
+
+/** 缸的環境有沒有白點病的誘因（溫差、太擠）；新魚帶進來的另外記在魚身上。 */
+export function ichTrigger(state: TankState, census: TankCensus = tankCensus(state)): IchCause | null {
+  if (tempSwing24(state) >= ICH_SWING_C) return 'temp_swing';
+  if (census.crowding > 1) return 'crowding';
+  return null;
+}
+
+/**
+ * 這缸的白點蟲現在能不能上身、算哪個原因：已經有魚帶著、或從魚身上掉下來的蟲還沒死光（同一波還沒過）就跟著那一波，
+ * 不然要環境有誘因。都沒有時，底砂裡剩下的蟲也上不了身（機率為 0）。
+ */
+function ichCauseNow(state: TankState, living: Fish[], trigger: IchCause | null): IchCause | null {
+  const { water } = state;
+  if (water.ichCause && water.ichPathogen + water.ichCysts < 0.01) delete water.ichCause;
+  // 舊存檔的帶原魚沒記原因，當成新魚帶進來的
+  const wave = living.find((f) => f.ich.stage !== 'none');
+  return wave ? (wave.ich.cause ?? 'new_fish') : (water.ichCause ?? trigger);
+}
+
 export function immunity(fish: Fish, sp: FishSpecies): number {
   return Math.min(1, hardiness(fish, sp) * nutritionFactor(fish.nutrition)) * (1 - 0.7 * fish.stress) * (fish.hunger > 0.8 ? 0.8 : 1);
 }
@@ -266,6 +309,15 @@ export function updateFauna(state: TankState, dt: number): void {
 
   feed(state, living, dt);
   const census = tankCensus(state);
+  const trigger = ichTrigger(state, census);
+  const ichCause = ichCauseNow(state, living, trigger);
+  // 溫差、太擠時，缸裡潛伏的蟲會找抵抗力最差的魚上身（還沒有魚帶著時才算新的一波）
+  if (trigger && !water.ichCause && !living.some((f) => f.ich.stage !== 'none') && chance(state.rng, LATENT_ICH_PER_HOUR, dt)) {
+    const weakest = living
+      .filter((f) => FISH_SPECIES[f.species].susceptibleToIch)
+      .sort((a, b) => immunity(a, FISH_SPECIES[a.species]) - immunity(b, FISH_SPECIES[b.species]))[0];
+    if (weakest) weakest.ich = { stage: 'incubating', progress: 0, cause: trigger };
+  }
 
   for (const fish of living) {
     const sp = FISH_SPECIES[fish.species];
@@ -290,7 +342,7 @@ export function updateFauna(state: TankState, dt: number): void {
     const rate = target > fish.stress ? 0.5 : 0.1;
     fish.stress += (target - fish.stress) * (1 - Math.exp(-rate * dt));
 
-    updateIch(state, fish, sp, dt);
+    updateIch(state, fish, sp, ichCause, dt);
 
     const damage = computeDamage(state, fish, sp);
     damage.push(...progressInfections(state, fish, water.tempC, { antibiotic: water.antibiotic ?? 0, dewormer: water.dewormer ?? 0 }, dt));
@@ -467,7 +519,7 @@ function settleCondition(fish: Fish, dt: number): void {
  * 在底砂分裂後釋放大量新的游走期蟲。藥物只殺游走期（包在皮下或包囊裡的殺不到），
  * 溫度越高週期越快，所以提高水溫能讓藥更快見效。
  */
-function updateIch(state: TankState, fish: Fish, sp: FishSpecies, dt: number): void {
+function updateIch(state: TankState, fish: Fish, sp: FishSpecies, cause: IchCause | null, dt: number): void {
   if (!sp.susceptibleToIch) return;
   const { water } = state;
   const tf = temperatureFactor(water.tempC);
@@ -475,16 +527,18 @@ function updateIch(state: TankState, fish: Fish, sp: FishSpecies, dt: number): v
 
   switch (fish.ich.stage) {
     case 'none': {
+      // 沒有誘因時水裡的蟲上不了身
+      if (!cause) break;
       const risk = 0.03 * water.ichPathogen * Math.pow(1 - immunity(fish, sp), 2);
-      if (chance(state.rng, risk, dt)) fish.ich = { stage: 'incubating', progress: 0 };
+      if (chance(state.rng, risk, dt)) fish.ich = { stage: 'incubating', progress: 0, cause };
       break;
     }
     case 'incubating':
       fish.ich.progress += (dt / 72) * tf;
       if (fish.ich.progress >= 1) {
-        fish.ich = { stage: 'visible', progress: 0 };
-        // 附上最可能的誘因（例如沒吃飽、水溫忽高忽低），老闆和魚的資訊可以說出為什麼會生病
-        recordEvent(state, { type: 'ich_visible', subjectId: fish.id, cause: likelyCauses(state, fish)[0]?.key });
+        fish.ich = { stage: 'visible', progress: 0, cause: fish.ich.cause };
+        // 附上這一波的誘因（溫差、新魚、太擠），早上報告和老闆可以說出為什麼會生病
+        recordEvent(state, { type: 'ich_visible', subjectId: fish.id, cause: fish.ich.cause ?? 'new_fish' });
       }
       break;
     case 'visible':
@@ -492,6 +546,7 @@ function updateIch(state: TankState, fish: Fish, sp: FishSpecies, dt: number): v
       if (fish.ich.progress >= 1) {
         // 成熟的蟲脫落，在底砂形成包囊。
         water.ichCysts += 10 * scale;
+        water.ichCause = fish.ich.cause ?? 'new_fish';
         fish.ich = { stage: 'none', progress: 0 };
       }
       break;

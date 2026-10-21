@@ -98,4 +98,17 @@ describe('「過一晚」（first-10-minutes.md F2）', () => {
     expect(item?.action).toBe('fry_box');
     expect(report.items.some((x) => x.kind === 'quiet')).toBe(false);
   });
+
+  it('好幾條魚出現白點：合成一行「3 條魚有白點」並寫出原因（polish-to-9.md G3）', () => {
+    const game = new Game(cycledTank());
+    const before = snapshot(game.tanks);
+    game.act((st) => {
+      for (const f of st.fish.slice(0, 3)) recordEvent(st, { type: 'ich_visible', subjectId: f.id, cause: 'temp_swing' });
+    });
+    const report = morningReport(before, game.tanks, 12, null);
+    const sick = report.items.filter((x) => x.kind === 'disease');
+    expect(sick).toHaveLength(1);
+    expect(sick[0].text).toBe('3 條魚有白點。原因：一天內水溫差了 3°C 以上');
+    expect(sick[0].count).toBe(3);
+  });
 });

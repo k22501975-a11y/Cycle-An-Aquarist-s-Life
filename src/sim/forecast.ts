@@ -1,9 +1,9 @@
 import { linkTanks } from './household';
 import { hasSteadyFood } from './feeders';
-import { freeAmmonia, hoursUntilStarving, STRESS_CAUSE_LABELS, type StressKey } from './processes/fauna';
+import { freeAmmonia, hoursUntilStarving, ICH_CAUSE_LABELS } from './processes/fauna';
 import { FISH_SPECIES } from './species';
 import { TICK_HOURS, step } from './step';
-import type { SimEvent, TankState } from './state';
+import type { IchCause, SimEvent, TankState } from './state';
 
 /**
  * 推播用的預測（GAME_DESIGN 第 11 節）：模擬是確定的（亂數狀態存在缸裡），
@@ -49,7 +49,7 @@ function eventAlert(state: TankState, e: SimEvent): Omit<ForecastAlert, 'hours' 
       return {
         category: 'crisis',
         key: 'ich',
-        body: `${speciesOf(state, e.subjectId)}身上出現白點，要趕快處理，不然會傳染整缸。${e.cause && e.cause in STRESS_CAUSE_LABELS ? `可能的原因：${STRESS_CAUSE_LABELS[e.cause as StressKey]}。` : ''}`,
+        body: `${speciesOf(state, e.subjectId)}身上出現白點，要趕快處理，不然會傳染整缸。${e.cause && e.cause in ICH_CAUSE_LABELS ? `原因：${ICH_CAUSE_LABELS[e.cause as IchCause]}。` : ''}`,
       };
     case 'disease_visible':
       return { category: 'crisis', key: 'disease', body: `${speciesOf(state, e.subjectId)}看起來生病了（${e.cause === 'columnaris' ? '身上長白色棉絮' : '鰓蓋張開、呼吸很急'}）。` };
