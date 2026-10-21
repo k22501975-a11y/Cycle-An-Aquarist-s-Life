@@ -1130,3 +1130,36 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 .la-trait.father { border-color: rgba(140, 200, 255, 0.6); color: #b5dcff; }
 .la-trait.both { border-color: rgba(190, 170, 255, 0.6); color: #d6ccff; }
 .la-trait.hidden { border-color: rgba(240, 200, 120, 0.8); color: var(--gold); background: rgba(240, 200, 120, 0.12); }
+/*
+ * 左上角收成一排小膠囊（YenWel 2026-10-21：「太亂了很躁」「都看不到魚了」）：
+ * 夢想魚只剩剪影和三個點，任務只剩老闆小頭像和一行短標題（點了聽完整說明），今天的小事點了才展開。
+ */
+.dream-strip { padding: 3px 10px 3px 4px; gap: 6px; height: 38px; }
+.dream-strip .dream-mini { width: 38px; height: 22px; }
+.dream-strip-label { display: none; }
+.quest-pill { flex-direction: row; align-items: center; gap: 8px; min-height: 38px; height: 38px; padding: 0 12px 0 40px; border-radius: 999px; max-width: min(230px, 34vw); overflow: hidden; }
+.quest-avatar { left: 4px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; }
+.quest-pill .quest-step, .quest-pill .quest-hint, .quest-pill .quest-progress { display: none; }
+.quest-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.quest-pill .quest-meter { position: absolute; left: 40px; right: 14px; bottom: 4px; width: auto; min-width: 0; height: 3px; margin: 0; }
+.quest-pill .quest-coins { flex: none; }
+.daily-holder:not(.open) .daily { width: auto; height: 38px; padding: 0 12px; justify-content: center; border-radius: 999px; }
+.daily-holder:not(.open) .daily-task { display: none; }
+.daily-holder:not(.open) .daily-chest { margin: 0; padding: 3px 10px; font-size: 12px; }
+.daily-holder:not(.open) .daily.ready { flex-direction: row; align-items: center; gap: 8px; }
+.daily-head { cursor: pointer; gap: 8px; }
+.daily-head b::after { content: ' ▾'; color: var(--muted); letter-spacing: 0; }
+.daily-holder.open .daily-head b::after { content: ' ▴'; }
+.daily-holder.open .daily { width: min(220px, 40vw); }
+.daily-holder:not(.open) .daily-head b { font-size: 0; letter-spacing: 0; }
+.daily-holder:not(.open) .daily-head b::after { content: '小事 ▾'; font-size: 12.5px; color: var(--gold); letter-spacing: 0.08em; }
+/* 一鍵買的圖卡也縮小：只留圖、名字、價錢 */
+.qt-row { gap: 5px; }
+.qt-card { width: 66px; padding: 4px 3px 4px; border-radius: 10px; font-size: 10.5px; animation: none; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); }
+.qt-card:first-child { animation: quest-glow 1.6s ease-in-out infinite; }
+.qt-card .qt-sub { display: none; }
+.qt-art, .qt-art.plant, .qt-art.stone { width: 50px; height: 30px; }
+.qt-card .price-tag { font-size: 10px; transform: scale(0.9); }
+.qt-badge { font-size: 9px; top: -6px; }
+.qt-more { width: 40px; font-size: 11px; border-radius: 10px; }
+.qt-more small { display: none; }

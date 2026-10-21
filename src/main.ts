@@ -1386,7 +1386,9 @@ async function start(): Promise<void> {
     const todo = (id: sim.DailyTaskId) => !!d?.tasks.some((t) => t.id === id && !t.done);
     view.setTargetHint(todo('observe') ? 'fish' : todo('snail') ? 'snail' : null);
     if (!dailyChanged(JSON.stringify([d?.day, d?.tasks, d?.claimed, claimable]))) return;
-    const card = dailyCard(d, claimable, { go: goDaily, claim: claimDailyChest });
+    // 平常收成一顆小膠囊（「今天的小事 ○●○」），點一下才展開三件事；做了一件就收起來（YenWel：左邊太亂、看不到魚）
+    const card = dailyCard(d, claimable, { go: (id) => (dailyHolder.classList.remove('open'), goDaily(id)), claim: claimDailyChest });
+    card?.querySelector('.daily-head')?.addEventListener('click', () => (dailyHolder.classList.toggle('open'), measure()));
     dailyHolder.replaceChildren(...(card ? [card] : []));
     requestAnimationFrame(() => measure());
   };
@@ -1417,21 +1419,28 @@ async function start(): Promise<void> {
     // 參觀時底部工具列藏起來，改留參觀列的空間
     const bottom = visiting ? visitBar.offsetHeight + 24 : scaping ? scapeBar.el.offsetHeight + 24 : stageRect.bottom - tools.getBoundingClientRect().top;
     view.setInsets({ top: Math.round(top), bottom: Math.round(bottom) });
-    // 任務小卡在左上角；浮動選取卡排在它下面，下緣留給左下角的缸名標籤。
-    dreamHolder.style.top = `${Math.round(top + 10)}px`;
-    const dreamH = dreamHolder.offsetHeight > 0 ? dreamHolder.offsetHeight + 6 : 0;
-    guide.pill.style.top = `${Math.round(top + 10 + dreamH)}px`;
-    // 通知讓出任務卡的寬度
-    document.body.style.setProperty('--pill-w', guide.pillVisible ? `${guide.pill.offsetWidth + 14}px` : '0px');
-    const pillH0 = guide.pillVisible ? guide.pill.offsetHeight + 8 : 0;
-    // 一鍵買的圖卡排在任務卡下面（#235）
-    guide.tray.style.top = `${Math.round(top + 10 + dreamH + pillH0)}px`;
-    const pillH = pillH0 + (guide.pillVisible && guide.trayVisible ? guide.tray.offsetHeight + 8 : 0);
-    // 每日小事卡排在任務卡下面（#185）
-    dailyHolder.style.top = `${Math.round(top + 10 + dreamH + pillH)}px`;
-    const dailyH = dailyHolder.offsetHeight > 0 ? dailyHolder.offsetHeight + 8 : 0;
+    // 左上角只留一排小膠囊（YenWel：「太亂了很躁」「都看不到魚了」）：夢想魚｜任務｜今天的小事，缸要露出來
+    let x = 14;
+    let rowH = 0;
+    for (const [el, shown] of [
+      [dreamHolder, dreamHolder.offsetHeight > 0],
+      [guide.pill, guide.pillVisible],
+      [dailyHolder, dailyHolder.offsetHeight > 0],
+    ] as const) {
+      el.style.top = `${Math.round(top + 10)}px`;
+      el.style.left = `calc(env(safe-area-inset-left) + ${x}px)`;
+      if (!shown) continue;
+      x += el.offsetWidth + 6;
+      // 展開的小事清單是蓋在缸上的下拉，不推開下面的東西
+      rowH = Math.max(rowH, el === dailyHolder ? 40 : el.offsetHeight);
+    }
+    // 通知讓出這一排的寬度
+    document.body.style.setProperty('--pill-w', `${x}px`);
+    // 一鍵買的圖卡排在這一排下面（#235）
+    guide.tray.style.top = `${Math.round(top + 16 + rowH)}px`;
+    const trayH = guide.pillVisible && guide.trayVisible ? guide.tray.offsetHeight + 8 : 0;
     const dockTop = dock.getBoundingClientRect().top - stageRect.top;
-    const above = 10 + dreamH + pillH + dailyH;
+    const above = 16 + rowH + trayH;
     cardArea = { x: 0, y: top + above, w: stageRect.width, h: Math.max(0, dockTop - top - above - 34) };
     placeSelCard();
     stage.style.setProperty('--dock-top', `${Math.round(stageRect.bottom - dockTop - stageRect.top)}px`);
