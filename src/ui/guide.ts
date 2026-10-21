@@ -3,6 +3,7 @@ import type { KeyValueStore } from '../game/save';
 import { checkGoals, nextGoals, nextStep, UNLOCK_LABELS, type Goal, type NextStep, type NextTarget, type TankState } from '../sim';
 import { h } from './dom';
 import { artImg, ownerImg } from './art-icons';
+import { ownerMood, type OwnerMood } from './owner-mood';
 import { kickOwnerQueue, onOwnerAskClosed, onOwnerAskOpened, ownerAskOpen } from './owner-ask';
 import { advanceQuest, currentQuest, loadProgress, newProgress, OWNER_NAME, pendingTip, QUESTS, questShopTab, saveProgress, type QuestShopTab, type QuestTarget, type TutorialProgress } from './tutorial';
 
@@ -188,7 +189,7 @@ export class Guide {
     };
     const whyBtn = h('button.tip-why', { onclick: expand }, '為什麼？');
     this.tip.classList.remove('why');
-    this.tip.replaceChildren(ownerPortrait('tip-avatar'), h('div.tip-body', {}, line, why ? whyBtn : ''), h('button.tip-close', { 'aria-label': '收起', onclick: close }, '✕'));
+    this.tip.replaceChildren(ownerPortrait('tip-avatar', ownerMood(why ?? body)), h('div.tip-body', {}, line, why ? whyBtn : ''), h('button.tip-close', { 'aria-label': '收起', onclick: close }, '✕'));
     this.tip.classList.add('open');
     window.clearTimeout(this.tipTimer);
     this.tipTimer = window.setTimeout(close, TIP_MS);
@@ -265,7 +266,7 @@ export class Guide {
     // 老闆的問句或提醒開著：一次只出一個對話框（G9），等它收起來再出（onOwnerAskClosed）
     if (ownerAskOpen()) return;
     // 阿德老闆的插畫頭像；圖載不到就退回線條小人
-    const avatar = h('div.owner-avatar.has-art', {}, ownerPortrait());
+    const avatar = h('div.owner-avatar.has-art', {}, ownerPortrait('owner-art', ownerMood(page.text)));
     const q = currentQuest(this.progress);
     const turnPage = () => {
       this.pages.shift();
@@ -306,7 +307,7 @@ export class Guide {
       this.shownGoal = '';
       this.pill.classList.add('show', 'flash');
       this.pill.replaceChildren(
-        ownerPortrait('quest-avatar'),
+        ownerPortrait('quest-avatar', 'proud'),
         h('span.quest-step', {}, '做好了'),
         h('span.quest-title', { title: text }, `✓ ${text}`),
         ...(coins > 0 ? [h('span.quest-coins', {}, h('i.coin'), `+${coins}`)] : []),
@@ -399,6 +400,6 @@ function goalDoneText(g: Goal): string {
 }
 
 /** 阿德老闆頭像（插畫）。 */
-function ownerPortrait(cls = 'owner-art'): HTMLElement {
-  return ownerImg(cls);
+function ownerPortrait(cls = 'owner-art', mood: OwnerMood = 'calm'): HTMLElement {
+  return ownerImg(cls, mood);
 }

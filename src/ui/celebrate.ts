@@ -1,4 +1,5 @@
 import { ownerImg } from './art-icons';
+import { ownerMood, type OwnerMood } from './owner-mood';
 import { h } from './dom';
 
 /**
@@ -101,7 +102,7 @@ export class Celebration {
       h('div.celebrate-pic', {}, h('span.celebrate-glow'), img),
       h('b.celebrate-title', {}, spec.title),
       h('span.celebrate-sub', {}, spec.sub),
-      spec.owner ? h('div.celebrate-owner', {}, ownerImg('celebrate-avatar'), h('span', {}, spec.owner)) : null,
+      spec.owner ? h('div.celebrate-owner', {}, ownerImg('celebrate-avatar', celebrateMood(spec.owner)), h('span', {}, spec.owner)) : null,
     );
     if (big) {
       // 全螢幕：畫面暗一點、中間一圈旋轉的光芒、彩帶從整個畫面上方灑下來
@@ -160,4 +161,10 @@ export class Celebration {
     if (this.waiting.length > 0) window.setTimeout(() => this.next(), 450);
     else if (!this.held) window.setTimeout(() => this.onClear.splice(0).forEach((run) => run()), 400);
   }
+}
+
+/** 慶祝卡上的老闆：沒有特別的情緒就是得意（玩家做到了一件事）。 */
+function celebrateMood(text: string): OwnerMood {
+  const mood = ownerMood(text);
+  return mood === 'calm' ? 'proud' : mood;
 }

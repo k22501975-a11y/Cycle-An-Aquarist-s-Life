@@ -1,4 +1,5 @@
 import { h } from './dom';
+import type { OwnerMood } from './owner-mood';
 
 /**
  * 插畫風圖示（public/art/ui/*.webp）：工具列用 AI 生的那批，選單用 scripts/ui-icons 畫的那批，同一款青綠底金框。
@@ -39,9 +40,13 @@ export function artImg(name: ArtIcon, cls = 'art-icon'): HTMLImageElement {
   return img;
 }
 
-/** 阿德老闆的頭像（插畫，第 11 批）；載入失敗退回選單用的小圖示。 */
-export function ownerImg(cls: string): HTMLImageElement {
-  const img = h(`img.${cls}.portrait`, { src: `${import.meta.env.BASE_URL}art/ui/owner-portrait.webp`, alt: '阿德老闆', draggable: 'false' });
+/** 已經有圖的老闆表情（public/art/ui/owner-<表情>.webp）；沒有的用平常的頭像。 */
+const OWNER_MOOD_ART: ReadonlySet<OwnerMood> = new Set<OwnerMood>(['happy', 'worried', 'surprised', 'proud']);
+
+/** 阿德老闆的頭像（插畫，第 11 批），mood 是表情（V1，看他說的話，owner-mood.ts）；載入失敗退回選單用的小圖示。 */
+export function ownerImg(cls: string, mood: OwnerMood = 'calm'): HTMLImageElement {
+  const file = OWNER_MOOD_ART.has(mood) ? `owner-${mood}` : 'owner-portrait';
+  const img = h(`img.${cls}.portrait`, { src: `${import.meta.env.BASE_URL}art/ui/${file}.webp`, alt: '阿德老闆', draggable: 'false', 'data-mood': mood });
   img.addEventListener('error', () => img.replaceWith(artImg('owner', cls)), { once: true });
   return img;
 }

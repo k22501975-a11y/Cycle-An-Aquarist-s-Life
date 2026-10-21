@@ -968,7 +968,7 @@ async function start(): Promise<void> {
       h('p.hint', {}, '遊戲時間是現實的 7 倍：現實 1 天＝遊戲 1 週，現實 1 小時＝遊戲 7 小時。關掉網頁時時間照常前進，下次打開會補算（最多兩週）。'),
       h('p.hint', {}, '暫停和快轉在主畫面時鐘旁邊的速度按鈕。'),
       h('h3', {}, '存檔'),
-      h('div.row', {}, h('button.btn', { onclick: exportSave }, '匯出存檔'), h('button.btn', { onclick: importSave }, '從檔案匯入')),
+      h('div.row', {}, h('button.btn', { onclick: exportSave }, '匯出存檔'), h('button.btn', { onclick: importSave }, '匯入存檔')),
       h('p.hint', {}, '遊戲每 10 秒自動存檔，每 30 分鐘自動備份一次；存檔壞掉時會自動用備份還原。換手機時可以匯出成檔案帶過去。'),
       ...(FEATURES.cloudSave
         ? [h('h3', {}, '雲端存檔'), h('button.btn', { onclick: openCloud }, cloud.session ? `雲端存檔（${cloud.session.username}）` : '登入雲端存檔')]
@@ -980,7 +980,7 @@ async function start(): Promise<void> {
       // App 版本來就是裝好的，不用顯示安裝說明
       ...(isNativeApp() ? [] : [h('h3', {}, '安裝'), ...installSection()]),
       h('h3', {}, '開發者'),
-      h('button.btn', { onclick: () => panelSheet('開發者數值', (p) => p.debugPanel(ctx), { live: true }) }, '開發者數值'),
+      h('button.btn', { onclick: () => panelSheet('開發者數值', (p) => p.debugPanel(ctx), { live: true }) }, '開發者'),
       h('label.check-row', {}, h('input', { type: 'checkbox', checked: uiPrefs.showFps, onchange: (e: Event) => setShowFps((e.target as HTMLInputElement).checked) }), h('span', {}, '顯示幀率（實機量效能用）')),
     );
   const menu = () =>

@@ -11,6 +11,7 @@ import { applyFoodLook, BITE_SECONDS, biteKick, biteMotion, frenzyLevel, visible
 import { canvasTexture, flakeTextures, spotlightTexture, makeCanvas, mix, pelletTextures, softDotTexture, tabletTexture, wormTextures } from './paint';
 import { cuttingsFromDrop, inferFraction, kitColor, tubeFrame, waterChangeFrame, TEST_SECONDS, WATER_CHANGE_SECONDS, type KitParam } from './ops-fx';
 import { PlantMesh } from './plant-sway';
+import { dayLight, flowNear } from './daylight';
 import { SnailView } from './snail-view';
 import { LAYER_LOOK, ScapeView, type Rect, type ScapeEdit, type ScapeTarget } from './scape-view';
 import { clawPose, clawRate, pleopods, type Pt } from './shrimp-limbs';
@@ -100,6 +101,8 @@ interface FishView {
   turn: TurnState;
   /** 蝦的小螯與腹足（程式畫的細線）。 */
   limbs: Graphics | null;
+  /** 剛出生（V3）：在媽媽身邊等 wait 秒才出現，一尾接一尾冒出來，t 是出現後過了幾秒。 */
+  born?: { mother: number; wait: number; t: number };
   /** 目前套用的發色加成（分四段，變了才換濾鏡）。 */
   /** 目前套用的色調（發色加成、轉色、老魚褪色），變了才重建濾鏡。 */
   tone: string;
@@ -217,6 +220,8 @@ export class TankView {
   private dropT = -1;
   /** 夜晚的程度 0（開燈）～1（關燈），慢慢轉換。 */
   private night = 0;
+  /** 燈的時間表（亮度、色溫），每格慢慢追上 dayLight()，避免跳一下。 */
+  private day = { level: 1, warm: 0 };
   private cuttings: Cutting[] = [];
   /** 換水演出進行了幾秒（-1 沒在演）與這次換掉的比例。 */
   private wcT = -1;
@@ -837,17 +842,22 @@ export class TankView {
     const b = this.bounds;
     this.rayLayer.visible = lit;
     this.causticsLayer.visible = lit;
+    // 跟著燈的時間表（V2）：剛開燈慢慢亮、中午最亮、關燈前漸暗；留個底，不會亮著燈卻看不到光
+    const day = dayLight(state);
+    this.day.level += (day.level - this.day.level) * Math.min(1, dt * 2);
+    this.day.warm += (day.warm - this.day.warm) * Math.min(1, dt * 2);
+    const glow = 0.25 + 0.75 * this.day.level;
     if (lit) {
       for (const r of this.rays) {
         r.s.x = r.x + Math.sin(t * 0.15 + r.phase) * b.width * 0.03;
-        r.s.alpha = 0.45 + 0.15 * Math.sin(t * 0.4 + r.phase);
+        r.s.alpha = (0.45 + 0.15 * Math.sin(t * 0.4 + r.phase)) * glow;
       }
       this.causticsA.tilePosition.x += dt * 9;
       this.causticsA.tilePosition.y += dt * 4;
       this.causticsB.tilePosition.x -= dt * 6;
       this.causticsB.tilePosition.y += dt * 7;
-      this.causticsA.alpha = 0.16 + 0.05 * Math.sin(t * 0.8);
-      this.causticsB.alpha = 0.12 + 0.05 * Math.sin(t * 0.6 + 1);
+      this.causticsA.alpha = (0.16 + 0.05 * Math.sin(t * 0.8)) * glow;
+      this.causticsB.alpha = (0.12 + 0.05 * Math.sin(t * 0.6 + 1)) * glow;
     }
     for (const m of this.motes) {
       m.x += (m.vx + Math.sin(t * 0.5 + m.phase) * 4) * dt;
@@ -1562,6 +1572,41 @@ export class TankView {
     return view;
   }
 
+  /** 剛出生的仔魚是誰生的：幾個小時內有「生了」的事件、媽媽還在畫面上。讀檔補算時很久以前生的就直接出現。 */
+  private motherOf(state: TankState, fish: Fish): number | null {
+    if (!fish.alive || (fish.ageDays ?? 99) > 0.15) return null;
+    for (let i = state.events.length - 1; i >= 0; i--) {
+      const e = state.events[i];
+      if (state.hours - e.hours > 4) break;
+      if (e.type === 'fry_born' && e.subjectId !== undefined && this.fish.has(e.subjectId)) return e.subjectId;
+    }
+    return null;
+  }
+
+  /** 出生的演出：還沒輪到就藏在媽媽身邊，輪到了從小冒出來（稍微彈一下）。 */
+  private stepBirth(view: FishView, dt: number): void {
+    const born = view.born!;
+    const mom = this.fish.get(born.mother);
+    if (born.wait > 0) {
+      born.wait -= dt;
+      if (mom) {
+        // 從媽媽肚子後面一點的地方出來
+        const back = Math.sign(mom.turn.f || 1) * (mom.swimmer.size?.halfLen ?? 10) * 0.25;
+        view.swimmer.x = mom.swimmer.x + back;
+        view.swimmer.y = mom.swimmer.y + (mom.swimmer.size?.halfH ?? 4) * 0.4;
+        view.swimmer.vx = mom.swimmer.vx * 0.3 + (this.rand() - 0.5) * 20;
+        view.swimmer.vy = (this.rand() - 0.3) * 15;
+      }
+      return;
+    }
+    view.holder.visible = true;
+    born.t += dt;
+    const k = Math.min(1, born.t / BIRTH_POP);
+    // 先長到 1.15 倍再縮回 1，看起來是「啵」一下冒出來
+    view.holder.scale.set(k < 1 ? Math.sin((k * Math.PI) / 2) * (1 + 0.15 * Math.sin(k * Math.PI)) : 1);
+    if (k >= 1) view.born = undefined;
+  }
+
   /** 這條魚現在的外觀：用哪張圖、補畫哪些鰭。key 一樣畫出來就一樣。 */
   private rigSpec(fish: Fish) {
     const form = this.formOf(fish);
@@ -1682,12 +1727,21 @@ export class TankView {
 
   private syncFish(state: TankState, dt: number): void {
     const present = new Set<number>();
+    // 剛生的（V3）：這一格新出現的仔魚照順序一尾一尾從媽媽身邊冒出來
+    const bornNow = new Map<number, number>();
     for (const fish of state.fish) {
       present.add(fish.id);
       let view = this.fish.get(fish.id);
       if (!view) {
         view = this.createView(fish);
         this.fish.set(fish.id, view);
+        const mother = this.motherOf(state, fish);
+        if (mother !== null) {
+          const i = bornNow.get(mother) ?? 0;
+          bornNow.set(mother, i + 1);
+          view.born = { mother, wait: BIRTH_FIRST + i * BIRTH_GAP, t: 0 };
+          view.holder.visible = false;
+        }
       }
       this.applyRig(view, fish);
     }
@@ -1706,7 +1760,7 @@ export class TankView {
     const inBox = all.filter((s) => boxed.has(s.id));
     const box = nurseryRect(this.waterBounds);
     if (this.poke && (this.poke.age += dt) > POKE_SECONDS) this.poke = null;
-    const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food, frenzy: this.food.length ? frenzyLevel(this.dropT) : 0, poke: this.poke ?? undefined };
+    const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food, frenzy: this.food.length ? frenzyLevel(this.dropT) : 0, poke: this.poke ?? undefined, plants: state.plants.map((pl) => plantPlacement(pl).x * this.waterBounds.width) };
     for (const fish of state.fish) {
       const view = this.fish.get(fish.id)!;
       const { swimmer, rig } = view;
@@ -1718,6 +1772,7 @@ export class TankView {
       const body = { halfLen, halfH: halfLen * ('heightPx' in rig ? rig.heightPx / Math.max(1, rig.lengthPx) : 0.35) };
       const caged = boxed.has(fish.id);
       const mood = isShrimpSpecies(fish.species) ? undefined : personalitySpec(fish);
+      if (view.born) this.stepBirth(view, dt);
       updateSwimmer(swimmer, caged ? inBox : living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX, body, begging: hungerLook(fish.hunger).begging, mood }, ctx, dt, () => this.rand());
 
       if (caged) {
@@ -1740,7 +1795,7 @@ export class TankView {
       view.holder.position.set(swimmer.x, swimmer.y);
       // 圖層是頭朝左畫的：往右游時水平翻轉。轉身時身體先壓窄再彈回，不是瞬間翻面。
       // 蝦受驚往後彈開時頭的方向不變
-      if (fish.alive && !(swimmer.startle! > 0)) stepTurn(view.turn, swimmer.vx, dt, swimmer.eating && !isShrimpSpecies(fish.species));
+      if (fish.alive && !(swimmer.startle! > 0)) stepTurn(view.turn, swimmer.vx, dt, (swimmer.eating || swimmer.settled) && !isShrimpSpecies(fish.species));
       const facingLeft = view.turn.f > 0;
       const turn = turnScale(view.turn.f);
       const k = (this.lengthPx(fish) / rig.lengthPx) * depth;
@@ -1767,13 +1822,15 @@ export class TankView {
         rig.rotation = facingLeft ? tilt : -tilt;
         const clamped = symptoms.includes('clamped_fins');
         // 停在飼料旁邊吃：尾巴只輕輕擺著平衡
-        const hovering = swimmer.eating && !isShrimpSpecies(fish.species);
+        const hovering = (swimmer.eating || swimmer.settled) && !isShrimpSpecies(fish.species);
         rig.animate(swimmer.phase, clamped ? 0.25 : hovering ? 0.35 : 1, clamped ? 0.55 : 1, fish.finDamage);
       }
       // 咬一口：身體只往前吸一點點，動作集中在張嘴
       const len = this.lengthPx(fish) * depth;
       const dir = facingLeft ? -1 : 1;
       view.biteT += dt;
+      // 待機時在水面啄一下（V1）
+      if (swimmer.peck) view.biteT = 0;
       const kick = biteKick(view.biteT);
       if (kick > 0 && !isShrimpSpecies(fish.species)) {
         const m = biteMotion(kick);
@@ -1847,8 +1904,6 @@ export class TankView {
       }
     }
     const t = state.hours;
-    // 過濾器開著水流比較強，水草擺得比較明顯
-    const flow = state.equipment.filter?.on ? 1 : 0.35;
     for (const plant of state.plants) {
       let view = this.plants.get(plant.id);
       if (!view) {
@@ -1886,7 +1941,8 @@ export class TankView {
       view.holder.scale.set(place.flip ? -look.scale : look.scale, look.scale);
       // 水流造成的搖擺：根部不動、葉尖擺最多
       const tall = view.rig!.mesh.texture.height;
-      view.rig!.sway(t * 6 + plant.id + this.time * 1.1, tall * 0.045 * flow);
+      // 過濾器開著水流比較強，靠近出水口的擺得最明顯（V2）
+      view.rig!.sway(t * 6 + plant.id + this.time * 1.1, tall * 0.045 * flowNear(state, place.x));
     }
   }
 
@@ -2007,6 +2063,10 @@ export class TankView {
         g.circle(x, edge, (10 + (i % 5) * 7) * this.hs).fill({ color: 0x3f7a22, alpha: a * 0.3 });
       }
     }
+    // 早上偏暖白、傍晚偏橘（V2）
+    const warm = this.day.warm * (1 - this.night);
+    if (warm > 0.01) g.rect(0, 0, width, height).fill({ color: 0xff8a3a, alpha: 0.12 * warm });
+    else if (warm < -0.01) g.rect(0, 0, width, height).fill({ color: 0xfff1d0, alpha: 0.07 * -warm });
     // 夜晚（關燈或停電）：月光藍，魚還看得清楚（原本整片灰暗，新玩家第一眼就是暗畫面）；開關燈慢慢轉換
     if (this.night > 0.01) {
       g.rect(0, 0, width, height).fill({ color: 0x0a2246, alpha: 0.34 * this.night });
@@ -2015,6 +2075,11 @@ export class TankView {
     }
   }
 }
+
+/** 出生演出：第一尾等多久、之後每尾隔多久、冒出來花幾秒（V3）。 */
+const BIRTH_FIRST = 0.3;
+const BIRTH_GAP = 0.45;
+const BIRTH_POP = 0.45;
 
 /** 魚圖的基本調色：飽和度加多少、亮度乘多少。 */
 const ART_SAT = 0.2;

@@ -1,4 +1,5 @@
 import { HUNGRY, type FishSpeciesId, type Symptom } from '../sim';
+import { stepIdle, type Idle } from './idle';
 import { floorAt, type TankBounds } from './layout';
 
 /** 每個魚種的游動個性。 */
@@ -42,6 +43,12 @@ export interface Swimmer {
   follow?: number;
   /** 畫面上身體的一半長、一半高（像素），別的魚算距離時用。 */
   size?: { halfLen: number; halfH: number };
+  /** 待機行為（V1）：在草邊停、在水面啄、在底下休息。 */
+  idle?: Idle;
+  /** 待機到位了：停著不轉身、尾巴輕輕擺。 */
+  settled?: boolean;
+  /** 這一格在水面啄了一下（畫面張嘴）。 */
+  peck?: boolean;
 }
 
 /** 蝦受驚彈開的時間（秒）。 */
@@ -56,6 +63,8 @@ export interface MotionContext {
   frenzy?: number;
   /** 手指剛點過的水裡一點（F6）：好奇的魚會游過來看；seq 每點一次換一個，決定這次誰會來。 */
   poke?: { x: number; y: number; age: number; seq: number };
+  /** 水草的水平位置（像素）：待機時會游到草邊停一會兒。 */
+  plants?: readonly number[];
 }
 
 /** 魚的個性帶來的小行為（sim/personality.ts 的係數）。 */
@@ -123,6 +132,7 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   const { bounds, scale } = ctx;
 
   if (!cond.alive) {
+    s.idle = undefined;
     // 死魚慢慢沉到底，停在底砂上。
     s.vx *= 0.95;
     s.vy = Math.min(s.vy + 4 * dt, 12 * scale);
@@ -136,6 +146,8 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   let speed = p.speed * scale * (mood?.activity ?? 1);
   s.size = cond.body;
   s.eating = false;
+  s.settled = false;
+  s.peck = false;
 
   // 蝦受驚：尾巴一收往後彈開（頭的方向不變），慢慢停下
   if (p.crawler && (s.startle ?? 0) > 0) {
@@ -308,6 +320,29 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
     chasing = true;
   }
 
+  // 沒事做的時候（V1）：偶爾去草邊停、到水面啄、沉到底下休息，看個性
+  let settle = false;
+  let idling = false;
+  const unwell = sym.has('hiding') || sym.has('gasping') || sym.has('lethargic') || sym.has('loss_of_balance');
+  const free = !chasing && !p.crawler && !mom && cond.nestX === undefined && !cond.guarding && !unwell && (cond.begging ?? 0) < 0.3;
+  if (!free) s.idle = undefined;
+  else {
+    const scene = { surface: bounds.surface, bottom: bounds.bottom, width: bounds.width, scale, plants: ctx.plants ?? [], floorAt: (x: number) => floorAt(bounds, x) };
+    const steer = stepIdle(s, mood, cond.body?.halfLen ?? 10 * scale, cond.body?.halfH ?? 4 * scale, scene, dt, rand);
+    if (steer) {
+      idling = true;
+      ax = ax * 0.2 + steer.ax;
+      ay = steer.ay;
+      speed *= steer.speed;
+      settle = s.settled = steer.settled;
+      s.peck = steer.peck;
+      if (settle) {
+        s.vx *= Math.pow(0.15, dt);
+        s.vy *= Math.pow(0.15, dt);
+      }
+    }
+  }
+
   // 分離最後才加：追飼料、停著吃會蓋掉前面的方向，但不能蓋掉個人空間（停著吃時推得輕一點，大家擠在同一顆飼料邊也看得出幾條）
   ax += sepX * (s.eating ? 0.5 : 1);
   ay += sepY * (s.eating ? 0.5 : 1);
@@ -334,13 +369,13 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   const band = Math.max(1, margin * 0.5);
   const top = bounds.surface + band;
   const low = floor - halfH - band;
-  if (s.y < top && cond.nestX === undefined && !chasing) ay += 2 * Math.min(1, (top - s.y) / band);
-  if (s.y > low && !p.crawler) ay -= 2 * Math.min(1, (s.y - low) / band);
+  if (s.y < top && cond.nestX === undefined && !chasing && !idling) ay += 2 * Math.min(1, (top - s.y) / band);
+  if (s.y > low && !p.crawler && !idling) ay -= 2 * Math.min(1, (s.y - low) / band);
 
   s.vx += ax * speed * dt * 2;
   // 魚主要水平游動，垂直方向的速度壓低；搶食往上衝時放寬一點
   s.vy += ay * speed * dt * 2;
-  s.vy *= chasing ? 0.92 + 0.05 * frenzy : 0.92;
+  s.vy *= chasing ? 0.92 + 0.05 * frenzy : idling ? 0.95 : 0.92;
   const v = Math.hypot(s.vx, s.vy);
   if (v > speed) {
     s.vx = (s.vx / v) * speed;
@@ -358,7 +393,7 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   // 頂到水面或底沙：往那邊的速度歸零，不然速度一直朝牆、位置被夾住，頭一直朝下（或朝上）抖
   if (!p.crawler && Math.abs(s.y - wantY) > 1e-6 && Math.sign(s.vy) === Math.sign(wantY - s.y)) s.vy = 0;
   // 病懨懨的魚尾巴也擺得慢
-  s.phase += dt * (4 + v / (8 * scale)) * (sym.has('lethargic') || sym.has('loss_of_balance') ? 0.5 : 1);
+  s.phase += dt * (4 + v / (8 * scale)) * (sym.has('lethargic') || sym.has('loss_of_balance') ? 0.5 : 1) * (settle && s.idle?.kind === 'rest' ? 0.35 : 1);
 }
 
 /**
@@ -481,7 +516,7 @@ export function stepTurn(s: TurnState, vx: number, dt: number, hold = false): vo
 /** 游泳時身體跟著上下的速度微微仰頭、低頭；停著吃東西時幾乎不歪，不然原地上下漂就前後點頭。 */
 export function swimTilt(s: Swimmer): number {
   const tilt = Math.max(-0.35, Math.min(0.35, Math.atan2(s.vy, Math.abs(s.vx) + 1) * 0.6));
-  return s.eating && !PROFILES[s.species].crawler ? tilt * 0.15 : tilt;
+  return (s.eating || s.settled) && !PROFILES[s.species].crawler ? tilt * 0.15 : tilt;
 }
 
 /** 面向換算成縮放：轉到一半身體壓窄、稍微變高；衝過頭時拉長、變扁。 */
