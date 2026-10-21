@@ -1259,8 +1259,12 @@ async function start(): Promise<void> {
         return select(sick()?.id ?? null);
       case 'select':
         return select(showy()?.id ?? null);
-      case 'mother':
-        return select(game.state.fish.filter((f) => f.alive && f.sex === 'female').sort((a, b) => b.pregnancy - a.pregnancy)[0]?.id ?? null);
+      case 'mother': {
+        // 母魚可能在別缸：先切過去再打開她的卡片（跟下一步的判斷用同一個函式）
+        const mom = sim.showingMother(game.tanks);
+        if (mom) game.switchTo(mom.tank);
+        return select(mom?.fish.id ?? null);
+      }
       case 'scape':
         return enterScape();
     }

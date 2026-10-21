@@ -6,7 +6,7 @@ import { BELLY_SHOWS, dueMothers } from './nursery';
 import { orderBoard, orderSupply } from './orders';
 import { hasVisible } from './processes/disease';
 import { isShrimpSpecies } from './species';
-import type { TankState } from './state';
+import type { Fish, TankState } from './state';
 import { breedingTankRaised, displayTankHighPlants, purposeTanks } from './tank-purpose';
 
 /**
@@ -45,11 +45,22 @@ const bredFry = (tanks: TankState[]) => living(tanks).filter((f) => (f.generatio
 /** 沒寫到的目標用的保底句。 */
 export const GENERIC_STEP = '看看任務卡上的目標';
 
+/** 肚子看得出懷孕、懷孕最久的那尾母魚和她在第幾缸（下一步「點她看看肚子」帶去看她）；沒有回傳 null。 */
+export function showingMother(tanks: TankState[]): { tank: number; fish: Fish } | null {
+  let best: { tank: number; fish: Fish } | null = null;
+  tanks.forEach((t, tank) =>
+    t.fish.forEach((fish) => {
+      if (!fish.alive || fish.sex !== 'female' || fish.pregnancy < BELLY_SHOWS || isShrimpSpecies(fish.species)) return;
+      if (!best || fish.pregnancy > best.fish.pregnancy) best = { tank, fish };
+    }),
+  );
+  return best;
+}
+
 /** 母魚快生了（要育幼盒）或肚子看得出懷孕時的下一步；都沒有回傳 null。 */
 function motherStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   if (tanks.some((t) => dueMothers(t).length > 0)) return tanks.some((t) => t.nurseryBox && dueMothers(t).length > 0) ? { text: '母魚快生了，放進育幼盒', target: 'nursery' } : { text: '母魚快生了，買個育幼盒', target: 'nursery' };
-  const showing = living(tanks).some((f) => f.sex === 'female' && f.pregnancy >= BELLY_SHOWS && !isShrimpSpecies(f.species));
-  return showing ? { text: '母魚懷孕了，點她看看肚子', target: 'mother' } : null;
+  return showingMother(tanks) ? { text: '母魚懷孕了，點她看看肚子', target: 'mother' } : null;
 }
 
 /** 每個目標在現在的狀況下要做的事。 */
