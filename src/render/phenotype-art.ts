@@ -14,14 +14,16 @@ export type ColorFamily = 'red' | 'gold' | 'blue';
 /** 各色系的代表色相（度）。 */
 const HUE: Record<ColorFamily, number> = { red: 4, gold: 46, blue: 212 };
 
-/** 有整條魚精繪圖的鰭型（緞帶、燕尾、半月）；其他鰭型在花紋圖上用程式補畫。 */
-export type WholeFin = 'ribbon' | 'swallow' | 'halfmoon';
-export const WHOLE_FINS: WholeFin[] = ['ribbon', 'swallow', 'halfmoon'];
+/** 有整條魚精繪圖的鰭型（緞帶、燕尾、半月、大C、上劍、下劍、雙劍）；大耳的胸鰭另外疊一片圖。 */
+export type WholeFin = 'ribbon' | 'swallow' | 'halfmoon' | 'bigc' | 'sword1' | 'sword2' | 'sword3';
+export const WHOLE_FINS: WholeFin[] = ['ribbon', 'swallow', 'halfmoon', 'bigc', 'sword1', 'sword2', 'sword3'];
 
+/** 一條魚只用一張圖：同時有好幾種鰭型時，挑最顯眼的那個（大C ＞ 緞帶 ＞ 燕尾 ＞ 劍 ＞ 半月），其他的照樣用程式補畫。 */
 export function wholeFin(p: GuppyPhenotype): WholeFin | null {
-  // 大C 是緞帶加上超長的背鰭臀鰭，緞帶圖的鰭不夠長，改用補畫
-  if (p.ribbon && !p.bigC) return 'ribbon';
+  if (p.bigC) return 'bigc';
+  if (p.ribbon) return 'ribbon';
   if (p.swallow) return 'swallow';
+  if (p.sword) return `sword${p.sword}` as WholeFin;
   if (p.tailShape === 'halfmoon') return 'halfmoon';
   return null;
 }

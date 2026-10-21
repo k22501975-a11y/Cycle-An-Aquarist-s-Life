@@ -20,12 +20,13 @@ export function finTraitsOf(fish: Fish, painted: string | null): FinLook | null 
   const traits: FinTraits = {
     // 母魚的燕尾、緞帶鰭只是稍長，不畫補線（之前畫成腹下兩條白線，像多長了鰭條）
     swallow: male && p.swallow && !inArt('swallow'),
-    ribbon: male && p.ribbon && !inArt('ribbon'),
+    ribbon: male && p.ribbon && !inArt('ribbon') && !inArt('bigc'),
     // 大耳的胸鰭有單片圖就用圖，沒有才用程式畫
     dumbo: p.dumbo && !paintedTexture('fin-pectoral-dumbo'),
-    bigC: male && p.bigC,
-    sword: male ? p.sword : 0,
-    halfmoon: male && p.tailShape === 'halfmoon' && !inArt('halfmoon') && !inArt('swallow') && !inArt('ribbon'),
+    bigC: male && p.bigC && !inArt('bigc'),
+    sword: male && p.sword && !inArt(`sword${p.sword}`) ? p.sword : 0,
+    // 半月的尾巴只在花紋圖上補畫：別的鰭型圖已經有自己的尾巴，疊上去會變兩條尾巴
+    halfmoon: male && p.tailShape === 'halfmoon' && base === patternBase(base),
     length: p.finLength,
   };
   const dumboArt = !!p.dumbo && !traits.dumbo;

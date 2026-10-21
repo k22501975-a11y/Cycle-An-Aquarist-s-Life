@@ -1,9 +1,9 @@
 import { isShrimpSpecies, lookVariant, phenotype } from '../sim';
 import { Assets, BlurFilter, ColorMatrixFilter, Container, type DestroyOptions, Mesh, MeshPlane, Texture } from 'pixi.js';
-import type { Fish, FishSpeciesId, GrowthStage, TankState } from '../sim';
+import type { Fish, FishSpeciesId, GrowthStage, GuppyPhenotype, TankState } from '../sim';
 import type { FishForm } from './fish-art';
 import { canvasTexture, makeCanvas } from './paint';
-import { parseRecipeKey, patternBase, phenotypeRecipe, recolorImage } from './phenotype-art';
+import { parseRecipeKey, patternBase, phenotypeRecipe, recolorImage, WHOLE_FINS } from './phenotype-art';
 import { guppyLook } from './strains';
 import { RefLru } from './lru';
 import { tankSubstrateLook } from './substrate';
@@ -31,11 +31,16 @@ interface PaintedSpec {
   eggs?: boolean;
   /** 張嘴吃東西的那一格（咬下去時換上）。 */
   eating?: string;
+  /** 圖寬是同一條魚基本款的幾倍（半月、劍尾的鰭往後長，圖比較寬）：魚的大小照基本款算，鰭多出來的部分畫在外面。 */
+  span?: number;
 }
 
 /** 公魚花紋圖的身體範圍：各張圖身體在圖裡的高度不一樣（上面留了背鰭的空間），y 照圖量過（#101：原本統一 0.02，大C 的鰭和白點都浮在背上方）。 */
 const maleBody = (y: number) => ({ x: 0.14, y, rx: 0.2, ry: 0.12 });
 const GUPPY_FEMALE_BODY = { x: 0.1, y: 0.02, rx: 0.3, ry: 0.22 };
+/** 母魚的尾巴帶品系的顏色（scripts/art/guppy-females.py）：藍、紅、金，白子另外是紅眼。 */
+export const FEMALE_TINTS = ['blue', 'red', 'gold', 'albino'] as const;
+export type FemaleTint = (typeof FEMALE_TINTS)[number];
 const SHRIMP_BODY = { x: 0.08, y: -0.02, rx: 0.25, ry: 0.12 };
 const ZEBRA_BODY = { x: 0.1, y: 0.0, rx: 0.3, ry: 0.11 };
 const FRY_BODY = { x: 0.12, y: 0.0, rx: 0.25, ry: 0.1 };
@@ -52,6 +57,7 @@ export const PAINTED: Record<string, PaintedSpec> = {
   'zebrafish-female': { file: 'fish/zebrafish-female.webp', tail: 0.2, swing: 0.09, body: ZEBRA_BODY },
   'guppy-female-base': { file: 'fish/guppy-female-base.webp', tail: 0.26, swing: 0.1, body: GUPPY_FEMALE_BODY, eating: 'fish/guppy-female-base-eating.webp' },
   'guppy-female-pregnant': { file: 'fish/guppy-female-pregnant.webp', tail: 0.24, swing: 0.09, body: GUPPY_FEMALE_BODY },
+  ...femaleArt(),
   'shrimp-cherry-male': { file: 'shrimp/shrimp-cherry-male.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
   'shrimp-cherry-female': { file: 'shrimp/shrimp-cherry-female.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY },
   'shrimp-cherry-berried': { file: 'shrimp/shrimp-cherry-berried.webp', tail: 0.18, swing: 0.03, body: SHRIMP_BODY, eggs: true },
@@ -76,26 +82,49 @@ export const PAINTED: Record<string, PaintedSpec> = {
 };
 
 /**
- * 緞帶、燕尾、半月的整條魚圖（5 種花紋各一張，art/fish/fins/）。
- * 緞帶下面多一大片垂下來的帶子，身體在圖裡偏上。
- * 燕尾、半月是從基本款的圖用程式改尾巴做的（品系對照 design/guppy-strain-audit.md）：身體位置照基本款換算。
+ * 鰭型的整條魚圖（5 種花紋各一張）。
+ * 燕尾是從基本款改尾巴做的；緞帶、半月、大C、劍尾由 scripts/art/guppy-fins.py 從基本款長出鰭，
+ * 鰭的質感取自同一條魚的尾鰭（品系對照 design/guppy-strain-audit.md）。
  */
 function finArt(): Record<string, PaintedSpec> {
-  const bodyY: Record<string, [number, number, number]> = {
-    // 花紋：緞帶、燕尾、半月的身體中心 y（相對圖高）
-    bluegrass: [-0.05, -0.122, -0.046],
-    cobra: [-0.05, -0.073, -0.034],
-    'albino-red': [-0.2, 0.147, 0.146],
-    tuxedo: [-0.18, -0.159, -0.109],
-    redcobra: [-0.24, 0.167, 0.145],
+  // 燕尾：身體中心 y（相對圖高）
+  const swallowY: Record<string, number> = { bluegrass: -0.122, cobra: -0.073, 'albino-red': 0.147, tuxedo: -0.159, redcobra: 0.167 };
+  // 其他鰭型：[span, tail, 身體中心 x, y, 身體半高 ry]（guppy-fins.py 印出來的，ry 照基本款 0.12 換算圖高）
+  const grown: Record<string, Record<string, [number, number, number, number, number]>> = {
+    bluegrass: { ribbon: [0.947, 0.346, 0.12, -0.234, 0.121], halfmoon: [1.109, 0.436, 0.175, -0.031, 0.106], bigc: [0.947, 0.346, 0.12, 0.02, 0.162], sword1: [1.07, 0.417, 0.164, -0.068, 0.197], sword2: [1.014, 0.387, 0.145, -0.084, 0.189], sword3: [1.07, 0.417, 0.164, -0.084, 0.189] },
+    cobra: { ribbon: [0.99, 0.333, 0.136, -0.222, 0.119], halfmoon: [1.18, 0.434, 0.195, -0.018, 0.107], bigc: [0.99, 0.333, 0.136, -0.003, 0.182], sword1: [1.111, 0.402, 0.176, -0.04, 0.198], sword2: [1.055, 0.372, 0.159, -0.051, 0.193], sword3: [1.111, 0.402, 0.176, -0.051, 0.193] },
+    'albino-red': { ribbon: [0.99, 0.348, 0.136, -0.019, 0.088], halfmoon: [1.148, 0.433, 0.187, 0.035, 0.098], bigc: [0.99, 0.348, 0.136, 0.165, 0.12], sword1: [1.119, 0.419, 0.178, 0.17, 0.121], sword2: [1.078, 0.398, 0.166, 0.154, 0.118], sword3: [1.119, 0.419, 0.178, 0.154, 0.118] },
+    tuxedo: { ribbon: [0.955, 0.347, 0.123, -0.252, 0.109], halfmoon: [1.109, 0.433, 0.175, -0.072, 0.093], bigc: [0.955, 0.347, 0.123, -0.033, 0.129], sword1: [1.088, 0.422, 0.169, -0.146, 0.156], sword2: [0.99, 0.369, 0.136, -0.15, 0.154], sword3: [1.088, 0.422, 0.169, -0.15, 0.154] },
+    redcobra: { ribbon: [0.967, 0.326, 0.128, -0.044, 0.082], halfmoon: [1.176, 0.439, 0.194, 0.017, 0.093], bigc: [0.967, 0.326, 0.128, 0.161, 0.117], sword1: [1.061, 0.382, 0.161, 0.182, 0.12], sword2: [1.016, 0.356, 0.146, 0.182, 0.12], sword3: [1.061, 0.382, 0.161, 0.182, 0.12] },
   };
   const out: Record<string, PaintedSpec> = {};
-  for (const [pat, ys] of Object.entries(bodyY)) {
-    (['ribbon', 'swallow', 'halfmoon'] as const).forEach((fin, i) => {
-      const key = `guppy-male-${pat}-${fin}`;
-      const ry = fin === 'ribbon' ? 0.08 : fin === 'halfmoon' ? 0.1 : 0.1;
-      out[key] = { file: `fish/${key}.webp`, tail: fin === 'halfmoon' ? 0.38 : 0.34, swing: 0.12, body: { x: 0.16, y: ys[i], rx: 0.2, ry } };
-    });
+  for (const [pat, y] of Object.entries(swallowY)) {
+    const key = `guppy-male-${pat}-swallow`;
+    out[key] = { file: `fish/${key}.webp`, tail: 0.34, swing: 0.12, body: { x: 0.16, y, rx: 0.2, ry: 0.1 } };
+    for (const [fin, [span, tail, x, by, ry]] of Object.entries(grown[pat])) {
+      const k = `guppy-male-${pat}-${fin}`;
+      out[k] = { file: `fish/${k}.webp`, tail, swing: 0.12, span, body: { x, y: by, rx: 0.2 / span, ry } };
+    }
+  }
+  return out;
+}
+
+
+/** 母魚用哪個顏色：白子是淡紅尾紅眼，其他照花紋的色系（草尾、禮服的母魚是藍尾）。 */
+export function femaleTint(p: GuppyPhenotype): FemaleTint {
+  return p.albino ? 'albino' : phenotypeRecipe(p).to;
+}
+
+/** 有基因的母孔雀魚：尾巴帶品系色的圖。 */
+export function femaleKey(p: GuppyPhenotype, gravid: boolean): string {
+  return `guppy-female-${gravid ? 'pregnant' : 'base'}-${femaleTint(p)}`;
+}
+
+function femaleArt(): Record<string, PaintedSpec> {
+  const out: Record<string, PaintedSpec> = {};
+  for (const t of FEMALE_TINTS) {
+    out[`guppy-female-base-${t}`] = { file: `fish/guppy-female-base-${t}.webp`, tail: 0.26, swing: 0.1, body: GUPPY_FEMALE_BODY, eating: `fish/guppy-female-base-${t}-eating.webp` };
+    out[`guppy-female-pregnant-${t}`] = { file: `fish/guppy-female-pregnant-${t}.webp`, tail: 0.24, swing: 0.09, body: GUPPY_FEMALE_BODY };
   }
   return out;
 }
@@ -226,7 +255,7 @@ export function startupArt(tanks: TankState[]): Set<string> {
     for (const f of t.fish) {
       want.push(SPECIES_ART[f.species]);
       const male = f.species === 'guppy' && f.sex === 'male' && guppyMaleArt(f);
-      if (male) want.push(new RegExp(`^${male}(-ribbon|-swallow|-halfmoon)?(#eating)?$`));
+      if (male) want.push(new RegExp(`^${male}(-(${WHOLE_FINS.join('|')}))?(#eating)?$`));
     }
     for (const p of t.plants) want.push(new RegExp(`^plant-${p.species}$`));
     if (t.equipment.hardscape?.length) want.push(/^(rock|wood)-/);
@@ -285,6 +314,9 @@ export function paintedTexture(key: string | null): Texture | null {
 /** 這個鍵實際用到哪張圖：鰭型圖沒載入時退回花紋圖（PaintedRig 要用對應的身體範圍）。 */
 export function resolvePaintedKey(key: string | null): string | null {
   if (!key || paintedTexture(key)) return key;
+  // 母魚的品系色圖還沒載好：先用素的母魚
+  const female = /^(guppy-female-(?:base|pregnant))-[a-z]+$/.exec(key);
+  if (female) return paintedTexture(female[1]) ? female[1] : key;
   const [base, rest] = key.split('~');
   const pat = patternBase(base);
   if (pat === base) return key;
@@ -365,7 +397,9 @@ const MESH_Y = 5;
  */
 export class PaintedRig extends Container {
   readonly art: { R: number; bodyEllipse: { x: number; y: number; rx: number; ry: number } };
+  /** 魚的長度（貼圖像素）：鰭比較長的圖照基本款的大小算，鰭多出來的部分畫在外面。 */
   readonly lengthPx: number;
+  private readonly texW: number;
   readonly drawsEggs: boolean;
   /** 蝦走路的快慢 0–1：步足交替擺動的幅度。 */
   walk = 0;
@@ -395,7 +429,8 @@ export class PaintedRig extends Container {
     this.key = key;
     const w = texture.width;
     const h = texture.height;
-    this.lengthPx = w;
+    this.texW = w;
+    this.lengthPx = w / (spec.span ?? 1);
     this.drawsEggs = !!spec.eggs;
     this.restTexture = texture;
     this.eatingTexture = textures.get(`${key}#eating`) ?? null;
@@ -478,7 +513,7 @@ export class PaintedRig extends Container {
 
   /** 跟 FishRig.animate 一樣的參數：相位、擺幅、夾鰭、鰭破損。 */
   animate(phase: number, swing: number, fold = 1, damage = 0): void {
-    const w = this.lengthPx;
+    const w = this.texW;
     const h = this.mesh.texture.height;
     const tailX = this.spec.tail * w;
     const cy = h / 2;
@@ -515,7 +550,7 @@ export class PaintedRig extends Container {
       return;
     }
     if (!this.rim) {
-      const w = this.lengthPx;
+      const w = this.texW;
       const h = this.mesh.texture.height;
       const k = 1.06;
       this.rim = new Mesh({ geometry: this.mesh.geometry, texture: this.mesh.texture });

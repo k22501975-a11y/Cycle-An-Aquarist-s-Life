@@ -1,7 +1,7 @@
 import { BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Texture, TilingSprite } from 'pixi.js';
 import { waterLook, isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, personalitySpec, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
-import { newToneFrame, PaintedRig, paintedArtVersion, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
+import { newToneFrame, PaintedRig, paintedArtVersion, femaleKey, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { SetupShow, type SetupStep } from './setup-show';
 import { DEATH_SECONDS, POKE_SECONDS, STARTLE_SECONDS, deathPose, hungerLook, sickLook, spawnSwimmer, stepTurn, swimTilt, turnPose, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { floorAt, keepInRect, nurseryRect, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
@@ -1672,7 +1672,11 @@ export class TankView {
     // 魚懷孕後期肚子才看得出來；蝦一抱卵就看得到。
     const gravid = form === 'female' && fish.pregnancy > (isShrimpSpecies(fish.species) ? 0 : 0.5);
     // 公孔雀魚照基因上色：雜交出來的組合也有自己的花色
-    const painted = resolvePaintedKey(fish.species === 'guppy' && form === 'male' && fish.genome ? recipeKey(phenotypeRecipe(phenotype(fish.genome))) : paintedKey(fish.species, form, lookVariant(fish), gravid, growthStage(fish), !!fish.stuckMolt));
+    // 母孔雀魚的尾巴帶品系色（白子紅眼），身體一樣是素的灰金色
+    const guppyGenome = fish.species === 'guppy' && fish.genome ? phenotype(fish.genome) : null;
+    const painted = resolvePaintedKey(
+      guppyGenome && form === 'male' ? recipeKey(phenotypeRecipe(guppyGenome)) : guppyGenome && form === 'female' ? femaleKey(guppyGenome, gravid) : paintedKey(fish.species, form, lookVariant(fish), gravid, growthStage(fish), !!fish.stuckMolt),
+    );
     // 鰭型到亞成魚才慢慢長出來（design/growth.md §1）
     const stage = growthStage(fish);
     const fins = fish.species === 'guppy' && form !== 'juvenile' && fish.genome && stage !== 'coloring' ? finTraitsOf(fish, painted) : null;

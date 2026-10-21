@@ -1,6 +1,6 @@
 import { lookIndex, type GuppyPhenotype, type LookalikeCard, type TraitFrom } from '../sim';
 import { h } from './dom';
-import { guppyArt } from './shop-cards';
+import { femaleArtOf, guppyArt, maleFinOf } from './shop-cards';
 
 /**
  * 早上報告的「長得像誰」比較卡（polish-to-9.md G2，資料在 sim/lookalike.ts）：
@@ -11,11 +11,10 @@ const ART = `${import.meta.env.BASE_URL}art/`;
 
 const FROM_LABEL: Record<TraitFrom, string> = { mother: '像媽媽', father: '像爸爸', both: '爸媽都有', hidden: '隔代冒出來' };
 
-/** 公魚的圖：品系的花色加鰭型；母魚身上看不到品系花色，都是素的母魚。 */
+/** 公魚的圖：品系的花色加鰭型；母魚身上是素的，只有尾巴帶品系的顏色。 */
 function phenoArt(p: GuppyPhenotype, sex: 'male' | 'female'): string {
-  if (sex === 'female') return 'fish/guppy-female-base.webp';
-  const fin = p.swallow ? 'swallow' : p.ribbon || p.bigC ? 'ribbon' : p.tailShape === 'halfmoon' ? 'halfmoon' : undefined;
-  return guppyArt(lookIndex(p), fin);
+  if (sex === 'female') return femaleArtOf(p);
+  return guppyArt(lookIndex(p), maleFinOf(p));
 }
 
 function portrait(label: string, p: GuppyPhenotype, sex: 'male' | 'female', cls: string): HTMLElement {
