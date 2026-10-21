@@ -268,6 +268,8 @@ export interface Fish {
   ageDays: number;
   /** 懷孕／抱卵進度 0–1，0 表示沒有。 */
   pregnancy: number;
+  /** 這一胎玩家已經點開她的卡片看過肚子（下一步就換成倒數，#282）；生完清掉。 */
+  bellySeen?: boolean;
   /** 長期營養 0–1（標準飼料約 0.5）：影響成長與免疫力。舊存檔沒有，當 0.5。 */
   nutrition?: number;
   /** 發色加成 0–1：只影響表現，停餵好飼料會慢慢退回去。 */
