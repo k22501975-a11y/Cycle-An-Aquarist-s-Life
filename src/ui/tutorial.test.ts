@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addFish, addHardscape, addPlant, applySetup, buyQuarantine, checkGoals, goalState, GOALS, isCycled, powerOn, moveToQuarantine, recordEvent, economy, HARDSCAPE, createTank, feed, FILTERS, HEATERS, RECOMMENDED_SETUP, TANKS, useTestKit, waterChange } from '../sim';
-import { advanceQuest, currentQuest, cycleProgress, loadProgress, newProgress, overloadWarning, pairProgress, pendingTip, questShopTab, QUESTS, saveProgress } from './tutorial';
+import { advanceQuest, currentQuest, cycleProgress, FIRST_PESTS_TIP, loadProgress, newProgress, overloadWarning, pairProgress, pendingTip, questShopTab, QUESTS, saveProgress, TEST_AMMONIA_LINE, TIPS } from './tutorial';
 
 function tank() {
   return createTank({ tank: TANKS.std40, filter: FILTERS.sponge, heater: { spec: HEATERS.h50, targetC: 25 }, seed: 5 });
@@ -276,5 +276,38 @@ describe('等母魚懷孕的任務卡', () => {
     addFish(s, 'guppy', { sex: 'female' });
     expect(pairProgress(s)).toBe('公 1・母 1');
     expect(QUESTS.find((q) => q.id === 'babies')?.progress).toBe(pairProgress);
+  });
+});
+
+describe('教學台詞（design/tutorial-lines.md）', () => {
+  const len = (t: string) => [...t].length;
+
+  it('任務卡和情境提醒都只放一行：每句 ≤ 24 個字，完整的話留在通知匣和「為什麼？」', () => {
+    for (const q of QUESTS) expect(len(q.hint), q.id).toBeLessThanOrEqual(24);
+    for (const t of TIPS.filter((t) => t.short)) expect(len(t.short!), t.id).toBeLessThanOrEqual(24);
+    expect(len(FIRST_PESTS_TIP)).toBeLessThanOrEqual(24);
+    expect(TIPS.filter((t) => t.short).map((t) => t.id).sort()).toEqual(['alkaline', 'ammonia', 'cycling_fish', 'nitrite', 'pair']);
+  });
+
+  it('前 5 分鐘要按掉的對話框只有歡迎和第一次放魚：任務做完只有挑魚會跳對話框，教學做完也不跳', () => {
+    expect(QUESTS.filter((q) => q.doneDialog).map((q) => q.id)).toEqual(['fish']);
+  });
+
+  it('測水任務測到氨（新缸症候群第 1 天）就叫玩家先換水，下一個任務接著就是換水', () => {
+    const s = tank();
+    const test = QUESTS.find((q) => q.id === 'test')!;
+    s.lastTest = { hours: 0, reading: { ammonia: 0, nitrite: 0, nitrate: 0, ph: 7.2, kh: 4 } };
+    expect(test.doneShortFor?.(s)).toBeNull();
+    s.lastTest = { hours: 0, reading: { ammonia: 0.25, nitrite: 0, nitrate: 0, ph: 7.2, kh: 4 } };
+    expect(test.doneShortFor?.(s)).toBe(TEST_AMMONIA_LINE);
+    expect(QUESTS[QUESTS.indexOf(test) + 1].id).toBe('water');
+  });
+
+  it('新缸症候群第一次讀到的氨 0.25、亞硝 0.25 就會提醒', () => {
+    const s = tank();
+    s.lastTest = { hours: s.hours, reading: { ammonia: 0.25, nitrite: 0, nitrate: 0, ph: 7.2, kh: 4 } };
+    expect(pendingTip(newProgress(), s)?.id).toBe('ammonia');
+    s.lastTest = { hours: s.hours, reading: { ammonia: 0, nitrite: 0.25, nitrate: 0, ph: 7.2, kh: 4 } };
+    expect(pendingTip(newProgress(), s)?.id).toBe('nitrite');
   });
 });
