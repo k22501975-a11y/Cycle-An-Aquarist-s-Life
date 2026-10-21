@@ -146,8 +146,11 @@ export function ordersPanel(ctx: PanelContext): Node {
   const refresh = () => sheet.open('客人的訂單', () => ordersPanel(ctx));
   const anyReady = board.orders.some((o) => orderSupply(game.tanks, o) >= o.count);
   const outlooks = compareOrders(game.tanks);
-  const empty = orderStarter(game.tanks) ? Math.max(0, ORDER_BOARD_SIZE - board.orders.length) : 0;
-  const say = board.orders.length === 0 ? '單都交完了。客人會陸續來，過幾天再來看看。' : anyReady ? '有單湊齊了，按「交貨」我就幫你包好送過去。' : '客人只收你自己繁殖的魚。照單子挑魚配對，養大就能交。';
+  const starter = orderStarter(game.tanks);
+  const empty = starter ? Math.max(0, ORDER_BOARD_SIZE - board.orders.length) : 0;
+  // 開局（還沒有自家的魚）板上只有螺、插枝的起步單（§4.4.5），老闆的話要對得上
+  const starterSay = '還沒有自己的小魚，先接螺和插枝的小單。生了小魚，客人就會多起來。';
+  const say = board.orders.length === 0 ? '單都交完了。客人會陸續來，過幾天再來看看。' : anyReady ? '有單湊齊了，按「交貨」我就幫你包好送過去。' : starter ? starterSay : '客人只收你自己繁殖的魚。照單子挑魚配對，養大就能交。';
   return h(
     'div.stack',
     {},
