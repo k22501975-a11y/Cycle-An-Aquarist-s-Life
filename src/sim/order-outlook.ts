@@ -1,5 +1,6 @@
 import { tankLabel } from './household';
-import { daysUntilMatch, matchingFish, orderBoard, orderExpiresHours, orderSupply, orderUnit, trimmableCuttings, type ShopOrder } from './orders';
+import { daysUntilMatch, matchingFish, orderTargetCm, orderBoard, orderExpiresHours, orderSupply, orderUnit, trimmableCuttings, type ShopOrder } from './orders';
+import { isShrimpSpecies } from './species';
 import { type TankState } from './state';
 
 /**
@@ -72,7 +73,14 @@ export function compareOrders(tanks: TankState[], keep: readonly number[] = []):
 export function outlookDaysLine(x: OrderOutlook, o: ShopOrder): string {
   if (x.trim) return '修剪一下就能交';
   if (x.days === 0) return '現在就能交';
-  if (x.late) return `來不及（要養約 ${x.days} 天，單子剩 ${x.daysLeft} 天）`;
+  if (x.late) {
+    // 交不出的單寫原因和預估時間（mvp.md §4.4.5 第 5 點），例如「中魚 2.3 cm：最快那尾約 9 天後，單子剩 4 天」
+    const shrimp = o.species !== undefined && isShrimpSpecies(o.species);
+    const what = o.kind === 'fry' ? '小孔雀' : o.size === 'adult' ? (shrimp ? '成蝦' : '成魚') : shrimp ? '幼蝦' : '中魚';
+    const need = o.count - x.have;
+    const when = need <= 1 ? `最快那尾約 ${x.days} 天後` : `湊齊 ${need} ${orderUnit(o)}約 ${x.days} 天後`;
+    return `${what} ${Number(orderTargetCm(o).toFixed(1))} cm：${when}，單子剩 ${x.daysLeft} 天`;
+  }
   if (x.days !== null) return `再養約 ${x.days} 天`;
   if (o.kind === 'cutting') return '等水草長高再剪';
   if (o.kind === 'snail') return '等螺再多生一些';
