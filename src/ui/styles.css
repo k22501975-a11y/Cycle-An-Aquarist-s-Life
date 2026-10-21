@@ -1164,3 +1164,24 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 .qt-more { width: 40px; font-size: 11px; border-radius: 10px; }
 .qt-more small { display: none; }
 .quest-pill .quest-hint.next { display: block; font-size: 13px; font-weight: 700; color: #f3e3b8; min-width: 0; }
+
+/* 水質膠囊放不下時從左邊排起、可以橫滑，溫度不會被切掉一半（原本靠右排，左邊溢出的部分滑不到） */
+.caps { justify-content: safe flex-end; }
+/* 窄的橫向手機（寬不到 960）：膠囊縮緊一點；一行還是放不下五顆水質膠囊時，膠囊和右邊的按鈕整組換到狀態列第二行 */
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 959px) {
+  #hud { flex-wrap: wrap; row-gap: 3px; }
+  .hud-sep { display: none; }
+  .caps { flex: 1 0 auto; gap: 4px; }
+  .cap { padding: 2px 5px; }
+}
+/* 很矮的橫向手機（高不到 400，例如 740×360）：面板標題列壓扁，商店一屏看得到整張卡和購買鈕 */
+@media (orientation: landscape) and (max-height: 400px) {
+  .sheet-head { padding-top: 8px; padding-bottom: 6px; gap: 10px; }
+  .sheet-title { font-size: 18px; }
+  .sheet-title::after { margin-top: 4px; }
+  .sheet-icon { width: 30px; height: 30px; }
+  .sheet-close { width: 30px; height: 30px; }
+  .shop-banner { padding: 3px 6px 3px 12px; }
+  .shop-banner > b { font-size: 13px; }
+  .card-pic { height: 62px; padding: 4px 8px; }
+}
