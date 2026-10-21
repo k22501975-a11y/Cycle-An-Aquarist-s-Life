@@ -51,6 +51,8 @@ export interface TankState {
    * 氨的總量（mg，菌夠多時是 0 並標成 prevented）。舊存檔沒有這個欄位，當作早就過了。
    */
   newTankSyndrome?: { startedHours?: number; fish?: number; totalMg?: number; prevented?: boolean };
+  /** 早上報告已經說過哪些設備的後果（gear-notes.ts，polish-to-9.md G5）。舊存檔沒有。 */
+  gearNotes?: string[];
   /** 最近一次餵食、剪下插枝的時間（遊戲小時；每日小事用）。舊存檔沒有。 */
   lastFedHours?: number;
   lastTrimHours?: number;
