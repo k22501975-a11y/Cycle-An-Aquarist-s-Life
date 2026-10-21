@@ -11,6 +11,7 @@ import {
   MEASURED_PROBLEM_LEVEL,
   testWater,
   pestCount,
+  takeGearNote,
   tankLabel,
   youngGettingHungry,
   type FishSpeciesId,
@@ -22,6 +23,7 @@ import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 /**
  * 「過一晚」的早上報告（first-10-minutes.md F2）：睡前拍一張快照，醒來跟現在比，
  * 列出昨晚發生的事。每一條帶 action，畫面點下去就帶玩家去處理。不碰 DOM。
+ * 唯一會改狀態的是設備後果那句（G5）：說過的記在缸上，下一晚不重複。
  */
 
 /** 點報告的一條要去哪裡處理（畫面自己決定開哪個面板）。 */
@@ -58,6 +60,7 @@ export type ReportKind =
   | 'plant_grew' // 水草長了一點
   | 'fish_relaxed' // 魚放鬆了
   | 'ammonia' // 新缸開始出現氨
+  | 'gear' // 開缸挑的設備造成的後果（G5）
   | 'quiet';
 
 export interface ReportItem {
@@ -245,6 +248,9 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       if (stressDrop >= RELAXED_DROP)
         push({ kind: 'fish_relaxed', tone: 'good', text: brighter ? '魚放鬆了，顏色變亮' : '魚慢慢適應新家，放鬆了', action: 'fish', subjectId: both[0].id });
     }
+    // 開缸挑的設備有後果（G5）：第 3～10 天每天一句，每種設備只說一次
+    const gear = takeGearNote(t);
+    if (gear) push({ kind: 'gear', tone: 'info', text: gear.text, action: gear.key === 'filter' || gear.key === 'heater' || gear.key === 'air' ? 'equipment' : gear.key === 'substrate' ? 'test_water' : undefined });
     // 訂單
     const fresh = orderBoard(t).orders.filter((o) => !snap.orders.has(o.id)).length;
     if (fresh > 0 && index === 0) push({ kind: 'orders', tone: 'info', text: `阿德那邊來了 ${fresh} 張新訂單`, action: 'orders', count: fresh });

@@ -27,6 +27,7 @@ const KIND_ICON: Record<ReportKind, ArtIcon> = {
   plant_grew: 'trim',
   fish_relaxed: 'owner',
   ammonia: 'waterchange',
+  gear: 'gear',
   quiet: 'owner',
 };
 
