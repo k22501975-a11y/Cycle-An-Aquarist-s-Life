@@ -47,7 +47,7 @@ describe('長得像誰（polish-to-9.md G2）', () => {
     expect(card!.motherId).toBe(mom.id);
     expect(card!.child).toEqual(phenotype(child.genome!));
     expect(card!.traits.length).toBeGreaterThan(1);
-    expect(lookalikeLine(card!)).toMatch(/^小魚看得出像誰了！(比較像媽媽|比較像爸爸|爸媽各像一點)：/);
+    expect(lookalikeLine(card!)).toMatch(/^小魚看得出像誰了！長大後(比較像媽媽|比較像爸爸|爸媽各像一點)：/);
     if (s.fish.some((f) => f.alive && f.motherId === mom.id && f.sex === 'male')) expect(child.sex).toBe('male');
     expect(economy(s).broodLog).toBeUndefined();
     simulate(s, 24 * 5);
