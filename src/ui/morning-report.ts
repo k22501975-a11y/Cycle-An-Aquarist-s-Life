@@ -1,5 +1,6 @@
 import { crisisText, type Crisis } from '../game/crisis';
 import {
+  BLOOM_NOTE,
   cycleMaturity,
   BELLY_SHOWS,
   DUE_PREGNANCY,
@@ -21,6 +22,7 @@ import {
   takeLookalike,
   tankLabel,
   usesNursery,
+  waterLook,
   youngGettingHungry,
   type FishSpeciesId,
   type LookalikeCard,
@@ -69,6 +71,7 @@ export type ReportKind =
   | 'plant_grew' // 水草長了一點
   | 'fish_relaxed' // 魚放鬆了
   | 'ammonia' // 新缸開始出現氨
+  | 'bloom' // 新缸細菌白濁第一次看得出來（整個存檔一次）
   | 'gear' // 開缸挑的設備造成的後果（G5）
   | 'belly' // 母魚肚子變大、出現胎斑（G8：缸裡真的發生的事）
   | 'courtship' // 公魚追母魚、配對成功（G8）
@@ -261,6 +264,12 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       else if (pct(now) !== pct(snap.maturity)) push({ kind: 'cycle', tone: 'info', text: `養水進度 ${pct(snap.maturity)} → ${pct(now)}`, action: 'test_water' });
       // 剛開始菌很少，一晚還跳不到下一個百分比
       else if (now > snap.maturity * 1.05) push({ kind: 'cycle', tone: 'info', text: `硝化菌慢慢在長，養水進度 ${pct(now)}。魚的排泄和飼料就是牠們的食物`, action: 'test_water' });
+    }
+    // 細菌白濁第一次看得出來：說是新缸常見的，玩家才不會以為是生病（企劃 2026-10-21）
+    const eco = economy(t);
+    if (!eco.bloomNoted && waterLook(t).bloom >= BLOOM_NOTE) {
+      eco.bloomNoted = true;
+      push({ kind: 'bloom', tone: 'info', text: '水有點白白霧霧的：新缸常見的細菌白濁，水養好就會散', action: 'test_water' });
     }
     // 螺、藻
     const pests = pestCount(t);
