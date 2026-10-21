@@ -4,6 +4,7 @@ import { FISH_SPECIES, isShrimpSpecies, type FishSpeciesId, type PlantSpeciesId 
 import { phenotype, type GuppyGenome, type GuppyPhenotype } from './genetics';
 import { updateOrders, type OrderBoard } from './orders';
 import type { GoalState } from './goals';
+import type { MarketArrival } from './arrivals';
 import type { DailyState, DailyTaskId } from './daily';
 
 /**
@@ -151,6 +152,8 @@ export interface Economy {
   chestCuttings?: Partial<Record<PlantSpeciesId, number>>;
   /** 已經套用到伺服器帳本的第幾筆（市場的收支，docs/ledger.md）；舊存檔沒有＝0。 */
   ledgerSeq?: number;
+  /** 市場買來的魚到貨後的紀錄（伺服器算賣家 30 天存活率用，arrivals.ts）；舊存檔沒有。 */
+  arrivals?: MarketArrival[];
   /** 夢想魚路線做到的步驟（§6 P2）；做到就不會倒退。 */
   dreamSteps?: Array<'tank' | 'brood' | 'bred'>;
   /** 已經選育出夢想魚。 */
