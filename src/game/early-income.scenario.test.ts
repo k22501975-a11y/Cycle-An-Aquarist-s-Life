@@ -15,6 +15,7 @@ import {
   fulfillOrder,
   orderBoard,
   orderContext,
+  reachableInTime,
   PINCH_MEALS,
   simulate,
   trimPlant,
@@ -98,6 +99,19 @@ describe('前期收入劇本（mvp.md §4.4.1）', () => {
       expect(chestCoins).toBeLessThanOrEqual(CHEST_COINS_CAP);
     }, 60_000);
   }
+
+  it('開局訂單板（mvp.md §4.4.5，#290）：第 1～11 天每天至少 1 張在期限內交得出，交不出的單任何時候 ≤ 1 張', () => {
+    for (const seed of [1, 2, 3]) {
+      baseline(seed, 30, {
+        check: (s, d) => {
+          const live = orderBoard(s).orders.filter((o) => !o.preview);
+          const ok = live.filter((o) => reachableInTime([s], o));
+          if (d <= 11) expect(ok.length, `seed ${seed} 第 ${d} 天`).toBeGreaterThanOrEqual(1);
+          expect(live.length - ok.length, `seed ${seed} 第 ${d} 天`).toBeLessThanOrEqual(1);
+        },
+      });
+    }
+  }, 120_000);
 
   it('不交保底單的玩家（§4「收入空檔」劇本變體）：不會卡死，保底單每 6 天換一張，板上同時只有一張', () => {
     for (const seed of [1, 2, 3]) {

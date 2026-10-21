@@ -10,12 +10,12 @@ import {
   economy,
   FILTERS,
   fishMatchesOrder,
+  FISH_SPECIES,
   fulfillOrder,
   HEATERS,
   LIGHTS,
   makeOrder,
   moveToQuarantine,
-  ORDER_EXPIRE_DAYS,
   FRY_ORDER_MIN_BROOD,
   fryOrderSize,
   buyNurseryBox,
@@ -41,9 +41,14 @@ import {
   INCOME_GAP_DAYS,
   incomeGapOrder,
   reachableInTime,
+  orderStarter,
+  STARTER_ORDER_DAYS,
+  STARTER_SNAILS,
   type Fish,
   type ShopOrder,
   type TankState,
+  orderOutlook,
+  outlookDaysLine,
 } from './index';
 
 const tank = (seed = 3) => createTank({ tank: TANKS.std40, filter: FILTERS.hangOn, heater: { spec: HEATERS.h50, targetC: 25 }, light: { spec: LIGHTS.basic }, seed, matureMedia: true });
@@ -64,17 +69,32 @@ const juvenileOrder = (s: TankState, count: number): ShopOrder => {
 };
 
 describe('店家訂單板（M21）', () => {
-  it('一開始就掛滿 3 張，都是新手交得出來的單（不會要指定品系、鰭型）', () => {
+  it('開局（還沒有自家的魚）：第 1 格起步單、第 2 格目標單預告、第 3 格空著，沒有交不出的魚單（mvp.md §4.4.5，#290）', () => {
     const s = tank();
     simulate(s, 1);
     const board = orderBoard(s);
-    expect(board.orders).toHaveLength(ORDER_BOARD_SIZE);
-    for (const o of board.orders) {
-      expect(o.strain).toBeUndefined();
-      expect(o.fin).toBeUndefined();
-      expect(o.unitPrice).toBeGreaterThan(0);
-      expect(orderTitle(o)).toMatch(/^\d+ (尾|隻|株)/);
-    }
+    expect(orderStarter([s])).toBe(true);
+    expect(board.orders).toHaveLength(2);
+    const [starter, preview] = board.orders;
+    // 還沒買過水草：照第一株一定夾帶的扁卷螺出，螺少時收 2 隻
+    expect(starter).toMatchObject({ kind: 'snail', snail: 'ramshorn', days: STARTER_ORDER_DAYS });
+    expect(starter.count).toBeGreaterThanOrEqual(STARTER_SNAILS - 1);
+    expect(starter.count * starter.unitPrice).toBeGreaterThanOrEqual(40);
+    expect(preview).toMatchObject({ kind: 'fry', preview: true });
+    expect(board.orders.some((o) => o.kind === 'fish')).toBe(false);
+    // 卡片上不寫「等螺再多生一些」：還沒買水草就說買第一株會附螺；買了之後寫還要幾天
+    expect(outlookDaysLine(orderOutlook([s], starter), starter)).toBe('買第一株水草會附螺，養幾天就夠');
+    s.snails ??= { snails: [], pests: { ramshorn: 0, bladder: 0, mts: 0 }, clutches: [], appleYoung: 0, neriteEggs: 0 };
+    s.snails.pests.ramshorn = 3;
+    const x = orderOutlook([s], starter);
+    expect(x.days).toBeGreaterThan(0);
+    expect(x.late).toBe(false);
+    expect(outlookDaysLine(x, starter)).toBe(`小螺還在生，約 ${x.days} 天`);
+    // 預告卡不能交、撕不掉、不會過期
+    expect(orderRefusal([s], preview.id)).toBe('生小魚之後就能接');
+    expect(dismissOrder(s, preview.id)).toBe(false);
+    simulate(s, 30 * 24);
+    expect(board.orders.some((o) => o.id === preview.id)).toBe(true);
   });
 
   it('交單：從所有缸湊魚，留下來的魚不交，錢一次給，不佔每天賣給店家的次數', () => {
@@ -97,17 +117,16 @@ describe('店家訂單板（M21）', () => {
     expect(orderBoard(a).done).toBe(1);
   });
 
-  it('交完或撕掉一張，隔天才補新單，最多 3 張', () => {
+  it('撕掉起步單：第 1 格馬上換一張新的（§4.4.5：起步階段第 1 格一直都有單）', () => {
     const s = tank();
     simulate(s, 1);
     const board = orderBoard(s);
-    expect(dismissOrder(s, board.orders[0].id)).toBe(true);
-    simulate(s, ORDER_GAP_HOURS - 2);
-    expect(board.orders).toHaveLength(ORDER_BOARD_SIZE - 1);
-    simulate(s, 3);
-    expect(board.orders).toHaveLength(ORDER_BOARD_SIZE);
-    simulate(s, 48);
-    expect(board.orders).toHaveLength(ORDER_BOARD_SIZE);
+    const first = board.orders[0];
+    expect(dismissOrder(s, first.id)).toBe(true);
+    simulate(s, 1);
+    const now = board.orders.filter((o) => !o.preview);
+    expect(now).toHaveLength(1);
+    expect(now[0].id).not.toBe(first.id);
   });
 
   it('自己繁殖出品系、鰭型後才有指定的高價單，鰭型單每尾 150～400', () => {
@@ -151,14 +170,33 @@ describe('店家訂單板（M21）', () => {
     expect(fishMatchesOrder(shrimp, { ...o, species: 'cherry_shrimp' })).toBe(true);
   });
 
-  it(`掛了 ${ORDER_EXPIRE_DAYS} 天沒人交的單自動換掉（不用玩家自己撕）`, () => {
+  it(`起步單掛 ${STARTER_ORDER_DAYS} 天沒人交就換一張（不用玩家自己撕），預告卡一直在`, () => {
     const s = tank();
     simulate(s, 1);
     const board = orderBoard(s);
-    const first = board.orders.map((o) => o.id);
-    simulate(s, ORDER_EXPIRE_DAYS * 24 + 1);
+    const first = board.orders.filter((o) => !o.preview).map((o) => o.id);
+    simulate(s, STARTER_ORDER_DAYS * 24 + 25);
     expect(board.orders.some((o) => first.includes(o.id))).toBe(false);
-    expect(board.orders.length).toBeGreaterThan(0);
+    expect(board.orders.filter((o) => !o.preview && !o.gap)).toHaveLength(1);
+    expect(board.orders.filter((o) => o.preview)).toHaveLength(1);
+  });
+
+  it('第一窩生出來：預告卡換成正式的小孔雀單，接著照一般規則補單（§4.4.5 第 4 點）', () => {
+    const s = tank();
+    simulate(s, 1);
+    const board = orderBoard(s);
+    const preview = board.orders.find((o) => o.preview)!;
+    for (let i = 0; i < 12; i++) {
+      const f = addFish(s, 'guppy', { carriesIch: false, carries: [] });
+      f.lengthCm = 0.7;
+      f.generation = 1;
+    }
+    simulate(s, 1);
+    expect(board.orders.some((o) => o.preview)).toBe(false);
+    const fry = board.orders.find((o) => o.kind === 'fry')!;
+    expect(fry.id).not.toBe(preview.id);
+    expect(fry.count).toBeGreaterThanOrEqual(1);
+    expect(fry.count).toBeLessThanOrEqual(12);
   });
 
   it('產卵盒裡的中魚也能拿去交單', () => {
@@ -178,6 +216,7 @@ describe('店家訂單板（M21）', () => {
       const board = orderBoard(s);
       board.orders = [];
       board.lastChangeHours = undefined;
+      board.fillCheckedHour = undefined;
       updateOrders(s);
       return board.orders;
     };
@@ -208,10 +247,14 @@ describe('店家訂單板（M21）', () => {
       expect(orderTitle(o)).toBe('5 隻扁卷螺');
       expect(fulfillOrder([s], o.id)).toBe(50);
       expect(snailState(s).pests.ramshorn).toBe(7);
-      snailState(s).pests.ramshorn = 2;
+      // 留 2 隻當種螺：缸裡 4 隻只能交 2 隻
+      snailState(s).pests.ramshorn = 4;
       const again: ShopOrder = { ...o, id: 901 };
       orderBoard(s).orders = [again];
-      expect(orderRefusal([s], again.id)).toBe('缸裡的只有 2 隻，還差 3 隻');
+      expect(orderRefusal([s], again.id)).toBe('缸裡能交的只有 2 隻（留 2 隻當種螺），還差 3 隻');
+      snailState(s).pests.ramshorn = 7;
+      expect(fulfillOrder([s], again.id)).toBe(50);
+      expect(snailState(s).pests.ramshorn).toBe(2);
     });
 
     it('第一窩：有仔魚就出小孔雀單，收 1.2 cm 以上自己繁殖的小魚（還沒到店家收購的大小也收）', () => {
@@ -263,17 +306,21 @@ describe('店家訂單板（M21）', () => {
       board.orders = [0, 1, 2].map((i) => ({ id: 900 + i, kind: 'fish', species: 'guppy', size: 'juvenile', count: 3, unitPrice: 45, postedHours: s.hours }) as ShopOrder);
       brood(s, FRY_ORDER_MIN_BROOD + 4);
       simulate(s, ORDER_GAP_HOURS + 1);
-      expect(board.orders).toHaveLength(ORDER_BOARD_SIZE);
       expect(board.orders.some((o) => o.kind !== 'fish')).toBe(true);
+      // 交不出的單最多留 1 張（§4.4.5 第 5 點）
+      expect(board.orders.filter((o) => !reachableInTime([s], o)).length).toBeLessThanOrEqual(1);
     });
 
-    it('開局板上全是中魚單：缸裡抓得到螺了，隔天換一張交得出來的（遊戲性 g9）', () => {
+    it('舊存檔開局板上全是中魚單：下一次更新就撤掉，換成交得出來的起步單和預告卡（§4.4.5）', () => {
       const s = tank(8);
       simulate(s, 1);
       const board = orderBoard(s);
       board.orders = [0, 1, 2].map((i) => ({ id: 950 + i, kind: 'fish', species: 'guppy', size: 'juvenile', count: 3, unitPrice: 45, postedHours: s.hours }) as ShopOrder);
+      board.lastChangeHours = s.hours - ORDER_GAP_HOURS;
       snailState(s).pests.bladder = 6;
-      simulate(s, ORDER_GAP_HOURS + 1);
+      simulate(s, 1);
+      expect(board.orders.some((o) => o.kind === 'fish')).toBe(false);
+      expect(board.orders.some((o) => o.preview)).toBe(true);
       expect(board.orders.some((o) => deliverableNow(s, o))).toBe(true);
     });
 
@@ -343,6 +390,14 @@ describe('店家訂單板（M21）', () => {
 
 describe('收入空檔保底（polish-to-9.md §4）', () => {
   const fishOnly = (s: TankState) => {
+    // 3 尾自家的小魚，再一兩天就長到中魚：已經過了起步階段（起步階段的板子另外照 §4.4.5 出），板上的中魚單交得出但還不能交。
+    // 出生時間記成現在：不算保底單收的「出生滿 7 天的仔魚」
+    for (let i = 0; i < 3; i++) {
+      const own = addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'female' });
+      own.generation = 1;
+      own.lengthCm = FISH_SPECIES.guppy.adultLengthCm * 0.5 - 0.05;
+      own.bornHours = s.hours;
+    }
     const board = orderBoard(s);
     board.orders = [0, 1, 2].map((i) => ({ id: 900 + i, kind: 'fish', species: 'guppy', size: 'juvenile', count: 3, unitPrice: 50, postedHours: s.hours - i } as ShopOrder));
     board.lastChangeHours = s.hours;

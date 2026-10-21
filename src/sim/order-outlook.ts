@@ -1,5 +1,7 @@
 import { tankLabel } from './household';
-import { daysUntilMatch, matchingFish, orderBoard, orderExpiresHours, orderSupply, orderUnit, trimmableCuttings, type ShopOrder } from './orders';
+import { economy } from './economy';
+import { daysToFill, daysUntilMatch, matchingFish, orderTargetCm, orderBoard, orderExpiresHours, orderSupply, orderUnit, trimmableCuttings, type ShopOrder } from './orders';
+import { isShrimpSpecies } from './species';
 import { type TankState } from './state';
 
 /**
@@ -24,6 +26,8 @@ export interface OrderOutlook {
   daysLeft: number;
   /** 估的天數比單子剩下的久：等魚長大之前客人就不等了。 */
   late: boolean;
+  /** 螺單：還沒買過水草、缸裡也沒螺（起步螺單照第一株一定夾帶的螺估，§4.4.5）。 */
+  firstPlant?: boolean;
   /** 跟這張搶同一批魚的其他單。 */
   sharesWith: number[];
 }
@@ -37,7 +41,13 @@ export function orderOutlook(tanks: TankState[], o: ShopOrder, keep: readonly nu
     const more = tanks.reduce((n, t) => n + trimmableCuttings(t, o.plant!), 0);
     return have + more >= o.count ? { ...base, fish: [], days: 0, trim: true } : { ...base, fish: [], days: null };
   }
-  if (o.kind === 'snail') return { ...base, fish: [], days: have >= o.count ? 0 : null };
+  if (o.kind === 'snail') {
+    // 螺會自己生：照 daysToFill 的繁殖速度估（要留種螺）
+    const d = daysToFill(tanks, o);
+    const days = d === null ? null : Math.ceil(d);
+    const firstPlant = d === null && (economy(tanks[0]).plantBuys ?? 0) === 0;
+    return { ...base, fish: [], days, late: days !== null && days * 24 > hoursLeft, ...(firstPlant ? { firstPlant } : {}) };
+  }
   const now: OrderOutlook['fish'] = [];
   const later: OrderOutlook['fish'] = [];
   tanks.forEach((t, tank) => {
@@ -72,10 +82,18 @@ export function compareOrders(tanks: TankState[], keep: readonly number[] = []):
 export function outlookDaysLine(x: OrderOutlook, o: ShopOrder): string {
   if (x.trim) return '修剪一下就能交';
   if (x.days === 0) return '現在就能交';
-  if (x.late) return `來不及（要養約 ${x.days} 天，單子剩 ${x.daysLeft} 天）`;
-  if (x.days !== null) return `再養約 ${x.days} 天`;
+  if (x.late && o.kind === 'snail') return `小螺約 ${x.days} 天後才生夠，單子剩 ${x.daysLeft} 天`;
+  if (x.late) {
+    // 交不出的單寫原因和預估時間（mvp.md §4.4.5 第 5 點），例如「中魚 2.3 cm：最快那尾約 9 天後，單子剩 4 天」
+    const shrimp = o.species !== undefined && isShrimpSpecies(o.species);
+    const what = o.kind === 'fry' ? '小孔雀' : o.size === 'adult' ? (shrimp ? '成蝦' : '成魚') : shrimp ? '幼蝦' : '中魚';
+    const need = o.count - x.have;
+    const when = need <= 1 ? `最快那尾約 ${x.days} 天後` : `湊齊 ${need} ${orderUnit(o)}約 ${x.days} 天後`;
+    return `${what} ${Number(orderTargetCm(o).toFixed(1))} cm：${when}，單子剩 ${x.daysLeft} 天`;
+  }
+  if (x.days !== null) return o.kind === 'snail' ? `小螺還在生，約 ${x.days} 天` : `再養約 ${x.days} 天`;
   if (o.kind === 'cutting') return '等水草長高再剪';
-  if (o.kind === 'snail') return '等螺再多生一些';
+  if (o.kind === 'snail') return x.firstPlant ? '買第一株水草會附螺，養幾天就夠' : '等螺再多生一些';
   return '缸裡還沒有養得成的魚';
 }
 

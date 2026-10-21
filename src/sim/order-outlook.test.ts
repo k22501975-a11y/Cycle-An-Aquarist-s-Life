@@ -120,7 +120,9 @@ describe('訂單比較（polish-to-9.md G5）', () => {
     expect(x.daysLeft).toBe(ORDER_EXPIRE_DAYS);
     expect(x.days).toBeGreaterThan(ORDER_EXPIRE_DAYS);
     expect(x.late).toBe(true);
-    expect(outlookDaysLine(x, o)).toBe(`來不及（要養約 ${x.days} 天，單子剩 ${ORDER_EXPIRE_DAYS} 天）`);
+    // 交不出的單寫原因和預估時間（§4.4.5 第 5 點）
+    expect(outlookDaysLine(x, o)).toBe(`中魚 ${Number((adult * 0.5).toFixed(1))} cm：最快那尾約 ${x.days} 天後，單子剩 ${ORDER_EXPIRE_DAYS} 天`);
+    expect(outlookDaysLine({ ...x, have: 0 }, { ...o, count: 3 })).toBe(`中魚 ${Number((adult * 0.5).toFixed(1))} cm：湊齊 3 尾約 ${x.days} 天後，單子剩 ${ORDER_EXPIRE_DAYS} 天`);
     // 掛了 3 天半的保底單只剩 2 天
     const gap = orderOutlook([s], { ...o, gap: true, postedHours: s.hours - 84 });
     expect(gap.daysLeft).toBe(INCOME_GAP_DAYS - 4);

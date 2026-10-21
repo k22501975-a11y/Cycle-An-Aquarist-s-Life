@@ -1331,9 +1331,10 @@ async function start(): Promise<void> {
         else panelSheet('育幼盒', (p) => p.nurseryPanel(ctx));
         return;
       case 'treat': {
-        // 生病的魚可能在別缸：先切過去，直接打開用藥（#291），老闆先說是什麼病、下什麼藥
-        const at = game.tanks.findIndex((t) => t.fish.some((f) => f.alive && illnessOf(f)));
-        if (at >= 0) game.switchTo(at);
+        // 生病的魚可能在別缸：這缸沒有才切過去，直接打開用藥（#291），老闆先說是什麼病、下什麼藥
+        const ill = (t: sim.TankState) => t.fish.some((f) => f.alive && illnessOf(f));
+        const at = game.tanks.findIndex(ill);
+        if (!ill(game.state) && at >= 0) game.switchTo(at);
         const fish = sick();
         return panelSheet('用藥', (p) => p.treatPanel(ctx, fish ? causeAdvice(fishName(fish), [], fish) : '缸裡現在看不到生病的魚。'));
       }
