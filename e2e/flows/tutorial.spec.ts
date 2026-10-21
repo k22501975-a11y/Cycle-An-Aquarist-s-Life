@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { aliveCount, closeSheet, dismissGuide, finishDrip, fastForward, gameState, NO_WAIT, questStep, seedRng, setSpeed, sheetButton, startGame, tapTool, tool, watchConsoleErrors } from './helpers';
+import { aliveCount, closeSheet, dismissGuide, finishDrip, fastForward, gameState, NO_WAIT, questStep, seedRng, setSpeed, sheetButton, startGame, tapTool, tool, trayCard, watchConsoleErrors } from './helpers';
 
 // 要快轉很多天：用 1 倍密度省 CPU（無頭瀏覽器用軟體繪圖）
 test.use({ deviceScaleFactor: 1, actionTimeout: 20_000 });
@@ -60,7 +60,7 @@ test('新手任務 1～9：照老闆的引導從新存檔玩得完，教學第 4
 
   // 2 挑魚、對水（#235）：任務卡下面一鍵買，不用開商店：第一個品系「一公兩母」（滴水對水小遊戲）
   await dismissGuide(page);
-  await page.locator('.quest-tray .qt-card', { hasText: '一公兩母' }).click(NO_WAIT);
+  await trayCard(page, '一公兩母');
   await finishDrip(page);
   await closeSheet(page);
   expect(await aliveCount(page)).toBe(3);
@@ -78,7 +78,7 @@ test('新手任務 1～9：照老闆的引導從新存檔玩得完，教學第 4
 
   // 4 種水草（#235）：任務卡下面點一株草
   await dismissGuide(page);
-  await page.locator('.quest-tray .qt-card').first().click(NO_WAIT);
+  await trayCard(page);
   // P4：買了先拿在手上，進造景模式，拖到想種的位置
   await expect(page.locator('.scape-bar')).toBeVisible();
   const coach = page.locator('.scape-coach');
@@ -114,7 +114,7 @@ test('新手任務 1～9：照老闆的引導從新存檔玩得完，教學第 4
 
   // 7 擺石頭（#235）：任務卡下面點火山石，拿在手上進造景模式（拖放另有上面水草那段測過），按「完成」收起
   await dismissGuide(page);
-  await page.locator('.quest-tray .qt-card', { hasText: '火山石' }).click(NO_WAIT);
+  await trayCard(page, '火山石');
   await expect(page.locator('.scape-bar')).toBeVisible();
   expect(await gameState<number>(page, '(s.equipment.hardscape ?? []).length')).toBe(1);
   await page.locator('.scape-bar button', { hasText: '完成' }).click(NO_WAIT);

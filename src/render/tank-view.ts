@@ -166,7 +166,10 @@ export interface TankViewEvents {
 }
 
 /** 魚畫得比真實比例大一些（遊戲裡要看得清楚品系花紋）。 */
-const EXAGGERATION: Record<string, number> = { guppy: 1.8, zebrafish: 1.6, cherry_shrimp: 1.8, apisto: 1.5, betta: 1.5, crystal_shrimp: 1.8 };
+// 魚再放大 1.2 倍（畫面評測第 9 輪 #265：孔雀魚只佔畫面寬 6%）；蝦不動，牠們走在沙面上
+const EXAGGERATION: Record<string, number> = { guppy: 2.16, zebrafish: 1.92, cherry_shrimp: 1.8, apisto: 1.8, betta: 1.8, crystal_shrimp: 1.8 };
+/** 後排的魚：淡一點、偏水色、微糊，但還認得出是魚（#265：原本 0.75 透明度加藍色，母孔雀魚遠看像影子）。 */
+const BACK_ALPHA = 0.88;
 /** 景深切換的門檻（有緩衝，避免在兩層之間跳來跳去）。 */
 const BACK_ENTER = 0.3;
 const BACK_LEAVE = 0.4;
@@ -238,7 +241,7 @@ export class TankView {
   private sceneKey = '';
   /** 畫面用到的素材版本：背景載好新圖後，退回程式繪製的魚、水草、場景改畫成精繪圖。 */
   private artVersion = paintedArtVersion();
-  private readonly depthBlur = new BlurFilter({ strength: 2.5, quality: 2 });
+  private readonly depthBlur = new BlurFilter({ strength: 1.6, quality: 2 });
   private quality: QualitySpec = qualitySpec('high', 2);
   private fish = new Map<number, FishView>();
   private plants = new Map<number, PlantView>();
@@ -322,8 +325,8 @@ export class TankView {
     this.causticsLayer.addChild(this.causticsA, this.causticsB, this.causticsMask);
     // 遠層的魚：模糊、偏藍、淡一點（後景模糊）
     this.backFish.filters = [this.depthBlur];
-    this.backFish.alpha = 0.75;
-    this.backFish.tint = 0xa9d4e2;
+    this.backFish.alpha = BACK_ALPHA;
+    this.backFish.tint = 0xc6e4ec;
     this.moteLayer.blendMode = 'add';
     this.rayLayer.blendMode = 'add';
     this.gearGlow.blendMode = 'add';
@@ -655,7 +658,7 @@ export class TankView {
     const fade = [this.gearArtLayer, this.gear, this.gearGlow, this.bubbleLayer, this.rayLayer, this.causticsLayer, this.moteLayer, this.frontFish, this.backFish];
     if (show.step === 'done' && before === 'done') {
       this.setup = null;
-      for (const c of fade) c.alpha = c === this.backFish ? 0.75 : c === this.gearArtLayer ? GEAR_ALPHA : 1;
+      for (const c of fade) c.alpha = c === this.backFish ? BACK_ALPHA : c === this.gearArtLayer ? GEAR_ALPHA : 1;
       this.gearArtLayer.y = this.gear.y = this.gearGlow.y = 0;
       this.front.mask = null;
       this.sandMask.clear();
@@ -757,7 +760,7 @@ export class TankView {
     this.rayLayer.alpha = this.causticsLayer.alpha = L.light;
     this.moteLayer.alpha = L.water * (1 - L.milk);
     this.frontFish.alpha = L.light;
-    this.backFish.alpha = 0.75 * L.light;
+    this.backFish.alpha = BACK_ALPHA * L.light;
   }
 
   /** 生小魚的慶祝特寫：聚光在母魚身上幾秒，金色亮點往上飄。 */

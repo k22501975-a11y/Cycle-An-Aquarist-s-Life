@@ -1370,13 +1370,13 @@ async function start(): Promise<void> {
     litTarget = el;
   };
   // 觀賞模式（畫面評測第 8 輪 #252）：10 秒沒操作，介面淡到 30%；點兩下水缸只留魚，右上角一顆小鈕叫回來。
-  // 面板開著、在餵食或造景、有任務要點的按鈕時不淡
+  // 面板開著、在餵食或造景時不淡；有任務要點的按鈕時照樣淡，只留那顆按鈕亮著（styles.css，畫面評測第 9 輪 #265）
   let idleTimer = 0;
   const stayAwake = () => {
     document.body.classList.remove('idle');
     window.clearTimeout(idleTimer);
     idleTimer = window.setTimeout(() => {
-      if (sheet.isOpen || feedingMode || scaping || litTarget) return stayAwake();
+      if (sheet.isOpen || feedingMode || scaping) return stayAwake();
       document.body.classList.add('idle');
       // 第一次淡下去時說一聲怎麼只看魚
       if (!store.getItem('cycle.watchHint')) {

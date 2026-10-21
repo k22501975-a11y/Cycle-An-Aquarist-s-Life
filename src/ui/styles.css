@@ -139,7 +139,7 @@ button.todo-item.go:hover { color: var(--accent, #f0c96a); }
   #dock { left: 6px; right: 6px; bottom: calc(env(safe-area-inset-bottom) + 8px); }
   .tools { gap: 2px; padding: 8px 6px 6px; width: 100%; justify-content: space-between; }
   .tool { flex: 1; }
-  .tool .disc { width: 42px; height: 42px; padding: 9px; }
+  .tool .disc { width: 38px; height: 38px; padding: 8px; }
   .tool .lbl { font-size: 11px; letter-spacing: 0.04em; }
 }
 /* 很矮的橫向手機：狀態列、按鈕列都壓扁，留最多空間給水缸 */
@@ -1236,7 +1236,8 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 /* 任務卡下面的圖卡：點了缸就收起來，點任務卡再叫出來；窄螢幕最多兩張 */
 .quest-tray.tucked { display: none; }
 .quest-pill.tray-tucked { padding-right: 24px; }
-.quest-pill.tray-tucked::after { content: '▾'; position: absolute; right: 9px; top: 50%; transform: translateY(-50%); color: var(--gold); font-size: 12px; }
+.quest-pill.tray-tucked::after { content: '▾'; position: absolute; right: 9px; top: 50%; transform: translateY(-50%); color: var(--gold); font-size: 12px; animation: tray-nudge 1.4s ease-in-out 3; }
+@keyframes tray-nudge { 50% { transform: translateY(-20%); text-shadow: 0 0 8px rgba(240, 200, 120, 0.9); } }
 @media (max-width: 800px) { .qt-row .qt-card:nth-of-type(3) { display: none; } }
 
 /* 造景時不出魚的事件字幕，免得蓋住「拖到想種的位置」（#254） */
@@ -1244,7 +1245,10 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 
 /* 觀賞模式：10 秒沒操作，介面淡到 30%；點兩下缸只留魚 */
 #hud, #dock, .quest-pill, .quest-tray, .tank-label, .dream-holder, .daily-holder, .owner-tip { transition: opacity 0.8s ease; }
-body.idle #hud, body.idle #dock, body.idle .quest-pill, body.idle .quest-tray, body.idle .tank-label, body.idle .dream-holder, body.idle .daily-holder, body.idle .owner-tip { opacity: 0.3; }
+/* 有任務要點的按鈕時（新手前幾天幾乎一直有），只留那顆按鈕不淡，其他照樣淡下去（畫面評測第 9 輪 #265） */
+body.idle:not(.watching) #hud:not(:has(.quest-target)), body.idle:not(.watching) #dock > :not(:has(.quest-target)), body.idle:not(.watching) .quest-pill, body.idle:not(.watching) .quest-tray, body.idle:not(.watching) .tank-label:not(.quest-target), body.idle:not(.watching) .dream-holder, body.idle:not(.watching) .daily-holder, body.idle:not(.watching) .owner-tip { opacity: 0.3; }
+body.idle:not(.watching) #hud:has(.quest-target) > :not(.quest-target):not(:has(.quest-target)), body.idle:not(.watching) #hud:has(.quest-target) > :has(.quest-target) > :not(.quest-target), body.idle:not(.watching) #dock .tools:has(.quest-target) > .tool:not(.quest-target) { opacity: 0.3; transition: opacity 0.8s ease; }
+body.idle:not(.watching) #hud:has(.quest-target), body.idle:not(.watching) #dock .tools:has(.quest-target) { background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; transition: background 0.8s ease, border-color 0.8s ease; }
 body.watching #hud, body.watching #dock, body.watching .quest-pill, body.watching .quest-tray, body.watching .tank-label, body.watching .dream-holder, body.watching .daily-holder, body.watching .owner-tip, body.watching #stage .selcard { opacity: 0; pointer-events: none; }
 .watch-exit { position: fixed; z-index: 6; top: calc(env(safe-area-inset-top) + 10px); right: calc(env(safe-area-inset-right) + 12px); width: 40px; height: 40px; border-radius: 50%; display: none; place-items: center; background: rgba(8, 28, 38, 0.55); border: 1px solid var(--line); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 body.watching .watch-exit { display: grid; animation: rise 0.3s ease-out; }
@@ -1260,3 +1264,9 @@ body.watching .watch-exit { display: grid; animation: rise 0.3s ease-out; }
 .cap-list .cap .lbl { flex: 1; text-align: left; }
 /* 直向的窄手機（會提示轉橫向）：放不下一行時照舊換行，不撐出橫向捲動 */
 @media (max-width: 560px) { #hud { flex-wrap: wrap; row-gap: 6px; } }
+
+/* 橫向手機上通知最多佔 40% 寬、兩行內，不橫跨半個缸（畫面評測第 9 輪 #265） */
+@media (orientation: landscape) and (max-height: 500px) {
+  .toasts { max-width: min(40vw, 380px); }
+  .toast > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+}
