@@ -54,7 +54,7 @@ import { flyCoins, rewardBurst } from './ui/coin-fly';
 import type { ReportItem } from './ui/morning-report';
 import { loadCodexSeen, saveCodexSeen } from './ui/codex-seen';
 import { Sheet, Toasts } from './ui/sheet';
-import { clockLabel, householdTodos, waterCapsules, type Todo } from './ui/status';
+import { clockLabel, householdTodos, waterCapsules, waterSummary, type Todo } from './ui/status';
 import { cornerRect, pickCorner, type Corner, type Rect } from './ui/dodge';
 import './ui/styles.css';
 
@@ -701,7 +701,7 @@ async function start(): Promise<void> {
       overfed = got.overfed;
       renderFeedBar();
     });
-  sheet.onOpen = () => leaveFeeding();
+  sheet.onOpen = () => (leaveFeeding(), document.body.classList.remove('watching'), toasts.clear());
   debugHandle.feeding = { start: startFeeding, leave: leaveFeeding };
   debugHandle.scape = { enter: enterScape, leave: leaveScape, bar: scapeBar };
   // 畫質：低畫質關掉景深模糊、柔光，降低解析度與粒子數量
@@ -786,8 +786,21 @@ async function start(): Promise<void> {
     // 其他缸有嚴重的事：小紅點
     const alarm = game.tanks.some((t, i) => i !== game.active && householdTodos([t], 0).some((x) => x.tone === 'bad'));
     tankBtn.classList.toggle('alert', alarm);
+    // 只有一缸時不佔上方列的位置（選單裡有「我的水缸」可以加缸）
+    tankBtn.hidden = !multi;
   };
-  const caps = h('button.caps', { 'aria-label': '水質趨勢', title: '點一下看水質趨勢', onclick: () => panelSheet('紀錄', (p) => p.recordsPanel(ctx)) });
+  // 窄螢幕（畫面評測第 8 輪 #251、#252）：5 顆合成一顆「水質」，點一下才展開 5 項，展開後再點看趨勢
+  const ONE_CAP = window.matchMedia('(max-width: 1279px)');
+  const caps = h('button.caps', {
+    'aria-label': '水質',
+    title: '點一下看水質',
+    onclick: () => {
+      if (ONE_CAP.matches && !caps.classList.contains('open')) return caps.classList.add('open');
+      caps.classList.remove('open');
+      panelSheet('紀錄', (p) => p.recordsPanel(ctx));
+    },
+  });
+  window.addEventListener('pointerdown', (e) => caps.contains(e.target as Node) || caps.classList.remove('open'), { capture: true });
   // 分缸提示可以點：打開一鍵分缸
   const todoRow = (t: Todo) =>
     t.nursery
@@ -819,21 +832,21 @@ async function start(): Promise<void> {
     const urgent = list.filter((t) => t.tone !== 'ok').length;
     todoBadge.textContent = urgent > 0 ? String(urgent) : '';
     todoBadge.classList.toggle('show', urgent > 0);
+    renderBell();
   };
-  const todoSheet = () =>
-    h(
-      'div.stack',
-      {},
-      ...householdTodos(game.tanks, game.active).map(todoRow),
-      h('button.btn', { onclick: () => panelSheet('紀錄', (p) => p.recordsPanel(ctx, 'events')) }, '看事件紀錄'),
-    );
-  const todoBtn = h('button.hud-btn.todo-btn', { 'aria-label': '待辦', onclick: () => sheet.open('待辦', todoSheet, { live: true }) }, icon(ICONS.todo), todoBadge);
   const capsChanged = memo();
   const renderCaps = () => {
     const list = waterCapsules(game.state);
     if (!capsChanged(JSON.stringify(list))) return;
+    const sum = waterSummary(list);
     caps.replaceChildren(
-      ...list.map((c) => h(`span.cap.${c.tone}${c.stale ? '.stale' : ''}`, { title: c.title }, h('i.dot'), h('span.lbl', {}, c.label), h('b', {}, c.value))),
+      h(`span.cap.cap-sum.${sum.tone}`, {}, h('i.dot'), h('span.lbl', {}, '水質'), h('b', {}, sum.value)),
+      h(
+        'span.cap-list',
+        {},
+        ...list.map((c) => h(`span.cap.${c.tone}${c.stale ? '.stale' : ''}`, { title: c.title }, h('i.dot'), h('span.lbl', {}, c.label), h('b', {}, c.value))),
+        h('span.cap-more', {}, '看趨勢 ›'),
+      ),
     );
   };
   const notifySection = (): Node[] => {
@@ -1050,10 +1063,12 @@ async function start(): Promise<void> {
     const m = Math.floor((Date.now() - at) / 60_000);
     return m < 1 ? '剛剛' : m < 60 ? `${m} 分鐘前` : `${Math.floor(m / 60)} 小時前`;
   };
+  // 待辦併進鈴鐺（畫面評測第 8 輪 #252）：上方列少一顆鈕，打開先看要處理的，下面是通知
   const inboxSheet = () =>
     h(
       'div.stack',
       {},
+      ...householdTodos(game.tanks, game.active).map(todoRow),
       ...(toasts.inbox.length === 0
         ? [h('p.hint', {}, '目前沒有通知')]
         : toasts.inbox.map((n) =>
@@ -1065,22 +1080,25 @@ async function start(): Promise<void> {
               n.action ? h('button.btn.small', { onclick: () => (sheet.close(), n.action!.run()) }, n.action.label) : h('small', {}, ago(n.at)),
             ),
           )),
+      h('button.btn', { onclick: () => panelSheet('紀錄', (p) => p.recordsPanel(ctx, 'events')) }, '看事件紀錄'),
     );
   const openInbox = () => {
     toasts.markRead();
-    sheet.open('通知', inboxSheet);
+    sheet.open('通知', inboxSheet, { live: true });
   };
   const bellBtn = h('button.hud-btn.bell-btn', { 'aria-label': '通知', onclick: openInbox }, icon(ICONS.bell), bellBadge);
+  // 徽章只是一個小金點，不寫數字（紅底數字比紅色的魚還搶眼）
+  const renderBell = () => bellBadge.classList.toggle('show', toasts.unread > 0 || todoBadge.classList.contains('show'));
   toasts.onInbox = () => {
     bellBadge.textContent = toasts.unread > 0 ? String(Math.min(99, toasts.unread)) : '';
-    bellBadge.classList.toggle('show', toasts.unread > 0);
+    renderBell();
     bellBtn.classList.remove('ring');
     if (toasts.unread > 0) {
       void bellBtn.offsetWidth; // 重新觸發搖鈴動畫
       bellBtn.classList.add('ring');
     }
   };
-  hud.append(clock, speed.el, sleepBtn, coinsBtn, tankBtn, h('span.hud-sep'), caps, bellBtn, todoBtn, menuBtn);
+  hud.append(clock, speed.el, sleepBtn, coinsBtn, tankBtn, h('span.hud-sep'), caps, bellBtn, menuBtn);
 
   // ---- 下方櫃台：待辦卡｜圓形工具列｜選取卡 ----
   const tools = h('div.tools.glass');
@@ -1096,6 +1114,8 @@ async function start(): Promise<void> {
     net: 'icon-net',
     orders: 'icon-orders',
   };
+  // 平常只露常用的 4 個，其他收在「更多」裡（畫面評測第 8 輪 #252）；任務要點的、有訂單能交的、有死魚的會自己露出來
+  const MAIN_TOOLS: (keyof typeof ICONS)[] = ['feed', 'water', 'test', 'shop'];
   /** 任務要點的按鈕會發光（P1）。 */
   const toolButtons: Partial<Record<keyof typeof ICONS, HTMLElement>> = {};
   const tool = (key: keyof typeof ICONS, label: string, color: string, onclick: () => void) => {
@@ -1110,7 +1130,7 @@ async function start(): Promise<void> {
       disc.classList.add('has-art');
       disc.append(img);
     }
-    const b = h('button.tool', { onclick }, disc, h('span.lbl', {}, label));
+    const b = h(`button.tool${MAIN_TOOLS.includes(key) ? '' : '.extra'}`, { onclick, title: label }, disc, h('span.lbl', {}, label));
     toolButtons[key] = b;
     b.addEventListener('click', () => audio.play(key === 'net' ? 'net' : key === 'test' ? 'test' : 'open'));
     b.style.setProperty('--c', color);
@@ -1132,10 +1152,10 @@ async function start(): Promise<void> {
     renderCaps();
     panelSheet('水質測試', (p) => p.testKitPanel(ctx), { live: true });
   });
+  tool('shop', '商店', '#ef8a6a', () => openShop());
   tool('trim', '修剪', '#7ccf8a', () => panelSheet('修剪水草', (p) => p.trimListPanel(ctx)));
   // 造景（F1-c）：養水的那幾天能做的事，入口放在主畫面
   tool('scape', '造景', '#9fd6a0', () => enterScape());
-  tool('shop', '商店', '#ef8a6a', () => openShop());
   tool('gear', '設備', '#e3bd6d', () => panelSheet('設備與維護', (p) => p.maintenancePanel(ctx)));
   // 店家訂單（#143）：自己的入口，有能交的單亮綠色數字並發光，有沒看過的新單亮小紅點
   const seenOrders = loadSeenOrders(store);
@@ -1163,6 +1183,18 @@ async function start(): Promise<void> {
     const n = game.act(removeDeadFish);
     toasts.show(n > 0 ? `撈出 ${n} 條死魚` : '缸裡沒有死魚');
   });
+  const moreLbl = h('span.lbl', {}, '更多');
+  const setMore = (open: boolean) => {
+    tools.classList.toggle('open', open);
+    moreLbl.textContent = open ? '收起' : '更多';
+    moreBtn.setAttribute('aria-expanded', String(open));
+  };
+  const moreBtn = h('button.tool.tool-more', { title: '更多工具', 'aria-expanded': 'false', onclick: () => setMore(!tools.classList.contains('open')) }, h('span.disc', {}, h('i.more-dots', { 'aria-hidden': 'true' })), moreLbl);
+  moreBtn.style.setProperty('--c', '#8fb7c4');
+  tools.append(moreBtn);
+  // 點了收起來的工具、或點到別的地方，就收回去
+  tools.addEventListener('click', (e) => (e.target as Element).closest('.tool.extra') && setMore(false));
+  window.addEventListener('pointerdown', (e) => tools.contains(e.target as Node) || setMore(false), { capture: true });
   dock.append(todoCard, tools);
   // 選取卡的位置依螢幕寬度切換：寬螢幕在櫃台右邊，其他時候浮在水缸右上角。
   const placeCards = () => {
@@ -1297,6 +1329,30 @@ async function start(): Promise<void> {
     el?.classList.add('quest-target');
     litTarget = el;
   };
+  // 觀賞模式（畫面評測第 8 輪 #252）：10 秒沒操作，介面淡到 30%；點兩下水缸只留魚，右上角一顆小鈕叫回來。
+  // 面板開著、在餵食或造景、有任務要點的按鈕時不淡
+  let idleTimer = 0;
+  const stayAwake = () => {
+    document.body.classList.remove('idle');
+    window.clearTimeout(idleTimer);
+    idleTimer = window.setTimeout(() => {
+      if (sheet.isOpen || feedingMode || scaping || litTarget) return stayAwake();
+      document.body.classList.add('idle');
+      // 第一次淡下去時說一聲怎麼只看魚
+      if (!store.getItem('cycle.watchHint')) {
+        store.setItem('cycle.watchHint', '1');
+        toasts.show('點兩下水缸，可以收起介面只看魚');
+      }
+    }, 10_000);
+  };
+  for (const type of ['pointerdown', 'keydown', 'wheel']) window.addEventListener(type, stayAwake, { capture: true, passive: true });
+  stayAwake();
+  const setWatching = (on: boolean) => document.body.classList.toggle('watching', on);
+  stage.addEventListener('pointerdown', (e) => e.target instanceof HTMLCanvasElement && guide.tuckTray());
+  stage.addEventListener('dblclick', (e) => {
+    if (e.target instanceof HTMLCanvasElement && !feedingMode && !scaping && !sheet.isOpen) setWatching(!document.body.classList.contains('watching'));
+  });
+  document.body.append(h('button.watch-exit', { 'aria-label': '叫回介面', title: '叫回介面', onclick: () => setWatching(false) }, h('i.watch-eye', { 'aria-hidden': 'true' })));
   // 開缸（F1-a）：新遊戲先挑設備，開完缸時間才開始走；關掉面板時主畫面留一個「開缸」按鈕
   // 開局 0～5 秒：阿德老闆的歡迎疊在挑設備的畫面上，點一下或 5 秒後自己收起來（mvp.md §4.4.4）；設備說明只寫在卡片上
   let welcomed = false;
@@ -1891,6 +1947,8 @@ async function start(): Promise<void> {
     clockValue.textContent = `${clockLabel(game.state.hours)}${game.clock.timeScale === 0 ? '・暫停' : ''}`;
     speed.render();
     netBtn.classList.toggle('alert', game.state.fish.some((f) => !f.alive));
+    // 第 3 天以後工具都認得了：拿掉圖示下面的字，按住才顯示
+    tools.classList.toggle('quiet', game.tanks[0].hours >= 72);
 
     // 每半秒更新一次卡片與數值。用現實經過的時間：deltaMS 每幀最多只算 100ms，
     // 畫面很卡時會變成好幾秒才更新一次（任務、待辦、金幣跟著慢；新手任務流程測試在 CI 上因此卡住）

@@ -1185,3 +1185,76 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
   .shop-banner > b { font-size: 13px; }
   .card-pic { height: 62px; padding: 4px 8px; }
 }
+
+/* ---- 畫面評測第 8 輪（#251、#252）：主畫面減量，讓出缸看魚 ---- */
+/* 上方列固定一行：水質合成一顆、待辦併進鈴鐺、只有一缸不顯示缸切換 */
+.caps .cap-sum { display: none; }
+.cap-list { display: flex; gap: 8px; }
+.cap-more { display: none; }
+.tank-chip[hidden] { display: none; }
+@media (max-width: 1279px) {
+  #hud { flex-wrap: nowrap; row-gap: 0; }
+  .caps { flex: 1 1 auto; position: relative; overflow: visible; justify-content: flex-end; }
+  .caps .cap-sum { display: inline-flex; }
+  .cap-list { display: none; position: absolute; z-index: 13; top: calc(100% + 10px); right: 0; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; border-radius: 16px; background: var(--glass-strong); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .caps.open .cap-list { display: flex; animation: rise 0.18s ease-out; }
+  .cap-list .cap { justify-content: space-between; min-width: 150px; }
+  .cap-more { display: block; padding: 4px 6px 0; color: var(--gold); font-size: 13px; text-align: right; }
+}
+@media (max-width: 640px) {
+  .caps { order: 0; flex: 1 1 auto; justify-content: flex-end; }
+  .time { flex: 0 1 auto; }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  #hud { padding: 3px 6px 3px 12px; gap: 8px; }
+  #hud .speed-btn { min-height: 34px; }
+  #hud .coins, #hud .tank-chip { min-height: 30px; padding-top: 2px; padding-bottom: 2px; }
+  #hud .sleep-btn { min-height: 34px; padding: 2px 7px; }
+}
+/* 徽章只是一個小金點，不寫數字：紅底數字是畫面上最搶眼的顏色，比紅色的魚還搶眼 */
+.badge.show, .tool .badge.ok, .tool .badge.dot { font-size: 0; min-width: 0; width: 10px; height: 10px; padding: 0; top: 1px; right: 1px; border-radius: 50%; color: transparent; background: var(--gold-bright, #f3d27a); box-shadow: 0 0 0 2px rgba(10, 30, 40, 0.8), 0 0 8px rgba(243, 210, 122, 0.8); }
+.tool .badge.ok { background: var(--sage, #8cd6aa); box-shadow: 0 0 0 2px rgba(10, 30, 40, 0.8), 0 0 8px rgba(140, 214, 170, 0.9); }
+.tool .badge { top: 0; right: 4px; }
+
+/* 工具列：常用 4 個加「更多」；任務要點的、有訂單能交、有死魚的自己露出來 */
+.tool.extra { display: none; }
+.tools.open .tool.extra, .tool.extra.quest-target, .tool.extra.glow, .tool.extra.alert { display: flex; }
+.tools.open .tool.extra { animation: rise 0.18s ease-out; }
+.tool-more .disc { background: radial-gradient(circle at 50% 30%, rgba(143, 183, 196, 0.35), #0a2430 72%); }
+.more-dots { display: block; width: 24px; height: 6px; background: radial-gradient(circle, var(--text) 2.6px, transparent 3.2px) 0 0 / 8px 6px repeat-x; opacity: 0.9; }
+.tools.open .tool-more .disc { box-shadow: inset 0 0 0 2px var(--gold), 0 4px 14px rgba(0, 0, 0, 0.35); }
+@media (max-width: 640px) {
+  .tools { width: auto; justify-content: center; gap: 10px; padding: 6px 12px 5px; }
+  .tool { flex: 0 0 auto; }
+}
+/* 第 3 天以後拿掉圖示下面的字，按住才顯示 */
+.tools.quiet .tool { position: relative; }
+.tools.quiet .tool .lbl { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); padding: 2px 8px; border-radius: 8px; background: var(--glass-strong); opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+.tools.quiet .tool:active .lbl, .tools.quiet .tool:hover .lbl, .tools.quiet .tool.quest-target .lbl { opacity: 1; }
+.tools.quiet { padding-bottom: 6px; }
+
+/* 任務卡下面的圖卡：點了缸就收起來，點任務卡再叫出來；窄螢幕最多兩張 */
+.quest-tray.tucked { display: none; }
+.quest-pill.tray-tucked { padding-right: 24px; }
+.quest-pill.tray-tucked::after { content: '▾'; position: absolute; right: 9px; top: 50%; transform: translateY(-50%); color: var(--gold); font-size: 12px; }
+@media (max-width: 800px) { .qt-row .qt-card:nth-of-type(3) { display: none; } }
+
+/* 造景時不出魚的事件字幕，免得蓋住「拖到想種的位置」（#254） */
+.scaping .bite-tag { display: none; }
+
+/* 觀賞模式：10 秒沒操作，介面淡到 30%；點兩下缸只留魚 */
+#hud, #dock, .quest-pill, .quest-tray, .tank-label, .dream-holder, .daily-holder, .owner-tip { transition: opacity 0.8s ease; }
+body.idle #hud, body.idle #dock, body.idle .quest-pill, body.idle .quest-tray, body.idle .tank-label, body.idle .dream-holder, body.idle .daily-holder, body.idle .owner-tip { opacity: 0.3; }
+body.watching #hud, body.watching #dock, body.watching .quest-pill, body.watching .quest-tray, body.watching .tank-label, body.watching .dream-holder, body.watching .daily-holder, body.watching .owner-tip, body.watching #stage .selcard { opacity: 0; pointer-events: none; }
+.watch-exit { position: fixed; z-index: 6; top: calc(env(safe-area-inset-top) + 10px); right: calc(env(safe-area-inset-right) + 12px); width: 40px; height: 40px; border-radius: 50%; display: none; place-items: center; background: rgba(8, 28, 38, 0.55); border: 1px solid var(--line); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+body.watching .watch-exit { display: grid; animation: rise 0.3s ease-out; }
+.watch-eye { width: 20px; height: 12px; border: 2px solid var(--text); border-radius: 50% / 60%; position: relative; }
+.watch-eye::after { content: ''; position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; border-radius: 50%; background: var(--text); transform: translate(-50%, -50%); }
+/* 老闆的提醒小卡縮成兩行以內（畫面評測第 8 輪：通知不要疊在缸上），點「為什麼？」才展開 */
+@media (orientation: landscape) and (max-height: 500px) {
+  .owner-tip { width: min(330px, 38vw); gap: 8px; padding: 6px 30px 6px 6px; }
+  .owner-tip .tip-avatar { width: 30px; height: 30px; }
+  .owner-tip .tip-text { font-size: 12px; line-height: 1.35; -webkit-line-clamp: 2; }
+  .owner-tip .tip-why { font-size: 11.5px; padding: 0; }
+}
+.cap-list .cap .lbl { flex: 1; text-align: left; }

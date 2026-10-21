@@ -227,12 +227,17 @@ export class Toasts {
     if (!sticky) this.arm(el, tone);
   }
 
-  /** 一般的停 4 秒；警告、壞消息要看清楚，停 6 秒。 */
+  /** 開面板時收掉畫面上的一般通知（畫面評測第 8 輪 #254：舊通知浮在商店標題上）；要處理的留著。 */
+  clear(): void {
+    if (this.current && !this.current.sticky) this.current.el.remove();
+  }
+
+  /** 一般的停 2.5 秒（畫面評測第 8 輪 #252）；警告、壞消息要看清楚，停 5 秒。 */
   private arm(el: HTMLElement, tone: Tone): void {
     window.clearTimeout(this.fadeTimer);
     window.clearTimeout(this.removeTimer);
     el.classList.remove('fade');
-    const stay = tone === 'info' ? 4000 : 6000;
+    const stay = tone === 'info' ? 2500 : 5000;
     this.fadeTimer = window.setTimeout(() => el.classList.add('fade'), stay);
     this.removeTimer = window.setTimeout(() => el.remove(), stay + 600);
   }

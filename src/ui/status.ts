@@ -68,6 +68,17 @@ export function waterCapsules(state: TankState): Capsule[] {
   return caps;
 }
 
+/**
+ * 窄螢幕上 5 顆水質膠囊合成一顆（畫面評測第 8 輪 #251、#252）：只看最糟的那一項。
+ * 有一項沒測或太久沒測就是「待測」，不說正常。
+ */
+export function waterSummary(caps: Capsule[]): { tone: Tone; value: string } {
+  if (caps.some((c) => c.tone === 'bad')) return { tone: 'bad', value: '危險' };
+  if (caps.some((c) => c.tone === 'warn')) return { tone: 'warn', value: '注意' };
+  if (caps.some((c) => c.tone === 'unknown')) return { tone: 'unknown', value: '待測' };
+  return { tone: 'ok', value: '正常' };
+}
+
 /** 「第 3 週・週二 14:05」：第 1 天是第 1 週的週一。 */
 export function clockLabel(hours: number): string {
   const t = hours * 3600;

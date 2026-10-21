@@ -106,7 +106,10 @@ export async function tool(page: Page, name: string): Promise<void> {
   // 老闆說完話有時會自己幫你打開商店，先關掉再點
   await dismissGuide(page);
   await closeSheet(page);
-  await page.locator('button.tool', { hasText: name }).click(NO_WAIT);
+  const btn = page.locator('button.tool', { hasText: name });
+  // 不常用的收在「更多」裡（畫面評測第 8 輪）
+  if (!(await btn.isVisible())) await page.locator('button.tool-more').click(NO_WAIT);
+  await btn.click(NO_WAIT);
   await expect(page.locator('.sheet.open')).toHaveCount(1);
 }
 
