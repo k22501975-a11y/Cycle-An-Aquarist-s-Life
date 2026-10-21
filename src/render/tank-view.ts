@@ -3,7 +3,7 @@ import { waterLook, isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress,
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { newToneFrame, PaintedRig, paintedArtVersion, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { SetupShow, type SetupStep } from './setup-show';
-import { DEATH_SECONDS, POKE_SECONDS, STARTLE_SECONDS, deathPose, hungerLook, sickLook, spawnSwimmer, stepTurn, swimTilt, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
+import { DEATH_SECONDS, POKE_SECONDS, STARTLE_SECONDS, deathPose, hungerLook, sickLook, spawnSwimmer, stepTurn, swimTilt, turnPose, turnScale, updateSwimmer, type Swimmer, type TurnState } from './fish-motion';
 import { floorAt, keepInRect, nurseryRect, pxPerCm, sceneBounds, type Insets, type TankBounds } from './layout';
 import { dirtSpots, floorY, frontLip, sandSurface, tankSubstrateLook, SUBSTRATE_PALETTES, type SubstrateLook } from './substrate';
 import { celebrateFrame, CELEBRATE_SECONDS, sparkleAlpha, sparkleBurst, type Sparkle } from './celebrate';
@@ -1877,11 +1877,14 @@ export class TankView {
         const sick = sickLook(symptoms, fish.health, this.time, fish.id);
         rig.scale.y = k * turn.sy * sick.thin * hungerLook(fish.hunger).thin * (1 - 0.55 * sick.flash);
         rig.alpha = rig.look.alpha;
-        rig.setDim(sick.dim);
+        const pose = turnPose(view.turn.f, view.turn.v);
+        rig.setDim(sick.dim ?? (pose.shade > 0.05 ? mix(0xffffff, 0x8f9ea8, 0.5 * pose.shade) : null));
         // 仰頭低頭照速度算，但平滑地跟上（約 0.2 秒），推擠、閃避時速度一格一格變也不會抖
-        view.tilt += (swimTilt(swimmer) - view.tilt) * Math.min(1, dt * 6);
+        // 蝦停下來或在吃：低頭啄沙，一下一下點頭（畫面評測第 9 輪 #265）
+        const graze = isShrimpSpecies(fish.species) && (swimmer.eating || Math.abs(swimmer.vx) < 3 * this.hs) ? -(0.16 + 0.08 * Math.max(0, Math.sin(this.time * 4.5 + fish.id))) : 0;
+        view.tilt += (swimTilt(swimmer) + graze - view.tilt) * Math.min(1, dt * 6);
         const tilt = symptoms.includes('loss_of_balance') ? 1.2 : view.tilt + 0.5 * sick.flash;
-        rig.rotation = facingLeft ? tilt : -tilt;
+        rig.rotation = (facingLeft ? tilt : -tilt) + pose.bank;
         const clamped = symptoms.includes('clamped_fins');
         // 停在飼料旁邊吃：尾巴只輕輕擺著平衡
         const hovering = (swimmer.eating || swimmer.settled) && !isShrimpSpecies(fish.species);

@@ -528,12 +528,23 @@ export function swimTilt(s: Swimmer): number {
   return (s.eating || s.settled) && !PROFILES[s.species].crawler ? tilt * 0.15 : tilt;
 }
 
-/** 面向換算成縮放：轉到一半身體壓窄、稍微變高；衝過頭時拉長、變扁。 */
+/** 面向換算成縮放：轉到一半身體壓窄（最窄 30%，不會變成一條線）、稍微變高；衝過頭時拉長、變扁。 */
 export function turnScale(f: number): { sx: number; sy: number } {
   const a = Math.abs(f);
-  const sx = (f < 0 ? -1 : 1) * Math.max(0.15, a);
+  const sx = (f < 0 ? -1 : 1) * Math.max(0.3, a);
   const sy = 1 + 0.1 * (1 - Math.min(1, a)) - 0.35 * Math.max(0, a - 1);
   return { sx, sy };
+}
+
+/**
+ * 轉身中段的側身（畫面評測第 9 輪 #265）：只壓窄看起來像紙片翻面。
+ * 轉到一半時身體往轉的方向側傾，顏色暗一點（看到的是背和肚子，不是側面的花紋）。
+ * bank 是加在 rotation 上的弧度，shade 0～1 是要變暗多少。
+ */
+export function turnPose(f: number, v: number): { bank: number; shade: number } {
+  const mid = 1 - Math.min(1, Math.abs(f));
+  const bank = Math.max(-0.3, Math.min(0.3, 0.3 * mid * Math.sign(v) * Math.min(1, Math.abs(v) / 4)));
+  return { bank, shade: mid };
 }
 
 /**
