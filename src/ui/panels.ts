@@ -188,6 +188,7 @@ import { h } from './dom';
 import { ORDER_ICON, ordersPanel } from './orders-panel';
 import { BROOD_ISSUE_LABELS, DEATH_CAUSE_LABELS, fishName, SYMPTOM_LABELS } from './labels';
 import { artImg, ownerImg } from './art-icons';
+import { pairPreviewCard } from './pair-preview-card';
 import { advice, cardGrid, guppyArt, iconTabs, plantArt, priceTag, shopCard, snailArt, speciesArt } from './shop-cards';
 import type { Sheet, Toasts } from './sheet';
 import type { CelebrateSpec } from './celebrate';
@@ -975,6 +976,11 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         `孔雀魚（pH ${FISH_SPECIES.guppy.phSurvive.min}–${FISH_SPECIES.guppy.phSurvive.max} 都能慢慢適應）照品系賣。同品系配對生出來的大多一樣；不同品系混養會生出各種組合，也可能冒出藏在基因裡的白子。`,
         '鰭型品系：燕尾、大耳是隱性，要兩邊都帶才長得出來；緞帶、大C 的公魚交接器太長不能配，要用母魚配一般公魚；劍尾只會傳給兒子。',
       ]),
+      // P3：選魚當下就看得到後果，挑一公一母先看會生出什麼
+      pairPreviewCard((sex, p) => {
+        const fs = p.fin ? GUPPY_FIN_STRAINS.find((f) => f.name === p.name) : undefined;
+        void buyFish('guppy', 1, fs ? undefined : p.strain, fs, [sex])();
+      }),
       h('h3', {}, '孔雀魚品系'),
       cardGrid(
         ...GUPPY_STRAINS.map((strain, i) =>

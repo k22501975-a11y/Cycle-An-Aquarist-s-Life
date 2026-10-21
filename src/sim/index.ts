@@ -19,6 +19,7 @@ export * from './gear-notes';
 export * from './tank-purpose';
 export * from './economy';
 export * from './orders';
+export * from './order-outlook';
 export * from './goals';
 export * from './feeders';
 export * from './genetics';

@@ -277,7 +277,7 @@ export interface OrderContext {
 }
 
 /** 這株水草現在修剪得下幾株插枝（跟 trimPlant 一樣：留一半，多的剪下來）。 */
-function trimmable(state: TankState, plant: PlantSpeciesId): number {
+export function trimmableCuttings(state: TankState, plant: PlantSpeciesId): number {
   const sp = PLANT_SPECIES[plant];
   return state.plants.filter((p) => p.species === plant).reduce((n, p) => n + Math.max(0, Math.floor((p.biomassG - sp.maxBiomassG * 0.5) / sp.cuttingMassG)), 0);
 }
@@ -289,7 +289,7 @@ export function orderContext(state: TankState): OrderContext {
   const cuttings: OrderContext['cuttings'] = {};
   for (const plant of Object.keys(PLANT_PRICES) as PlantSpeciesId[]) {
     // 寶箱來的插枝不能交單，不照它出插枝單
-    const n = sellableCuttings(state, plant) + trimmable(state, plant);
+    const n = sellableCuttings(state, plant) + trimmableCuttings(state, plant);
     if (n > 0) cuttings[plant] = n;
   }
   const snails: OrderContext['snails'] = {};
@@ -465,6 +465,11 @@ function swapInSmallOrder(state: TankState, board: OrderBoard, ctx: OrderContext
 /** 連續幾天沒有真的收入（賣魚、賣插枝、交單），訂單板就保證出一張現在交得出來的小單（polish-to-9.md §4「收入空檔」）。 */
 export const INCOME_GAP_DAYS = 6;
 
+/** 這張單什麼時候下架（遊戲小時）：一般 ORDER_EXPIRE_DAYS 天、小孔雀單 FRY_ORDER_EXPIRE_DAYS 天、保底單 INCOME_GAP_DAYS 天。 */
+export function orderExpiresHours(o: ShopOrder): number {
+  return o.postedHours + (o.gap ? INCOME_GAP_DAYS : o.kind === 'fry' ? FRY_ORDER_EXPIRE_DAYS : ORDER_EXPIRE_DAYS) * 24;
+}
+
 /** 保底單收的仔魚要出生滿幾天（剛生的魚苗店家不收，polish-to-9.md §4「第二次確認」）；大小不限。 */
 export const GAP_FRY_MIN_DAYS = 7;
 const GAP_FRY_MIN_CM = 0.5;
@@ -476,7 +481,7 @@ const GAP_PEST_PRICE = 8;
 
 /** 這張保底單在這幾缸（共用錢包）湊不湊得出來：插枝看手上能賣的加每缸剪得下來的，魚和螺從每一缸湊（跟交單一樣）。 */
 function gapDeliverable(tanks: TankState[], o: ShopOrder): boolean {
-  if (o.kind === 'cutting') return sellableCuttings(tanks[0], o.plant!) + tanks.reduce((n, t) => n + trimmable(t, o.plant!), 0) >= o.count;
+  if (o.kind === 'cutting') return sellableCuttings(tanks[0], o.plant!) + tanks.reduce((n, t) => n + trimmableCuttings(t, o.plant!), 0) >= o.count;
   return orderSupply(tanks, o) >= o.count;
 }
 
@@ -494,7 +499,7 @@ export function incomeGapOrder(tanks: TankState[], board: OrderBoard): ShopOrder
   const base = { id: 0, count: 0, unitPrice: 0, postedHours: now, gap: true };
   const candidates: ShopOrder[] = [];
   for (const plant of Object.keys(PLANT_PRICES) as PlantSpeciesId[]) {
-    const count = Math.min(tanks.reduce((n, t) => n + trimmable(t, plant), 0), 2);
+    const count = Math.min(tanks.reduce((n, t) => n + trimmableCuttings(t, plant), 0), 2);
     if (count > 0) candidates.push({ ...base, kind: 'cutting', plant, count, unitPrice: Math.max(1, Math.floor(PLANT_PRICES[plant] / 3)) });
   }
   for (const snail of Object.keys(ORDER_SNAIL_NAMES) as OrderSnail[]) {
@@ -556,7 +561,7 @@ export function updateOrders(state: TankState): void {
 
 function fillOrders(state: TankState, board: OrderBoard): void {
   // 太久沒人交的單，客人就不等了（不用玩家自己撕）；保底單掛 INCOME_GAP_DAYS 天
-  const expired = board.orders.filter((o) => state.hours - o.postedHours >= (o.gap ? INCOME_GAP_DAYS : o.kind === 'fry' ? FRY_ORDER_EXPIRE_DAYS : ORDER_EXPIRE_DAYS) * 24);
+  const expired = board.orders.filter((o) => state.hours >= orderExpiresHours(o));
   if (expired.length > 0) board.orders = board.orders.filter((o) => !expired.includes(o));
   if (board.orders.length >= ORDER_BOARD_SIZE) {
     if (board.lastChangeHours !== undefined && state.hours - board.lastChangeHours >= ORDER_GAP_HOURS && swapInSmallOrder(state, board, orderContext(state))) board.lastChangeHours = state.hours;

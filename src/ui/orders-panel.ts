@@ -1,5 +1,5 @@
 import type { KeyValueStore } from '../game/save';
-import { dismissOrder, FIN_NAMES, fulfillOrder, markDaily, ORDER_STRAINS, orderBoard, orderRefusal, orderSupply, orderTitle, orderUnit, tankStarted, type OrderStrain, type ShopOrder, type TankState } from '../sim';
+import { compareOrders, dismissOrder, FIN_NAMES, fulfillOrder, markDaily, ORDER_STRAINS, orderBoard, orderRefusal, orderSupply, orderTitle, orderUnit, outlookDaysLine, outlookFishLine, tankStarted, type OrderOutlook, type OrderStrain, type ShopOrder, type TankState } from '../sim';
 import { artUrl, ownerImg } from './art-icons';
 import { ownerMood } from './owner-mood';
 import { h } from './dom';
@@ -86,7 +86,20 @@ function conditionChips(o: ShopOrder): HTMLElement | null {
   return h('div.order-chips', {}, ...chips.map(([icon, text, cls]) => h(`span.order-chip.${cls}`, {}, h('i', {}, icon), text)));
 }
 
-function orderCard(ctx: PanelContext, o: ShopOrder, refresh: () => void): HTMLElement {
+/** 同時有 2 張以上的單時（G5）：所需天數、要用的魚，搶同一批魚的提醒，讓玩家比較先接哪張。 */
+function outlookRow(tanks: TankState[], o: ShopOrder, x: OrderOutlook | undefined): HTMLElement | null {
+  if (!x) return null;
+  const fish = outlookFishLine(tanks, x, o);
+  return h(
+    'div.order-outlook',
+    {},
+    h(`span.order-eta${x.days === 0 ? '.now' : x.late ? '.late' : ''}`, {}, h('i', {}, '⏱'), outlookDaysLine(x, o)),
+    fish ? h('span.order-use', {}, fish) : null,
+    x.sharesWith.length > 0 ? h('span.order-shared', {}, '跟另一張單搶同一批魚') : null,
+  );
+}
+
+function orderCard(ctx: PanelContext, o: ShopOrder, refresh: () => void, outlook?: OrderOutlook): HTMLElement {
   const { game, toasts } = ctx;
   const have = Math.min(orderSupply(game.tanks, o), o.count);
   const ready = have >= o.count;
@@ -104,6 +117,7 @@ function orderCard(ctx: PanelContext, o: ShopOrder, refresh: () => void): HTMLEl
       conditionChips(o),
       h('div.order-pay', {}, h('i.coin'), h('b', {}, String(o.unitPrice * o.count)), h('small', {}, `每${unit} ${o.unitPrice}`)),
       h('div.order-meter', { title: `湊到 ${have} / ${o.count}` }, h('i', { style: `width:${(have / o.count) * 100}%` }), h('span', {}, `${have} / ${o.count}`)),
+      outlookRow(game.tanks, o, outlook),
       h(
         'div.order-actions',
         {},
@@ -150,12 +164,13 @@ export function ordersPanel(ctx: PanelContext): Node {
   const board = orderBoard(game.state);
   const refresh = () => sheet.open('客人的訂單', () => ordersPanel(ctx));
   const anyReady = board.orders.some((o) => orderSupply(game.tanks, o) >= o.count);
+  const outlooks = compareOrders(game.tanks);
   const say = board.orders.length === 0 ? '單都交完了，明天會有新的客人來訂。' : anyReady ? '有單湊齊了，按「交貨」我就幫你包好送過去。' : '客人只收你自己繁殖的魚。照單子挑魚配對，養大就能交。';
   return h(
     'div.stack',
     {},
     h('div.owner-say', {}, ownerImg('owner-say-avatar', ownerMood(say)), h('span', {}, say)),
     board.done > 0 ? h('div.order-stats', {}, h('span', {}, `已交 ${board.done} 張`), h('span', {}, h('i.coin'), ` ${board.earned}`)) : null,
-    h('div.card-grid.order-grid', {}, ...board.orders.map((o) => orderCard(ctx, o, refresh))),
+    h('div.card-grid.order-grid', {}, ...board.orders.map((o) => orderCard(ctx, o, refresh, outlooks.find((x) => x.orderId === o.id)))),
   );
 }

@@ -668,6 +668,10 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .order-meter { position: relative; height: 18px; border-radius: 9px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
 .order-meter i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #5fb4af, var(--sage)); }
 .order-meter span { position: relative; display: block; text-align: center; font-size: 12px; line-height: 18px; color: var(--text); font-variant-numeric: tabular-nums; }
+.order-outlook { display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.order-outlook i { font-style: normal; margin-right: 2px; }
+.order-eta.now { color: var(--sage); }
+.order-shared, .order-eta.late { color: #e0b25c; }
 .order-actions { display: flex; gap: 6px; margin-top: auto; }
 .order-actions .btn { min-height: 36px; padding: 4px 10px; }
 .order-actions .order-skip { flex: 0 0 40px; width: 40px; margin-top: 0; font-size: 17px; }
@@ -999,3 +1003,76 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 }
 /* 全螢幕面板開著時，老闆的對話框、通知仍在最上層；缸上的提示卡先收起來 */
 body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { display: none !important; }
+
+/* 夢想魚（P2）：選育出來之前是發光的剪影；白子是紅眼、偏淡的紅 */
+.dream-fish, .dream-mini { filter: brightness(0) drop-shadow(0 0 6px rgba(246, 216, 145, 0.85)) drop-shadow(0 0 2px rgba(246, 216, 145, 0.9)); opacity: 0.92; }
+.dream-fish.got, .dream-mini.got { filter: saturate(0.75) brightness(1.18) drop-shadow(0 0 8px rgba(255, 190, 170, 0.6)); opacity: 1; }
+.dream-holder { position: absolute; z-index: 5; left: calc(env(safe-area-inset-left) + 14px); }
+.scaping .dream-holder, .setting-up .dream-holder { display: none; }
+.dream-strip { display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--text); font-size: 12px; max-width: min(250px, 42vw); animation: rise 0.25s ease-out; }
+.dream-strip .dream-mini { width: 44px; height: 26px; object-fit: contain; }
+.dream-strip-dots { display: flex; gap: 4px; }
+.dream-strip-dots i { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--gold); }
+.dream-strip-dots i.done { background: var(--gold); }
+.dream-strip-dots i.current { box-shadow: 0 0 0 3px rgba(227, 189, 109, 0.3); animation: dream-pulse 1.6s ease-in-out infinite; }
+.dream-strip-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--gold-bright); }
+@keyframes dream-pulse { 50% { box-shadow: 0 0 0 5px rgba(227, 189, 109, 0.1); } }
+.setup-welcome-body { display: flex; flex-direction: column; gap: 6px; }
+.dream-teaser { display: flex; align-items: center; gap: 10px; padding: 4px 10px 4px 4px; border-radius: 12px; background: rgba(227, 189, 109, 0.1); border: 1px solid rgba(227, 189, 109, 0.35); }
+.dream-teaser .dream-mini { width: 64px; height: 36px; object-fit: contain; }
+.dream-teaser span { display: flex; flex-direction: column; font-size: 13px; }
+.dream-teaser b { color: var(--gold-bright); }
+.dream-teaser small { color: var(--muted); }
+.dream-card { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; }
+.dream-stage { position: relative; width: min(360px, 100%); height: 170px; display: grid; place-items: center; border-radius: 18px; overflow: hidden; background: radial-gradient(ellipse at 50% 40%, rgba(80, 160, 190, 0.35), rgba(8, 30, 40, 0.9) 70%); }
+.dream-glow { position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, rgba(246, 216, 145, 0.28), transparent 60%); animation: dream-breathe 3.2s ease-in-out infinite; }
+.dream-stage .dream-fish { position: relative; width: 78%; height: 78%; object-fit: contain; animation: dream-swim 4s ease-in-out infinite; }
+@keyframes dream-breathe { 50% { opacity: 0.55; transform: scale(1.06); } }
+@keyframes dream-swim { 50% { transform: translateY(-6px) rotate(-1.5deg); } }
+.dream-name { margin: 4px 0 0; font-size: 20px; color: var(--gold-bright); }
+.dream-tag { margin: 0; color: var(--muted); }
+.dream-steps { list-style: none; display: flex; gap: 6px; padding: 0; margin: 6px 0; width: 100%; justify-content: center; }
+.dream-steps li { flex: 1; max-width: 120px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); position: relative; }
+.dream-steps li + li::before { content: ''; position: absolute; top: 14px; right: 50%; width: 100%; height: 2px; background: rgba(227, 189, 109, 0.35); z-index: -1; }
+.dream-dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--gold); background: var(--glass-strong); font-weight: 700; color: var(--gold); }
+.dream-steps li.done { color: var(--text); }
+.dream-steps li.done .dream-dot { background: var(--gold); color: var(--deep); }
+.dream-steps li.current { color: var(--gold-bright); font-weight: 700; }
+.dream-steps li.current .dream-dot { box-shadow: 0 0 0 4px rgba(227, 189, 109, 0.3); }
+.dream-recipe { width: 100%; text-align: left; }
+.dream-recipe summary { cursor: pointer; color: var(--gold); }
+@media (prefers-reduced-motion: reduce) { .dream-glow, .dream-stage .dream-fish, .dream-strip-dots i.current { animation: none; } }
+
+/* 配一對看看（P3）：挑公母、看小魚 */
+.pp { border: 1px solid var(--line); border-radius: 16px; padding: 8px 12px 12px; background: linear-gradient(180deg, rgba(227, 189, 109, 0.08), rgba(8, 30, 40, 0.4)); }
+.pp summary { cursor: pointer; padding: 4px 0; }
+.pp summary small { color: var(--muted); }
+.pp-chooser { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.pp-chooser-label { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--gold); color: var(--deep); font-weight: 700; font-size: 13px; }
+.pp-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+.pp-chip { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 66px; padding: 4px; border-radius: 10px; border: 1px solid rgba(227, 189, 109, 0.25); background: rgba(8, 30, 40, 0.5); font-size: 11px; line-height: 1.2; }
+.pp-chip img { width: 56px; height: 30px; object-fit: contain; }
+.pp-chip.active { border-color: var(--gold); background: rgba(227, 189, 109, 0.18); color: var(--gold-bright); box-shadow: 0 0 0 2px rgba(227, 189, 109, 0.25); }
+.pp-row { margin-top: 10px; }
+.pp-row-head { display: flex; align-items: baseline; gap: 8px; }
+.pp-row-head small { color: var(--muted); font-size: 12px; }
+.pp-row.surprise .pp-row-head b { color: var(--gold-bright); }
+.pp-row.surprise .pp-kid { border-color: rgba(246, 216, 145, 0.6); box-shadow: 0 0 12px rgba(246, 216, 145, 0.2); }
+.pp-row.first { opacity: 0.85; }
+.pp-kids { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; margin-top: 6px; }
+.pp-kid { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px; border-radius: 12px; border: 1px solid rgba(227, 189, 109, 0.25); background: radial-gradient(ellipse at 50% 30%, rgba(80, 160, 190, 0.25), rgba(8, 30, 40, 0.6) 75%); }
+.pp-kid-art { width: 96px; height: 52px; object-fit: contain; animation: dream-swim 3.6s ease-in-out infinite; }
+.pp-kid.female .pp-kid-art { width: 80px; }
+.pp-kid-art.albino { filter: saturate(0.75) brightness(1.18); }
+.pp-kid-name { font-size: 12px; text-align: center; }
+.pp-sex { font-style: normal; margin-right: 3px; color: var(--gold); }
+.pp-kid.female .pp-sex { color: #f3a6c0; }
+.pp-dots { display: flex; gap: 2px; }
+.pp-dots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.15); }
+.pp-dots i.on { background: var(--gold); }
+.pp-buy { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+@media (prefers-reduced-motion: reduce) { .pp-kid-art { animation: none; } }
+.pp-kid { position: relative; }
+.pp-kid.dream { border-color: var(--gold-bright); box-shadow: 0 0 16px rgba(246, 216, 145, 0.45); }
+.pp-dream-badge { position: absolute; top: -8px; right: -6px; padding: 2px 8px; border-radius: 999px; background: var(--gold-bright); color: var(--deep); font-size: 11px; font-weight: 700; }
+.dream-strip-label small { color: var(--muted); margin-right: 4px; }

@@ -466,8 +466,11 @@ export function isFilterRunning(state: TankState): boolean {
 }
 
 /** 是否為幼體（還沒長到可以繁殖的大小）。 */
+/** 長到成魚體長的這個比例才算成魚（之前都是幼魚，isJuvenile）。 */
+export const ADULT_SIZE = 0.75;
+
 export function isJuvenile(fish: Fish): boolean {
-  return fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * 0.75;
+  return fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * ADULT_SIZE;
 }
 
 /**

@@ -36,6 +36,7 @@ import { ICONS } from './ui/icons';
 import { DEATH_ADVICE, describeEvent, FIRST_PESTS_LINE, firstDeathOwnerLine, fishName, fishStrain, pluralEventText } from './ui/labels';
 import { mergeEventToasts, type EventToast } from './ui/notify-gate';
 import { personaChip } from './ui/persona';
+import { dreamCard, dreamStrip, dreamTeaser } from './ui/dream-card';
 import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
 import type { PanelContext, ShopTab } from './ui/panels';
 import { Guide } from './ui/guide';
@@ -1228,10 +1229,11 @@ async function start(): Promise<void> {
       'div.setup-welcome.glass',
       { role: 'status', onclick: close },
       ownerImg('setup-welcome-avatar'),
-      h('p', {}, h('b', {}, '阿德老闆　'), WELCOME_LINE),
+      h('div.setup-welcome-body', {}, h('p', {}, h('b', {}, '阿德老闆　'), WELCOME_LINE), dreamTeaser()),
     );
     document.body.append(welcome);
-    window.setTimeout(close, 5000);
+    // 多了夢想魚小卡，多停 2 秒讓人看得到
+    window.setTimeout(close, 7000);
   };
   const openSetup = () => {
     showWelcome();
@@ -1248,6 +1250,17 @@ async function start(): Promise<void> {
   let dailyDay = sim.dailyTasks(game.tanks)?.day;
   const dailyHolder = h('div.daily-holder');
   stage.append(dailyHolder);
+  // 夢想魚路線（P2）：常駐在任務卡上方，點開看夢想魚卡
+  const dreamHolder = h('div.dream-holder');
+  stage.append(dreamHolder);
+  const dreamChanged = memo();
+  const renderDream = () => {
+    const hide = sim.needsSetup(game.tanks[0]) || view.settingUp;
+    const route = hide ? null : sim.dreamRoute(game.tanks);
+    if (!dreamChanged(JSON.stringify(route))) return;
+    dreamHolder.replaceChildren(...(route ? [dreamStrip(route, () => sheet.open('夢想魚', () => dreamCard(sim.dreamRoute(game.tanks))))] : []));
+    requestAnimationFrame(() => measure());
+  };
   const dailyChanged = memo();
   const claimDailyChest = () => {
     const got = game.actAll((tanks) => sim.claimDaily(tanks));
@@ -1331,15 +1344,18 @@ async function start(): Promise<void> {
     const bottom = visiting ? visitBar.offsetHeight + 24 : scaping ? scapeBar.el.offsetHeight + 24 : stageRect.bottom - tools.getBoundingClientRect().top;
     view.setInsets({ top: Math.round(top), bottom: Math.round(bottom) });
     // 任務小卡在左上角；浮動選取卡排在它下面，下緣留給左下角的缸名標籤。
-    guide.pill.style.top = `${Math.round(top + 10)}px`;
+    dreamHolder.style.top = `${Math.round(top + 10)}px`;
+    const dreamH = dreamHolder.offsetHeight > 0 ? dreamHolder.offsetHeight + 6 : 0;
+    guide.pill.style.top = `${Math.round(top + 10 + dreamH)}px`;
     // 通知讓出任務卡的寬度
     document.body.style.setProperty('--pill-w', guide.pillVisible ? `${guide.pill.offsetWidth + 14}px` : '0px');
     const pillH = guide.pillVisible ? guide.pill.offsetHeight + 8 : 0;
     // 每日小事卡排在任務卡下面（#185）
-    dailyHolder.style.top = `${Math.round(top + 10 + pillH)}px`;
+    dailyHolder.style.top = `${Math.round(top + 10 + dreamH + pillH)}px`;
     const dailyH = dailyHolder.offsetHeight > 0 ? dailyHolder.offsetHeight + 8 : 0;
     const dockTop = dock.getBoundingClientRect().top - stageRect.top;
-    cardArea = { x: 0, y: top + 10 + pillH + dailyH, w: stageRect.width, h: Math.max(0, dockTop - top - 10 - pillH - dailyH - 34) };
+    const above = 10 + dreamH + pillH + dailyH;
+    cardArea = { x: 0, y: top + above, w: stageRect.width, h: Math.max(0, dockTop - top - above - 34) };
     placeSelCard();
     stage.style.setProperty('--dock-top', `${Math.round(stageRect.bottom - dockTop - stageRect.top)}px`);
     document.body.style.setProperty('--dock-top', `${Math.round(stageRect.bottom - dockTop - stageRect.top)}px`);
@@ -1640,6 +1656,7 @@ async function start(): Promise<void> {
     renderTodos();
     renderCaps();
     renderTankChip();
+    renderDream();
     save();
   });
 
