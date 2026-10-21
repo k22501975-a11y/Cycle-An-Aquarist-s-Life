@@ -19,7 +19,7 @@ export interface GuppyPick {
 export const GUPPY_PICKS: GuppyPick[] = [...GUPPY_STRAINS.map((name, strain) => ({ name, strain })), ...GUPPY_FIN_STRAINS.map((f) => ({ name: f.name, strain: f.strain, fin: f.fin }))];
 
 /** 預設夢想魚的配方：白子全紅母、紅蛇王公。 */
-const pick = { mother: 2, father: 4 };
+const pick = { mother: DREAM_FISH.parents.female, father: DREAM_FISH.parents.male };
 
 export function kidArt(k: PreviewKid): string {
   // 母魚身上看不到品系的花色，畫面上都是素的母魚

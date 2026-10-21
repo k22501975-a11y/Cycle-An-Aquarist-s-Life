@@ -18,6 +18,8 @@ export const DREAM_FISH = {
   albino: true,
   /** 卡片上的一句話。 */
   tagline: '店裡買不到，要自己選育出來',
+  /** 配方的爸媽（GUPPY_STRAINS 的索引）：紅蛇王公魚配白子全紅母魚；商店一鍵買和「配一對看看」的預設都用這組。 */
+  parents: { male: GUPPY_STRAINS.indexOf('紅蛇王'), female: GUPPY_STRAINS.indexOf('白子全紅') },
   /** 怎麼做（點卡片看）。 */
   recipe: ['買白子全紅的母魚和紅蛇王的公魚', '等小魚長大，挑兄妹配一窩', '孫代裡找紅眼睛的蛇紋公魚'],
 } as const;

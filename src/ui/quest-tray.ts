@@ -26,7 +26,7 @@ interface Choice {
 }
 
 /** 夢想魚的配方（dream.ts）：紅蛇王公魚配白子全紅母魚。 */
-const DREAM_PAIR: [number, number] = [GUPPY_STRAINS.indexOf('紅蛇王'), GUPPY_STRAINS.indexOf('白子全紅')];
+const DREAM_PAIR: [number, number] = [DREAM_FISH.parents.male, DREAM_FISH.parents.female];
 const STONES: HardscapeId[] = ['lava', 'slate', 'driftwood'];
 
 const pairPrice = ([m, f]: [number, number]) => GUPPY_STRAIN_PRICES[m] + GUPPY_STRAIN_PRICES[f] * 2;
