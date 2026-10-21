@@ -113,6 +113,15 @@ export async function tool(page: Page, name: string): Promise<void> {
   await expect(page.locator('.sheet.open')).toHaveCount(1);
 }
 
+/** 點下方工具列直接做事、不開面板的按鈕（換水一鍵換，#257）。 */
+export async function tapTool(page: Page, name: string): Promise<void> {
+  await dismissGuide(page);
+  await closeSheet(page);
+  const btn = page.locator('button.tool', { hasText: name });
+  if (!(await btn.isVisible())) await page.locator('button.tool-more').click(NO_WAIT);
+  await btn.click(NO_WAIT);
+}
+
 /** 在開著的面板裡點一個按鈕。 */
 export async function sheetButton(page: Page, text: string): Promise<void> {
   await page.locator('.sheet.open button', { hasText: text }).first().click(NO_WAIT);

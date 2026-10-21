@@ -653,7 +653,9 @@ async function start(): Promise<void> {
   let overfed = false;
   const feedDots = h('span.feed-dots', { 'aria-hidden': 'true' });
   const feedSay = h('span.feed-say', {}, '點水面撒飼料');
+  let feedDoneTimer = 0;
   const leaveFeeding = () => {
+    window.clearTimeout(feedDoneTimer);
     if (!feedingMode) return;
     feedingMode = false;
     view.setFeedMode(false);
@@ -700,6 +702,9 @@ async function start(): Promise<void> {
       fedThisRound += sim.TAP_FEED_MEALS;
       overfed = got.overfed;
       renderFeedBar();
+      // 三個點滿了（「這一餐夠了」）就自己收，不用按「好了」（#257）；再撒一下就重新計時
+      window.clearTimeout(feedDoneTimer);
+      if (Math.round(fedThisRound * 3) >= 3) feedDoneTimer = window.setTimeout(() => leaveFeeding(), 1800);
     });
   sheet.onOpen = () => (leaveFeeding(), document.body.classList.remove('watching'), toasts.clear());
   debugHandle.feeding = { start: startFeeding, leave: leaveFeeding };
@@ -1138,7 +1143,7 @@ async function start(): Promise<void> {
     return b;
   };
   tool('feed', '餵食', '#e8a24a', () => startFeeding());
-  tool('water', '換水', '#4fb8e0', () => panelSheet('換水', (p) => p.waterChangePanel(ctx)));
+  tool('water', '換水', '#4fb8e0', () => withPanels((p) => p.quickWaterChange(ctx)));
   const testBtn = tool('test', '測試', '#a98be8', () => {
     const cost = sim.price('use:test');
     if (!sim.canAfford(game.state, cost)) {
@@ -1151,6 +1156,7 @@ async function start(): Promise<void> {
     });
     renderCaps();
     panelSheet('水質測試', (p) => p.testKitPanel(ctx), { live: true });
+    sheet.closeLater('水質測試', 5000);
   });
   tool('shop', '商店', '#ef8a6a', () => openShop());
   tool('trim', '修剪', '#7ccf8a', () => panelSheet('修剪水草', (p) => p.trimListPanel(ctx)));

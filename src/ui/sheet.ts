@@ -64,6 +64,17 @@ export class Sheet {
     this.body.replaceChildren(next);
   }
 
+  /** 這個面板過 ms 毫秒自己收（遊戲性評測第 14 輪 #257：測水結果看一眼就好，跟換水一樣）；這段時間點過面板就不收。 */
+  closeLater(title: string, ms: number): void {
+    let touched = false;
+    const mark = () => (touched = true);
+    this.panel.addEventListener('pointerdown', mark);
+    window.setTimeout(() => {
+      this.panel.removeEventListener('pointerdown', mark);
+      if (!touched && this.isOpen && this.title.textContent === title) this.close();
+    }, ms);
+  }
+
   close(): void {
     this.render = null;
     this.backdrop.classList.remove('open');
@@ -150,9 +161,9 @@ export class Toasts {
     this.pop(text, tone, action);
   }
 
-  /** 只記進通知匣、不跳出來（老闆完整的話；任務卡上已經閃過短句）。 */
+  /** 只記進通知匣、不跳出來（老闆完整的話；任務卡上已經閃過短句）。不算沒看過：教學 5 分鐘鈴鐺就漲到 10，像有 10 件事沒做（#257）。 */
   log(text: string, tone: Tone = 'info'): void {
-    this.record(text, tone, undefined, true);
+    this.record(text, tone, undefined, false);
   }
 
   /** 打開通知匣：都算看過了。 */
@@ -227,9 +238,10 @@ export class Toasts {
     if (!sticky) this.arm(el, tone);
   }
 
-  /** 開面板時收掉畫面上的一般通知（畫面評測第 8 輪 #254：舊通知浮在商店標題上）；要處理的留著。 */
+  /** 開面板時收掉畫面上的一般通知（畫面評測第 8 輪 #254：舊通知浮在商店標題上）；要處理的、剛跳出來的留著。 */
   clear(): void {
-    if (this.current && !this.current.sticky) this.current.el.remove();
+    const cur = this.current;
+    if (cur && !cur.sticky && performance.now() - cur.at > DIRECT_MS) cur.el.remove();
   }
 
   /** 一般的停 2.5 秒（畫面評測第 8 輪 #252）；警告、壞消息要看清楚，停 5 秒。 */

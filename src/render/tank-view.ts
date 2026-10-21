@@ -68,6 +68,8 @@ interface Cutting {
   t: number;
 }
 
+/** 設備插圖的透明度。 */
+const GEAR_ALPHA = 0.72;
 const TUBES: Array<{ param: KitParam; label: string }> = [
   { param: 'ph', label: 'pH' },
   { param: 'ammonia', label: '氨' },
@@ -175,7 +177,8 @@ export class TankView {
   private readonly gear = new Graphics();
   /** 有插圖的設備（加熱棒、海綿過濾器）；沒載入就退回程式畫。 */
   private readonly gearArt = { heater: new Sprite(), sponge: new Sprite(), intake: new Sprite() };
-  private readonly gearArtLayer = new Container();
+  /** 加熱棒、進水管這些插圖淡一點（畫面評測第 8 輪：深色大剪影比魚還先吸走視線），看得到後面的水。 */
+  private readonly gearArtLayer = Object.assign(new Container(), { alpha: GEAR_ALPHA });
   /** 育幼盒的背板和正面（美術圖；沒載到就退回線畫）。 */
   private readonly nurseryBack = new Sprite();
   private readonly nurseryFront = new Sprite();
@@ -631,7 +634,7 @@ export class TankView {
     const fade = [this.gearArtLayer, this.gear, this.gearGlow, this.bubbleLayer, this.rayLayer, this.causticsLayer, this.moteLayer, this.frontFish, this.backFish];
     if (show.step === 'done' && before === 'done') {
       this.setup = null;
-      for (const c of fade) c.alpha = c === this.backFish ? 0.75 : 1;
+      for (const c of fade) c.alpha = c === this.backFish ? 0.75 : c === this.gearArtLayer ? GEAR_ALPHA : 1;
       this.gearArtLayer.y = this.gear.y = this.gearGlow.y = 0;
       this.front.mask = null;
       this.sandMask.clear();
@@ -720,7 +723,7 @@ export class TankView {
     }
     // 設備：從上面放進缸裡
     for (const c of [this.gearArtLayer, this.gear, this.gearGlow]) {
-      c.alpha = L.gear;
+      c.alpha = L.gear * (c === this.gearArtLayer ? GEAR_ALPHA : 1);
       c.y = -(1 - L.gear) * 40 * hs;
     }
     // 氣泡等開機（打氣、過濾出水）才冒
@@ -1150,13 +1153,14 @@ export class TankView {
     if (this.testT >= 0 && this.testReading) {
       if (this.tubeLabels.children.length === 0) {
         for (const tb of TUBES) {
-          const label = new Text({ text: tb.label, style: { fill: 0xeaf6f8, fontSize: 12, fontWeight: '600', fontFamily: 'system-ui, sans-serif' } });
+          const label = new Text({ text: tb.label, style: { fill: 0xeaf6f8, fontSize: 13, fontWeight: '700', fontFamily: 'system-ui, sans-serif', dropShadow: { color: 0x061018, alpha: 0.8, blur: 3, distance: 0 } } });
           label.anchor.set(0.5, 0);
           this.tubeLabels.addChild(label);
         }
       }
-      const tw = 16 * hs, th = 70 * hs, gap = 30 * hs;
-      const x0 = this.cam.pan + this.app.screen.width - 50 * hs - (TUBES.length - 1) * gap;
+      // 小手機上不要縮到字疊在一起（畫面評測第 8 輪 #254：原本約 8px、「亞硝」「硝酸」黏在一起）
+      const tw = Math.max(12, 16 * hs), th = Math.max(52, 70 * hs), gap = Math.max(36, 30 * hs);
+      const x0 = this.cam.pan + this.app.screen.width - Math.max(34, 50 * hs) - (TUBES.length - 1) * gap;
       const y0 = surface + 24 * hs;
       const reading = this.testReading;
       TUBES.forEach((tb, i) => {
@@ -1169,7 +1173,7 @@ export class TankView {
         g.rect(x - tw / 2 + 3 * hs, y0 + 6 * hs, 2.5 * hs, th - 16 * hs).fill({ color: 0xffffff, alpha: 0.35 * tube.alpha });
         const label = this.tubeLabels.children[i] as Text;
         label.position.set(x, y0 + th + 6 * hs);
-        label.scale.set(Math.max(0.8, hs));
+        label.scale.set(Math.max(1, hs));
         label.alpha = tube.alpha;
       });
     }
