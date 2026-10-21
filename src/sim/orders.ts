@@ -1,9 +1,10 @@
-import { buybackRefusal, economy, FISH_PRICES, guppyBuybackTier, householdTanks, noteBredSale, noteEarned, noteRaisedGone, PLANT_PRICES, sellableCuttings } from './economy';
+import { BUYBACK_MIN_SIZE, buybackRefusal, economy, FISH_PRICES, guppyBuybackTier, householdTanks, noteBredSale, noteEarned, noteRaisedGone, PLANT_PRICES, sellableCuttings } from './economy';
 import { phenotype, type FinTrait, type GuppyPhenotype } from './genetics';
+import { daysToLength } from './growth';
 import { nextRandom, type RngState } from './random';
 import { PESTS, SNAILS, type PestKind } from './snails';
 import { FISH_SPECIES, isShrimpSpecies, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
-import { isJuvenile, type Fish, type TankState } from './state';
+import { ADULT_SIZE, isJuvenile, type Fish, type TankState } from './state';
 import { hidingFactor } from './processes/population';
 
 /**
@@ -132,6 +133,41 @@ function fryMatches(fish: Fish, o: ShopOrder): boolean {
   if (o.bornBy !== undefined && (fish.bornHours !== undefined ? fish.bornHours > o.bornBy : (fish.ageDays ?? 0) < (o.postedHours - o.bornBy) / 24)) return false;
   const sick = fish.ich.stage === 'visible' || (fish.infections ?? []).some((i) => i.stage === 'visible') || fish.health < 0.6;
   return !sick;
+}
+
+/** 魚要長到多大這張單才收（中魚單是店家收購的大小，成魚單是成魚，小孔雀單看單上寫的）。 */
+function targetCm(fish: Fish, o: ShopOrder): number {
+  const adult = FISH_SPECIES[fish.species].adultLengthCm;
+  if (o.kind === 'fry') return o.minCm ?? FRY_ORDER_MIN_CM;
+  return adult * (o.size === 'adult' ? ADULT_SIZE : BUYBACK_MIN_SIZE);
+}
+
+/** 照標準成長曲線，這條魚要幾天長到單上的大小就符合（只差大小；其他條件不合、長不到那麼大的回傳 null）。 */
+export function daysUntilMatch(fish: Fish, o: ShopOrder): number | null {
+  const target = targetCm(fish, o);
+  const days = daysToLength(fish, target);
+  if (!Number.isFinite(days)) return null;
+  // 假裝已經長到那麼大，其他條件（品系、公母、鰭型、健康）都合才算
+  return fishMatchesOrder({ ...fish, lengthCm: Math.max(fish.lengthCm, target + 1e-6) }, o) ? days : null;
+}
+
+/**
+ * 這張魚單在下架前湊不湊得齊（#281）：現在就符合的，加上照標準成長在期限內長得到的。
+ * 湊不齊的單一掛上去就標「來不及」，還佔住欄位，所以不出這種單。slackDays 是至少要留幾天餘裕。插枝、螺、小孔雀單不在這裡管。
+ */
+export function reachableInTime(tanks: TankState[], o: ShopOrder, slackDays = 0): boolean {
+  if (o.kind !== 'fish') return true;
+  const daysLeft = (orderExpiresHours(o) - tanks[0].hours) / 24 - slackDays;
+  let n = orderSupply(tanks, o);
+  for (const t of tanks) {
+    for (const f of [...t.fish, ...(t.quarantine?.fish ?? [])]) {
+      if (n >= o.count) return true;
+      if (!f.alive || fishMatchesOrder(f, o)) continue;
+      const days = daysUntilMatch(f, o);
+      if (days !== null && days <= daysLeft) n++;
+    }
+  }
+  return n >= o.count;
 }
 
 /** 這缸可以拿去交的螺（扁卷、囊螺只記數量；小蘋果螺也是）。 */
@@ -423,22 +459,32 @@ export const ORDER_EXPIRE_DAYS = 7;
 export const FRY_ORDER_EXPIRE_DAYS = 10;
 
 /**
- * 補一張新單。板上還沒有現在就交得出來的單時，優先抽交得出來的（可交付保證，§4.4.1 第 2 點）；
+ * 補一張新單（補不到期限內湊得齊的單就回 false、先空著）。板上還沒有現在就交得出來的單時，優先抽交得出來的（可交付保證，§4.4.1 第 2 點）；
  * 選育階段板上沒有小額單時，優先抽小額單（插枝、螺、小孔雀）。抽幾次都不合就用最後一張。
  */
-function addOrder(state: TankState, board: OrderBoard, ctx: OrderContext): void {
+function addOrder(state: TankState, board: OrderBoard, ctx: OrderContext): boolean {
   const needDeliverable = ctx.stage !== 'breeding' && !board.orders.some((o) => deliverableNow(state, o, ctx));
   // 選育階段留一張插枝或螺的小額單（缸裡剪得出、抓得到才算數）
   const canSmall = Object.values(ctx.cuttings).some((n) => (n ?? 0) >= 2) || Object.values(ctx.snails).some((n) => (n ?? 0) >= 3);
   const needSmall = ctx.stage === 'breeding' && canSmall && !board.orders.some(isSmallOrder);
   // 小孔雀單不拿來湊保證：不然每交一張隔天又補一張，仔魚還沒長大就被賣光
   const ok = (o: ShopOrder) => (!needDeliverable || (o.kind !== 'fry' && deliverableNow(state, o, ctx))) && (!needSmall || (isSmallOrder(o) && o.kind !== 'fry'));
+  // 有自家的魚以後，期限內湊不齊的魚單（例如仔魚才剛生就出中魚單）不出：抽不到合格的就退一步，只要不是死單就好（#281）。
+  // 開局還沒有自家的魚，中魚單是「養大的目標」，照舊出（缸裡剪得出插枝、抓得到螺就會被換掉，見 swapInSmallOrder）
+  const tanks = householdTanks(state);
+  // 新單留一天餘裕：成長是照標準照顧估的，差幾個小時就變「來不及」
+  const live = (o: ShopOrder) => ctx.stage === 'start' || reachableInTime(tanks, o, 1);
   let o = makeOrder(board, state.hours, ctx);
+  let fallback: ShopOrder | null = live(o) ? o : null;
   for (let tries = 0; tries < 8; tries++) {
-    if (ok(o)) break;
+    if (ok(o) && live(o)) break;
     o = makeOrder(board, state.hours, ctx);
+    if (!fallback && live(o)) fallback = o;
   }
-  board.orders.push(o);
+  const pick = ok(o) && live(o) ? o : fallback;
+  if (!pick) return false;
+  board.orders.push(pick);
+  return true;
 }
 
 /**
@@ -460,6 +506,23 @@ function swapInSmallOrder(state: TankState, board: OrderBoard, ctx: OrderContext
     return true;
   }
   return false;
+}
+
+/**
+ * 板子滿了、上面有期限內湊不齊的魚單（存檔裡舊的單、或魚死了被吃了）：把最舊的那張換成湊得齊的（#281）。換了回 true。
+ * 開局還沒有自家的魚時不換（交給 swapInSmallOrder）。
+ */
+function swapDeadOrder(state: TankState, board: OrderBoard, ctx: OrderContext): boolean {
+  if (ctx.stage === 'start') return false;
+  const tanks = householdTanks(state);
+  const dead = board.orders.filter((o) => !o.gap && !reachableInTime(tanks, o)).sort((a, b) => a.postedHours - b.postedHours)[0];
+  if (!dead) return false;
+  const before = board.orders;
+  board.orders = before.filter((x) => x !== dead);
+  const added = addOrder(state, board, ctx) ? board.orders.pop()! : dead;
+  // 新單放回原來那格，其他單不換位置
+  board.orders = before.map((x) => (x === dead ? added : x));
+  return added !== dead;
 }
 
 /** 連續幾天沒有真的收入（賣魚、賣插枝、交單），訂單板就保證出一張現在交得出來的小單（polish-to-9.md §4「收入空檔」）。 */
@@ -559,17 +622,23 @@ export function updateOrders(state: TankState): void {
   ensureIncomeOrder(state, board);
 }
 
+function swapAny(state: TankState, board: OrderBoard): boolean {
+  const ctx = orderContext(state);
+  return swapInSmallOrder(state, board, ctx) || swapDeadOrder(state, board, ctx);
+}
+
 function fillOrders(state: TankState, board: OrderBoard): void {
   // 太久沒人交的單，客人就不等了（不用玩家自己撕）；保底單掛 INCOME_GAP_DAYS 天
   const expired = board.orders.filter((o) => state.hours >= orderExpiresHours(o));
   if (expired.length > 0) board.orders = board.orders.filter((o) => !expired.includes(o));
   if (board.orders.length >= ORDER_BOARD_SIZE) {
-    if (board.lastChangeHours !== undefined && state.hours - board.lastChangeHours >= ORDER_GAP_HOURS && swapInSmallOrder(state, board, orderContext(state))) board.lastChangeHours = state.hours;
+    if (board.lastChangeHours !== undefined && state.hours - board.lastChangeHours >= ORDER_GAP_HOURS && swapAny(state, board)) board.lastChangeHours = state.hours;
     return;
   }
   if (board.lastChangeHours === undefined) {
     const ctx = orderContext(state);
-    while (board.orders.length < ORDER_BOARD_SIZE) addOrder(state, board, ctx);
+    // 抽不到期限內交得出來的單就先空著，隔天再補
+    while (board.orders.length < ORDER_BOARD_SIZE && addOrder(state, board, ctx));
     board.lastChangeHours = state.hours;
   } else if (state.hours - board.lastChangeHours >= ORDER_GAP_HOURS) {
     addOrder(state, board, orderContext(state));
