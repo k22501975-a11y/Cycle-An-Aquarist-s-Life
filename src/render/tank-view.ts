@@ -676,11 +676,14 @@ export class TankView {
     for (let i = 0; i <= 32; i++) mask.lineTo((W * i) / 32, sandAt((W * i) / 32));
     mask.lineTo(W, b.height).closePath().fill(0xffffff);
     this.front.mask = this.sandMask;
-    // 水位以上是空氣：玻璃後面淡淡的房間色，蓋住後景的水
+    // 水位以上是空氣：玻璃後面是微暗的暖色房間（畫面評測第 8 輪：原本的灰藍色像還沒載入完），上面亮、下面暗一點
     // 水從沙面往上漲（沙面以下看不到水）
     const bed = Math.min(b.height, floorAt(b, W / 2));
     const waterY = bed - (bed - b.surface) * L.water;
-    if (waterY > 0) back.rect(0, 0, W, waterY).fill({ color: 0xd3e2e8, alpha: 0.94 });
+    if (waterY > 0) {
+      back.rect(0, 0, W, waterY).fill({ color: 0xd6a873, alpha: 0.95 });
+      back.rect(0, waterY * 0.55, W, waterY * 0.45).fill({ color: 0x5a4632, alpha: 0.18 });
+    }
     // 空缸看得出是一個玻璃缸：上緣黑框、左右玻璃邊的反光、斜斜的玻璃反光帶（開燈後淡出）
     const glass = 1 - L.light * 0.85;
     g.rect(0, 0, W, 9 * hs).fill({ color: 0x1b2328, alpha: 0.85 * glass });
@@ -2131,9 +2134,19 @@ export class TankView {
     // 新缸細菌白濁（g13 門檻 2）：水裡一層乳白的霧，中間最濃；氨 0.25 就看得出一點，換水後慢慢散
     const bloom = this.water.bloom;
     if (bloom > 0.01) {
+      // 不是均勻一層（畫面評測第 8 輪）：缸中間最濃，靠水面和右邊過濾器出水口淡一點，水裡飄著細細的雜質
       const depth = bottom - surface;
-      g.rect(0, surface, width, depth).fill({ color: 0xe9f0ec, alpha: Math.min(0.4, bloom * 1.5) });
-      g.rect(0, surface + depth * 0.2, width, depth * 0.55).fill({ color: 0xf4f7f2, alpha: Math.min(0.2, bloom * 0.8) });
+      const a = Math.min(1, bloom * 3.5);
+      g.rect(0, surface, width, depth).fill({ color: 0xe9f0ec, alpha: 0.28 * a });
+      for (let i = 0; i < 4; i++) {
+        const k = 1 - i * 0.22;
+        g.ellipse(width * 0.44, surface + depth * 0.58, width * 0.5 * k, depth * 0.44 * k).fill({ color: 0xf2f5f0, alpha: 0.09 * a });
+      }
+      for (let i = 0; i < 40; i++) {
+        const x = ((i * 0.618 + this.time * 0.006 * (1 + (i % 3))) % 1) * width;
+        const y = surface + depth * (0.15 + 0.75 * ((i * 0.377) % 1)) + Math.sin(this.time * 0.4 + i) * 6 * this.hs;
+        g.circle(x, y, (0.8 + (i % 3) * 0.5) * this.hs).fill({ color: 0xffffff, alpha: 0.35 * a });
+      }
     }
     // 剛動過造景：攪起來的細沙讓水白濁，底下最濃，慢慢沉澱
     const silt = state.water.turbidity ?? 0;
