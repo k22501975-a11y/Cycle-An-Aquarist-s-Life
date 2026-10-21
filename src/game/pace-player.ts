@@ -19,7 +19,7 @@ export interface NightRewards {
 }
 
 /** 早上報告裡算大獎勵的條目。 */
-export const BIG_REPORT_KINDS: ReadonlySet<ReportKind> = new Set<ReportKind>(['birth', 'cycled', 'belly', 'courtship', 'fry_grew', 'new_leaf', 'rescued']);
+export const BIG_REPORT_KINDS: ReadonlySet<ReportKind> = new Set<ReportKind>(['birth', 'cycled', 'belly', 'courtship', 'fry_grew', 'new_leaf', 'rescued', 'lookalike']);
 
 const alive = (s: TankState) => s.fish.filter((f) => f.alive);
 const meal = (s: TankState) => alive(s).reduce((a, f) => a + FISH_SPECIES[f.species].dailyFoodMg, 0) / 2;
