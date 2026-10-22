@@ -1431,3 +1431,35 @@ span.bc-ks-icon { width: 32px; height: 42px; }
 .bc-pick-btn, .bc-done, .bc-later { flex: 0 0 auto; }
 .keeper-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .keeper-btn .keeper-ribbon { margin-left: 0; }
+
+/* 成長里程碑報告卡（midgame.md §5.3）：放大鏡看肛鰭／胎斑、灰變彩、公母面對面 */
+.ms { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.ms-scene { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; height: 104px; border-radius: 14px; background: radial-gradient(ellipse at 50% 40%, rgba(110, 200, 220, 0.28), rgba(6, 26, 36, 0.7) 75%); overflow: hidden; }
+.ms-fish { width: 150px; height: 84px; object-fit: contain; filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.5)); }
+.ms-fish.albino { filter: saturate(0.75) brightness(1.18) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.5)); }
+.ms-subject { position: relative; width: 150px; height: 84px; transform: translateX(-70px); }
+.ms-fish.young { filter: saturate(0.35) brightness(1.05) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.5)); }
+.ms-spot { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; border: 2px dashed #f6d891; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(0, 0, 0, 0.45); }
+.ms-lens { position: absolute; right: 14%; top: 50%; width: 92px; height: 92px; margin-top: -46px; border-radius: 50%; overflow: hidden; border: 4px solid #c9a35a; box-shadow: 0 0 0 2px rgba(255, 244, 210, 0.5), 0 6px 16px rgba(0, 0, 0, 0.5), inset 0 0 18px rgba(255, 255, 255, 0.25); background: rgba(90, 170, 190, 0.55); }
+.ms-lens::after { content: ''; position: absolute; right: -26px; bottom: -22px; width: 34px; height: 10px; border-radius: 5px; background: linear-gradient(90deg, #8a6a32, #4a3412); transform: rotate(45deg); }
+.ms-lens img { position: absolute; height: auto; }
+.ms-lens-glint { position: absolute; left: 14px; top: 10px; width: 26px; height: 14px; border-radius: 50%; background: rgba(255, 255, 255, 0.45); transform: rotate(-30deg); }
+.ms-sex-badge { position: absolute; right: calc(14% - 8px); top: 8px; }
+.ms-arrow { color: var(--gold-bright); font-size: 22px; }
+.ms-fish.before { width: 110px; filter: saturate(0.15) brightness(0.95) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.5)); }
+.ms-after { position: relative; }
+.ms-spark { position: absolute; width: 14px; height: 14px; background: radial-gradient(circle, #fff8d8 0 18%, transparent 20%), conic-gradient(from 0deg, transparent 0 40deg, #fff2b8 45deg, transparent 50deg 130deg, #fff2b8 135deg, transparent 140deg 220deg, #fff2b8 225deg, transparent 230deg 310deg, #fff2b8 315deg, transparent 320deg); animation: ms-twinkle 1.6s ease-in-out infinite; }
+.ms-spark.s0 { left: 8px; top: 4px; } .ms-spark.s1 { right: 10px; top: 18px; animation-delay: 0.5s; } .ms-spark.s2 { left: 46%; bottom: 2px; animation-delay: 1s; }
+@keyframes ms-twinkle { 0%, 100% { opacity: 0.2; transform: scale(0.6); } 50% { opacity: 1; transform: scale(1.15); } }
+.ms-ready .ms-fish { width: 130px; }
+.ms-ready .ms-fish.right { transform: scaleX(-1); }
+.ms-heart { position: relative; color: #ff6b81; font-size: 30px; text-shadow: 0 0 12px rgba(255, 107, 129, 0.6); animation: ms-beat 1.4s ease-in-out infinite; }
+.ms-heart .ms-ribbon { position: absolute; left: 50%; top: 30px; width: 18px; height: 24px; margin-left: -9px; }
+@keyframes ms-beat { 0%, 100% { transform: scale(1); } 15% { transform: scale(1.18); } 30% { transform: scale(1); } }
+.ms-foot { display: flex; align-items: center; justify-content: space-between; }
+.ms-track { display: flex; gap: 4px; }
+.ms-track i { width: 22px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.15); }
+.ms-track i.on { background: linear-gradient(90deg, #e8495a, var(--gold-bright)); }
+.ms-track i.now { box-shadow: 0 0 6px rgba(246, 216, 145, 0.7); }
+.ms-early { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: rgba(127, 216, 138, 0.18); color: var(--ok); }
+@media (prefers-reduced-motion: reduce) { .ms-spark, .ms-heart { animation: none; } }

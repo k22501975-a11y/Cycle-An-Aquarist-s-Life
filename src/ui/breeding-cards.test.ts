@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pickDone, toggleKeeper, traitIcon, type PickFish } from './breeding-cards';
+import { LENS_AT, LENS_ZOOM, lensPos, pickDone, toggleKeeper, traitIcon, type PickFish } from './breeding-cards';
 
 const kid = (fishId: number, sex: 'male' | 'female', keeper = false): PickFish => ({ fishId, tank: 0, sex, name: '全紅', look: 4, fins: [], traits: [], missing: [], keeper });
 const limit = { male: 1, female: 2 };
@@ -28,5 +28,26 @@ describe('選種卡（midgame.md C2）', () => {
   it('每個特徵都有圖示：顏色是寶石、鰭和尾是剪影', () => {
     for (const key of ['albino', 'gold', 'tuxedo', 'red', 'snake', 'grass', 'wild']) expect(traitIcon(key)).toContain('radialGradient');
     for (const key of ['swallow', 'ribbon', 'dumbo', 'bigC', 'sword', 'tail:halfmoon', 'tail:delta', 'tail:round']) expect(traitIcon(key)).toContain('<path');
+  });
+});
+
+describe('成長里程碑卡的放大鏡（midgame.md §5.3）', () => {
+  it('肛鰭、胎斑剛好落在鏡片正中間（魚圖寬 512、高 213～234）', () => {
+    for (const aspect of [213 / 512, 234 / 512]) {
+      for (const at of Object.values(LENS_AT)) {
+        const { left, top } = lensPos(at, aspect);
+        // 鏡片是正方形，圖寬是鏡片的 LENS_ZOOM 倍：圖上的 at 換回鏡片座標要是 50%
+        expect(left + at.x * LENS_ZOOM * 100).toBeCloseTo(50);
+        expect(top + at.y * LENS_ZOOM * 100 * aspect).toBeCloseTo(50);
+      }
+    }
+  });
+
+  it('要看的地方都在魚身下半部（肛鰭、胎斑都在肚子那側）', () => {
+    for (const at of Object.values(LENS_AT)) {
+      expect(at.x).toBeGreaterThan(0.3);
+      expect(at.x).toBeLessThan(0.8);
+      expect(at.y).toBeGreaterThan(0.5);
+    }
   });
 });
