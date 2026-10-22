@@ -22,6 +22,15 @@ function reportAfter(change: (s: TankState) => void, s = tank()) {
 const kinds = (r: ReturnType<typeof reportAfter>) => r.items.map((i) => i.kind);
 
 describe('早上報告寫玩家自己做的事的結果（polish-to-9 §6 P6）', () => {
+  it('有魚已經餓到開始消瘦：寫幾尾、口氣比「一天餵兩次」重（#315）', () => {
+    const r = reportAfter((s) => {
+      const fry = addFish(s, 'guppy', { carriesIch: false });
+      fry.lengthCm = 0.8;
+      fry.hunger = 0.65;
+    });
+    expect(r.items.find((i) => i.kind === 'hungry')).toMatchObject({ tone: 'warn', text: '1 尾魚餓到開始消瘦，今天不餵會餓死', action: 'feed' });
+  });
+
   it('水草長了 1% 以上才寫「水草長了一點」', () => {
     const grew = reportAfter((s) => (s.plants[0].biomassG *= 1.05));
     expect(grew.items.find((i) => i.kind === 'plant_grew')).toMatchObject({ tone: 'info', text: '水草長了一點（+5%）' });
