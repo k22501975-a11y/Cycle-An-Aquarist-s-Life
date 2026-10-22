@@ -703,11 +703,13 @@ async function start(): Promise<void> {
   );
   const startFeeding = () => {
     if (feedingMode) return leaveFeeding();
-    // 停在還沒放魚的新缸：切到有魚、最餓的那缸去餵（#315）
+    // 停在還沒放魚的新缸、或這缸不餓別缸餓了：切到最餓的那缸去餵（#315、#322）
     const target = sim.feedTarget(game.tanks, game.active);
     if (target !== game.active) {
+      const empty = !game.state.fish.some((f) => f.alive);
+      if (scaping) leaveScape();
       game.switchTo(target);
-      toasts.show(`這缸還沒有魚，切到${sim.tankLabel(game.tanks, target)}餵`);
+      toasts.show(empty ? `這缸還沒有魚，切到${sim.tankLabel(game.tanks, target)}餵` : `${sim.tankLabel(game.tanks, target)}的魚餓了，切過去餵`);
     }
     // 沒有魚：面板會說要先去買魚
     if (!game.state.fish.some((f) => f.alive)) return panelSheet('餵食', (p) => p.feedPanel(ctx));

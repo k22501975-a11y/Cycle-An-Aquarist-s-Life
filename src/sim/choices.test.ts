@@ -18,6 +18,7 @@ import {
   setTankPurpose,
   breedingProgress,
   chooseOption,
+  CHOICE_RESHOW_DAYS,
   choiceState,
   cross,
   DREAM_FISH,
@@ -468,6 +469,8 @@ describe('中期的選擇點（design/midgame.md）', () => {
     const t2 = buyTank(tanks, 'nano20')!;
     setTankPurpose(t2, 'breeding');
     kids[0].keeper = true;
+    // 小魚夠大，母魚吞不下
+    for (const k of kids) k.lengthCm = 2.2;
     mom.pregnancy = 0.8;
     const c6 = takeChoice(tanks);
     expect(c6?.id).toBe('C6');
@@ -477,6 +480,54 @@ describe('中期的選擇點（design/midgame.md）', () => {
     expect(t2.bacteria.aob).toBeGreaterThan(0);
     expect(t2.fish.map((f) => f.id)).toEqual(expect.arrayContaining([kids[0].id, mom.id, ...kids.slice(1).map((k) => k.id)]));
     expect(takeChoice(tanks)).toBeNull();
+  });
+
+  it('C6 小魚還小：吃得下牠們的快生母魚不跟著搬（#322）', () => {
+    const { s, tanks, kids, mom } = withBrood(6, PICK_AFTER_BROOD_DAYS * 24);
+    Object.assign(choiceState(tanks).picked, { C1: 'box', C2: 'later', C3: 'breeding', C8: 'media' });
+    economy(s).coins = 5000;
+    s.bacteria.aob = s.bacteria.nob = bacteriaCapacity(s);
+    const t2 = buyTank(tanks, 'nano20')!;
+    setTankPurpose(t2, 'breeding');
+    kids[0].keeper = true;
+    mom.pregnancy = 0.8;
+    const c6 = takeChoice(tanks)!;
+    expect(c6.move).toContain(kids[0].id);
+    expect(c6.move).not.toContain(mom.id);
+  });
+
+  it('C6 等選種之後才問；育幼盒裡留種的也搬；之後又有留種的魚在外面，隔幾天再問一次（#322）', () => {
+    const { s, tanks, kids } = withBrood(6, PICK_AFTER_BROOD_DAYS * 24);
+    const st = choiceState(tanks);
+    Object.assign(st.picked, { C1: 'box', C3: 'breeding', C8: 'media' });
+    economy(s).coins = 5000;
+    s.bacteria.aob = s.bacteria.nob = bacteriaCapacity(s);
+    const t2 = buyTank(tanks, 'nano20')!;
+    setTankPurpose(t2, 'breeding');
+    // 還沒選種：先出選種卡，不出搬魚卡
+    expect(takeChoice(tanks)?.id).toBe('C2');
+    for (const k of kids) k.nursery = true;
+    expect(chooseOption(tanks, 'C2', 'pick', [kids[0].id, kids[1].id, kids[3].id])).toBeNull();
+    s.hours += 24;
+    const c6 = takeChoice(tanks);
+    expect(c6?.id).toBe('C6');
+    expect(c6!.move).toEqual(expect.arrayContaining([kids[0].id, kids[1].id, kids[3].id]));
+    expect(chooseOption(tanks, 'C6', 'move')).toBeNull();
+    expect(t2.fish.filter((f) => f.keeper).length).toBe(3);
+    // 之後又留了一尾在主缸：隔 CHOICE_RESHOW_DAYS 天再問
+    const late = addFish(s, 'guppy', { sex: 'female', pregnant: false });
+    late.genome = kids[2].genome;
+    late.generation = 1;
+    late.lengthCm = 2.2;
+    late.keeper = true;
+    Object.assign(st.picked, { C4: 'x', C7: 'standard', C9: 'grow' });
+    s.hours += 24;
+    expect(takeChoice(tanks)?.id).not.toBe('C6');
+    s.hours += CHOICE_RESHOW_DAYS * 24;
+    const again = takeChoice(tanks);
+    expect(again?.id).toBe('C6');
+    expect(again!.title).toMatch(/還有魚/);
+    expect(again!.move).toContain(late.id);
   });
 
   it('C6 搬到繁殖缸快養滿為止（跟分缸提示同一把尺），已經滿了就不出', () => {
