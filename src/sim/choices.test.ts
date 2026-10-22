@@ -98,6 +98,20 @@ describe('中期的選擇點（design/midgame.md）', () => {
     expect(orderSupply(tanks, order)).toBe(3);
   });
 
+  it('C2 留種會超過上限：整批不標，卡片下次還會出', () => {
+    const { tanks, kids, dad, mom } = withBrood(6, PICK_AFTER_BROOD_DAYS * 24);
+    Object.assign(choiceState(tanks).picked, { C1: 'box', C3: 'had' });
+    const c2 = takeChoice(tanks)!;
+    // 已經有 4 尾留種（爸媽和第一窩兩尾），再挑 3 尾會超過 6
+    for (const f of [dad, mom, kids[4], kids[5]]) f.keeper = true;
+    const fresh = c2.fish!.filter((f) => !kids.find((k) => k.id === f.fishId)!.keeper);
+    const picks = [fresh.find((f) => f.sex === 'male')!, ...fresh.filter((f) => f.sex === 'female').slice(0, 2)].map((f) => f.fishId);
+    expect(picks.length).toBe(3);
+    expect(chooseOption(tanks, 'C2', 'pick', picks)).toMatch(/最多留 6 尾/);
+    expect(kids.filter((k) => k.keeper).length).toBe(2);
+    expect(choiceState(tanks).picked.C2).toBeUndefined();
+  });
+
   it('選種前，第一窩最大的 1 公 2 母先留著，訂單不拿；選種卡選過就不留', () => {
     const { s, tanks, kids } = withBrood(6, 5 * 24);
     kids.forEach((k, i) => (k.lengthCm = 2 + i * 0.05));

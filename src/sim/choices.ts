@@ -1,5 +1,5 @@
 import { DREAM_FISH } from './dream';
-import { economy, setKeeper } from './economy';
+import { economy, keeperRefusal, MAX_KEEPERS, setKeeper } from './economy';
 import { cross, finWords, lookIndex, phenotype, strainName, type GuppyGenome, type GuppyPhenotype } from './genetics';
 import { daysToLength, growthStage } from './growth';
 import { moveFish, newTankCost } from './household';
@@ -374,17 +374,6 @@ function settleImplicit(tanks: TankState[], s: ChoiceState): void {
   if (!s.picked.C1 && s.shown.C1 !== undefined && !cardFor('C1', tanks, s)) s.picked.C1 = 'grown';
 }
 
-/** 出過、還沒選、現在還成立的卡（畫面隨時可以拿來再顯示；不記錄）。 */
-export function pendingChoice(tanks: TankState[]): ChoiceCard | null {
-  const s = choiceState(tanks);
-  for (const id of CHOICE_IDS) {
-    if (s.shown[id] === undefined || s.picked[id]) continue;
-    const card = cardFor(id, tanks, s);
-    if (card && (id !== 'C5' || s.tradeAsked?.includes(card.trade!.orderId))) return card;
-  }
-  return null;
-}
-
 /**
  * 早上報告用：拿今天要出的那張卡並記下出現時間。一個早上最多一張：還沒出過的優先，
  * 出過沒選的隔 CHOICE_RESHOW_DAYS 天再出一次。C5 每張訂單只問一次。
@@ -435,10 +424,14 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
         const chosen = picks.map(find).filter((x) => !!x);
         if (chosen.length === 0) return '先點幾尾要留種的魚';
         if (chosen.filter((x) => x.fish.sex === 'male').length > 1 || chosen.filter((x) => x.fish.sex === 'female').length > 2) return '最多留 1 公 2 母';
+        // 先全部檢查再一起標：中途被拒不會留下標了一半的魚
         for (const { fish, tank } of chosen) {
-          const why = setKeeper(tanks[tank], fish.id, true);
+          const why = keeperRefusal(tanks[tank], fish);
           if (why) return why;
         }
+        const have = located(tanks).filter(({ fish }) => fish.keeper).length;
+        if (have + chosen.filter(({ fish }) => !fish.keeper).length > MAX_KEEPERS) return `最多留 ${MAX_KEEPERS} 尾種魚，先取消幾尾`;
+        for (const { fish, tank } of chosen) setKeeper(tanks[tank], fish.id, true);
       }
       break;
     }
@@ -522,7 +515,7 @@ export function breedingProgress(tanks: TankState[]): string | null {
  * 沒有第一窩回傳 null。不改存檔。
  */
 export function breedingStep(tanks: TankState[]): string | null {
-  const s = choiceState(tanks);
+  const s: Readonly<ChoiceState> = economy(tanks[0]).choices ?? { shown: {}, picked: {} };
   const all = located(tanks);
   const pair = s.pair?.map((id) => all.find(({ fish }) => fish.id === id));
   if (pair?.[0] && pair[1]) {
