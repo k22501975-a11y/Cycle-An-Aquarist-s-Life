@@ -138,14 +138,15 @@ export function forgedGenomes(prev: TankState[], next: TankState[], known: reado
       continue;
     }
     const m = mother.genome;
-    const momSire = [before.get(mother.id), nowById.get(mother.id)].find((f) => f?.sire)?.sire;
-    if (isLost(mother) || (momSire && lostGenomes.has(genomeKey(momSire.genome)))) {
+    // 媽媽存的精子：上一份和這一份都要看（中間可能換成查不到來歷的公魚的）
+    const momSires = [before.get(mother.id), nowById.get(mother.id)].flatMap((f) => (f?.sire ? [f.sire.genome] : []));
+    const lostSire = (s: GuppyGenome) => lostGenomes.has(genomeKey(s));
+    if (isLost(mother) || momSires.some(lostSire)) {
       markLost(c, `#${c.id} 爸媽的來歷查不到`);
       continue;
     }
     // 媽媽沒存精子就生的（舊存檔、市場買來懷孕但沒附精子）：讀檔時照編號補的舊基因，尾鰭 50，不用查
-    const sires = [before.get(mother.id), nowById.get(mother.id)].filter((f) => f?.sire);
-    if (sires.length === 0 && genomeKey(g) === genomeKey(legacyGenome(c.id, c.sex))) continue;
+    if (momSires.length === 0 && genomeKey(g) === genomeKey(legacyGenome(c.id, c.sex))) continue;
     if (!maternalOk(g, m)) {
       out.push({ id: c.id, reason: `#${c.id} 這條小魚的基因不可能是牠媽媽生的` });
       continue;
@@ -155,10 +156,10 @@ export function forgedGenomes(prev: TankState[], next: TankState[], known: reado
     const adults = males.filter((f) => f.bornHours === undefined || f.bornHours <= born - MIN_MOTHER_DAYS * 24);
     // 來歷查不到的公魚不能當「查得到」的爸爸：只有牠對得上的小魚也查不到
     const grown = adults.filter((f) => !isLost(f)).map((f) => f.genome!);
-    const fathers = [before.get(mother.id), nowById.get(mother.id)].flatMap((f) => (f?.sire ? [f.sire.genome] : [])).concat(grown);
+    const fathers = momSires.filter((s) => !lostSire(s)).concat(grown);
     const fitsAny = (dads: GuppyGenome[]) => dads.some((f) => paternalOk(g, f) && quantOk(g, m, f.tail, f.fins));
     if (fitsAny(fathers)) continue;
-    if (fitsAny(adults.filter(isLost).map((f) => f.genome!))) {
+    if (fitsAny(adults.filter(isLost).map((f) => f.genome!).concat(momSires.filter(lostSire)))) {
       markLost(c, `#${c.id} 爸爸的來歷查不到`);
       continue;
     }
