@@ -70,10 +70,14 @@ const allFish = (tanks: TankState[], withBox = false) =>
 const bred = (f: Fish) => (f.generation ?? 0) >= 1;
 const STAGES = ['fry', 'juvenile', 'coloring', 'subadult', 'adult', 'old'];
 
-/** 養大了幾條自己繁殖的魚：缸裡（含檢疫盒）長到轉色期的，加上養過仔魚期才交訂單的（#183：交單不會讓目標倒退）。 */
+/**
+ * 養大過幾條自己繁殖的魚（#303：累計，交單、賣掉都不扣）：長到轉色期過的（raisedEver），加上還沒轉色就交訂單的（#183）。
+ * 缸裡已經轉色、這個 tick 還沒記到的也算（讀檔後第一個 tick 前）。
+ */
 export function raisedCount(tanks: TankState[]): number {
-  const now = allFish(tanks, true).filter((f) => bred(f) && !isShrimpSpecies(f.species) && STAGES.indexOf(growthStage(f)) >= 2).length;
-  return now + (economy(tanks[0]).raisedGone ?? 0);
+  const unseen = allFish(tanks, true).filter((f) => !f.raisedSeen && bred(f) && !isShrimpSpecies(f.species) && STAGES.indexOf(growthStage(f)) >= 2).length;
+  const e = economy(tanks[0]);
+  return (e.raisedEver ?? 0) + unseen + (e.raisedGone ?? 0);
 }
 
 /** 缸裡有沒有玩家看得到的警告：氨、亞硝、水溫、生病、死魚。 */

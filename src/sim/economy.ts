@@ -110,8 +110,10 @@ export interface Economy {
   goals?: GoalState;
   /** 累計賣給店家幾條魚。 */
   fishSold?: number;
-  /** 自己繁殖、養過仔魚期才交訂單的魚（目標「養大 5 條」也算這些，#183）。 */
+  /** 自己繁殖、養過仔魚期、還沒轉色就交訂單的魚（目標「養大 5 條」也算這些，#183）。 */
   raisedGone?: number;
+  /** 自己繁殖、長到轉色期過的魚累計幾尾（交單、賣掉、死掉都不扣，#303）。 */
+  raisedEver?: number;
   /** 已經領過獎勵的新手任務（任務進度存在裝置上，換裝置、匯入存檔重跑教學也不能再領）。 */
   questRewards?: string[];
   /** 手上還沒用的假期飼料錠（目標送的）。 */
@@ -292,8 +294,37 @@ export function buybackRefusal(fish: Fish): string | null {
   if (!fish.alive) return '死魚不收';
   if (fish.gift) return '老闆送的魚不能賣回去';
   if (fish.listing) return '已經在市場上架了';
+  if (fish.keeper) return '留種的魚不賣（先取消留種）';
   if (fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * BUYBACK_MIN_SIZE) return '還太小，店家不收';
   if (fish.ich.stage === 'visible' || (fish.infections ?? []).some((i) => i.stage === 'visible') || fish.health < 0.6) return '看起來生病了，店家不收';
+  return null;
+}
+
+/** 全家最多幾尾留種（選種日挑 1 公 2 母，C4 再加候選公魚；留太多訂單會交不出貨）。 */
+export const MAX_KEEPERS = 6;
+
+/** 為什麼這尾不能標留種；可以就回傳 null（取消留種永遠可以）。 */
+export function keeperRefusal(state: TankState, fish: Fish): string | null {
+  if (fish.keeper) return null;
+  if (!fish.alive) return '死掉了';
+  if (isShrimpSpecies(fish.species)) return '蝦子不用留種，留一群自己就會繁殖';
+  if (fish.listing) return '已經在市場上架了，先下架';
+  const n = householdTanks(state).reduce((k, t) => k + [...t.fish, ...(t.quarantine?.fish ?? [])].filter((f) => f.alive && f.keeper).length, 0);
+  if (n >= MAX_KEEPERS) return `最多留 ${MAX_KEEPERS} 尾種魚，先取消一尾`;
+  return null;
+}
+
+/** 標或取消「留種」（design/midgame.md C2）。回傳不能標的原因；成功回傳 null。 */
+export function setKeeper(state: TankState, fishId: number, on: boolean): string | null {
+  const fish = [...state.fish, ...(state.quarantine?.fish ?? [])].find((f) => f.id === fishId);
+  if (!fish) return '這條魚不在缸裡';
+  if (!on) {
+    delete fish.keeper;
+    return null;
+  }
+  const why = keeperRefusal(state, fish);
+  if (why) return why;
+  fish.keeper = true;
   return null;
 }
 
@@ -380,9 +411,23 @@ export function noteBredSale(state: TankState, fish: Fish, coins: number, via: '
  * 賣給店家的不算：那是玩家自己選擇換錢，目標本來就要留著魚看轉色。
  */
 export function noteRaisedGone(state: TankState, fish: Fish): void {
-  if ((fish.generation ?? 0) < 1 || isShrimpSpecies(fish.species) || growthStage(fish) === 'fry') return;
+  // 已經轉色過的算在 raisedEver 裡了
+  if (fish.raisedSeen || (fish.generation ?? 0) < 1 || isShrimpSpecies(fish.species) || growthStage(fish) === 'fry') return;
   const e = economy(state);
   e.raisedGone = (e.raisedGone ?? 0) + 1;
+}
+
+/** 轉色期以後的成長階段。 */
+const COLORED = new Set(['coloring', 'subadult', 'adult', 'old']);
+
+/** 每個 tick：自己繁殖的魚（不含蝦）第一次長到轉色期，記進「養到轉色」的累計（#303）。 */
+export function trackRaised(state: TankState): void {
+  for (const f of [...state.fish, ...(state.quarantine?.fish ?? [])]) {
+    if (f.raisedSeen || !f.alive || (f.generation ?? 0) < 1 || isShrimpSpecies(f.species) || !COLORED.has(growthStage(f))) continue;
+    f.raisedSeen = true;
+    const e = economy(state);
+    e.raisedEver = (e.raisedEver ?? 0) + 1;
+  }
 }
 
 /** 手上這種插枝有幾株是寶箱來的（不會比手上的多）。 */

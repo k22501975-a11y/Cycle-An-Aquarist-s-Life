@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, buyQuarantine, buyTank, economy, fulfillOrder, maxLengthCm, moveToQuarantine, orderBoard, sellFish, type ShopOrder } from './index';
+import { addFish, buyQuarantine, buyTank, economy, fulfillOrder, maxLengthCm, moveToQuarantine, orderBoard, orderSupply, sellFish, setKeeper, trackRaised, type ShopOrder } from './index';
 import { CALM_DAYS, checkGoals, GOALS, goalState, isUnlocked, nextGoals, raisedCount, speciesUnlocked, unlockHint } from './goals';
 import type { TankState } from './state';
 
@@ -67,6 +67,48 @@ describe('新手之後的目標（M19）', () => {
     bredFish(tanks[0], 0.65);
     expect(raise5.progress!(tanks)).toEqual([5, 5]);
     expect(checkGoals(tanks).map((g) => g.id)).toContain('raise5');
+  });
+
+  it('養到轉色是累計：轉色過的魚交單、賣掉、死掉都不扣（#303）', () => {
+    const tanks = [newGameState(1)];
+    const colored = [0, 1, 2].map(() => bredFish(tanks[0], 0.65));
+    trackRaised(tanks[0]);
+    expect(raisedCount(tanks)).toBe(3);
+    expect(sellFish(tanks[0], colored[0].id)).toBeGreaterThan(0);
+    colored[1].alive = false;
+    const board = orderBoard(tanks[0]);
+    board.orders = [{ id: 991, kind: 'fish', species: 'guppy', size: 'juvenile', count: 1, unitPrice: 40, postedHours: tanks[0].hours } as ShopOrder];
+    expect(fulfillOrder(tanks, 991)).toBeGreaterThan(0);
+    expect(tanks[0].fish.includes(colored[2])).toBe(false);
+    expect(raisedCount(tanks)).toBe(3);
+    // 同一尾不會算兩次
+    trackRaised(tanks[0]);
+    expect(raisedCount(tanks)).toBe(3);
+  });
+
+  it('留種的魚不進訂單、店家不收；取消留種就可以（design/midgame.md C2）', () => {
+    const tanks = [newGameState(1)];
+    const keep = bredFish(tanks[0], 0.65);
+    const spare = bredFish(tanks[0], 0.9);
+    expect(setKeeper(tanks[0], keep.id, true)).toBeNull();
+    const order = { id: 992, kind: 'fish', species: 'guppy', size: 'juvenile', count: 1, unitPrice: 40, postedHours: tanks[0].hours } as ShopOrder;
+    orderBoard(tanks[0]).orders = [order];
+    expect(orderSupply(tanks, order)).toBe(1);
+    // 交單拿沒留種的那尾，就算留種的比較差
+    expect(fulfillOrder(tanks, 992)).toBeGreaterThan(0);
+    expect(tanks[0].fish.includes(spare)).toBe(false);
+    expect(tanks[0].fish.includes(keep)).toBe(true);
+    expect(sellFish(tanks[0], keep.id)).toBe(0);
+    expect(setKeeper(tanks[0], keep.id, false)).toBeNull();
+    expect(sellFish(tanks[0], keep.id)).toBeGreaterThan(0);
+  });
+
+  it('留種最多 6 尾，蝦子不用留', () => {
+    const tanks = [newGameState(1)];
+    for (let i = 0; i < 6; i++) expect(setKeeper(tanks[0], bredFish(tanks[0], 0.65).id, true)).toBeNull();
+    expect(setKeeper(tanks[0], bredFish(tanks[0], 0.65).id, true)).toContain('最多');
+    const shrimp = addFish(tanks[0], 'cherry_shrimp', calmFish);
+    expect(setKeeper(tanks[0], shrimp.id, true)).toContain('蝦');
   });
 
   it('買第二個缸：店裡開始賣鬥魚', () => {
