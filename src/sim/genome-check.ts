@@ -152,13 +152,20 @@ export function forgedGenomes(prev: TankState[], next: TankState[], known: reado
     }
     // 爸爸：媽媽存的精子，或缸裡夠大的公魚（同一胎、剛出生的兄弟不算）
     const born = c.bornHours ?? next[0].hours;
-    const grown = males.filter((f) => f.bornHours === undefined || f.bornHours <= born - MIN_MOTHER_DAYS * 24).map((f) => f.genome!);
+    const adults = males.filter((f) => f.bornHours === undefined || f.bornHours <= born - MIN_MOTHER_DAYS * 24);
+    // 來歷查不到的公魚不能當「查得到」的爸爸：只有牠對得上的小魚也查不到
+    const grown = adults.filter((f) => !isLost(f)).map((f) => f.genome!);
     const fathers = [before.get(mother.id), nowById.get(mother.id)].flatMap((f) => (f?.sire ? [f.sire.genome] : [])).concat(grown);
+    const fitsAny = (dads: GuppyGenome[]) => dads.some((f) => paternalOk(g, f) && quantOk(g, m, f.tail, f.fins));
+    if (fitsAny(fathers)) continue;
+    if (fitsAny(adults.filter(isLost).map((f) => f.genome!))) {
+      markLost(c, `#${c.id} 爸爸的來歷查不到`);
+      continue;
+    }
     // 已經賣掉的店魚當爸爸：尾鰭分數照店魚偏好的或缸裡最好的公魚算
     const anyFatherTail = Math.max(UNKNOWN_FATHER_TAIL, ...grown.map((f) => f.tail));
     const anyFatherFins = Math.max(45 + 2 * FINS_SD, ...grown.map((f) => f.fins ?? 45));
-    const fits = fathers.some((f) => paternalOk(g, f) && quantOk(g, m, f.tail, f.fins));
-    if (!fits && !quantOk(g, m, anyFatherTail, anyFatherFins)) out.push({ id: c.id, reason: `#${c.id} 這條小魚的尾鰭比爸媽能生出來的好太多` });
+    if (!quantOk(g, m, anyFatherTail, anyFatherFins)) out.push({ id: c.id, reason: `#${c.id} 這條小魚的尾鰭比爸媽能生出來的好太多` });
   }
   return out;
 }

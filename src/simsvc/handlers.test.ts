@@ -116,6 +116,29 @@ describe('模擬小服務（L2）', () => {
     expect(later[0].fish!.id).toBe(kid.id);
   });
 
+  it('上傳檢查：只有來歷查不到的公魚才生得出的小魚，標 lineage_unknown，不算查得到（#312 架構複審）', () => {
+    const { state } = saveAt(T0, (s) => (s.hours = 2000));
+    const mom = addFish(state, 'guppy', { carriesIch: false, sex: 'female' });
+    const dad = addFish(state, 'guppy', { carriesIch: false, sex: 'male' });
+    // 假公魚：媽媽編號是假的，基因跟店裡的母魚一樣、只有尾鰭完美
+    dad.genome = { ...mom.genome!, y: state.fish[0].genome!.y, tail: 100 };
+    dad.motherId = 424242;
+    dad.bornHours = 10;
+    const raw = JSON.parse(serializeSave(state, 7, T0));
+    const alone = verify(null, raw, 0);
+    expect(alone.map((p) => p.fish?.id)).toEqual([dad.id]);
+
+    // 店裡的母魚跟牠生的小魚：只有假公魚當爸爸才生得出尾鰭 100
+    const kid = addFish(state, 'guppy', { carriesIch: false, sex: 'male' });
+    kid.genome = { ...dad.genome };
+    kid.motherId = mom.id;
+    kid.bornHours = state.hours;
+    kid.generation = 1;
+    const later = verify(raw, JSON.parse(serializeSave(state, 7, T0)), 0, [], [], [alone[0].fish!]);
+    expect(later.map((p) => p.code)).toEqual(['lineage_unknown']);
+    expect(later[0].fish!.id).toBe(kid.id);
+  });
+
   it('上傳檢查：兩次上傳隔 20 天以上、媽媽不在了的小魚，不擋但標 lineage_unknown（#301 留下的洞）', () => {
     const { state, raw } = saveAt(T0);
     state.hours += 24 * 25;
