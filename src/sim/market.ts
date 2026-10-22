@@ -48,6 +48,7 @@ export function listingTitle(fish: Fish): string {
 export function listingRefusal(fish: Fish): string | null {
   if (!fish.alive) return '死掉了';
   if (fish.listing) return '已經上架了';
+  if (fish.keeper) return '留種的魚不賣（先取消留種）';
   if (fish.gift) return '老闆送的魚不能賣（牠生的可以）';
   if (fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * 0.5) return '還太小，養大一點再賣';
   if (hasVisible(fish) || fish.ich.stage === 'visible' || fish.health < 0.5) return '生病的魚不能上架';
@@ -81,9 +82,9 @@ export function suggestedPlantPrice(species: PlantSpeciesId, count: number): num
   return Math.max(minPlantPrice(species, count), Math.round((PLANT_PRICES[species] / 3) * count));
 }
 
-/** 上架或出貨時送給市場的魚資料（listing 是自己這邊的標記，不帶過去）。 */
+/** 上架或出貨時送給市場的魚資料（listing、留種是自己這邊的標記，不帶過去）。 */
 export function marketItem(fish: Fish): Record<string, unknown> {
-  const { listing: _listing, ...rest } = fish;
+  const { listing: _listing, keeper: _keeper, ...rest } = fish;
   return JSON.parse(JSON.stringify(rest));
 }
 

@@ -128,7 +128,7 @@ describe('「養大 5 條」卡超過 3 天（#258）', () => {
     s.hours += RAISE_STUCK_HOURS + 1;
     const step = nextStep([s]);
     expect(step).toMatchObject({ goal: 'raise5', target: 'fastest' });
-    expect(step!.text).toMatch(/^最快轉色的那尾，還差約 \d+ 天$/);
+    expect(step!.text).toMatch(/^養到轉色 \d\/5，最快的那尾還差約 \d+ 天$/);
     expect(fastestColoring([s])?.fish).toBe(fry);
   });
 

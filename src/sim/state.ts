@@ -300,6 +300,10 @@ export interface Fish {
   broodColor?: number;
   /** 在育幼盒裡（掛在主缸裡的小網盒，nursery.ts）：成魚吃不到、不會配對。 */
   nursery?: boolean;
+  /** 玩家標了「留種」（design/midgame.md C2）：訂單、店家收購、市場上架都不會拿走。 */
+  keeper?: boolean;
+  /** 已經算進「養到轉色」的累計（自己繁殖的長到轉色期時記一次，之後交單、賣掉、死掉都不扣，#303）。 */
+  raisedSeen?: boolean;
 }
 
 export interface Plant {
