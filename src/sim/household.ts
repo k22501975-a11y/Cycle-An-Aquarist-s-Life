@@ -49,6 +49,22 @@ export function newTankCost(tanks: TankState[], id: TankSizeId): number {
   return tankSetPrice(id) + slotPrice(tanks.length);
 }
 
+/**
+ * 按「餵食」要餵哪一缸：這缸有活魚就這缸；這缸是空的（剛買的新缸還在養水）就換成別缸裡最餓的那缸，
+ * 主缸的魚才不會因為畫面停在空缸、每天的餵食都落空而整批餓死（#315）。
+ */
+export function feedTarget(tanks: TankState[], active: number): number {
+  const living = (t: TankState) => t.fish.filter((f) => f.alive);
+  if (!tanks[active] || living(tanks[active]).length > 0) return active;
+  let best = active;
+  let hunger = -1;
+  tanks.forEach((t, i) => {
+    const most = Math.max(-1, ...living(t).map((f) => f.hunger));
+    if (most > hunger) [best, hunger] = [i, most];
+  });
+  return best;
+}
+
 export function tankLabel(tanks: TankState[], index: number): string {
   return tanks[index]?.label || `第 ${index + 1} 缸`;
 }
