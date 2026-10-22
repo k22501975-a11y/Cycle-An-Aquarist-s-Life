@@ -1,8 +1,8 @@
-import { DREAM_FISH, lookIndex, type GuppyPhenotype, type PreviewKid } from '../sim';
+import { DREAM_FISH, type PreviewKid } from '../sim';
 import { h } from './dom';
 import { keeperRibbon } from './keeper-ribbon';
 import { dotsOn, kidArt } from './pair-preview-card';
-import { femaleArtOf, guppyArt, maleFinOf } from './shop-cards';
+import { guppyArt } from './shop-cards';
 
 /**
  * 中期選育的卡片（design/midgame.md §4）：選種卡（C2）、配對比較卡（C4）、交單還是留著（C5）、
@@ -12,13 +12,20 @@ import { femaleArtOf, guppyArt, maleFinOf } from './shop-cards';
 
 const ART = `${import.meta.env.BASE_URL}art/`;
 
-// ── 資料（核心填） ──────────────────────────────────────────
+// ── 資料（核心的 src/sim/choices.ts 算好，欄位名照核心的 ChoiceCard） ──────────
 
-export interface KeeperKid {
-  id: number;
+/** 畫一尾魚需要的：公母、品系名、外觀編號、鰭型字（和 PreviewKid 一樣）。 */
+export interface FishLook {
   sex: 'male' | 'female';
-  /** 長大後的樣子（基因決定）。 */
-  pheno: GuppyPhenotype;
+  name: string;
+  look: number;
+  fins: string[];
+}
+
+/** 選種卡上的一尾（ChoiceCard.fish）。 */
+export interface PickFish extends FishLook {
+  fishId: number;
+  tank: number;
   /** 看得出來的特徵（guppyTraits）。 */
   traits: Array<{ key: string; name: string }>;
   /** 離夢想魚還差的特徵名稱，例如「白子」。 */
@@ -26,49 +33,45 @@ export interface KeeperKid {
   keeper: boolean;
 }
 
-export interface KeeperPick {
-  tank: number;
-  kids: KeeperKid[];
-  /** 要留幾公幾母（企劃：1 公 2 母）。 */
-  need: { male: number; female: number };
+/** 選種名額（ChoiceCard.pickLimit，企劃：1 公 2 母）。 */
+export interface PickLimit {
+  male: number;
+  female: number;
 }
 
-export interface SireCandidate {
-  id: number;
-  pheno: GuppyPhenotype;
-  traits: Array<{ key: string; name: string }>;
-  /** 孫代出現夢想魚的機率（%）。 */
-  dreamChance: number;
-  /** 和母魚配出來的小魚（previewPair）。 */
+/** 配對比較卡上的一尾候選公魚（ChoiceCard.candidates）。 */
+export interface PairCandidate {
+  fishId: number;
+  tank: number;
+  name: string;
+  look: number;
+  fins: string[];
+  /** 這對配下去，孫代出現夢想魚的機率（%）。 */
+  dreamPct: number;
+  /** 看得出來的特徵（guppyTraits）；有就畫成小圖示。 */
+  traits?: Array<{ key: string; name: string }>;
+  /** 和母魚配出來的小魚（previewPair 前 3 種）。 */
   kids: PreviewKid[];
   keeper?: boolean;
 }
 
-export interface SireChoice {
-  tank: number;
-  mother: { id: number; pheno: GuppyPhenotype };
-  candidates: SireCandidate[];
-}
-
-export interface KeepOrSell {
+/** 交單還是留著（ChoiceCard.trade）。 */
+export interface TradeEstimate {
   fishId: number;
-  pheno: GuppyPhenotype;
-  sex: 'male' | 'female';
+  orderId: number;
   /** 交單拿到的錢。 */
   coins: number;
-  /** 留著：孫代夢想魚機率（%）；交掉之後的機率。 */
-  chanceIfKept: number;
-  chanceIfSold: number;
+  /** 留著／交掉之後，孫代夢想魚的機率（%）。 */
+  keepPct: number;
+  sellPct: number;
 }
 
 export interface ChoiceOption {
   key: string;
   label: string;
-  /** 一句後果。 */
-  consequence: string;
+  /** 一行後果。 */
+  outcome: string;
   recommended?: boolean;
-  /** 卡上的圖（public/art/ 底下的路徑）。 */
-  art?: string;
 }
 
 // ── 小零件 ──────────────────────────────────────────────
@@ -127,9 +130,9 @@ function missingChip(name: string): HTMLElement {
   return h('span.bc-trait.missing', { title: `還差：${name}` }, h('i', {}, '?'), h('small', {}, name));
 }
 
-function fishArt(p: GuppyPhenotype, sex: 'male' | 'female'): HTMLElement {
-  const src = ART + (sex === 'female' ? femaleArtOf(p) : guppyArt(lookIndex(p), maleFinOf(p)));
-  return h(`img.bc-fish${p.albino ? '.albino' : ''}`, { src, alt: '', draggable: 'false' });
+function fishArt(f: FishLook): HTMLElement {
+  const src = ART + kidArt({ ...f, tailShape: f.fins.includes('大三角') ? 'halfmoon' : 'round', pct: 0 });
+  return h(`img.bc-fish${f.name.includes('白子') ? '.albino' : ''}`, { src, alt: '', draggable: 'false' });
 }
 
 function sexBadge(sex: 'male' | 'female'): HTMLElement {
@@ -156,57 +159,49 @@ function dreamMeter(pct: number): HTMLElement {
 
 /**
  * 點一尾要做的事：沒留種就標上；這一性別名額滿了，就把最早標的那尾換下來（只留 1 公時就是直接換公魚）。
- * 回傳要依序呼叫的 [id, on]。
+ * 回傳要依序套用的 [fishId, on]。
  */
-export function toggleKeeper(pick: KeeperPick, kid: KeeperKid): Array<[number, boolean]> {
-  if (kid.keeper) return [[kid.id, false]];
-  const same = pick.kids.filter((k) => k.keeper && k.sex === kid.sex);
+export function toggleKeeper(fish: PickFish[], limit: PickLimit, f: PickFish): Array<[number, boolean]> {
+  if (f.keeper) return [[f.fishId, false]];
+  const same = fish.filter((k) => k.keeper && k.sex === f.sex);
   const out: Array<[number, boolean]> = [];
-  if (same.length >= pick.need[kid.sex] && same.length > 0) out.push([same[0].id, false]);
-  out.push([kid.id, true]);
+  if (same.length >= limit[f.sex] && same.length > 0) out.push([same[0].fishId, false]);
+  out.push([f.fishId, true]);
   return out;
 }
 
-/** 這一性別名額滿了（再點會換掉一尾）。 */
-function sexFull(pick: KeeperPick, sex: 'male' | 'female'): boolean {
-  return pick.kids.filter((k) => k.keeper && k.sex === sex).length >= pick.need[sex];
-}
+const keptCount = (fish: PickFish[], sex: 'male' | 'female') => fish.filter((k) => k.keeper && k.sex === sex).length;
 
 /** 公母都標滿了。 */
-export function pickDone(pick: KeeperPick): boolean {
-  const n = (s: 'male' | 'female') => pick.kids.filter((k) => k.keeper && k.sex === s).length;
-  return n('male') >= pick.need.male && n('female') >= pick.need.female;
+export function pickDone(fish: PickFish[], limit: PickLimit): boolean {
+  return keptCount(fish, 'male') >= limit.male && keptCount(fish, 'female') >= limit.female;
 }
 
 /** 上面的計數：每個名額一個緞帶槽，標了就亮。 */
-function tally(pick: KeeperPick): HTMLElement {
+function tally(fish: PickFish[], limit: PickLimit): HTMLElement {
   const slots = (sex: 'male' | 'female') => {
-    const used = pick.kids.filter((k) => k.keeper && k.sex === sex).length;
-    return h(
-      `span.bc-tally-group.${sex}`,
-      {},
-      sexBadge(sex),
-      ...Array.from({ length: pick.need[sex] }, (_, i) => (i < used ? keeperRibbon('bc-slot.on') : h('span.bc-slot'))),
-    );
+    const used = keptCount(fish, sex);
+    return h(`span.bc-tally-group.${sex}`, {}, sexBadge(sex), ...Array.from({ length: limit[sex] }, (_, i) => (i < used ? keeperRibbon('bc-slot.on') : h('span.bc-slot'))));
   };
   return h('div.bc-tally', {}, slots('male'), slots('female'));
 }
 
 /**
  * 選種卡：一窩小魚排成一排，每尾一張「寶貝卡」，點一下掛上留種緞帶。
- * onToggle 由呼叫端改存檔再重畫；onDone 在公母都標滿後出現。
+ * onToggle 由呼叫端改畫面上的選擇再重畫（名額滿了會先拿掉一尾再標新的）；onDone 在公母都標滿後才按得下去，
+ * 呼叫端把標了的 fishId 交給 chooseOption。
  */
-export function keeperPickCard(pick: KeeperPick, onToggle: (id: number, on: boolean) => void, onDone?: () => void): HTMLElement {
-  const done = pickDone(pick);
-  const card = (k: KeeperKid) => {
-    const swap = !k.keeper && sexFull(pick, k.sex);
+export function keeperPickCard(fish: PickFish[], limit: PickLimit, onToggle: (fishId: number, on: boolean) => void, onDone?: () => void): HTMLElement {
+  const done = pickDone(fish, limit);
+  const card = (k: PickFish) => {
+    const swap = !k.keeper && keptCount(fish, k.sex) >= limit[k.sex];
     return h(
       `button.bc-kid.${k.sex}${k.keeper ? '.kept' : ''}${swap ? '.swap' : ''}${k.missing.length === 0 ? '.dreamy' : ''}`,
-      { type: 'button', 'aria-pressed': String(k.keeper), onclick: () => toggleKeeper(pick, k).forEach(([id, on]) => onToggle(id, on)) },
+      { type: 'button', 'aria-pressed': String(k.keeper), onclick: () => toggleKeeper(fish, limit, k).forEach(([id, on]) => onToggle(id, on)) },
       h('span.bc-glow', { 'aria-hidden': 'true' }),
       k.keeper ? keeperRibbon('bc-kid-ribbon') : null,
       sexBadge(k.sex),
-      fishArt(k.pheno, k.sex),
+      fishArt(k),
       h('span.bc-traits', {}, ...k.traits.map((t) => traitChip(t))),
       k.missing.length ? h('span.bc-missing', {}, ...k.missing.map(missingChip)) : h('span.bc-complete', {}, '★ 都有了'),
       h('span.bc-mark', {}, k.keeper ? '已留種' : swap ? '換這尾' : '留種'),
@@ -215,10 +210,10 @@ export function keeperPickCard(pick: KeeperPick, onToggle: (id: number, on: bool
   return h(
     'div.bc.bc-pick.glass',
     {},
-    h('div.bc-head', {}, keeperRibbon('bc-head-ribbon'), h('b', {}, '選種日'), tally(pick)),
+    h('div.bc-head', {}, keeperRibbon('bc-head-ribbon'), h('b', {}, '選種日'), tally(fish, limit)),
     h('div.bc-dream-goal', {}, h(`img${DREAM_FISH.albino ? '.albino' : ''}`, { src: ART + guppyArt(DREAM_FISH.look), alt: '', draggable: 'false' }), h('small', {}, '目標'), h('span', {}, DREAM_FISH.name)),
-    h('div.bc-kids', {}, ...pick.kids.map(card)),
-    onDone ? h(`button.btn.primary.bc-done`, { type: 'button', disabled: !done, onclick: onDone }, done ? '就留這幾尾' : '挑 1 公 2 母') : null,
+    h('div.bc-kids', {}, ...fish.map(card)),
+    onDone ? h('button.btn.primary.bc-done', { type: 'button', disabled: !done, onclick: onDone }, done ? '就留這幾尾' : `挑 ${limit.male} 公 ${limit.female} 母`) : null,
   );
 }
 
@@ -228,17 +223,17 @@ export function keeperPickCard(pick: KeeperPick, onToggle: (id: number, on: bool
  * 配哪一尾：母魚在左，2～3 尾候選公魚並排；每尾下面是配出來的小魚和孫代夢想魚的機率星星。
  * 機率最高的那尾掛「機率最高」，但不替玩家決定。
  */
-export function sireCompareCard(choice: SireChoice, onPick: (id: number) => void): HTMLElement {
-  const best = Math.max(...choice.candidates.map((c) => c.dreamChance));
-  const col = (c: SireCandidate) =>
+export function sireCompareCard(mother: FishLook, candidates: PairCandidate[], onPick: (fishId: number) => void): HTMLElement {
+  const best = Math.max(...candidates.map((c) => c.dreamPct));
+  const col = (c: PairCandidate) =>
     h(
-      `div.bc-sire${c.dreamChance === best && best > 0 ? '.best' : ''}`,
+      `div.bc-sire${c.dreamPct === best && best > 0 ? '.best' : ''}`,
       {},
-      c.dreamChance === best && best > 0 ? h('span.bc-best', {}, '機率最高') : null,
+      c.dreamPct === best && best > 0 ? h('span.bc-best', {}, '機率最高') : null,
       c.keeper ? keeperRibbon('bc-kid-ribbon') : null,
-      h('div.bc-sire-pic', {}, sexBadge('male'), fishArt(c.pheno, 'male')),
-      h('span.bc-traits', {}, ...c.traits.map((t) => traitChip(t))),
-      dreamMeter(c.dreamChance),
+      h('div.bc-sire-pic', {}, sexBadge('male'), fishArt({ ...c, sex: 'male' })),
+      c.traits ? h('span.bc-traits', {}, ...c.traits.map((t) => traitChip(t))) : null,
+      dreamMeter(c.dreamPct),
       h(
         'div.bc-kidstrip',
         {},
@@ -251,7 +246,7 @@ export function sireCompareCard(choice: SireChoice, onPick: (id: number) => void
           ),
         ),
       ),
-      h('button.btn.small.primary.bc-pick-btn', { type: 'button', onclick: () => onPick(c.id) }, '配這尾'),
+      h('button.btn.small.primary.bc-pick-btn', { type: 'button', onclick: () => onPick(c.fishId) }, '配這尾'),
     );
   return h(
     'div.bc.bc-sires.glass',
@@ -260,21 +255,21 @@ export function sireCompareCard(choice: SireChoice, onPick: (id: number) => void
     h(
       'div.bc-sires-row',
       {},
-      h('div.bc-mom', {}, keeperRibbon('bc-kid-ribbon'), sexBadge('female'), fishArt(choice.mother.pheno, 'female'), h('small', {}, '媽媽')),
+      h('div.bc-mom', {}, keeperRibbon('bc-kid-ribbon'), sexBadge('female'), fishArt(mother), h('small', {}, '媽媽')),
       h('span.bc-x', { 'aria-hidden': 'true' }, '×'),
-      h('div.bc-sire-cols', {}, ...choice.candidates.map(col)),
+      h('div.bc-sire-cols', {}, ...candidates.map(col)),
     ),
   );
 }
 
 // ── 交單還是留著（C5） ───────────────────────────────────
 
-export function keepOrSellCard(c: KeepOrSell, onSell: () => void, onKeep: () => void): HTMLElement {
+export function keepOrSellCard(fish: FishLook, c: TradeEstimate, onSell: () => void, onKeep: () => void): HTMLElement {
   return h(
     'div.bc.bc-ks.glass',
     {},
     h('div.bc-head', {}, h('b', {}, '交單還是留著？')),
-    h('div.bc-ks-fish', {}, sexBadge(c.sex), fishArt(c.pheno, c.sex)),
+    h('div.bc-ks-fish', {}, sexBadge(fish.sex), fishArt(fish)),
     h(
       'div.bc-ks-row',
       {},
@@ -283,7 +278,7 @@ export function keepOrSellCard(c: KeepOrSell, onSell: () => void, onKeep: () => 
         { type: 'button', onclick: onSell },
         h('img.bc-ks-icon', { src: `${ART}ui/coin.webp`, alt: '', draggable: 'false' }),
         h('b', {}, `+${c.coins}`),
-        dreamMeter(c.chanceIfSold),
+        dreamMeter(c.sellPct),
         h('span.bc-ks-label', {}, '交單'),
       ),
       h(
@@ -291,7 +286,7 @@ export function keepOrSellCard(c: KeepOrSell, onSell: () => void, onKeep: () => 
         { type: 'button', onclick: onKeep },
         keeperRibbon('bc-ks-icon'),
         h('b', {}, '留著'),
-        dreamMeter(c.chanceIfKept),
+        dreamMeter(c.keepPct),
         h('span.bc-ks-label', {}, '當種魚'),
       ),
     ),
@@ -300,7 +295,7 @@ export function keepOrSellCard(c: KeepOrSell, onSell: () => void, onKeep: () => 
 
 // ── 其他選擇點（C1 等）：圖卡二選一 ─────────────────────────
 
-export function choiceCard(title: string, options: ChoiceOption[], onChoose: (key: string) => void): HTMLElement {
+export function choiceCard(title: string, options: ChoiceOption[], onChoose: (key: string) => void, art: Record<string, string> = {}): HTMLElement {
   return h(
     'div.bc.bc-choice.glass',
     {},
@@ -313,30 +308,32 @@ export function choiceCard(title: string, options: ChoiceOption[], onChoose: (ke
           `button.bc-opt${o.recommended ? '.rec' : ''}`,
           { type: 'button', onclick: () => onChoose(o.key) },
           o.recommended ? h('span.bc-best', {}, '推薦') : null,
-          o.art ? h('img.bc-opt-art', { src: ART + o.art, alt: '', draggable: 'false' }) : null,
+          art[o.key] ? h('img.bc-opt-art', { src: ART + art[o.key], alt: '', draggable: 'false' }) : null,
           h('b', {}, o.label),
-          h('small', {}, o.consequence),
+          h('small', {}, o.outcome),
         ),
       ),
     ),
   );
 }
 
-/** C1 小魚怎麼保護：育幼盒（推薦）／留在主缸躲草。 */
-export const FRY_GUARD_OPTIONS: ChoiceOption[] = [
-  { key: 'box', label: '放育幼盒', consequence: '幾乎都活下來', recommended: true, art: 'gear/nursery-box.webp' },
-  { key: 'plants', label: '躲水草', consequence: '不花錢，會被吃掉幾尾', art: 'scape/plant-moss.webp' },
-];
+/** 選項的圖（public/art/ 底下）：C1 育幼盒／躲水草，C3 繁殖缸／展示缸。 */
+export const CHOICE_ART: Record<string, string> = {
+  box: 'gear/nursery-box.webp',
+  plants: 'scape/plant-moss.webp',
+  breeding: 'gear/nursery-box.webp',
+  display: 'gear/led-planted.webp',
+};
 
 // ── 早上報告的「選育進度」行 ──────────────────────────────
 
 /** 早上報告裡的一行：緞帶＋留種魚的小圖＋一句進度＋進度條。 */
-export function breedingLineRow(text: string, fish?: { pheno: GuppyPhenotype; sex: 'male' | 'female' }, progress?: number): HTMLElement {
+export function breedingLineRow(text: string, fish?: FishLook, progress?: number): HTMLElement {
   return h(
     'div.bc-line',
     {},
     keeperRibbon('bc-line-ribbon'),
-    fish ? fishArt(fish.pheno, fish.sex) : null,
+    fish ? fishArt(fish) : null,
     h('span.bc-line-text', {}, text),
     progress !== undefined ? h('span.bc-line-bar', {}, h('i', { style: { width: `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%` } })) : null,
   );
