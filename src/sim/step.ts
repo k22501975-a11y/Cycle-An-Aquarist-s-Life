@@ -38,12 +38,15 @@ export function step(state: TankState, dtHours: number = TICK_HOURS): void {
   updateQuarantine(state, dtHours);
   updateNursery(state);
   updateEconomy(state, dtHours);
-  trackRaised(state);
   trackArrivals(state);
   // 小時數由很多小 tick 累加，有浮點誤差，加一點點容差再取整
   const before = Math.floor(state.hours + 1e-6);
   state.hours += dtHours;
-  if (Math.floor(state.hours + 1e-6) > before) logTemperature(state);
+  if (Math.floor(state.hours + 1e-6) > before) {
+    logTemperature(state);
+    // 養到轉色的累計每個整點記一次就夠（raisedCount 也會算還沒記到的）
+    trackRaised(state);
+  }
 }
 
 /** 溫度計每個整點記一筆（玩家隨時看得到溫度計，所以可以畫趨勢圖）。 */

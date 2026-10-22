@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, buyTank, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, noteBellySeen, setTankPurpose, showingMother, simulate } from '.';
+import { addFish, buyTank, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, noteBellySeen, setTankPurpose, showingMother, simulate } from '.';
 
 describe('主畫面的下一步（U1）', () => {
   it('每個目標都說得出下一步，句子短', () => {
@@ -114,7 +114,8 @@ describe('主畫面的下一步（U1）', () => {
 describe('「養大 5 條」卡超過 3 天（#258）', () => {
   function stuck() {
     const s = newGameState(1);
-    goalState([s]).done.push('cycled', 'protect_fry');
+    // 第二缸另外測（錢夠時下一步先說去買）
+    goalState([s]).done.push('cycled', 'protect_fry', 'second_tank');
     const fry = addFish(s, 'guppy', { sex: 'male' });
     fry.generation = 1;
     fry.lengthCm = 0.8;
@@ -122,9 +123,27 @@ describe('「養大 5 條」卡超過 3 天（#258）', () => {
     return { s, fry };
   }
 
-  it('3 天內照舊；之後說最快轉色那尾還差幾天，點了開她的卡', () => {
+  it('第一窩出生後就出「存錢買第二缸」：錢不夠時下一步照舊顧小魚，錢夠了叫你去買（#305）', () => {
+    const s = newGameState(1);
+    goalState([s]).done.push('cycled');
+    expect(nextGoals([s]).map((g) => g.id)).toEqual(['protect_fry', 'raise5']);
+    const fry = addFish(s, 'guppy', { sex: 'male' });
+    fry.generation = 1;
+    fry.lengthCm = 0.8;
+    expect(nextGoals([s]).map((g) => g.id)).toEqual(['protect_fry', 'second_tank']);
+    goalState([s]).done.push('protect_fry');
+    economy(s).coins = 100;
+    expect(nextStep([s])).toMatchObject({ goal: 'second_tank', text: '第一窩再 12 天看得出公母' });
+    economy(s).coins = 99_999;
+    expect(nextStep([s])).toMatchObject({ goal: 'second_tank', text: '錢夠了，去買第二個缸', target: 'shop_tank' });
+  });
+
+  it('3 天內說選育走到哪（餓了才叫你餵）；之後說最快轉色那尾還差幾天，點了開她的卡', () => {
     const { s, fry } = stuck();
+    expect(nextStep([s])).toMatchObject({ text: '第一窩再 12 天看得出公母', target: 'fastest' });
+    fry.hunger = 0.9;
     expect(nextStep([s])?.target).toBe('feed');
+    fry.hunger = 0.2;
     s.hours += RAISE_STUCK_HOURS + 1;
     const step = nextStep([s]);
     expect(step).toMatchObject({ goal: 'raise5', target: 'fastest' });

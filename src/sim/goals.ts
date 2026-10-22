@@ -80,6 +80,12 @@ export function raisedCount(tanks: TankState[]): number {
   return (e.raisedEver ?? 0) + unseen + (e.raisedGone ?? 0);
 }
 
+/** 第一窩出生過了沒（自家繁殖的魚還在，或養大過、交出去過）。 */
+export function broodSeen(tanks: TankState[]): boolean {
+  const e = economy(tanks[0]);
+  return e.choices?.firstBrood !== undefined || !!e.goals?.done.includes('protect_fry') || (e.raisedEver ?? 0) > 0 || (e.raisedGone ?? 0) > 0 || allFish(tanks, true).some((f) => bred(f) && !isShrimpSpecies(f.species));
+}
+
 /** 缸裡有沒有玩家看得到的警告：氨、亞硝、水溫、生病、死魚。 */
 export function tankAlarm(t: TankState): boolean {
   const w = t.water;
@@ -141,6 +147,16 @@ export const GOALS: Goal[] = [
     coins: 50,
     check: (tanks) => allFish(tanks, true).some((f) => bred(f) && !isShrimpSpecies(f.species) && STAGES.indexOf(growthStage(f)) >= 1),
   },
+  // 存錢買第二缸（#305、design/midgame.md §3）：第一窩出生後就出，不等天數；錢夠的那天早上報告出 C3 用途卡（choices.ts）
+  {
+    id: 'second_tank',
+    title: '存錢買第二個缸',
+    done: '兩個缸了！鬥魚要單獨一缸，現在你有地方養了，店裡開始進鬥魚。',
+    coins: 100,
+    unlock: 'betta',
+    hidden: (tanks) => tanks.length < 2 && !broodSeen(tanks),
+    check: (tanks) => tanks.length >= 2,
+  },
   {
     id: 'raise5',
     title: '養大 5 條自己繁殖的魚（長到轉色期）',
@@ -157,14 +173,6 @@ export const GOALS: Goal[] = [
     done: '第一筆生意成交！好魚可以賣好價錢，記得看看訂單板上客人要什麼。',
     coins: 50,
     check: (tanks) => (economy(tanks[0]).fishSold ?? 0) > 0 || orderBoard(tanks[0]).done > 0,
-  },
-  {
-    id: 'second_tank',
-    title: '存錢買第二個缸',
-    done: '兩個缸了！鬥魚要單獨一缸，現在你有地方養了，店裡開始進鬥魚。',
-    coins: 100,
-    unlock: 'betta',
-    check: (tanks) => tanks.length >= 2,
   },
   // 第二缸的用途（polish-to-9.md G4）：開缸卡選了哪一種，就多一個那種的目標；沒選就不出
   {

@@ -213,9 +213,28 @@ function snailsIn(state: TankState, kind: OrderSnail): number {
   return Math.floor(kind === 'appleYoung' ? s.appleYoung : s.pests[kind]);
 }
 
+/** 第一窩出生後幾天內、選種卡還沒選，先幫玩家留著第一窩最大的 1 公 2 母（選種卡第 12 天出，沒選隔 3 天再出一次）。 */
+export const PICK_RESERVE_DAYS = 18;
+
+/**
+ * 選種日（midgame.md C2）之前，第一窩先留給玩家挑的魚：自家孔雀魚裡最大的 1 公 2 母，訂單不拿（#303：照提示交單，
+ * 第一窩在選種前就被小孔雀單、中魚單收光）。選種卡選過（留種或先不挑）、或第一窩出生超過 PICK_RESERVE_DAYS 天就不再保留，
+ * 之後看玩家標的留種。第一窩的時間由選擇點（choices.ts）記下，還沒記（舊存檔、沒過夜）就不留。
+ */
+export function reservedForPick(state: TankState): Set<number> {
+  const c = economy(state).choices;
+  if (!c || c.picked.C2 || c.firstBrood === undefined || state.hours - c.firstBrood > PICK_RESERVE_DAYS * 24) return new Set();
+  const bred = householdTanks(state)
+    .flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])])
+    .filter((f) => f.alive && f.species === 'guppy' && (f.generation ?? 0) >= 1)
+    .sort((a, b) => b.lengthCm - a.lengthCm);
+  return new Set([...bred.filter((f) => f.sex === 'male').slice(0, 1), ...bred.filter((f) => f.sex === 'female').slice(0, 2)].map((f) => f.id));
+}
+
 /** 這缸（連產卵盒裡的）可以拿去交這張單的魚，差的排前面（不會先把最好的魚交出去）；keep 是玩家要留下來的魚。 */
 export function matchingFish(state: TankState, o: ShopOrder, keep: readonly number[] = []): Fish[] {
-  return [...state.fish, ...(state.quarantine?.fish ?? [])].filter((f) => fishMatchesOrder(f, o) && !keep.includes(f.id)).sort((a, b) => a.lengthCm + (a.genome?.tail ?? 0) / 10 - (b.lengthCm + (b.genome?.tail ?? 0) / 10));
+  const held = reservedForPick(state);
+  return [...state.fish, ...(state.quarantine?.fish ?? [])].filter((f) => fishMatchesOrder(f, o) && !keep.includes(f.id) && !held.has(f.id)).sort((a, b) => a.lengthCm + (a.genome?.tail ?? 0) / 10 - (b.lengthCm + (b.genome?.tail ?? 0) / 10));
 }
 
 /** 這缸拿得出來交單的螺：害蟲小螺留 SNAIL_BREEDERS 隻當種螺（不然交一張單就把缸裡的螺收光，之後再也長不回來）；小蘋果螺全部都能交。 */
@@ -366,8 +385,10 @@ export function trimmableCuttings(state: TankState, plant: PlantSpeciesId): numb
 
 export function orderContext(state: TankState): OrderContext {
   const bred = [...state.fish, ...(state.quarantine?.fish ?? [])].filter((f) => f.alive && (f.generation ?? 0) >= 1);
-  const sellable = bred.some((f) => f.lengthCm >= FISH_SPECIES[f.species].adultLengthCm * 0.5);
-  const stage: OrderStage = sellable ? 'breeding' : bred.length > 0 ? 'brood' : 'start';
+  // 進度看全家（訂單板是共用的）：自家魚都搬去繁殖缸了，主缸也不會退回起步階段
+  const home = householdTanks(state).flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])]).filter((f) => f.alive && (f.generation ?? 0) >= 1);
+  const sellable = home.some((f) => f.lengthCm >= FISH_SPECIES[f.species].adultLengthCm * 0.5);
+  const stage: OrderStage = sellable ? 'breeding' : home.length > 0 ? 'brood' : 'start';
   const cuttings: OrderContext['cuttings'] = {};
   for (const plant of Object.keys(PLANT_PRICES) as PlantSpeciesId[]) {
     // 寶箱來的插枝不能交單，不照它出插枝單

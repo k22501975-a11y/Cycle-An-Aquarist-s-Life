@@ -66,6 +66,9 @@ export function purposeCost(purpose: TankPurpose): number {
  * 不然看錢夠不夠買水草燈那一套，夠就推薦展示缸，不夠還是繁殖缸（便宜）。
  */
 export function suggestPurpose(tanks: TankState[], coins: number): TankPurpose {
+  // 早上的 C3 卡已經選過用途（design/midgame.md）：照玩家選的
+  const picked = tanks[0]?.economy?.choices?.picked.C3;
+  if (picked === 'breeding' || picked === 'display') return picked;
   const fish = tanks.flatMap((t) => t.fish.filter((f) => f.alive && !isShrimpSpecies(f.species)));
   const busy = fish.some((f) => f.pregnancy > 0.5) || fish.filter((f) => growthStage(f) === 'fry' || growthStage(f) === 'juvenile').length >= 5;
   if (busy) return 'breeding';
