@@ -1,5 +1,7 @@
 import { economy } from './economy';
-import { CALM_DAYS, goalState, nextGoals, PURPOSE_GOAL_COUNT, raisedCount, type Goal } from './goals';
+import { breedingStep } from './choices';
+import { HUNGRY } from './readings';
+import { CALM_DAYS, GOALS, goalState, nextGoals, PURPOSE_GOAL_COUNT, raisedCount, type Goal } from './goals';
 import { COLORING_AT, daysToLength, growthStage, maxLengthCm } from './growth';
 import { newTankCost } from './household';
 import { BELLY_SHOWS, daysToBirth, dueMothers } from './nursery';
@@ -113,15 +115,24 @@ function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
     case 'protect_fry':
       if (bredFry(tanks).length > 0) return { text: '小魚還小，一天餵兩次', target: 'feed' };
       return motherStep(tanks) ?? { text: '餵飽母魚，等她懷孕', target: 'feed' };
-    case 'raise5':
-      return raiseStuckStep(tanks) ?? { text: `小魚一天餵兩次，養到轉色（${Math.min(5, raisedCount(tanks))}/5）`, target: 'feed' };
+    case 'raise5': {
+      const feedStep = { text: `小魚一天餵兩次，養到轉色（${Math.min(5, raisedCount(tanks))}/5）`, target: 'feed' } as const;
+      // 「一天餵兩次」只在小魚真的餓了才說；其他時候說選育走到哪（midgame.md §2）
+      if (bredFry(tanks).some((f) => f.hunger >= HUNGRY)) return feedStep;
+      const breeding = breedingStep(tanks);
+      return raiseStuckStep(tanks) ?? (breeding ? { text: breeding, target: 'fastest' } : feedStep);
+    }
     case 'sale': {
       const ready = orderBoard(home).orders.some((o) => orderSupply(tanks, o) >= o.count);
       return ready ? { text: '有訂單交得出貨，去交貨', target: 'orders' } : { text: '賣一尾魚，或看看訂單板', target: 'sell' };
     }
     case 'second_tank': {
       const need = newTankCost(tanks, 'nano20') - economy(home).coins;
-      return need > 0 ? { text: `再存 ${need} 魚幣買第二個缸`, target: 'orders' } : { text: '錢夠了，去買第二個缸', target: 'shop_tank' };
+      if (need <= 0) return { text: '錢夠了，去買第二個缸', target: 'shop_tank' };
+      // 存錢是背景目標（第一窩一出生就出，#305）：小魚還在等轉色時，下一步照舊叫玩家顧小魚
+      const raise = GOALS.find((g) => g.id === 'raise5')!;
+      if (!goalState(tanks).done.includes('raise5')) return stepFor(raise, tanks);
+      return { text: `再存 ${need} 魚幣買第二個缸`, target: 'orders' };
     }
     case 'cure':
       return anySick(tanks) ? { text: '有魚生病了，去下藥', target: 'treat' } : { text: '每天測水，魚生病就治好牠', target: 'test' };

@@ -1,4 +1,5 @@
 import { isJuvenile, isLightOn, noteAct, recordEvent, type Fish, type TankState } from './state';
+import type { ChoiceState } from './choices';
 import { growthStage } from './growth';
 import { FISH_SPECIES, isShrimpSpecies, type FishSpeciesId, type PlantSpeciesId } from './species';
 import { phenotype, type GuppyGenome, type GuppyPhenotype } from './genetics';
@@ -114,6 +115,8 @@ export interface Economy {
   raisedGone?: number;
   /** 自己繁殖、長到轉色期過的魚累計幾尾（交單、賣掉、死掉都不扣，#303）。 */
   raisedEver?: number;
+  /** 中期選擇點 C1～C5 出過、選過什麼（choices.ts，design/midgame.md）。 */
+  choices?: ChoiceState;
   /** 已經領過獎勵的新手任務（任務進度存在裝置上，換裝置、匯入存檔重跑教學也不能再領）。 */
   questRewards?: string[];
   /** 手上還沒用的假期飼料錠（目標送的）。 */

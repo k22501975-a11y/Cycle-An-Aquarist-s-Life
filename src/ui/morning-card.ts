@@ -1,8 +1,9 @@
 import { artUrl, ownerImg, type ArtIcon } from './art-icons';
 import { ownerMood } from './owner-mood';
 import { h } from './dom';
+import { choiceVisual } from './choice-card';
 import { lookalikeVisual } from './lookalike-card';
-import { isBadNews, type MorningReport, type ReportItem, type ReportKind } from './morning-report';
+import { choiceFollowUp, isBadNews, type MorningReport, type ReportItem, type ReportKind } from './morning-report';
 
 /**
  * 「過一晚」醒來的早上報告卡（first-10-minutes.md F2）：阿德老闆一句話、一條一條的圖卡，
@@ -37,6 +38,8 @@ const KIND_ICON: Record<ReportKind, ArtIcon> = {
   new_leaf: 'trim',
   rescued: 'testkit',
   lookalike: 'owner',
+  choice: 'owner',
+  breeding: 'owner',
   observe: 'owner',
   quiet: 'owner',
 };
@@ -55,6 +58,7 @@ const ACTION_ICON: Record<NonNullable<ReportItem['action']>, ArtIcon> = {
   trim: 'trim',
   fry_box: 'net',
   nursery: 'net',
+  shop_tank: 'shop',
 };
 
 /** 點下去會做什麼（按鈕上的小字）。 */
@@ -71,6 +75,7 @@ const ACTION_LABEL: Record<NonNullable<ReportItem['action']>, string> = {
   trim: '修剪',
   fry_box: '救小魚',
   nursery: '放進盒子',
+  shop_tank: '去買缸',
 };
 
 export interface MorningCardDeps {
@@ -78,6 +83,11 @@ export interface MorningCardDeps {
   picture?: (item: ReportItem) => string | null;
   /** 點了某一條：關掉報告卡後帶去處理。 */
   go: (item: ReportItem) => void;
+  /**
+   * 選擇卡（C1～C5）選了一個選項：套用選擇，回傳錯誤訊息（顯示在卡上），成功回傳 null。
+   * 選了要去做的（放育幼盒、買缸），報告卡關掉再帶過去；其他留在報告卡上。
+   */
+  choose?: (item: ReportItem, key: string, picks: number[]) => string | null;
   /** 今天的小事（F3，#185）：早上一起列出來，點一件就關掉報告卡帶去做。 */
   daily?: { tasks: Array<{ id: string; art: string; text: string; done: boolean }>; go: (id: string) => void };
 }
@@ -91,6 +101,8 @@ const GOOD_LINE: Partial<Record<ReportKind, string>> = {
   grown: '小魚長大了！',
   fry_grew: '小魚又長大一點了！',
   lookalike: '小魚越來越像爸媽了！',
+  choice: '今天有件事要你決定！',
+  breeding: '選育有進展。',
   cycled: '水養好了，好消息！',
   rescued: '你救回來了！',
   fish_relaxed: '魚慢慢習慣新家了。',
@@ -135,7 +147,28 @@ function reportText(text: string): HTMLElement {
 }
 
 export function morningCard(report: MorningReport, deps: MorningCardDeps, close: () => void): HTMLElement {
+  // 選擇卡：不是整條一個按鈕，選項各自一個按鈕；選完換成「選好了」
+  const choiceRow = (item: ReportItem) => {
+    const box = h(`div.morning-item.${item.tone}.choice-item`, {});
+    const done = (text: string) => box.replaceChildren(h('span.morning-text', {}, `${item.text} ✓ ${text}`));
+    box.append(
+      h('span.morning-body', {}, h('span.morning-text', {}, h('b', {}, item.text)), choiceVisual(item.choice!, (key, picks) => {
+        if (!deps.choose) return null;
+        const why = deps.choose(item, key, picks);
+        if (why) return why;
+        done(item.choice!.options.find((o) => o.key === key)?.label ?? '');
+        const go = choiceFollowUp(item.choice!, key);
+        if (go) {
+          close();
+          deps.go({ ...item, action: go });
+        }
+        return null;
+      })),
+    );
+    return box;
+  };
   const row = (item: ReportItem) => {
+    if (item.choice) return choiceRow(item);
     const pic = deps.picture?.(item) ?? artUrl(item.kind === 'crisis' && item.action ? ACTION_ICON[item.action] : KIND_ICON[item.kind]);
     const img = h('img', { src: pic, alt: '', draggable: 'false' });
     img.addEventListener('error', () => img.remove());

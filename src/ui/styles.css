@@ -1146,6 +1146,22 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 .la-trait.father { border-color: rgba(140, 200, 255, 0.6); color: #b5dcff; }
 .la-trait.both { border-color: rgba(190, 170, 255, 0.6); color: #d6ccff; }
 .la-trait.hidden { border-color: rgba(240, 200, 120, 0.8); color: var(--gold); background: rgba(240, 200, 120, 0.12); }
+/* 中期的選擇卡（design/midgame.md C1～C5，choice-card.ts）：選項一列、推薦的金邊；選種卡的魚排一排，點了亮起來 */
+.choice-item { cursor: default; }
+.choice { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.choice-owner { margin: 0; font-size: 13px; color: var(--muted); }
+.choice-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.choice-opt { flex: 1 1 140px; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 8px 10px; border-radius: 12px; text-align: left; color: var(--text); background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(243, 234, 216, 0.18); }
+.choice-opt.rec { border-color: var(--gold); background: rgba(240, 200, 120, 0.1); }
+.choice-opt em { margin-left: 6px; padding: 0 6px; border-radius: 999px; font-style: normal; font-size: 11px; color: #1b2a30; background: var(--gold); }
+.choice-opt small, .choice-fish small { font-size: 12px; color: var(--muted); }
+.choice-cand { display: flex; align-items: center; gap: 6px; }
+.choice-cand img, .choice-fish img { width: 56px; height: 34px; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45)); }
+.choice-cand img.albino, .choice-fish img.albino { filter: saturate(0.75) brightness(1.18) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45)); }
+.choice-fish-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.choice-fish { flex: 0 0 auto; width: 104px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px; border-radius: 12px; color: var(--text); font-size: 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(243, 234, 216, 0.14); }
+.choice-fish.on { border-color: var(--gold); background: rgba(240, 200, 120, 0.14); box-shadow: 0 0 0 2px rgba(240, 200, 120, 0.25); }
+.choice-msg { margin: 0; font-size: 13px; color: var(--gold-bright); }
 /*
  * 左上角收成一排小膠囊（YenWel 2026-10-21：「太亂了很躁」「都看不到魚了」）：
  * 夢想魚只剩剪影和三個點，任務只剩老闆小頭像和一行短標題（點了聽完整說明），今天的小事點了才展開。
