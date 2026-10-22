@@ -37,6 +37,7 @@ import {
   transferMedia,
   mediaAvailable,
   buybackRefusal,
+  setKeeper,
   cureRefusal,
   mallBag,
   useCure,
@@ -545,6 +546,7 @@ export function fishPanel({ game, sheet, toasts, fishPic, useMall }: PanelContex
       : h('p', {}, '游動正常，看起來很健康。'),
     h('p', {}, conditionLine(fish)),
     h('p.hint', {}, '症狀只是線索：先用測試劑檢查水質，再判斷是環境問題還是生病。'),
+    keeperRow(game, sheet, toasts, fish),
     game.tanks.length > 1 ? moveFishRow(game, sheet, toasts, fish) : null,
     cureButton(game, sheet, toasts, fish, useMall),
   );
@@ -639,6 +641,23 @@ export function conditionLine(fish: Fish): string {
 }
 
 /** 把魚撈到別缸：繁殖時把母魚隔開、把挑出來的種魚放專缸。 */
+/** 留種（design/midgame.md C2）：標了之後訂單、店家收購都不會拿走這尾。蝦子不出。 */
+function keeperRow(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish): Node | null {
+  if (isShrimpSpecies(fish.species)) return null;
+  const toggle = () => {
+    const why = game.act((st) => setKeeper(st, fish.id, !fish.keeper));
+    if (why) toasts.show(why, 'warn');
+    else toasts.show(fish.keeper ? `${fishName(fish)} 留下來當種魚，訂單和店家都不會拿走` : `${fishName(fish)} 不留種了`);
+    sheet.refresh();
+  };
+  return h(
+    'div.stack',
+    {},
+    button(fish.keeper ? '取消留種' : '留種', toggle, fish.keeper ? '' : 'primary'),
+    h('p.hint', {}, fish.keeper ? '留種中：訂單和店家收購都不會拿走這尾。' : '標成留種的魚，訂單和店家收購都不會拿走。'),
+  );
+}
+
 function moveFishRow(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish): Node {
   return h(
     'div.stack',

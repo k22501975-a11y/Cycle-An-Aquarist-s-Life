@@ -85,7 +85,8 @@ function raiseStuckStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   const eaten = tanks.some((t) => t.fish.some((f) => f.alive && !f.nursery && (f.generation ?? 0) >= 1 && growthStage(f) === 'fry') && t.events.some((e) => e.type === 'fry_eaten' && t.hours - e.hours <= RAISE_STUCK_HOURS));
   if (eaten) return { text: '小魚在主缸會被吃，撈進育幼盒', target: 'fry_box' };
   const fast = fastestColoring(tanks);
-  return fast ? { text: `最快轉色的那尾，還差約 ${fast.days} 天`, target: 'fastest' } : null;
+  // 帶上累計數字：交單拿走小魚時倒數會變長，但數字不會掉（#303），玩家看得出不是倒退
+  return fast ? { text: `養到轉色 ${Math.min(5, raisedCount(tanks))}/5，最快的那尾還差約 ${fast.days} 天`, target: 'fastest' } : null;
 }
 
 /** 母魚快生了（要育幼盒）或肚子看得出懷孕時的下一步；都沒有回傳 null。 */

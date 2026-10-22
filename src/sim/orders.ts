@@ -140,7 +140,7 @@ export function fishMatchesOrder(fish: Fish, o: ShopOrder): boolean {
 
 /** 小孔雀單：自己繁殖、夠大、健康的就收（還沒到店家收購的大小也可以，這張單就是要小魚）。 */
 function fryMatches(fish: Fish, o: ShopOrder): boolean {
-  if (fish.species !== o.species || (fish.generation ?? 0) < 1 || !fish.alive || fish.gift || fish.listing) return false;
+  if (fish.species !== o.species || (fish.generation ?? 0) < 1 || !fish.alive || fish.gift || fish.listing || fish.keeper) return false;
   if (fish.lengthCm < (o.minCm ?? FRY_ORDER_MIN_CM)) return false;
   // 舊存檔沒有出生時間：看生理年齡
   if (o.bornBy !== undefined && (fish.bornHours !== undefined ? fish.bornHours > o.bornBy : (fish.ageDays ?? 0) < (o.postedHours - o.bornBy) / 24)) return false;

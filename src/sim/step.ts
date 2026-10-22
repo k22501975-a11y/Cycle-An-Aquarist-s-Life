@@ -13,7 +13,7 @@ import { updateQuarantine } from './quarantine';
 import { updateNursery } from './nursery';
 import { updateSnails } from './snails';
 import { updateParental } from './parental';
-import { updateEconomy } from './economy';
+import { trackRaised, updateEconomy } from './economy';
 import { trackArrivals } from './arrivals';
 import { settleTurbidity } from './aquascape';
 import { TEMP_LOG_HOURS, type TankState } from './state';
@@ -38,6 +38,7 @@ export function step(state: TankState, dtHours: number = TICK_HOURS): void {
   updateQuarantine(state, dtHours);
   updateNursery(state);
   updateEconomy(state, dtHours);
+  trackRaised(state);
   trackArrivals(state);
   // 小時數由很多小 tick 累加，有浮點誤差，加一點點容差再取整
   const before = Math.floor(state.hours + 1e-6);
