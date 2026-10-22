@@ -1,7 +1,8 @@
-import { compareOrders, dismissOrder, FIN_NAMES, fulfillOrder, markDaily, ORDER_BOARD_SIZE, ORDER_STRAINS, orderStarter, orderBoard, orderRefusal, orderSupply, orderTitle, orderUnit, outlookDaysLine, outlookFishLine, updateOrders, type OrderOutlook, type ShopOrder, type TankState } from '../sim';
+import { chooseOption, compareOrders, orderDreamNote, tradeCheck, dismissOrder, FIN_NAMES, fulfillOrder, markDaily, ORDER_BOARD_SIZE, ORDER_STRAINS, orderStarter, orderBoard, orderRefusal, orderSupply, orderTitle, orderUnit, outlookDaysLine, outlookFishLine, updateOrders, type OrderOutlook, type ShopOrder, type TankState } from '../sim';
 import { artUrl, ownerImg } from './art-icons';
 import { orderArt } from './order-alert';
 import { ownerMood } from './owner-mood';
+import { choiceVisual } from './choice-card';
 import { h } from './dom';
 import type { PanelContext } from './panels';
 
@@ -92,6 +93,8 @@ function orderCard(ctx: PanelContext, o: ShopOrder, refresh: () => void, outlook
       {},
       h('b.card-name', {}, orderTitle(o)),
       conditionChips(o),
+      // 選過「交單」之後不再跳卡，但會拿走有夢想魚基因的魚時，卡上寫一行（企劃 #316）
+      ((note) => (note ? h('small.order-dream', {}, note) : null))(orderDreamNote(game.tanks, o)),
       h('div.order-pay', {}, h('i.coin'), h('b', {}, String(o.unitPrice * o.count)), h('small', {}, `每${unit} ${o.unitPrice}`)),
       h('div.order-meter', { title: `湊到 ${have} / ${o.count}` }, h('i', { style: `width:${(have / o.count) * 100}%` }), h('span', {}, `${have} / ${o.count}`)),
       outlookRow(game.tanks, o, outlook),
@@ -104,6 +107,20 @@ function orderCard(ctx: PanelContext, o: ShopOrder, refresh: () => void, outlook
             onclick: (e: MouseEvent) => {
               // 先記下按鈕位置：交貨後面板會重畫，按鈕就不在畫面上了
               const from = (e.currentTarget as Element).getBoundingClientRect();
+              // 會交出有夢想魚基因、還沒留種的魚：先問一次（C5，#316）
+              const ask = game.actAll((tanks) => tradeCheck(tanks, o.id));
+              if (ask) {
+                ctx.sheet.open(ask.title, () =>
+                  choiceVisual(ask, (key) => {
+                    const why = game.actAll((tanks) => chooseOption(tanks, 'C5', key));
+                    if (why) return why;
+                    toasts.show(key === 'keep' ? '留下來當備用種魚了，訂單和收購不會拿走牠' : '照單交了');
+                    ctx.sheet.open('訂單', () => ordersPanel(ctx));
+                    return null;
+                  }),
+                );
+                return;
+              }
               const starter = orderStarter(game.tanks);
               const got = game.actAll((tanks) => fulfillOrder(tanks, o.id));
               if (got > 0) {
