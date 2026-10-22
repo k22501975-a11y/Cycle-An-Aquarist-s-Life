@@ -9,6 +9,7 @@ import { midgamePlayer, midgamePlayerTanks } from './midgame-player';
  * - C5（交單還是留著）、C9（第二窩快生了）36 天內出現
  * - 第 20～36 天至少 3 個選擇點（交單時的 C5 也算），相鄰隔 ≤ 6 天，同一天最多一張
  * - 第二缸（#305）：第 25 天前買到（C3 選繁殖缸就買）；養好了出 C6，搬過去之後繁殖缸裡有魚
+ * - C6 在選種（C2）之後；第 36 天留種的那對和留種的魚都在繁殖缸（#322）
  */
 describe('中期劇本（design/midgame.md §5）', () => {
   for (const seed of [1, 2, 3]) {
@@ -42,6 +43,13 @@ describe('中期劇本（design/midgame.md §5）', () => {
       for (let i = 1; i < late.length; i++) expect(late[i].day - late[i - 1].day, log).toBeLessThanOrEqual(6);
       const moved = nights.find((n) => n.choice === 'C6')!.day;
       expect(nights.filter((n) => n.day > moved).every((n) => n.inBreeding > 0), log).toBe(true);
+      // 搬魚卡等選種之後才出，留種的那對到第 36 天都在繁殖缸（#322）
+      expect(order.indexOf('C6'), log).toBeGreaterThan(order.indexOf('C2'));
+      const tanks = midgamePlayerTanks(seed, 36);
+      const breeding = tanks.find((t) => t.purpose === 'breeding')!;
+      const pair = choiceState(tanks).pair!;
+      expect(breeding.fish.filter((f) => f.alive && pair.includes(f.id)).length, log).toBe(2);
+      expect(breeding.fish.filter((f) => f.alive && f.keeper).length, log).toBeGreaterThanOrEqual(3);
     }, 300_000);
   }
 

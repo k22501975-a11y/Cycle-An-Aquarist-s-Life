@@ -553,9 +553,11 @@ function breedingMove(tanks: TankState[]): { to: number; fish: { fish: Fish; tan
   if (to < 0) return null;
   // 搬到「快養滿了」為止（跟分缸提示同一把尺：每公升幾公分魚，小魚算得少）
   let room = CROWD_WARN * tanks[to].equipment.tank.volumeL - crowdingRatio(tanks[to]) * tanks[to].equipment.tank.volumeL;
-  const others = tanks.flatMap((t, tank) => (tank === to || t.purpose === 'breeding' ? [] : t.fish.filter((f) => f.alive && !f.nursery && !f.listing && f.species === 'guppy').map((fish) => ({ fish, tank }))));
+  // 育幼盒裡留種的、自家的小魚也搬（繁殖缸就是讓牠們長大的地方，#322）
+  const movable = (f: Fish) => f.alive && !f.listing && f.species === 'guppy' && (!f.nursery || f.keeper || (bred(f) && isJuvenile(f)));
+  const others = tanks.flatMap((t, tank) => (tank === to || t.purpose === 'breeding' ? [] : t.fish.filter(movable).map((fish) => ({ fish, tank }))));
   const rank = (f: Fish) => (f.keeper ? 0 : f.sex === 'female' && f.pregnancy > 0.5 ? 1 : bred(f) && isJuvenile(f) ? 2 : 3);
-  const fish = others
+  let fish = others
     .filter(({ fish }) => rank(fish) < 3)
     .sort((a, b) => rank(a.fish) - rank(b.fish))
     .filter(({ fish }) => {
@@ -564,7 +566,27 @@ function breedingMove(tanks: TankState[]): { to: number; fish: { fish: Fish; tan
       room -= cm;
       return true;
     });
+  // 大魚會吃嘴巴塞得下的小魚：繁殖缸是讓小魚長大的，有小魚要搬或已經在裡面，就不把吃得下牠們的快生母魚搬過去
+  const dest = tanks[to].fish.filter((f) => f.alive);
+  const smallest = Math.min(...[...dest, ...fish.map(({ fish }) => fish)].filter(isJuvenile).map((f) => f.lengthCm));
+  fish = fish.filter(({ fish }) => fish.keeper || isJuvenile(fish) || mouthCm(fish) < smallest);
+  // 盒裡的小魚：繁殖缸裡（或一起搬過去的）大魚吃得下就先留在盒裡
+  const mouth = Math.max(0, ...[...dest, ...fish.map(({ fish }) => fish)].filter((f) => !isJuvenile(f)).map(mouthCm));
+  fish = fish.filter(({ fish }) => !fish.nursery || fish.lengthCm > mouth);
   return fish.length > 0 ? { to, fish } : null;
+}
+
+/** 這尾魚嘴巴吞得下多長的魚。 */
+const mouthCm = (f: Fish) => f.lengthCm * FISH_SPECIES[f.species].mouthRatio;
+
+/**
+ * 選過搬過去之後，又有留種的魚、或 3 尾以上自家小魚在繁殖缸外面（之後才留的種、育幼盒放出來的），
+ * 再問一次要不要搬（#322）。
+ */
+function moveAgain(tanks: TankState[], s: ChoiceState): boolean {
+  if (s.picked.C6 !== 'move') return false;
+  const m = breedingMove(tanks);
+  return !!m && (m.fish.some(({ fish }) => fish.keeper) || m.fish.filter(({ fish }) => bred(fish) && isJuvenile(fish)).length >= 3);
 }
 
 /** 這張卡現在該不該出、出的話卡片資料（不記錄）。 */
@@ -649,6 +671,10 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       return d ? tradeCard(d) : null;
     }
     case 'C6': {
+      // 選種（C2）之前先不問：不然搬過去的只有零星幾尾，留種的魚之後都留在主缸（#322）。
+      // 一直挑不出種（沒有公母）的話，等選種卡出過兩輪還沒選就照樣問
+      const waitPick = !s.picked.C2 && !located(tanks).some(({ fish }) => fish.keeper);
+      if (waitPick && (s.firstBrood === undefined || home.hours - s.firstBrood < (PICK_AFTER_BROOD_DAYS + 2 * CHOICE_RESHOW_DAYS) * 24)) return null;
       const m = breedingMove(tanks);
       if (!m) return null;
       // C8 選了倒菌液或自己等：等繁殖缸養好才問要不要搬（不然搬魚又會自己分濾材，跟玩家選的不一樣）
@@ -661,8 +687,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       return {
         id,
         tank: m.to,
-        title: '繁殖缸可以用了！把魚搬過去嗎？',
-        owner: `${cycled ? '繁殖缸的水養好了。' : '繁殖缸擺好了。先分主缸一半的濾材過去，菌就跟著過去，不用從頭養水。'}${what}搬過去，小魚不會被大魚吃，留種的也不會跟主缸的魚亂配。`,
+        title: s.picked.C6 ? '還有魚可以搬去繁殖缸，要搬嗎？' : '繁殖缸可以用了！把魚搬過去嗎？',
+        owner: `${s.picked.C6 ? '' : cycled ? '繁殖缸的水養好了。' : '繁殖缸擺好了。先分主缸一半的濾材過去，菌就跟著過去，不用從頭養水。'}${what}搬過去，小魚不會被大魚吃，留種的也不會跟主缸的魚亂配。`,
         options: [
           { key: 'move', label: '搬過去', outcome: `${cycled ? '' : '分一半濾材、'}${what}搬到繁殖缸`, recommended: true },
           { key: 'stay', label: '先不要', outcome: '之後在魚卡上也能一尾一尾搬' },
@@ -825,7 +851,7 @@ export function takeChoice(tanks: TankState[]): ChoiceCard | null {
   const today = Math.floor(now / 24);
   if (Object.values(s.shown).some((h) => h !== undefined && Math.floor(h / 24) === today)) return null;
   for (const id of CHOICE_IDS) {
-    if (id !== 'C5' && s.picked[id]) continue;
+    if (id !== 'C5' && s.picked[id] && !(id === 'C6' && moveAgain(tanks, s))) continue;
     const asked = (s.tradeAsked ??= []);
     const card = cardFor(id, tanks, s, id === 'C5' && !s.picked.C5 ? asked : []);
     if (!card) continue;

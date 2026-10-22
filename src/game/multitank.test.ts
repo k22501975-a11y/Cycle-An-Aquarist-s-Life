@@ -81,6 +81,18 @@ describe('多缸與缸位', () => {
       return home.events.filter((e) => e.type === 'fish_died' && e.cause === 'starvation').length;
     };
     expect(feedTarget(rich(), 0)).toBe(0);
+    // 這缸不餓、別缸的魚餓了：換過去（#322）；兩缸都不餓就照這缸
+    const two = rich();
+    const t2 = buyTank(two, 'nano20')!;
+    const kid = addFish(t2, 'guppy', { sex: 'female', pregnant: false });
+    addFish(two[0], 'guppy', { sex: 'male' });
+    for (const f of two[0].fish) f.hunger = 0.2;
+    kid.hunger = 0.3;
+    expect(feedTarget(two, 0)).toBe(0);
+    kid.hunger = 0.8;
+    expect(feedTarget(two, 0)).toBe(1);
+    for (const f of two[0].fish) f.hunger = 0.7;
+    expect(feedTarget(two, 0)).toBe(0);
     expect(run((tanks) => feedTarget(tanks, 1))).toBe(0);
     // 對照：餵食落在空缸就會餓死（評測 g18 看到的）
     expect(run(() => 1)).toBeGreaterThan(0);
