@@ -150,20 +150,41 @@ describe('中期的選擇點（design/midgame.md）', () => {
     expect(breedingProgress(tanks)).toMatch(/^留種的那對長到 .* cm，再約 \d+ 天成熟可以配$/);
   });
 
-  it('C5 留種的魚剛好是 200 元以上的單缺的那尾：交單拿錢或留著，每張單只問一次', () => {
-    const { s, tanks, kids } = withBrood(4, PICK_AFTER_BROOD_DAYS * 24);
-    Object.assign(choiceState(tanks).picked, { C1: 'box', C2: 'pick', C3: 'had', C4: '0' });
+  it('C5 相對門檻：便宜的單會拿走留著能提高孫代機率的魚就問；選過留著之後同類的單自動留，同一天最多一張（#316）', () => {
+    const { s, tanks, kids } = withBrood(6, PICK_AFTER_BROOD_DAYS * 24);
+    Object.assign(choiceState(tanks).picked, { C1: 'box', C2: 'later', C3: 'had' });
     for (const k of kids) k.lengthCm = 2.2;
-    kids[0].keeper = true;
-    orderBoard(s).orders = [{ id: 90, kind: 'fish', species: 'guppy', size: 'juvenile', count: 4, unitPrice: 55, postedHours: s.hours } as ShopOrder];
+    const order = (id: number) => ({ id, kind: 'fish', species: 'guppy', size: 'juvenile', sex: 'female', count: 1, unitPrice: 12, postedHours: s.hours }) as ShopOrder;
+    orderBoard(s).orders = [order(90)];
     const c5 = takeChoice(tanks);
     expect(c5?.id).toBe('C5');
-    expect(c5!.trade).toMatchObject({ fishId: kids[0].id, orderId: 90, coins: 220 });
+    expect(c5!.trade).toMatchObject({ orderId: 90, coins: 12 });
+    expect(c5!.trade!.keepPct).toBeGreaterThan(c5!.trade!.sellPct);
+    expect(c5!.owner).toMatch(/母魚身上有夢想魚要的基因/);
+    const fish = kids.find((k) => k.id === c5!.trade!.fishId)!;
+    expect(fish.sex).toBe('female');
+    // 同一天不出第二張
     expect(takeChoice(tanks)).toBeNull();
+    expect(chooseOption(tanks, 'C5', 'keep')).toBeNull();
+    expect(fish.keeper).toBe(true);
+    // 之後玩家取消了留種，隔天又來同類的單：照上次的選擇自動留下來，不再出卡
+    delete fish.keeper;
+    s.hours += 24;
+    orderBoard(s).orders = [order(91)];
+    expect(takeChoice(tanks)?.id).not.toBe('C5');
+    expect(fish.keeper).toBe(true);
+  });
+
+  it('C5 選交單：照單交出去拿錢', () => {
+    const { s, tanks, kids } = withBrood(6, PICK_AFTER_BROOD_DAYS * 24);
+    Object.assign(choiceState(tanks).picked, { C1: 'box', C2: 'later', C3: 'had' });
+    for (const k of kids) k.lengthCm = 2.2;
+    orderBoard(s).orders = [{ id: 90, kind: 'fish', species: 'guppy', size: 'juvenile', sex: 'female', count: 1, unitPrice: 12, postedHours: s.hours } as ShopOrder];
+    const c5 = takeChoice(tanks)!;
     const before = economy(s).coins;
     expect(chooseOption(tanks, 'C5', 'sell')).toBeNull();
-    expect(economy(s).coins).toBe(before + 220);
-    expect(kids[0].alive && s.fish.includes(kids[0])).toBe(false);
+    expect(economy(s).coins).toBe(before + 12);
+    expect(s.fish.some((f) => f.id === c5.trade!.fishId)).toBe(false);
   });
 
   it('C6 繁殖缸擺好了：分主缸濾材過去，留種的魚、快生的母魚先搬，小魚跟著搬', () => {

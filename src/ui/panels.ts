@@ -69,6 +69,7 @@ import {
   removeTankRefusal,
   slotPrice,
   TANK_SETS,
+  choiceState,
   tankLabel,
   type TankSizeId,
   chargeMeal,
@@ -1818,19 +1819,23 @@ const PURPOSE_ART: Record<TankPurpose, string> = { breeding: 'gear/nursery-box.w
  * 第二缸的用途（G4）：繁殖缸或展示缸兩張卡擇一，標「推薦」的照現在缸裡的狀況和錢；可以先跳過，之後在「我的水缸」再選。
  * 選了：缸沒取名就用用途當名字、目標串多一個那種用途的目標，接著帶去商店買必買的東西。
  */
-export function tankPurposePanel(ctx: PanelContext): Node {
+/** 這缸定用途，帶去商店買必備的東西。 */
+function applyPurpose(ctx: PanelContext, id: TankPurpose): void {
   const { game, sheet, toasts } = ctx;
+  const spec = TANK_PURPOSES[id];
+  game.actAll(() => setTankPurpose(game.state, id));
+  ctx.sound?.('quest');
+  const need = spec.items.filter((x) => x.required).map((x) => x.label).join('、');
+  toasts.show(`這缸當${spec.title}：先買${need}`);
+  sheet.open('商店', () => shopPanel(ctx, spec.items.find((x) => x.required)?.key.startsWith('plant:') ? 'plants' : 'gear'));
+}
+
+export function tankPurposePanel(ctx: PanelContext): Node {
+  const { game, sheet } = ctx;
   const coins = economy(game.state).coins;
   const pick = suggestPurpose(game.tanks, coins);
   const now = game.state.purpose;
-  const choose = (id: TankPurpose) => {
-    const spec = TANK_PURPOSES[id];
-    game.actAll(() => setTankPurpose(game.state, id));
-    ctx.sound?.('quest');
-    const need = spec.items.filter((x) => x.required).map((x) => x.label).join('、');
-    toasts.show(`這缸當${spec.title}：先買${need}`);
-    sheet.open('商店', () => shopPanel(ctx, spec.items.find((x) => x.required)?.key.startsWith('plant:') ? 'plants' : 'gear'));
-  };
+  const choose = (id: TankPurpose) => applyPurpose(ctx, id);
   const card = (id: TankPurpose) => {
     const spec = TANK_PURPOSES[id];
     const required = spec.items.filter((x) => x.required);
@@ -1948,8 +1953,10 @@ export function tanksPanel(ctx: PanelContext): Node {
       ctx.sound?.('buy');
       game.switchTo(game.tanks.indexOf(tank));
       toasts.show(`架好了新的${set.tank.name}（${yuan(cost)}）。新缸要先養水，硝化菌長起來才能放魚`);
-      // 第二缸起（G4）：先問這缸拿來做什麼，可以跳過
-      sheet.open('這缸拿來做什麼？', () => tankPurposePanel(ctx));
+      // 第二缸起（G4）：先問這缸拿來做什麼，可以跳過。早上的選擇卡（C3）已經選過的就照那個，不再問一次（#316）
+      const planned = game.tanks.length === 2 ? choiceState(game.tanks).picked.C3 : undefined;
+      if (planned === 'breeding' || planned === 'display') applyPurpose(ctx, planned);
+      else sheet.open('這缸拿來做什麼？', () => tankPurposePanel(ctx));
     };
     return shopCard({
       art: 'gear/tank-empty.webp',

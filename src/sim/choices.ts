@@ -10,7 +10,7 @@ import { CROWD_WARN } from './split';
 import { mediaAvailable, transferMedia } from './gifts';
 import { guppyTraits } from './lookalike';
 import { daysToBirth, releaseNursery, rescueFryToNursery, usesNursery } from './nursery';
-import { fishMatchesOrder, fulfillOrder, orderBoard, orderSupply, type ShopOrder } from './orders';
+import { fulfillOrder, matchingFish, orderBoard, orderSupply, type ShopOrder } from './orders';
 import { previewPair, type PreviewKid } from './pair-preview';
 import { FISH_SPECIES, isShrimpSpecies } from './species';
 import { ADULT_SIZE, isJuvenile, type Fish, type TankState } from './state';
@@ -22,7 +22,7 @@ import { ADULT_SIZE, isJuvenile, type Fish, type TankState } from './state';
  * - C2 第一窩有 ≥3 尾看得出公母：選種日，挑 1 公 2 母留種
  * - C3 第一窩出生後、錢夠買第二缸（#305）：第二缸當繁殖缸還是展示缸
  * - C4 選種後：留種的母魚配哪一尾公魚（各自附這對生出夢想魚的機率）
- * - C5 留種的魚剛好符合 200 元以上的單：交單拿錢，還是留著配種
+ * - C5 訂單會拿走一尾還沒留種、留著會讓孫代機率變高的魚（#316 相對門檻）：交單拿錢，還是留著當備用種魚
  * - C6 繁殖缸養好了（C3 選繁殖缸之後，#305）：留種的魚、快生的母魚、第一窩小魚搬過去
  * 不管選哪個都能玩下去。只出資料和套用選擇；卡片的樣子由畫面負責（選種卡、配對比較卡交美術）。
  */
@@ -120,7 +120,7 @@ export interface ChoiceState {
   firstBrood?: number;
   /** C4 選定的一對：[母魚, 公魚]。 */
   pair?: [number, number];
-  /** C5 問過的訂單（每張只問一次）。 */
+  /** C5 問過的訂單（每張只問一次）。選過之後 picked.C5 就是之後同類的單的處理方式（keep 自動標留種）。 */
   tradeAsked?: number[];
 }
 
@@ -135,8 +135,6 @@ export const PAIR_AFTER_PICK_DAYS = 2;
 export const PICK_AFTER_BROOD_DAYS = 12;
 /** 第一窩出生滿幾天、錢又夠，才出第二缸卡（C3）：小魚快長到 1.6 cm 要離開育幼盒，需要地方長大（midgame.md C3）。 */
 export const TANK_AFTER_BROOD_DAYS = 6;
-/** C5 看的訂單金額門檻。 */
-export const TRADE_MIN_COINS = 200;
 /** C2 一窩最多排幾尾。 */
 const PICK_SHOW = 8;
 /** 夢想魚機率模擬幾尾小魚（固定種子，同一對每次一樣）。 */
@@ -253,23 +251,34 @@ function pairCandidates(tanks: TankState[]): { mother: Fish; tank: number; candi
 const best2 = (c: PairCandidate) => Math.max(c.dreamPct, c.grandPct);
 const keeperOf = (tanks: TankState[], id: number) => located(tanks).find(({ fish }) => fish.id === id)?.fish.keeper;
 
-/** C5：符合 TRADE_MIN_COINS 以上的單、又是留種的魚，而且不拿牠就湊不齊。 */
-function tradeDilemma(tanks: TankState[]): { order: ShopOrder; fish: Fish; tank: number } | null {
-  const keepers = located(tanks).filter(({ fish }) => fish.keeper && bredGuppy(fish));
+/**
+ * C5（#316 相對門檻，不看金額）：交得出的魚單會拿走一尾還沒留種的自家孔雀魚，
+ * 而且把牠留下來當備用種魚，最好一對的夢想魚機率（小魚或孫代）會變高。
+ */
+function tradeDilemma(tanks: TankState[]): { order: ShopOrder; fish: Fish; tank: number; keepPct: number; sellPct: number } | null {
   for (const o of orderBoard(tanks[0]).orders) {
-    if (o.kind !== 'fish' || o.preview || o.late || o.unitPrice * o.count < TRADE_MIN_COINS) continue;
-    const supply = orderSupply(tanks, o);
-    if (supply >= o.count) continue;
-    const hit = keepers.find(({ fish }) => fishMatchesOrder({ ...fish, keeper: undefined }, o));
-    if (hit && supply + 1 >= o.count) return { order: o, ...hit };
+    if (o.kind !== 'fish' || o.preview || o.late || orderSupply(tanks, o) < o.count) continue;
+    // 交單時會拿走的那幾尾（跟 fulfillOrder 同樣從每一缸照順序挑）
+    let left = o.count;
+    const taken = tanks.flatMap((t, tank) => {
+      const give = matchingFish(t, o).slice(0, left);
+      left -= give.length;
+      return give.map((fish) => ({ fish, tank }));
+    });
+    for (const hit of taken) {
+      if (!bredGuppy(hit.fish) || hit.fish.keeper) continue;
+      const keepPct = bestDreamPct(tanks, undefined, hit.fish.id);
+      const sellPct = bestDreamPct(tanks, hit.fish.id);
+      if (keepPct > sellPct) return { order: o, ...hit, keepPct, sellPct };
+    }
   }
   return null;
 }
 
-/** 沒有這尾魚的話，最好的一對生出夢想魚的機率 %。 */
-function bestDreamPct(tanks: TankState[], without?: number): number {
+/** 最好的一對生出夢想魚的機率 %：without 這尾不算，asKeeper 這尾當成留種的算。 */
+function bestDreamPct(tanks: TankState[], without?: number, asKeeper?: number): number {
   const all = located(tanks).filter(({ fish }) => fish.id !== without);
-  const moms = all.filter(({ fish }) => fish.sex === 'female' && fish.keeper && fish.species === 'guppy' && fish.genome);
+  const moms = all.filter(({ fish }) => fish.sex === 'female' && (fish.keeper || fish.id === asKeeper) && fish.species === 'guppy' && fish.genome);
   const dads = all.filter(({ fish }) => breederMale(fish));
   let best = 0;
   for (const m of moms) for (const d of dads) best = Math.max(best, pairDream(m.fish.genome!, d.fish.genome!));
@@ -380,18 +389,16 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState): ChoiceCard |
     case 'C5': {
       const d = tradeDilemma(tanks);
       if (!d) return null;
+      const { keepPct, sellPct } = d;
       const coins = d.order.unitPrice * d.order.count;
-      const keepPct = bestDreamPct(tanks);
-      const sellPct = bestDreamPct(tanks, d.fish.id);
-      const name = strainName(phenotype(d.fish.genome!));
       return {
         id,
         tank: d.tank,
-        title: `留種的${name}，交單還是留著？`,
-        owner: `有客人出 ${coins} 元要這種魚，可是牠也是好種魚。`,
+        title: '要交出這尾嗎？',
+        owner: `${callName(d.fish)}身上有夢想魚要的基因，交了就少一尾備用種魚。`,
         options: [
-          { key: 'sell', label: `交單拿 ${coins} 元`, outcome: keepPct > sellPct ? `夢想魚機率從 ${keepPct}% 掉到 ${sellPct}%` : '夢想魚的機率不變' },
-          { key: 'keep', label: '留著配種', outcome: keepPct > 0 ? `夢想魚機率維持 ${keepPct}%，之後的孫代更好` : '留著繼續選育，之後的孫代更好', recommended: keepPct > sellPct },
+          { key: 'sell', label: '交單', outcome: `拿 ${coins} 元；孫代機率維持約 ${sellPct}%` },
+          { key: 'keep', label: '留著當備用種魚', outcome: `不拿錢；孫代機率約 ${keepPct}%`, recommended: true },
         ],
         trade: { fishId: d.fish.id, orderId: d.order.id, coins, keepPct, sellPct },
       };
@@ -435,15 +442,28 @@ export function takeChoice(tanks: TankState[]): ChoiceCard | null {
   noteFirstBrood(tanks, s);
   settleImplicit(tanks, s);
   const now = tanks[0].hours;
+  // 同一個遊戲天最多一張（#316）：同一天又過一晚、或別的地方再拿一次，都不再出第二張
+  const today = Math.floor(now / 24);
+  if (Object.values(s.shown).some((h) => h !== undefined && Math.floor(h / 24) === today)) return null;
   for (const id of CHOICE_IDS) {
     if (id !== 'C5' && s.picked[id]) continue;
     const card = cardFor(id, tanks, s);
     if (!card) continue;
     if (id === 'C5') {
+      // 選過一次之後，同類的單照上次的選擇：留著的話自動標留種（魚卡上看得到緞帶），交單的話不再問
+      if (s.picked.C5) {
+        if (s.picked.C5 === 'keep') {
+          const hit = located(tanks).find(({ fish }) => fish.id === card.trade!.fishId)!;
+          if (!setKeeper(tanks[hit.tank], hit.fish.id, true)) continue;
+        }
+        // 留種滿了、或玩家選過交單：這張單照常交，不再問
+        const asked = (s.tradeAsked ??= []);
+        if (!asked.includes(card.trade!.orderId)) asked.push(card.trade!.orderId);
+        continue;
+      }
       const asked = (s.tradeAsked ??= []);
       if (asked.includes(card.trade!.orderId)) continue;
       asked.push(card.trade!.orderId);
-      delete s.picked.C5;
     } else {
       const last = s.shown[id];
       if (last !== undefined && now - last < CHOICE_RESHOW_DAYS * 24) continue;
@@ -501,17 +521,14 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
       break;
     }
     case 'C5': {
-      if (key === 'sell') {
-        const card = cardFor('C5', tanks, s);
-        if (!card?.trade) return '這張單已經不在了';
-        const hit = find(card.trade.fishId);
-        if (!hit) return '這尾魚不在了';
-        setKeeper(tanks[hit.tank], hit.fish.id, false);
-        if (fulfillOrder(tanks, card.trade.orderId) <= 0) {
-          setKeeper(tanks[hit.tank], hit.fish.id, true);
-          return '現在交不出這張單';
-        }
-      }
+      const card = cardFor('C5', tanks, s);
+      if (!card?.trade) return '這張單已經不在了';
+      const hit = find(card.trade.fishId);
+      if (!hit) return '這尾魚不在了';
+      if (key === 'keep') {
+        const why = setKeeper(tanks[hit.tank], hit.fish.id, true);
+        if (why) return why;
+      } else if (fulfillOrder(tanks, card.trade.orderId) <= 0) return '現在交不出這張單';
       break;
     }
     case 'C6': {
