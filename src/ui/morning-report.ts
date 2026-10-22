@@ -10,6 +10,7 @@ import {
   isCycled,
   isJuvenile,
   isShrimpSpecies,
+  isStarving,
   orderBoard,
   BIG_WATER_CHANGE,
   MEASURED_PROBLEM_LEVEL,
@@ -86,6 +87,7 @@ export type ReportKind =
   | 'lookalike' // 第一窩小魚轉色，長得像誰（G2）
   | 'choice' // 中期的選擇點 C1～C5（design/midgame.md）
   | 'breeding' // 選育進度（midgame.md §2）：有第一窩或留種的魚就每天一行
+  | 'milestone' // 種魚長到一個里程碑：肛鰭／胎斑、顯色、可以配（midgame.md §5.3）
   | 'observe' // 平淡早上的小觀察（morning-observe.ts）
   | 'quiet';
 
@@ -106,6 +108,16 @@ export interface ReportItem {
   lookalike?: LookalikeCard;
   /** kind 'choice' 的選擇卡（sim/choices.ts）：選項和選種、配對的資料。 */
   choice?: ChoiceCard;
+  /** kind 'milestone' 的圖卡資料：哪一步、哪尾魚、配對的另一半、C7 養快提前了幾天。 */
+  milestone?: Milestone;
+}
+
+/** 成長里程碑（midgame.md §5.3）：sex 肛鰭變尖或出現胎斑、color 公魚顯色、ready 可以配。 */
+export interface Milestone {
+  step: 'sex' | 'color' | 'ready';
+  fishId: number;
+  partnerId?: number;
+  earlierDays?: number;
 }
 
 export interface MorningReport {
@@ -290,7 +302,10 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     if (t.algae > snap.algae + 0.05) push({ kind: 'algae', tone: 'warn', text: '玻璃上的藻變多了，光照可能太久或養分太多', action: 'water_change' });
     // 餓
     const living = t.fish.filter((f) => f.alive);
-    if (living.length > 0 && living.reduce((a, f) => a + f.hunger, 0) / living.length > HUNGRY) push({ kind: 'hungry', tone: 'warn', text: '魚在水面游來游去討食，該餵了', action: 'feed' });
+    // 已經餓到在消耗體力的：小魚撐不到一天，平均值還看不出來時就要講清楚（#315）
+    const starving = living.filter((f) => !isShrimpSpecies(f.species) && isStarving(f)).length;
+    if (starving > 0) push({ kind: 'hungry', tone: 'warn', text: `${starving} 尾魚餓到開始消瘦，今天不餵會餓死`, action: 'feed' });
+    else if (living.length > 0 && living.reduce((a, f) => a + f.hunger, 0) / living.length > HUNGRY) push({ kind: 'hungry', tone: 'warn', text: '魚在水面游來游去討食，該餵了', action: 'feed' });
     // 小魚兩倍快變餓：一天只餵一次的話，下一餐前就會餓到消耗體力，還沒到要叫醒的程度就在這裡提醒（#193）
     else if (living.some((f) => !isShrimpSpecies(f.species) && youngGettingHungry(f)))
       push({ kind: 'hungry', tone: 'info', text: '小魚長得快、餓得也快，一天餵兩次比較好', action: 'feed' });
