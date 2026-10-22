@@ -1848,7 +1848,14 @@ async function start(): Promise<void> {
         ? { tasks: today.tasks.map((t) => ({ id: t.id, art: dailyArt(t.id), text: DAILY_SHORT[t.id], done: t.done })), go: (id: string) => goDaily(id as sim.DailyTaskId) }
         : undefined;
       const choose = (item: ReportItem, key: string, picks: number[]) => (item.choice ? game.actAll((tanks) => sim.chooseOption(tanks, item.choice!.id, key, picks)) : null);
-      const card = morningCard(report, { picture: reportPicture, go: goReport, daily, choose }, () => {
+      const fishLook = (id: number) => {
+        // 母魚可能在產卵盒（quarantine）裡
+        const f = game.tanks.flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])]).find((x) => x.id === id && x.genome);
+        if (!f?.genome) return null;
+        const p = sim.phenotype(f.genome);
+        return { sex: f.sex, name: sim.strainName(p), look: sim.lookIndex(p), fins: sim.finWords(p) };
+      };
+      const card = morningCard(report, { picture: reportPicture, go: goReport, daily, choose, fishLook }, () => {
         shade.classList.remove('in');
         window.setTimeout(() => shade.remove(), 450);
         sleepingNow = false;

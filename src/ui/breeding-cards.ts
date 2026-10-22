@@ -52,6 +52,8 @@ export interface PairCandidate {
   traits?: Array<{ key: string; name: string }>;
   /** 和母魚配出來的小魚（previewPair 前 3 種）。 */
   kids: PreviewKid[];
+  /** 這對還要幾天才都長大能配（0 是現在就能配）。 */
+  matureDays?: number;
   keeper?: boolean;
 }
 
@@ -195,7 +197,7 @@ function tally(fish: PickFish[], limit: PickLimit): HTMLElement {
  * onToggle 由呼叫端改畫面上的選擇再重畫（名額滿了會先拿掉一尾再標新的）；onDone 在公母都標滿後才按得下去，
  * 呼叫端把標了的 fishId 交給 chooseOption。
  */
-export function keeperPickCard(fish: PickFish[], limit: PickLimit, onToggle: (fishId: number, on: boolean) => void, onDone?: () => void): HTMLElement {
+export function keeperPickCard(fish: PickFish[], limit: PickLimit, onToggle: (fishId: number, on: boolean) => void, onDone?: () => void, onLater?: { label: string; go: () => void }): HTMLElement {
   const done = pickDone(fish, limit);
   const card = (k: PickFish) => {
     const swap = !k.keeper && keptCount(fish, k.sex) >= limit[k.sex];
@@ -217,7 +219,14 @@ export function keeperPickCard(fish: PickFish[], limit: PickLimit, onToggle: (fi
     h('div.bc-head', {}, keeperRibbon('bc-head-ribbon'), h('b', {}, '選種日'), tally(fish, limit)),
     h('div.bc-dream-goal', {}, h(`img${DREAM_FISH.albino ? '.albino' : ''}`, { src: ART + guppyArt(DREAM_FISH.look), alt: '', draggable: 'false' }), h('small', {}, '目標'), h('span', {}, DREAM_FISH.name)),
     h('div.bc-kids', {}, ...fish.map(card)),
-    onDone ? h('button.btn.primary.bc-done', { type: 'button', disabled: !done, onclick: onDone }, done ? '就留這幾尾' : `挑 ${limit.male} 公 ${limit.female} 母`) : null,
+    onDone || onLater
+      ? h(
+          'div.bc-foot',
+          {},
+          onLater ? h('button.btn.small.ghost.bc-later', { type: 'button', onclick: onLater.go }, onLater.label) : null,
+          onDone ? h('button.btn.primary.bc-done', { type: 'button', disabled: !done, onclick: onDone }, done ? '就留這幾尾' : `挑 ${limit.male} 公 ${limit.female} 母`) : null,
+        )
+      : null,
   );
 }
 
@@ -238,6 +247,7 @@ export function sireCompareCard(mother: FishLook, candidates: PairCandidate[], o
       h('div.bc-sire-pic', {}, sexBadge('male'), fishArt({ ...c, sex: 'male' })),
       c.traits ? h('span.bc-traits', {}, ...c.traits.map((t) => traitChip(t))) : null,
       dreamMeter(c.dreamPct),
+      c.matureDays ? h('span.bc-wait', { title: `還要 ${c.matureDays} 天長大才能配` }, '⏳', h('b', {}, `${c.matureDays} 天`)) : null,
       h(
         'div.bc-kidstrip',
         {},
@@ -324,7 +334,7 @@ export function choiceCard(title: string, options: ChoiceOption[], onChoose: (ke
 /** 選項的圖（public/art/ 底下）：C1 育幼盒／躲水草，C3 繁殖缸／展示缸。 */
 export const CHOICE_ART: Record<string, string> = {
   box: 'gear/nursery-box.webp',
-  plants: 'scape/plant-moss.webp',
+  hide: 'scape/plant-moss.webp',
   breeding: 'gear/nursery-box.webp',
   display: 'gear/led-planted.webp',
 };

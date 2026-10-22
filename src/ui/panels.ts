@@ -192,6 +192,7 @@ import {
 } from '../sim';
 import { applySeason, type Game } from '../game/game';
 import { h } from './dom';
+import { keeperRibbon } from './keeper-ribbon';
 import { ORDER_ICON, ordersPanel } from './orders-panel';
 import { BROOD_ISSUE_LABELS, DEATH_CAUSE_LABELS, fishName, SYMPTOM_LABELS } from './labels';
 import { artImg, ownerImg } from './art-icons';
@@ -652,7 +653,7 @@ function keeperRow(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish): Node |
   return h(
     'div.stack',
     {},
-    button(fish.keeper ? '取消留種' : '留種', toggle, fish.keeper ? '' : 'primary'),
+    h(`button.btn.keeper-btn${fish.keeper ? '' : '.primary'}`, { onclick: toggle }, keeperRibbon(), fish.keeper ? '取消留種' : '留種'),
     h('p.hint', {}, fish.keeper ? '留種中：訂單和店家收購都不會拿走這尾。' : '標成留種的魚，訂單和店家收購都不會拿走。'),
   );
 }
