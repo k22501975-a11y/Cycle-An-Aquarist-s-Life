@@ -5,6 +5,10 @@ import {
   CROWD_WARN,
   crowdingRatio,
   bacteriaCapacity,
+  BACKUP_MAX,
+  hasDreamGenes,
+  orderDreamNote,
+  tradeCheck,
   buyTank,
   setTankPurpose,
   breedingProgress,
@@ -185,6 +189,54 @@ describe('中期的選擇點（design/midgame.md）', () => {
     expect(chooseOption(tanks, 'C5', 'sell')).toBeNull();
     expect(economy(s).coins).toBe(before + 12);
     expect(s.fish.some((f) => f.id === c5.trade!.fishId)).toBe(false);
+  });
+
+  it('C5 交單時才問：要交的單會拿走有夢想魚基因的魚就出卡，同一張單只問一次（#316）', () => {
+    const { s, tanks, kids } = withBrood(6, PICK_AFTER_BROOD_DAYS * 24);
+    Object.assign(choiceState(tanks).picked, { C1: 'box', C2: 'later', C3: 'had' });
+    for (const k of kids) k.lengthCm = 2.2;
+    orderBoard(s).orders = [{ id: 95, kind: 'fish', species: 'guppy', size: 'juvenile', sex: 'female', count: 1, unitPrice: 40, postedHours: s.hours } as ShopOrder];
+    const card = tradeCheck(tanks, 95);
+    expect(card?.id).toBe('C5');
+    expect(card!.trade).toMatchObject({ orderId: 95, coins: 40 });
+    const fish = kids.find((k) => k.id === card!.trade!.fishId)!;
+    expect(hasDreamGenes(fish)).toBe(true);
+    expect(card!.options.find((o) => o.recommended)?.key).toBe('keep');
+    // 同一張單不再問；當天早上也不會再出第二張卡
+    expect(tradeCheck(tanks, 95)).toBeNull();
+    expect(takeChoice(tanks)).toBeNull();
+    expect(chooseOption(tanks, 'C5', 'keep')).toBeNull();
+    expect(fish.keeper).toBe(true);
+    expect(choiceState(tanks).backups).toEqual([fish.id]);
+  });
+
+  it(`C5 選過留著：之後交單自動留下有基因的魚，最多 ${BACKUP_MAX} 尾`, () => {
+    const { s, tanks, kids } = withBrood(10, PICK_AFTER_BROOD_DAYS * 24);
+    const st = choiceState(tanks);
+    Object.assign(st.picked, { C1: 'box', C2: 'later', C3: 'had', C5: 'keep' });
+    for (const k of kids) k.lengthCm = 2.2;
+    const before = kids.filter((k) => k.keeper).length;
+    for (let i = 0; i < BACKUP_MAX + 3; i++) {
+      orderBoard(s).orders = [{ id: 200 + i, kind: 'fish', species: 'guppy', size: 'juvenile', count: 1, unitPrice: 40, postedHours: s.hours } as ShopOrder];
+      expect(tradeCheck(tanks, 200 + i)).toBeNull();
+    }
+    expect(st.backups!.length).toBeGreaterThan(0);
+    expect(st.backups!.length).toBeLessThanOrEqual(BACKUP_MAX);
+    expect(kids.filter((k) => k.keeper).length - before).toBe(st.backups!.length);
+  });
+
+  it('C5 選過交單：照常交、不出卡，訂單卡上標「有夢想魚基因」', () => {
+    const { s, tanks, kids } = withBrood(6, PICK_AFTER_BROOD_DAYS * 24);
+    Object.assign(choiceState(tanks).picked, { C1: 'box', C2: 'later', C3: 'had', C5: 'sell' });
+    for (const k of kids) k.lengthCm = 2.2;
+    const o = { id: 96, kind: 'fish', species: 'guppy', size: 'juvenile', sex: 'female', count: 1, unitPrice: 40, postedHours: s.hours } as ShopOrder;
+    orderBoard(s).orders = [o];
+    expect(orderDreamNote(tanks, o)).toBe('有夢想魚基因');
+    expect(tradeCheck(tanks, 96)).toBeNull();
+    expect(kids.some((k) => k.keeper)).toBe(false);
+    // 沒選交單的話不標
+    delete choiceState(tanks).picked.C5;
+    expect(orderDreamNote(tanks, o)).toBeNull();
   });
 
   it('C6 繁殖缸擺好了：分主缸濾材過去，留種的魚、快生的母魚先搬，小魚跟著搬', () => {

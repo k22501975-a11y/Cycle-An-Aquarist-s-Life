@@ -21,6 +21,7 @@ import {
   setTankPurpose,
   step,
   TICK_HOURS,
+  tradeCheck,
   updateDaily,
   useTestKit,
   waterChange,
@@ -44,6 +45,8 @@ export interface MidgameNight {
   /** 第幾天的早上（第 1 晚過完是第 2 天早上）。 */
   day: number;
   choice?: ChoiceId;
+  /** 前一天按交貨時跳出來的選擇卡（C5：會交出有夢想魚基因的魚）。 */
+  orderChoice?: ChoiceId;
   quiet: boolean;
   coins: number;
   /** 幾個缸。 */
@@ -132,7 +135,17 @@ function run(seed: number, days: number): { nights: MidgameNight[]; tanks: TankS
     act();
     doAllDaily(tanks);
     claimDaily(tanks);
-    for (const o of [...orderBoard(s).orders]) if (orderSupply(tanks, o) >= o.count) fulfillOrder(tanks, o.id);
+    let orderChoice: ChoiceId | undefined;
+    for (const o of [...orderBoard(s).orders]) {
+      if (orderSupply(tanks, o) < o.count) continue;
+      // 交貨前先問（C5）：照推薦選，選完還湊得齊就照常交
+      const ask = tradeCheck(tanks, o.id);
+      if (ask) {
+        orderChoice = ask.id;
+        chooseRecommended(tanks, ask);
+      }
+      if (orderSupply(tanks, o) >= o.count) fulfillOrder(tanks, o.id);
+    }
     for (const t of tanks) moveDueToNursery(t);
     checkGoals(tanks, !currentQuest(p));
     const before = snapshot(tanks);
@@ -141,7 +154,7 @@ function run(seed: number, days: number): { nights: MidgameNight[]; tanks: TankS
     const card = report.items.find((i) => i.choice)?.choice;
     const why = card ? pickRecommended(tanks, card) : null;
     const line = morningLine(report);
-    out.push({ day: Math.floor(s.hours / 24) + 1, choice: card?.id, quiet: line === '安靜的一晚。', coins: economy(s).coins, tanks: tanks.length, inBreeding: tanks.find((t) => t.purpose === 'breeding')?.fish.filter((f) => f.alive).length ?? 0, line: `${why ? `（選不了：${why}）` : ''}${line} ${report.items.map((i) => i.kind).join(',')}` });
+    out.push({ day: Math.floor(s.hours / 24) + 1, choice: card?.id, orderChoice, quiet: line === '安靜的一晚。', coins: economy(s).coins, tanks: tanks.length, inBreeding: tanks.find((t) => t.purpose === 'breeding')?.fish.filter((f) => f.alive).length ?? 0, line: `${why ? `（選不了：${why}）` : ''}${line} ${report.items.map((i) => i.kind).join(',')}` });
   }
   return { nights: out, tanks };
 }
