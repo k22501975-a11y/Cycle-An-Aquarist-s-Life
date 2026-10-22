@@ -762,19 +762,28 @@ export function takeSecondBrood(tanks: TankState[]): SecondBroodNews | null {
   sb.born = fry.length;
   const choice = s.picked.C9 ?? 'grow';
   let kept = 0;
+  let full = false;
   if (choice === 'sell') sb.fry = fry.map(({ fish }) => fish.id);
   if (choice === 'keep') {
     const rank = (f: Fish) => (hasDreamGenes(f) ? 0 : 100) + dreamMissing(f).length * 10 - (f.sex === 'female' ? bestDreamPct(tanks, undefined, f.id) / 10 : 0);
     for (const { fish, tank } of fry.filter(({ fish }) => fish.genome).sort((a, b) => rank(a.fish) - rank(b.fish))) {
       if (kept >= SECOND_BROOD_KEEP) break;
-      if (setKeeper(tanks[tank], fish.id, true)) continue;
+      const why = setKeeper(tanks[tank], fish.id, true);
+      if (why) {
+        // 留種名額滿了就不用再試；其他原因（例如上架中）換下一尾
+        if (located(tanks).filter((x) => x.fish.keeper).length >= MAX_KEEPERS) {
+          full = true;
+          break;
+        }
+        continue;
+      }
       (s.backups ??= []).push(fish.id);
       kept++;
     }
   }
   const mom = located(tanks).find(({ fish }) => fish.id === sb.momId)?.fish;
   const who = mom ? callName(mom) : '母魚';
-  const then = choice === 'sell' ? '長到能交就照訂單交。' : choice === 'keep' ? (kept > 0 ? `挑了 ${kept} 尾離夢想魚最近的當備用種魚。` : '這窩還挑不到能留的，先讓牠們長大。') : '整窩留著長大。';
+  const then = choice === 'sell' ? '長到能交就照訂單交。' : choice === 'keep' ? (full && kept === 0 ? `留種名額滿了（最多 ${MAX_KEEPERS} 尾），先取消幾尾才挑得了。` : kept > 0 ? `挑了 ${kept} 尾離夢想魚最近的當備用種魚。` : '這窩還挑不到能留的，先讓牠們長大。') : '整窩留著長大。';
   return { momId: sb.momId, count: fry.length, prevKids: sb.prevKids, kept, choice, text: `${who}的第二窩生了 ${fry.length} 尾（第一窩現在還有 ${sb.prevKids} 尾）。${then}` };
 }
 

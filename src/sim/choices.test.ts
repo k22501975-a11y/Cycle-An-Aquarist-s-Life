@@ -6,6 +6,7 @@ import {
   crowdingRatio,
   bacteriaCapacity,
   BACKUP_MAX,
+  MAX_KEEPERS,
   hasDreamGenes,
   orderDreamNote,
   tradeCheck,
@@ -290,6 +291,28 @@ describe('中期的選擇點（design/midgame.md）', () => {
     expect(fry.filter((f) => f.keeper).length).toBe(news!.kept);
     expect(news!.text).toMatch(/第二窩生了 8 尾（第一窩現在還有 4 尾）/);
     expect(takeSecondBrood(tanks)).toBeNull();
+  });
+
+  it('C9 挑備用種魚但留種名額滿了：報告講清楚，不默默略過', () => {
+    const { s, tanks, mom, dad, kids } = withBrood(MAX_KEEPERS, 20 * 24);
+    const st = choiceState(tanks);
+    Object.assign(st.picked, { C1: 'box', C2: 'later', C3: 'had', C4: 'x', C5: 'sell', C6: 'stay', C7: 'standard', C8: 'wait' });
+    for (const k of kids) k.keeper = true;
+    mom.pregnancy = 0.8;
+    expect(takeChoice(tanks)?.id).toBe('C9');
+    expect(chooseOption(tanks, 'C9', 'keep')).toBeNull();
+    s.hours += 6 * 24;
+    const rng = { seed: 9 };
+    for (let i = 0; i < 4; i++) {
+      const f = addFish(s, 'guppy', { sex: 'female', pregnant: false });
+      f.genome = cross(rng, mom.genome!, dad.genome!, 'female');
+      f.generation = 1;
+      f.motherId = mom.id;
+      f.bornHours = s.hours;
+    }
+    const news = takeSecondBrood(tanks)!;
+    expect(news.kept).toBe(0);
+    expect(news.text).toMatch(/留種名額滿了/);
   });
 
   it('C9 選交小魚單：這窩之後交單不再出 C5', () => {
