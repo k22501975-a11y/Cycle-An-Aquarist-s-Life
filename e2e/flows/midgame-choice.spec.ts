@@ -33,8 +33,8 @@ test('第一窩出生：早上報告出 C1 選擇卡，選了撈進育幼盒', a
   await expect(card).toBeVisible({ timeout: 15_000 });
   const choice = card.locator('.choice-item', { hasText: '第一窩小魚出生了' });
   await expect(choice).toBeVisible();
-  await expect(choice.locator('.choice-opt')).toHaveCount(2);
-  await choice.locator('.choice-opt.rec').dispatchEvent('click');
+  await expect(choice.locator('.bc-opt')).toHaveCount(2);
+  await choice.locator('.bc-opt.rec').dispatchEvent('click');
   await expect(page.locator('.morning')).toHaveCount(0);
   await expect.poll(() => gameState<string | undefined>(page, 's.economy.choices.picked.C1')).toBe('box');
   await expect.poll(() => gameState<number>(page, 's.fish.filter((f) => f.alive && f.generation === 1 && f.nursery).length')).toBeGreaterThan(0);

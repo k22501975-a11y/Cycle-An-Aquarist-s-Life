@@ -1849,7 +1849,8 @@ async function start(): Promise<void> {
         : undefined;
       const choose = (item: ReportItem, key: string, picks: number[]) => (item.choice ? game.actAll((tanks) => sim.chooseOption(tanks, item.choice!.id, key, picks)) : null);
       const fishLook = (id: number) => {
-        const f = game.tanks.flatMap((t) => t.fish).find((x) => x.id === id && x.genome);
+        // 母魚可能在產卵盒（quarantine）裡
+        const f = game.tanks.flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])]).find((x) => x.id === id && x.genome);
         if (!f?.genome) return null;
         const p = sim.phenotype(f.genome);
         return { sex: f.sex, name: sim.strainName(p), look: sim.lookIndex(p), fins: sim.finWords(p) };

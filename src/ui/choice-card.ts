@@ -23,7 +23,11 @@ export function choiceVisual(card: ChoiceCard, choose: ChoosePick, lookup: FishL
     msg.hidden = !why;
   };
   const box = h('div.choice', {}, h('p.choice-owner', {}, card.owner));
-  void import('./breeding-cards').then((bc) => fill(bc, card, box, pick, lookup)).then(() => box.append(msg));
+  void import('./breeding-cards')
+    .then((bc) => fill(bc, card, box, pick, lookup))
+    // 載不到卡片（離線更新到一半之類）：退回一排文字按鈕，照樣選得了
+    .catch(() => box.append(h('div.bc-opts', {}, ...card.options.map((o) => h(`button.btn.small${o.recommended ? '.primary' : ''}`, { type: 'button', onclick: () => pick(o.key) }, o.label)))))
+    .then(() => box.append(msg));
   return box;
 }
 
