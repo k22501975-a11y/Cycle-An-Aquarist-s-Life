@@ -47,13 +47,16 @@ function youngPairs(living: Fish[]): { males: Fish[]; females: Fish[] } {
   return { males: growing.filter((f) => f.sex === 'male'), females: living.filter((f) => f.species === 'guppy' && f.sex === 'female' && sexVisible(f)) };
 }
 
+/** 擁擠度到這裡就提醒「快養滿了」（crowdingRatio，每公升幾公分魚）。 */
+export const CROWD_WARN = 0.8;
+
 export function splitAdvice(state: TankState): SplitAdvice[] {
   const living = state.fish.filter((f) => f.alive);
   const out: SplitAdvice[] = [];
   const crowd = crowdingRatio(state);
   const hasYoung = living.some(young);
   if (crowd > 1) out.push({ reason: 'crowded', tone: 'bad', text: `缸裡太擠了（${living.length} 條），缺氧、氨升高，最弱的會先死：分缸、賣掉一些或換大缸`, plan: hasYoung ? 'by_size' : 'half' });
-  else if (crowd > 0.8) out.push({ reason: 'crowded', tone: 'warn', text: `魚快養滿了（${living.length} 條），該分缸或賣掉一些了`, plan: hasYoung ? 'by_size' : 'half' });
+  else if (crowd > CROWD_WARN) out.push({ reason: 'crowded', tone: 'warn', text: `魚快養滿了（${living.length} 條），該分缸或賣掉一些了`, plan: hasYoung ? 'by_size' : 'half' });
   const prey = preyAtRisk(living);
   if (prey.length > 0) out.push({ reason: 'fry_with_adults', tone: prey.length >= 5 ? 'bad' : 'warn', text: `成魚會吃小魚：把 ${prey.length} 條仔魚撈到${state.nurseryBox ? '育幼盒' : state.quarantine ? '檢疫盒' : '育幼盒（商店 150 元）'}或別缸`, plan: 'by_size' });
   const pairs = youngPairs(living);

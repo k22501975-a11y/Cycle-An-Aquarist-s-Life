@@ -3,7 +3,10 @@ import { economy, keeperRefusal, MAX_KEEPERS, setKeeper } from './economy';
 import { cross, finWords, lookIndex, phenotype, strainName, type GuppyGenome, type GuppyPhenotype } from './genetics';
 import { daysToLength, growthStage } from './growth';
 import { moveFish, newTankCost } from './household';
+import { crowdingRatio } from './processes/fauna';
 import { isCycled } from './processes/nitrogen';
+import { sizeRatio } from './processes/population';
+import { CROWD_WARN } from './split';
 import { mediaAvailable, transferMedia } from './gifts';
 import { guppyTraits } from './lookalike';
 import { daysToBirth, releaseNursery, rescueFryToNursery, usesNursery } from './nursery';
@@ -275,17 +278,25 @@ function bestDreamPct(tanks: TankState[], without?: number): number {
 
 /**
  * C6：繁殖缸和要搬過去的魚。順序：留種的魚、快生的母魚、自家的小魚（育幼盒裡的不動，盒子自己會放）。
- * 搬到繁殖缸的魚數上限是容量（一半水量的尾數）。沒有繁殖缸、沒魚要搬就回 null。
+ * 搬到繁殖缸快養滿為止（擁擠度 CROWD_WARN，跟分缸提示一樣）。沒有繁殖缸、沒魚要搬就回 null。
  * 新買的繁殖缸是空的，沒有氨就養不出菌：搬之前先分主缸一半的濾材過去（transferMedia），跟現實一樣。
  */
 function breedingMove(tanks: TankState[]): { to: number; fish: { fish: Fish; tank: number }[] } | null {
   const to = tanks.findIndex((t) => t.purpose === 'breeding');
   if (to < 0) return null;
-  const room = Math.round(tanks[to].equipment.tank.volumeL / 2) - tanks[to].fish.filter((f) => f.alive).length;
-  if (room <= 0) return null;
+  // 搬到「快養滿了」為止（跟分缸提示同一把尺：每公升幾公分魚，小魚算得少）
+  let room = CROWD_WARN * tanks[to].equipment.tank.volumeL - crowdingRatio(tanks[to]) * tanks[to].equipment.tank.volumeL;
   const others = tanks.flatMap((t, tank) => (tank === to || t.purpose === 'breeding' ? [] : t.fish.filter((f) => f.alive && !f.nursery && !f.listing && f.species === 'guppy').map((fish) => ({ fish, tank }))));
   const rank = (f: Fish) => (f.keeper ? 0 : f.sex === 'female' && f.pregnancy > 0.5 ? 1 : bred(f) && isJuvenile(f) ? 2 : 3);
-  const fish = others.filter(({ fish }) => rank(fish) < 3).sort((a, b) => rank(a.fish) - rank(b.fish)).slice(0, room);
+  const fish = others
+    .filter(({ fish }) => rank(fish) < 3)
+    .sort((a, b) => rank(a.fish) - rank(b.fish))
+    .filter(({ fish }) => {
+      const cm = fish.lengthCm * sizeRatio(fish);
+      if (cm > room) return false;
+      room -= cm;
+      return true;
+    });
   return fish.length > 0 ? { to, fish } : null;
 }
 

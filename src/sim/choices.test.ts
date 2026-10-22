@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
 import {
   addFish,
+  CROWD_WARN,
+  crowdingRatio,
   bacteriaCapacity,
   buyTank,
   setTankPurpose,
@@ -182,6 +184,24 @@ describe('中期的選擇點（design/midgame.md）', () => {
     expect(t2.bacteria.aob).toBeGreaterThan(0);
     expect(t2.fish.map((f) => f.id)).toEqual(expect.arrayContaining([kids[0].id, mom.id, ...kids.slice(1).map((k) => k.id)]));
     expect(takeChoice(tanks)).toBeNull();
+  });
+
+  it('C6 搬到繁殖缸快養滿為止（跟分缸提示同一把尺），已經滿了就不出', () => {
+    const { s, tanks, kids } = withBrood(6, PICK_AFTER_BROOD_DAYS * 24);
+    Object.assign(choiceState(tanks).picked, { C1: 'box', C2: 'later', C3: 'breeding' });
+    economy(s).coins = 5000;
+    const t2 = buyTank(tanks, 'nano20')!;
+    setTankPurpose(t2, 'breeding');
+    kids[0].keeper = true;
+    // 繁殖缸裡已經有魚，只剩一點空間
+    while (crowdingRatio(t2) < CROWD_WARN - 0.1) addFish(t2, 'guppy', { carriesIch: false, sex: 'female', pregnant: false });
+    const c6 = takeChoice(tanks);
+    expect(c6?.id).toBe('C6');
+    expect(c6!.move![0]).toBe(kids[0].id);
+    expect(c6!.move!.length).toBeLessThan(kids.length);
+    s.bacteria.aob = s.bacteria.nob = bacteriaCapacity(s);
+    chooseOption(tanks, 'C6', 'move');
+    expect(crowdingRatio(t2)).toBeLessThanOrEqual(CROWD_WARN);
   });
 
   it('選育進度：選種前說第一窩再幾天能挑，留種後說公魚再幾天成熟', () => {
