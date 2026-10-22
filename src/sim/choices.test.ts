@@ -213,6 +213,28 @@ describe('中期的選擇點（design/midgame.md）', () => {
     expect(choiceState(tanks).plan).toBe('fast');
   });
 
+  it('C7 的養法管到種魚長大：兩尾都能配了就收掉養法飼料、加熱棒調回原本的溫度（#319 架構）', () => {
+    const { s, tanks, kids } = withBrood(6, PICK_AFTER_BROOD_DAYS * 24);
+    Object.assign(choiceState(tanks).picked, { C1: 'box', C3: 'had' });
+    takeChoice(tanks);
+    chooseOption(tanks, 'C2', 'pick', [kids[0].id, kids[1].id, kids[3].id]);
+    s.hours += 2 * 24;
+    const c4 = takeChoice(tanks)!;
+    chooseOption(tanks, 'C4', c4.options.find((o) => o.recommended)!.key);
+    const before = s.equipment.heater!.targetC;
+    expect(chooseOption(tanks, 'C7', 'live')).toBeNull();
+    expect(s.feedPlan).toBeDefined();
+    s.hours += 24;
+    takeChoice(tanks);
+    expect(s.feedPlan).toBeDefined();
+    for (const id of choiceState(tanks).pair!) s.fish.find((f) => f.id === id)!.lengthCm = 3.2;
+    s.hours += 24;
+    takeChoice(tanks);
+    expect(s.feedPlan).toBeUndefined();
+    expect(s.equipment.heater!.targetC).toBe(before);
+    expect(choiceState(tanks).planDone).toBe(true);
+  });
+
   it('C8 買了第二缸：分舊缸濾材（推薦）、硝化菌液 30 元、自己等；選了倒菌液就等養好才問搬魚（#316）', () => {
     const { s, tanks } = withBrood(2, 24);
     Object.assign(choiceState(tanks).picked, { C1: 'box', C3: 'breeding' });
@@ -247,12 +269,27 @@ describe('中期的選擇點（design/midgame.md）', () => {
     const fish = kids.find((k) => k.id === card!.trade!.fishId)!;
     expect(hasDreamGenes(fish)).toBe(true);
     expect(card!.options.find((o) => o.recommended)?.key).toBe('keep');
-    // 同一張單不再問；當天早上也不會再出第二張卡
-    expect(tradeCheck(tanks, 95)).toBeNull();
+    // 沒選就關掉：下次按交貨再問；當天早上也不會再出第二張卡
+    expect(tradeCheck(tanks, 95)?.id).toBe('C5');
     expect(takeChoice(tanks)).toBeNull();
     expect(chooseOption(tanks, 'C5', 'keep')).toBeNull();
     expect(fish.keeper).toBe(true);
     expect(choiceState(tanks).backups).toEqual([fish.id]);
+    // 選過了，同一張單不再問
+    expect(tradeCheck(tanks, 95)).toBeNull();
+  });
+
+  it('C5 按交貨時選交單：只記下來，交貨照一般流程（不在選的時候就交）', () => {
+    const { s, tanks, kids } = withBrood(6, PICK_AFTER_BROOD_DAYS * 24);
+    Object.assign(choiceState(tanks).picked, { C1: 'box', C2: 'later', C3: 'had' });
+    for (const k of kids) k.lengthCm = 2.2;
+    orderBoard(s).orders = [{ id: 98, kind: 'fish', species: 'guppy', size: 'juvenile', sex: 'female', count: 1, unitPrice: 40, postedHours: s.hours } as ShopOrder];
+    const card = tradeCheck(tanks, 98)!;
+    const coins = economy(s).coins;
+    expect(chooseOption(tanks, 'C5', 'sell')).toBeNull();
+    expect(economy(s).coins).toBe(coins);
+    expect(s.fish.some((f) => f.id === card.trade!.fishId)).toBe(true);
+    expect(choiceState(tanks).tradeAsked).toContain(98);
   });
 
   it(`C5 選過留著：之後交單自動留下有基因的魚，最多 ${BACKUP_MAX} 尾`, () => {
