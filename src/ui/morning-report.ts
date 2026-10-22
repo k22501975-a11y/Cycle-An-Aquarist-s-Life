@@ -22,6 +22,7 @@ import {
   takeLookalike,
   takeChoice,
   takeMilestones,
+  takeSecondBrood,
   type MilestoneStep,
   breedingProgress,
   tankLabel,
@@ -89,6 +90,7 @@ export type ReportKind =
   | 'choice' // 中期的選擇點 C1～C5（design/midgame.md）
   | 'breeding' // 選育進度（midgame.md §2）：有第一窩或留種的魚就每天一行
   | 'milestone' // 種魚的成長里程碑：看得出公母、公魚顯色、可以配（midgame.md §5.3）
+  | 'second_brood' // C9 那尾母魚的第二窩生了：跟第一窩比、照選的處理（midgame.md §5.2）
   | 'observe' // 平淡早上的小觀察（morning-observe.ts）
   | 'quiet';
 
@@ -111,6 +113,8 @@ export interface ReportItem {
   choice?: ChoiceCard;
   /** kind 'milestone' 的報告卡資料：哪一步、哪尾（ready 時配的那尾）、養快提前了幾天。 */
   milestone?: { step: MilestoneStep; fishId: number; partnerId?: number; earlierDays?: number };
+  /** kind 'second_brood' 的比較卡資料：這窩幾尾、第一窩還有幾尾、挑了幾尾備用、C9 選了什麼。 */
+  secondBrood?: { momId: number; count: number; prevKids: number; kept: number; choice: string };
 }
 
 export interface MorningReport {
@@ -359,6 +363,13 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   for (const m of takeMilestones(tanks)) {
     const at = tanks.findIndex((t) => t.fish.some((f) => f.id === m.fishId));
     items.push({ kind: 'milestone', tank: Math.max(0, at), tone: 'good', text: m.text, action: 'fish', subjectId: m.fishId, milestone: { step: m.step, fishId: m.fishId, partnerId: m.partnerId, earlierDays: m.earlierDays } });
+  }
+  // C9 第二窩生了（midgame.md §5.2）：照玩家選的處理，和第一窩一起比
+  const brood2 = takeSecondBrood(tanks);
+  if (brood2) {
+    const at = tanks.findIndex((t) => t.fish.some((f) => f.id === brood2.momId));
+    const { momId, count, prevKids, kept, choice } = brood2;
+    items.push({ kind: 'second_brood', tank: Math.max(0, at), tone: 'good', text: brood2.text, action: 'fish', subjectId: momId, count, secondBrood: { momId, count, prevKids, kept, choice } });
   }
   // 中期的選擇點（design/midgame.md）：一個早上最多一張
   const choice = takeChoice(tanks);
