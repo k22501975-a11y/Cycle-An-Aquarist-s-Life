@@ -4,7 +4,7 @@ import { h } from './dom';
 import { keeperRibbon } from './keeper-ribbon';
 import { choiceVisual, type FishLookup } from './choice-card';
 import { lookalikeVisual } from './lookalike-card';
-import { choiceFollowUp, isBadNews, type MorningReport, type ReportItem, type ReportKind } from './morning-report';
+import { choiceFollowUp, isBadNews, type Milestone, type MorningReport, type ReportItem, type ReportKind } from './morning-report';
 
 /**
  * 「過一晚」醒來的早上報告卡（first-10-minutes.md F2）：阿德老闆一句話、一條一條的圖卡，
@@ -108,6 +108,8 @@ const GOOD_LINE: Partial<Record<ReportKind, string>> = {
   lookalike: '小魚越來越像爸媽了！',
   choice: '今天有件事要你決定！',
   breeding: '選育有進展。',
+  milestone: '種魚又長大一步了！',
+  second_brood: '第二窩生了！',
   cycled: '水養好了，好消息！',
   rescued: '你救回來了！',
   fish_relaxed: '魚慢慢習慣新家了。',
@@ -172,9 +174,20 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
     );
     return box;
   };
+  // 成長里程碑（midgame.md §5.3）：一句話＋一張圖（放大鏡看肛鰭／胎斑、顯色前後、公母配對），圖跟選育卡一起延後載入
+  const milestoneRow = (item: ReportItem, m: Milestone) => {
+    const fish = deps.fishLook?.(m.fishId);
+    const pic = h('div.ms-slot');
+    if (fish) {
+      const partner = m.partnerId !== undefined ? (deps.fishLook?.(m.partnerId) ?? undefined) : undefined;
+      void import('./breeding-cards').then((bc) => pic.append(bc.milestoneVisual(m.step, fish, partner, m.earlierDays))).catch(() => pic.remove());
+    }
+    return h(`div.morning-item.${item.tone}.milestone-item`, {}, h('span.morning-body', {}, reportText(item.text), fish ? pic : null));
+  };
   const row = (item: ReportItem) => {
     if (item.choice) return choiceRow(item);
     // 選育進度（midgame.md §2）：緞帶開頭的一行，不是可以點的事
+    if (item.milestone) return milestoneRow(item, item.milestone);
     if (item.kind === 'breeding') return h(`div.morning-item.${item.tone}.breeding-item`, {}, h('div.bc-line', {}, keeperRibbon('bc-line-ribbon'), h('span.bc-line-text', {}, item.text)));
     const pic = deps.picture?.(item) ?? artUrl(item.kind === 'crisis' && item.action ? ACTION_ICON[item.action] : KIND_ICON[item.kind]);
     const img = h('img', { src: pic, alt: '', draggable: 'false' });

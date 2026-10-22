@@ -352,3 +352,107 @@ export function breedingLineRow(text: string, fish?: FishLook, progress?: number
     progress !== undefined ? h('span.bc-line-bar', {}, h('i', { style: { width: `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%` } })) : null,
   );
 }
+
+// ── 成長里程碑報告卡（midgame.md §5.3） ─────────────────────
+
+export type MilestoneStep = 'sex' | 'color' | 'ready';
+
+/** 放大鏡要對準的地方（佔整張魚圖的比例）：公魚的肛鰭（交接器）、母魚的胎斑。圖都是頭朝右畫的。 */
+export const LENS_AT: Record<'male' | 'female', { x: number; y: number }> = {
+  male: { x: 0.5, y: 0.82 },
+  female: { x: 0.63, y: 0.74 },
+};
+
+/** 母魚懷孕的圖（同一個尾色）。 */
+export function pregnantArt(f: FishLook): string {
+  return kidArt({ ...f, tailShape: 'round', pct: 0 }).replace('-base-', '-pregnant-');
+}
+
+function artSrc(f: FishLook): string {
+  return ART + kidArt({ ...f, tailShape: f.fins.includes('大三角') ? 'halfmoon' : 'round', pct: 0 });
+}
+
+/** 圖載完（或已經在快取裡）就跑 f。 */
+function onLoaded(img: HTMLImageElement, f: () => void): void {
+  if (img.complete && img.naturalWidth > 0) f();
+  else img.addEventListener('load', f, { once: true });
+}
+
+/** 放大鏡裡的圖放大幾倍（圖寬是鏡片的幾倍）。 */
+export const LENS_ZOOM = 2.4;
+
+/** 放大鏡（正方形）裡的圖要擺在哪（left、top，佔鏡片的 %），at 才會剛好在鏡片正中間。aspect 是圖的高÷寬。 */
+export function lensPos(at: { x: number; y: number }, aspect: number): { left: number; top: number } {
+  return { left: 50 - at.x * LENS_ZOOM * 100, top: 50 - at.y * LENS_ZOOM * 100 * aspect };
+}
+
+/** 一塊放大鏡：同一張圖放大，對準 at（圖不是正方形，上下要等載完知道比例才對得準）。 */
+function lens(src: string, at: { x: number; y: number }, albino: boolean): HTMLElement {
+  const img = h(`img${albino ? '.albino' : ''}`, { src, alt: '', draggable: 'false' }) as HTMLImageElement;
+  img.style.width = `${LENS_ZOOM * 100}%`;
+  onLoaded(img, () => {
+    const { left, top } = lensPos(at, img.naturalHeight / img.naturalWidth);
+    img.style.left = `${left}%`;
+    img.style.top = `${top}%`;
+  });
+  return h('span.ms-lens', { 'aria-hidden': 'true' }, img, h('i.ms-lens-glint'));
+}
+
+/** 缸裡那尾魚，身上用虛線圈出放大鏡在看的地方（魚圖照比例縮在 150×84 的框裡）。 */
+function lensSubject(src: string, at: { x: number; y: number }, albino: boolean): HTMLElement {
+  const img = h(`img.ms-fish.young${albino ? '.albino' : ''}`, { src, alt: '', draggable: 'false' }) as HTMLImageElement;
+  const spot = h('i.ms-spot', { hidden: true });
+  onLoaded(img, () => {
+    // object-fit: contain：比較高的圖是左右留白，比較扁的是上下留白
+    const k = Math.min(150 / img.naturalWidth, 84 / img.naturalHeight);
+    const [w, tall] = [img.naturalWidth * k, img.naturalHeight * k];
+    spot.style.left = `${(150 - w) / 2 + at.x * w}px`;
+    spot.style.top = `${(84 - tall) / 2 + at.y * tall}px`;
+    spot.hidden = false;
+  });
+  return h('span.ms-subject', {}, img, spot);
+}
+
+/**
+ * 里程碑報告卡的圖：
+ * - sex：魚在缸裡（還沒顯色、淡淡的），放大鏡對著肛鰭（公）或胎斑（母）
+ * - color：小時候灰灰的樣子 → 現在顯色的樣子，旁邊閃光
+ * - ready：公母面對面，中間一顆愛心和留種緞帶
+ * earlierDays：種魚照 C7 養快，比原本提前幾天，掛一個小標。
+ */
+export function milestoneVisual(step: MilestoneStep, fish: FishLook, partner?: FishLook, earlierDays?: number): HTMLElement {
+  const albino = fish.name.includes('白子');
+  const steps: MilestoneStep[] = ['sex', 'color', 'ready'];
+  const track = h(
+    'span.ms-track',
+    { 'aria-hidden': 'true' },
+    ...steps.map((s, i) => h(`i${i <= steps.indexOf(step) ? '.on' : ''}${s === step ? '.now' : ''}`)),
+  );
+  const early = earlierDays ? h('span.ms-early', {}, `提前 ${earlierDays} 天`) : null;
+  let scene: HTMLElement;
+  if (step === 'sex') {
+    const src = fish.sex === 'female' ? ART + pregnantArt(fish) : artSrc(fish);
+    scene = h(
+      `div.ms-scene.ms-sex.${fish.sex}`,
+      {},
+      lensSubject(src, LENS_AT[fish.sex], albino),
+      lens(src, LENS_AT[fish.sex], albino),
+      h(`i.bc-sex.${fish.sex}.ms-sex-badge`, {}, fish.sex === 'male' ? '♂' : '♀'),
+    );
+  } else if (step === 'color') {
+    scene = h(
+      'div.ms-scene.ms-color',
+      {},
+      h('img.ms-fish.before', { src: `${ART}fish/guppy-juvenile.webp`, alt: '', draggable: 'false' }),
+      h('span.ms-arrow', { 'aria-hidden': 'true' }, '➜'),
+      h('span.ms-after', {}, h(`img.ms-fish${albino ? '.albino' : ''}`, { src: artSrc(fish), alt: '', draggable: 'false' }), ...[0, 1, 2].map((i) => h(`i.ms-spark.s${i}`))),
+    );
+  } else {
+    const mate = partner ?? null;
+    const male = fish.sex === 'male' ? fish : mate;
+    const female = fish.sex === 'female' ? fish : mate;
+    const pic = (f: FishLook | null, cls: string) => (f ? h(`img.ms-fish.${cls}${f.name.includes('白子') ? '.albino' : ''}`, { src: artSrc(f), alt: '', draggable: 'false' }) : null);
+    scene = h('div.ms-scene.ms-ready', {}, pic(female, 'left'), h('span.ms-heart', { 'aria-hidden': 'true' }, '❤', keeperRibbon('ms-ribbon')), pic(male, 'right'));
+  }
+  return h(`div.ms.ms-${step}`, {}, scene, h('div.ms-foot', {}, track, early));
+}
