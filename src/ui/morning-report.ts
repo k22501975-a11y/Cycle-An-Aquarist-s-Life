@@ -21,6 +21,8 @@ import {
   takeGearNote,
   takeLookalike,
   takeChoice,
+  takeMilestones,
+  type MilestoneStep,
   breedingProgress,
   tankLabel,
   usesNursery,
@@ -86,6 +88,7 @@ export type ReportKind =
   | 'lookalike' // 第一窩小魚轉色，長得像誰（G2）
   | 'choice' // 中期的選擇點 C1～C5（design/midgame.md）
   | 'breeding' // 選育進度（midgame.md §2）：有第一窩或留種的魚就每天一行
+  | 'milestone' // 種魚的成長里程碑：看得出公母、公魚顯色、可以配（midgame.md §5.3）
   | 'observe' // 平淡早上的小觀察（morning-observe.ts）
   | 'quiet';
 
@@ -106,6 +109,8 @@ export interface ReportItem {
   lookalike?: LookalikeCard;
   /** kind 'choice' 的選擇卡（sim/choices.ts）：選項和選種、配對的資料。 */
   choice?: ChoiceCard;
+  /** kind 'milestone' 的報告卡資料：哪一步、哪尾（ready 時配的那尾）、養快提前了幾天。 */
+  milestone?: { step: MilestoneStep; fishId: number; partnerId?: number; earlierDays?: number };
 }
 
 export interface MorningReport {
@@ -349,6 +354,11 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   if (look) {
     const where = tanks.length > 1 ? `${tankLabel(tanks, look.tank)}：` : '';
     items.push({ kind: 'lookalike', tank: look.tank, tone: 'good', text: where + lookalikeLine(look), action: 'fish', subjectId: look.childId, lookalike: look });
+  }
+  // 種魚的成長里程碑（midgame.md §5.3）：每到一個就一張有圖的卡
+  for (const m of takeMilestones(tanks)) {
+    const at = tanks.findIndex((t) => t.fish.some((f) => f.id === m.fishId));
+    items.push({ kind: 'milestone', tank: Math.max(0, at), tone: 'good', text: m.text, action: 'fish', subjectId: m.fishId, milestone: { step: m.step, fishId: m.fishId, partnerId: m.partnerId, earlierDays: m.earlierDays } });
   }
   // 中期的選擇點（design/midgame.md）：一個早上最多一張
   const choice = takeChoice(tanks);

@@ -41,6 +41,7 @@ const KIND_ICON: Record<ReportKind, ArtIcon> = {
   lookalike: 'owner',
   choice: 'owner',
   breeding: 'owner',
+  milestone: 'owner',
   observe: 'owner',
   quiet: 'owner',
 };

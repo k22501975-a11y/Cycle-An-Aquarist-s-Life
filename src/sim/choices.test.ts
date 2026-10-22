@@ -24,6 +24,8 @@ import {
   reservedForPick,
   suggestPurpose,
   takeChoice,
+  takeMilestones,
+  nextMilestone,
   TANK_AFTER_BROOD_DAYS,
   type ShopOrder,
   type TankState,
@@ -148,7 +150,7 @@ describe('中期的選擇點（design/midgame.md）', () => {
     const pick = c4!.options.find((o) => o.recommended)!;
     expect(chooseOption(tanks, 'C4', pick.key)).toBeNull();
     expect(choiceState(tanks).pair).toEqual([c4!.motherId, Number(pick.key)]);
-    expect(breedingProgress(tanks)).toMatch(/^留種的那對長到 .* cm，再約 \d+ 天成熟可以配$/);
+    expect(breedingProgress(tanks)).toMatch(/^留種的那對長到 .* cm，下一步：肛鰭變尖、出現胎斑，約 \d+ 天$/);
   });
 
   it('C5 相對門檻：便宜的單會拿走留著能提高孫代機率的魚就問；選過留著之後同類的單自動留，同一天最多一張（#316）', () => {
@@ -207,6 +209,37 @@ describe('中期的選擇點（design/midgame.md）', () => {
     expect(s.equipment.heater!.targetC).toBe(FAST_TEMP_C);
     expect(s.feedPlan).toEqual({ kind: 'floating', grade: 3 });
     expect(choiceState(tanks).plan).toBe('fast');
+  });
+
+  it('成長里程碑：配好對之後，看得出公母、公魚顯色、可以配各報一次；養快會寫提前幾天（#316）', () => {
+    const { s, tanks, kids } = withBrood(6, PICK_AFTER_BROOD_DAYS * 24);
+    Object.assign(choiceState(tanks).picked, { C1: 'box', C3: 'had' });
+    takeChoice(tanks);
+    chooseOption(tanks, 'C2', 'pick', [kids[0].id, kids[1].id, kids[3].id]);
+    s.hours += 2 * 24;
+    const c4 = takeChoice(tanks)!;
+    chooseOption(tanks, 'C4', c4.options.find((o) => o.recommended)!.key);
+    const [momId, dadId] = choiceState(tanks).pair!;
+    const mom = s.fish.find((f) => f.id === momId)!;
+    const dad = s.fish.find((f) => f.id === dadId)!;
+    // 剛配好對：已經到了的不報
+    expect(takeMilestones(tanks)).toEqual([]);
+    expect(nextMilestone(tanks)?.step).toBe('sex');
+    expect(chooseOption(tanks, 'C7', 'fast')).toBeNull();
+    mom.lengthCm = dad.lengthCm = 2.6;
+    const sex = takeMilestones(tanks);
+    expect(sex.map((m) => m.step)).toEqual(['sex', 'sex']);
+    expect(sex.find((m) => m.fishId === dadId)!.text).toMatch(/肛鰭開始變尖了，是公魚！/);
+    expect(sex.find((m) => m.fishId === momId)!.text).toMatch(/看得到胎斑了，是母魚！/);
+    expect(sex[0].earlierDays).toBeGreaterThan(0);
+    expect(takeMilestones(tanks)).toEqual([]);
+    expect(nextMilestone(tanks)?.step).toBe('color');
+    dad.lengthCm = 2.8;
+    expect(takeMilestones(tanks).map((m) => m.step)).toEqual(['color']);
+    mom.lengthCm = dad.lengthCm = 3.1;
+    const ready = takeMilestones(tanks);
+    expect(ready).toMatchObject([{ step: 'ready', fishId: dadId, partnerId: momId }]);
+    expect(nextMilestone(tanks)).toBeNull();
   });
 
   it('C8 買了第二缸：分舊缸濾材（推薦）、硝化菌液 30 元、自己等；選了倒菌液就等養好才問搬魚（#316）', () => {
