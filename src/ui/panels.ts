@@ -300,8 +300,10 @@ export function feedPanel(ctx: PanelContext): Node {
   const s = game.state;
   const meal = mealSize(s);
   if (meal <= 0) return emptyState(ctx, '缸裡還沒有魚，先去挑幾條吧。', 'fish', speciesArt('guppy'));
+  // C7 選了養法（#316）：面板顯示的就是點水面會撒的；玩家自己換飼料，這缸就改回玩家選的
+  const current = () => game.state.feedPlan ?? feedChoice;
   const give = (mg: number, label: string) => () => {
-    const { kind, grade } = feedChoice;
+    const { kind, grade } = current();
     game.act((st) => {
       // 飼料錢每週跟電費一起結算，沒錢也能餵，魚不會因為沒錢餓死
       chargeMeal(st, mealPrice(kind, grade) * (mg / meal));
@@ -312,10 +314,12 @@ export function feedPanel(ctx: PanelContext): Node {
     sheet.close();
   };
   const pick = (choice: Partial<typeof feedChoice>) => () => {
-    feedChoice = { ...feedChoice, ...choice };
+    feedChoice = { ...current(), ...choice };
+    if (game.state.feedPlan) game.act((st) => delete st.feedPlan);
     sheet.refresh();
   };
-  const { kind, grade } = feedChoice;
+  const plan = !!s.feedPlan;
+  const { kind, grade } = current();
   const g = FOOD_GRADES[grade];
   const warning = feedWarning(s, kind);
   return h(
@@ -323,6 +327,7 @@ export function feedPanel(ctx: PanelContext): Node {
     {},
     h('div.tabs', {}, ...(Object.keys(FOOD_KINDS) as FoodKind[]).map((k) => h(`button.tab${k === kind ? '.active' : ''}`, { onclick: pick({ kind: k }) }, FOOD_KINDS[k].name))),
     h('p.hint', {}, FOOD_KINDS[kind].hint + '。'),
+    plan ? h('p.hint', {}, '種魚照選的養法餵；換飼料就改回你自己選的。') : null,
     h('div.tabs', {}, ...([1, 2, 3, 4] as FoodGrade[]).map((n) => h(`button.tab${n === grade ? '.active' : ''}`, { onclick: pick({ grade: n }) }, FOOD_GRADES[n].name))),
     h('p.hint', {}, `${g.name}：${GRADE_NOTES[grade]}價錢是標準的 ${mealPrice(kind, grade).toFixed(1)} 倍。`),
     warning ? h('p.hint.warn', {}, warning) : null,

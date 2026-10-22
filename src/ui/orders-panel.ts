@@ -107,29 +107,33 @@ function orderCard(ctx: PanelContext, o: ShopOrder, refresh: () => void, outlook
             onclick: (e: MouseEvent) => {
               // 先記下按鈕位置：交貨後面板會重畫，按鈕就不在畫面上了
               const from = (e.currentTarget as Element).getBoundingClientRect();
-              // 會交出有夢想魚基因、還沒留種的魚：先問一次（C5，#316）
+              const deliver = () => {
+                const starter = orderStarter(game.tanks);
+                const got = game.actAll((tanks) => fulfillOrder(tanks, o.id));
+                if (got > 0) {
+                  ctx.sound?.('buy');
+                  ctx.reward?.(from, got, 'medium');
+                  // 開局的起步單交掉馬上補（§4.4.5），先補好再重畫，玩家才看得到新的那張
+                  if (starter) game.act((st) => updateOrders(st));
+                  toasts.show(`交了「${orderTitle(o)}」，拿到 ${got} 元。${starter ? '店家馬上補了一張新的單' : '明天會有新的單'}`);
+                } else toasts.show(orderRefusal(game.tanks, o.id) ?? '交不了', 'warn');
+              };
+              // 會交出有夢想魚基因、還沒留種的魚：先問一次（C5，#316）；選交單就照一般交貨走，沒選就關掉下次再問
               const ask = game.actAll((tanks) => tradeCheck(tanks, o.id));
               if (ask) {
                 ctx.sheet.open(ask.title, () =>
                   choiceVisual(ask, (key) => {
                     const why = game.actAll((tanks) => chooseOption(tanks, 'C5', key));
                     if (why) return why;
-                    toasts.show(key === 'keep' ? '留下來當備用種魚了，訂單和收購不會拿走牠' : '照單交了');
+                    if (key === 'keep') toasts.show('留下來當備用種魚了，訂單和收購不會拿走牠');
+                    else deliver();
                     ctx.sheet.open('訂單', () => ordersPanel(ctx));
                     return null;
                   }),
                 );
                 return;
               }
-              const starter = orderStarter(game.tanks);
-              const got = game.actAll((tanks) => fulfillOrder(tanks, o.id));
-              if (got > 0) {
-                ctx.sound?.('buy');
-                ctx.reward?.(from, got, 'medium');
-                // 開局的起步單交掉馬上補（§4.4.5），先補好再重畫，玩家才看得到新的那張
-                if (starter) game.act((st) => updateOrders(st));
-                toasts.show(`交了「${orderTitle(o)}」，拿到 ${got} 元。${starter ? '店家馬上補了一張新的單' : '明天會有新的單'}`);
-              } else toasts.show(orderRefusal(game.tanks, o.id) ?? '交不了', 'warn');
+              deliver();
               refresh();
             },
           },

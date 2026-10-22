@@ -136,8 +136,15 @@ export interface ChoiceState {
   milestoneSeen?: string[];
   /** C5 問過的訂單（每張只問一次）。選過之後 picked.C5 就是之後同類的單的處理方式（keep 自動標留種）。 */
   tradeAsked?: number[];
-  /** C5 這次問的是哪張單、哪尾魚（選的時候照這個做，不重算）。 */
-  trade?: { orderId: number; fishId: number };
+  /**
+   * C5 這次問的是哪張單、哪尾魚（選的時候照這個做，不重算）。atDelivery：按交貨時問的，選交單只記下來，
+   * 交貨由畫面照一般流程做（金幣動畫、補單）；沒選就關掉，下次按交貨會再問。
+   */
+  trade?: { orderId: number; fishId: number; atDelivery?: boolean };
+  /** C7 選之前加熱棒設的溫度：種魚長大能配了，養法收掉、溫度調回來。 */
+  planPrevTemp?: number;
+  /** C7 的養法已經收掉了（種魚長大）。 */
+  planDone?: boolean;
   /** C5 留下來的備用種魚（不含 C2 選的）：自動留最多 BACKUP_MAX 尾。 */
   backups?: number[];
   /**
@@ -488,11 +495,10 @@ export function tradeCheck(tanks: TankState[], orderId: number): ChoiceCard | nu
     }
     return null;
   }
-  const asked = (s.tradeAsked ??= []);
-  if (asked.includes(o.id)) return null;
+  if ((s.tradeAsked ??= []).includes(o.id)) return null;
   const card = tradeCard({ order: o, ...hit });
-  asked.push(o.id);
-  s.trade = { orderId: o.id, fishId: hit.fish.id };
+  // 選了才記成問過：沒選就關掉，下次按交貨再問
+  s.trade = { orderId: o.id, fishId: hit.fish.id, atDelivery: true };
   s.shown.C5 = tanks[0].hours;
   return card;
 }
@@ -772,6 +778,23 @@ export function takeSecondBrood(tanks: TankState[]): SecondBroodNews | null {
   return { momId: sb.momId, count: fry.length, prevKids: sb.prevKids, kept, choice, text: `${who}的第二窩生了 ${fry.length} 尾（第一窩現在還有 ${sb.prevKids} 尾）。${then}` };
 }
 
+/**
+ * C7 的養法只管到種魚長大：兩尾都能配了（或有一尾不在了），收掉這缸的養法飼料、加熱棒調回選之前的溫度。
+ * 玩家自己在餵食面板換飼料的話，畫面那邊就先收掉 feedPlan 了。
+ */
+function endGrowPlan(tanks: TankState[], s: ChoiceState): void {
+  if (!s.plan || s.planDone || !s.pair) return;
+  const all = located(tanks);
+  const pair = s.pair.map((id) => all.find(({ fish }) => fish.id === id));
+  const grown = pair.every((p) => p && !isJuvenile(p.fish));
+  const gone = pair.some((p) => !p);
+  if (!grown && !gone) return;
+  s.planDone = true;
+  for (const t of tanks) delete t.feedPlan;
+  const t = tanks[pair.find((p) => p)?.tank ?? 0];
+  if (t.equipment.heater && s.planPrevTemp !== undefined) setHeaterTarget(t, s.planPrevTemp);
+}
+
 /** 已經不用問的卡（例如已經有第二缸）直接記成選過，不再出。 */
 function settleImplicit(tanks: TankState[], s: ChoiceState): void {
   if (!s.picked.C3 && tanks.length >= 2) s.picked.C3 = tanks[1].purpose ?? 'had';
@@ -787,6 +810,7 @@ export function takeChoice(tanks: TankState[]): ChoiceCard | null {
   const s = choiceState(tanks);
   noteFirstBrood(tanks, s);
   settleImplicit(tanks, s);
+  endGrowPlan(tanks, s);
   const now = tanks[0].hours;
   // 同一個遊戲天最多一張（#316）：同一天又過一晚、或別的地方再拿一次，都不再出第二張
   const today = Math.floor(now / 24);
@@ -874,8 +898,10 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
         const why = setKeeper(tanks[hit.tank], hit.fish.id, true);
         if (why) return why;
         (s.backups ??= []).push(hit.fish.id);
-      } else if (!orderRefusal(tanks, s.trade.orderId)) fulfillOrder(tanks, s.trade.orderId);
-      // 還湊不齊的單：選交單就是「這尾可以交」，湊齊了照常按交貨
+      } else if (!s.trade.atDelivery && !orderRefusal(tanks, s.trade.orderId)) fulfillOrder(tanks, s.trade.orderId);
+      // 還湊不齊的單：選交單就是「這尾可以交」，湊齊了照常按交貨；按交貨時問的，交貨由畫面接著做
+      const asked = (s.tradeAsked ??= []);
+      if (!asked.includes(s.trade.orderId)) asked.push(s.trade.orderId);
       break;
     }
     case 'C7': {
@@ -887,7 +913,10 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
       const food = GROW_PLAN_FOOD[plan];
       if (food) t.feedPlan = { ...food };
       else delete t.feedPlan;
-      if (t.equipment.heater) setHeaterTarget(t, planTemp(t, plan));
+      if (t.equipment.heater) {
+        s.planPrevTemp ??= t.equipment.heater.targetC;
+        setHeaterTarget(t, planTemp(t, plan));
+      }
       s.plan = plan;
       s.planHours = tanks[0].hours;
       // 每個里程碑比標準提前幾天（兩尾裡慢的那尾決定）
