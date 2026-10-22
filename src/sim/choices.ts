@@ -3,6 +3,8 @@ import { economy, keeperRefusal, MAX_KEEPERS, setKeeper } from './economy';
 import { cross, finWords, lookIndex, phenotype, strainName, type GuppyGenome, type GuppyPhenotype } from './genetics';
 import { daysToLength, growthStage } from './growth';
 import { moveFish, newTankCost } from './household';
+import { isCycled } from './processes/nitrogen';
+import { mediaAvailable, transferMedia } from './gifts';
 import { guppyTraits } from './lookalike';
 import { daysToBirth, releaseNursery, rescueFryToNursery, usesNursery } from './nursery';
 import { fishMatchesOrder, fulfillOrder, orderBoard, orderSupply, type ShopOrder } from './orders';
@@ -18,11 +20,12 @@ import { ADULT_SIZE, isJuvenile, type Fish, type TankState } from './state';
  * - C3 第一窩出生後、錢夠買第二缸（#305）：第二缸當繁殖缸還是展示缸
  * - C4 選種後：留種的母魚配哪一尾公魚（各自附這對生出夢想魚的機率）
  * - C5 留種的魚剛好符合 200 元以上的單：交單拿錢，還是留著配種
+ * - C6 繁殖缸養好了（C3 選繁殖缸之後，#305）：留種的魚、快生的母魚、第一窩小魚搬過去
  * 不管選哪個都能玩下去。只出資料和套用選擇；卡片的樣子由畫面負責（選種卡、配對比較卡交美術）。
  */
 
-export type ChoiceId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5';
-export const CHOICE_IDS: ChoiceId[] = ['C1', 'C2', 'C3', 'C4', 'C5'];
+export type ChoiceId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6';
+export const CHOICE_IDS: ChoiceId[] = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
 
 export interface ChoiceOption {
   key: string;
@@ -102,6 +105,8 @@ export interface ChoiceCard {
   /** C4：配哪尾母魚。 */
   motherId?: number;
   trade?: TradeEstimate;
+  /** C6：要搬去繁殖缸的魚（照搬的順序）。 */
+  move?: number[];
 }
 
 /** 存在共用錢包上：每張卡上次出現的時間、選了什麼。 */
@@ -268,6 +273,22 @@ function bestDreamPct(tanks: TankState[], without?: number): number {
   return best;
 }
 
+/**
+ * C6：繁殖缸和要搬過去的魚。順序：留種的魚、快生的母魚、自家的小魚（育幼盒裡的不動，盒子自己會放）。
+ * 搬到繁殖缸的魚數上限是容量（一半水量的尾數）。沒有繁殖缸、沒魚要搬就回 null。
+ * 新買的繁殖缸是空的，沒有氨就養不出菌：搬之前先分主缸一半的濾材過去（transferMedia），跟現實一樣。
+ */
+function breedingMove(tanks: TankState[]): { to: number; fish: { fish: Fish; tank: number }[] } | null {
+  const to = tanks.findIndex((t) => t.purpose === 'breeding');
+  if (to < 0) return null;
+  const room = Math.round(tanks[to].equipment.tank.volumeL / 2) - tanks[to].fish.filter((f) => f.alive).length;
+  if (room <= 0) return null;
+  const others = tanks.flatMap((t, tank) => (tank === to || t.purpose === 'breeding' ? [] : t.fish.filter((f) => f.alive && !f.nursery && !f.listing && f.species === 'guppy').map((fish) => ({ fish, tank }))));
+  const rank = (f: Fish) => (f.keeper ? 0 : f.sex === 'female' && f.pregnancy > 0.5 ? 1 : bred(f) && isJuvenile(f) ? 2 : 3);
+  const fish = others.filter(({ fish }) => rank(fish) < 3).sort((a, b) => rank(a.fish) - rank(b.fish)).slice(0, room);
+  return fish.length > 0 ? { to, fish } : null;
+}
+
 /** 這張卡現在該不該出、出的話卡片資料（不記錄）。 */
 function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState): ChoiceCard | null {
   const home = tanks[0];
@@ -362,6 +383,26 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState): ChoiceCard |
           { key: 'keep', label: '留著配種', outcome: keepPct > 0 ? `夢想魚機率維持 ${keepPct}%，之後的孫代更好` : '留著繼續選育，之後的孫代更好', recommended: keepPct > sellPct },
         ],
         trade: { fishId: d.fish.id, orderId: d.order.id, coins, keepPct, sellPct },
+      };
+    }
+    case 'C6': {
+      const m = breedingMove(tanks);
+      if (!m) return null;
+      const keepers = m.fish.filter(({ fish }) => fish.keeper).length;
+      const moms = m.fish.filter(({ fish }) => !fish.keeper && fish.pregnancy > 0.5).length;
+      const young = m.fish.length - keepers - moms;
+      const cycled = isCycled(tanks[m.to]);
+      const what = [keepers ? `留種的魚 ${keepers} 尾` : '', moms ? `快生的母魚 ${moms} 尾` : '', young ? `小魚 ${young} 尾` : ''].filter(Boolean).join('、');
+      return {
+        id,
+        tank: m.to,
+        title: '繁殖缸可以用了！把魚搬過去嗎？',
+        owner: `${cycled ? '繁殖缸的水養好了。' : '繁殖缸擺好了。先分主缸一半的濾材過去，菌就跟著過去，不用從頭養水。'}${what}搬過去，小魚不會被大魚吃，留種的也不會跟主缸的魚亂配。`,
+        options: [
+          { key: 'move', label: '搬過去', outcome: `${cycled ? '' : '分一半濾材、'}${what}搬到繁殖缸`, recommended: true },
+          { key: 'stay', label: '先不要', outcome: '之後在魚卡上也能一尾一尾搬' },
+        ],
+        move: m.fish.map(({ fish }) => fish.id),
       };
     }
   }
@@ -459,6 +500,20 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
           setKeeper(tanks[hit.tank], hit.fish.id, true);
           return '現在交不出這張單';
         }
+      }
+      break;
+    }
+    case 'C6': {
+      if (key === 'move') {
+        const m = breedingMove(tanks);
+        if (!m) return '繁殖缸滿了，或沒有要搬的魚';
+        const to = tanks[m.to];
+        if (!isCycled(to)) {
+          // 從最成熟的那缸分濾材
+          const from = tanks.filter((t) => t !== to).sort((a, b) => mediaAvailable(b) - mediaAvailable(a))[0];
+          if (!from || !transferMedia(from, to)) return '主缸的濾材還不夠成熟，繁殖缸先自己養水';
+        }
+        for (const { fish, tank } of m.fish) moveFish(tanks[tank], tanks[m.to], fish.id);
       }
       break;
     }

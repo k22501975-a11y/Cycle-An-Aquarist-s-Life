@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
 import {
   addFish,
+  bacteriaCapacity,
+  buyTank,
+  setTankPurpose,
   breedingProgress,
   chooseOption,
   choiceState,
@@ -159,6 +162,26 @@ describe('中期的選擇點（design/midgame.md）', () => {
     expect(chooseOption(tanks, 'C5', 'sell')).toBeNull();
     expect(economy(s).coins).toBe(before + 220);
     expect(kids[0].alive && s.fish.includes(kids[0])).toBe(false);
+  });
+
+  it('C6 繁殖缸擺好了：分主缸濾材過去，留種的魚、快生的母魚先搬，小魚跟著搬', () => {
+    const { s, tanks, kids, mom } = withBrood(6, PICK_AFTER_BROOD_DAYS * 24);
+    Object.assign(choiceState(tanks).picked, { C1: 'box', C2: 'later', C3: 'breeding' });
+    economy(s).coins = 5000;
+    s.bacteria.aob = s.bacteria.nob = bacteriaCapacity(s);
+    expect(takeChoice(tanks)).toBeNull();
+    const t2 = buyTank(tanks, 'nano20')!;
+    setTankPurpose(t2, 'breeding');
+    kids[0].keeper = true;
+    mom.pregnancy = 0.8;
+    const c6 = takeChoice(tanks);
+    expect(c6?.id).toBe('C6');
+    expect(c6!.move!.slice(0, 2)).toEqual([kids[0].id, mom.id]);
+    expect(c6!.owner).toMatch(/濾材/);
+    expect(chooseOption(tanks, 'C6', 'move')).toBeNull();
+    expect(t2.bacteria.aob).toBeGreaterThan(0);
+    expect(t2.fish.map((f) => f.id)).toEqual(expect.arrayContaining([kids[0].id, mom.id, ...kids.slice(1).map((k) => k.id)]));
+    expect(takeChoice(tanks)).toBeNull();
   });
 
   it('選育進度：選種前說第一窩再幾天能挑，留種後說公魚再幾天成熟', () => {
