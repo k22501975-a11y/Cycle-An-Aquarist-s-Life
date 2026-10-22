@@ -100,9 +100,13 @@ const FIN_PATH: Record<string, string> = {
   'tail:round': 'M3 12 Q8 9 11 12 Q8 15 3 12 M11 12 Q20 4 20 12 Q20 20 11 12Z',
 };
 
+let gemSeq = 0;
+
 export function traitIcon(key: string): string {
   const gem = GEM[key];
   if (gem) {
+    // 每個圖示用自己的漸層 id（同 id 的第一個若被藏起來，WebView 會讓其他的沒有填色）
+    const id = `g-${key}-${++gemSeq}`;
     // 蛇王多一層迷宮紋；禮服是後半身暗
     const extra =
       key === 'snake'
@@ -112,7 +116,7 @@ export function traitIcon(key: string): string {
           : key === 'albino'
             ? '<circle cx="12" cy="12" r="2.6" fill="#e0263e"/>'
             : '';
-    return `<svg viewBox="0 0 24 24" aria-hidden="true"><defs><radialGradient id="g-${key}" cx=".35" cy=".3" r=".75"><stop offset="0" stop-color="${gem[0]}"/><stop offset="1" stop-color="${gem[1]}"/></radialGradient></defs><circle cx="12" cy="12" r="8" fill="url(#g-${key})" stroke="#f3ead8" stroke-opacity=".55" stroke-width="1"/>${extra}<ellipse cx="9" cy="8.5" rx="2.4" ry="1.4" fill="#fff" opacity=".55"/></svg>`;
+    return `<svg viewBox="0 0 24 24" aria-hidden="true"><defs><radialGradient id="${id}" cx=".35" cy=".3" r=".75"><stop offset="0" stop-color="${gem[0]}"/><stop offset="1" stop-color="${gem[1]}"/></radialGradient></defs><circle cx="12" cy="12" r="8" fill="url(#${id})" stroke="#f3ead8" stroke-opacity=".55" stroke-width="1"/>${extra}<ellipse cx="9" cy="8.5" rx="2.4" ry="1.4" fill="#fff" opacity=".55"/></svg>`;
   }
   const d = FIN_PATH[key] ?? FIN_PATH['tail:round'];
   return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}" fill="#e3bd6d" fill-opacity=".35" stroke="#f6d891" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
