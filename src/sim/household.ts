@@ -24,17 +24,20 @@ export const TANK_RESALE_SHARE = 0.3;
 
 export type TankSizeId = keyof typeof TANKS;
 
-/** 套缸：缸＋過濾＋加熱棒＋燈，買回來就能開始養水。大缸配大一點的設備。 */
-export const TANK_SETS: Record<TankSizeId, { tank: TankSpec; filter: FilterSpec; heater: HeaterSpec; price: number }> = {
-  nano20: { tank: TANKS.nano20, filter: FILTERS.sponge, heater: HEATERS.h25, price: 600 },
-  std40: { tank: TANKS.std40, filter: FILTERS.hangOn, heater: HEATERS.h50, price: 900 },
-  std90: { tank: TANKS.std90, filter: FILTERS.hangOn, heater: HEATERS.h100, price: 2200 },
+/**
+ * 套缸：缸＋過濾＋加熱棒＋燈，買回來就能開始養水。大缸配大一點的設備。
+ * tankPrice 只是缸本身；玩家看到、mvp.md §4.3 寫的是 tankSetPrice 的整組價（20L 1,430、90L 3,500，#283）。
+ */
+export const TANK_SETS: Record<TankSizeId, { tank: TankSpec; filter: FilterSpec; heater: HeaterSpec; tankPrice: number }> = {
+  nano20: { tank: TANKS.nano20, filter: FILTERS.sponge, heater: HEATERS.h25, tankPrice: 600 },
+  std40: { tank: TANKS.std40, filter: FILTERS.hangOn, heater: HEATERS.h50, tankPrice: 900 },
+  std90: { tank: TANKS.std90, filter: FILTERS.hangOn, heater: HEATERS.h100, tankPrice: 2200 },
 };
 
 /** 套缸的總價（缸本身加上配的設備）。 */
 export function tankSetPrice(id: TankSizeId): number {
   const set = TANK_SETS[id];
-  return set.price + (PRICES[`filter:${set.filter.id}`] ?? 0) + (PRICES[`heater:${set.heater.id}`] ?? 0) + (PRICES['light:basic'] ?? 0);
+  return set.tankPrice + (PRICES[`filter:${set.filter.id}`] ?? 0) + (PRICES[`heater:${set.heater.id}`] ?? 0) + (PRICES['light:basic'] ?? 0);
 }
 
 /** 第 count + 1 個缸要不要先買缸架。 */
@@ -148,7 +151,7 @@ export function removeTank(tanks: TankState[], index: number): number {
   if (removeTankRefusal(tanks, index)) return 0;
   const t = tanks[index];
   const id = t.equipment.tank.id as TankSizeId;
-  const refund = Math.round((TANK_SETS[id]?.price ?? 0) * TANK_RESALE_SHARE);
+  const refund = Math.round((TANK_SETS[id]?.tankPrice ?? 0) * TANK_RESALE_SHARE);
   tanks.splice(index, 1);
   economy(tanks[0]).coins += refund;
   linkTanks(tanks);
