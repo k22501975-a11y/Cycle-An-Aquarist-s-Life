@@ -13,10 +13,8 @@ import {
   feed,
   fulfillOrder,
   HARDSCAPE,
-  isCycled,
   linkTanks,
   moveDueToNursery,
-  moveFish,
   orderBoard,
   orderSupply,
   PINCH_MEALS,
@@ -38,7 +36,7 @@ import { doAllDaily } from './daily-player';
 /**
  * 中期劇本（design/midgame.md §5）：基準玩法玩 36 天。開局照教學、買夢想魚配對（紅蛇王公魚、兩尾全紅白子母魚），
  * 之後每天一小撮、測水、測到氨或亞硝換三成、做完小事、交得出的單就交、快生的母魚放育幼盒，晚上過一晚看早上報告。
- * 早上出選擇卡就照推薦選：選種挑卡上排最前面的 1 公 2 母，第二缸買來當繁殖缸、把留種的魚搬過去。
+ * 早上出選擇卡就照推薦選：選種挑卡上排最前面的 1 公 2 母，第二缸買來當繁殖缸，養好了照 C6 卡把魚搬過去。
  * 每晚記下：出了哪張選擇卡、早上是不是「安靜的一晚」、手上的錢。
  */
 
@@ -48,6 +46,10 @@ export interface MidgameNight {
   choice?: ChoiceId;
   quiet: boolean;
   coins: number;
+  /** 幾個缸。 */
+  tanks: number;
+  /** 繁殖缸裡有幾尾魚（沒有繁殖缸是 0）。 */
+  inBreeding: number;
   /** 這天早上報告的開場白和每條（除錯看）。 */
   line: string;
 }
@@ -123,9 +125,6 @@ export function midgamePlayer(seed: number, days = 36): MidgameNight[] {
     claimDaily(tanks);
     for (const o of [...orderBoard(s).orders]) if (orderSupply(tanks, o) >= o.count) fulfillOrder(tanks, o.id);
     for (const t of tanks) moveDueToNursery(t);
-    // 繁殖缸養好了：留種的魚搬過去（避免主缸亂配）
-    const breed = tanks.find((t) => t.purpose === 'breeding');
-    if (breed && isCycled(breed)) for (const f of [...s.fish]) if (f.alive && f.keeper) moveFish(s, breed, f.id);
     checkGoals(tanks, !currentQuest(p));
     const before = snapshot(tanks);
     simulateAll(tanks, 23.5);
@@ -133,7 +132,7 @@ export function midgamePlayer(seed: number, days = 36): MidgameNight[] {
     const card = report.items.find((i) => i.choice)?.choice;
     const why = card ? pickRecommended(tanks, card) : null;
     const line = morningLine(report);
-    out.push({ day: Math.floor(s.hours / 24) + 1, choice: card?.id, quiet: line === '安靜的一晚。', coins: economy(s).coins, line: `${why ? `（選不了：${why}）` : ''}${line} ${report.items.map((i) => i.kind).join(',')}` });
+    out.push({ day: Math.floor(s.hours / 24) + 1, choice: card?.id, quiet: line === '安靜的一晚。', coins: economy(s).coins, tanks: tanks.length, inBreeding: tanks.find((t) => t.purpose === 'breeding')?.fish.filter((f) => f.alive).length ?? 0, line: `${why ? `（選不了：${why}）` : ''}${line} ${report.items.map((i) => i.kind).join(',')}` });
   }
   return out;
 }
