@@ -270,6 +270,8 @@ export interface Fish {
   ageDays: number;
   /** 懷孕／抱卵進度 0–1，0 表示沒有。 */
   pregnancy: number;
+  /** 選種日標的「留種」魚（design/midgame.md C2）：訂單和收購預設排除；舊存檔沒有。 */
+  keeper?: boolean;
   /** 這一胎玩家已經點開她的卡片看過肚子（下一步就換成倒數，#282）；生完清掉。 */
   bellySeen?: boolean;
   /** 長期營養 0–1（標準飼料約 0.5）：影響成長與免疫力。舊存檔沒有，當 0.5。 */

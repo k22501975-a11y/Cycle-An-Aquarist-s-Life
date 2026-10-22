@@ -109,6 +109,8 @@ interface FishView {
   glow: Sprite;
   spots: Graphics;
   eggs: Graphics;
+  /** 留種魚頭上的小緞帶（midgame.md C2）；不是留種就沒有。 */
+  ribbon: Graphics | null;
   ichDrawn: boolean;
   eggsDrawn: boolean;
   /** 景深 0（最遠）– 1（最近），慢慢游來游去。 */
@@ -1618,6 +1620,7 @@ export class TankView {
       glow,
       spots,
       eggs,
+      ribbon: null,
       ichDrawn: false,
       eggsDrawn: false,
       deathT: fish.alive ? -1 : DEATH_SECONDS,
@@ -1958,6 +1961,18 @@ export class TankView {
         }
         view.eggsDrawn = berried;
       }
+      // 留種的魚：背上方浮一個小緞帶，跟著魚游、不跟著翻面
+      const kept = fish.alive && !!fish.keeper;
+      if (kept && !view.ribbon) view.holder.addChild((view.ribbon = keeperRibbonGraphic()));
+      if (view.ribbon) {
+        view.ribbon.visible = kept;
+        if (kept) {
+          const s = 1.3 * Math.max(0.8, Math.min(1.3, this.hs)) * (0.85 + 0.2 * view.z);
+          view.ribbon.scale.set(s);
+          view.ribbon.position.set(0, -this.lengthPx(fish) * depth * 0.14 - 8 * s + Math.sin(this.time * 2 + fish.id) * 1.5);
+          view.ribbon.alpha = view.back ? 0.7 : 1;
+        }
+      }
       // 選取的魚：身後一圈柔和的金色光暈
       const selected = this.selectedFish === fish.id;
       const spot = selected ? 0 : this.spotLevel('fish', fish.id);
@@ -2238,4 +2253,15 @@ function fadeTexture(): Texture {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 4, 256);
   return canvasTexture(canvas, false);
+}
+
+/** 缸裡的留種緞帶：金色圓章加兩條紅緞帶（和介面上的 keeper-ribbon 同一個樣子，縮小成向量）。 */
+function keeperRibbonGraphic(): Graphics {
+  const g = new Graphics();
+  g.poly([-2.5, 1, -6, 11, -3, 9, -1.5, 12, 0.5, 2]).fill({ color: 0xc8283e }).stroke({ color: 0x5c0f1f, width: 0.6 });
+  g.poly([2.5, 1, 6, 11, 3, 9, 1.5, 12, -0.5, 2]).fill({ color: 0xd8384a }).stroke({ color: 0x5c0f1f, width: 0.6 });
+  g.circle(0, -1, 4.6).fill({ color: 0xe3bd6d }).stroke({ color: 0x7a5420, width: 0.8 });
+  g.circle(0, -1, 2.9).stroke({ color: 0xfff4cf, width: 0.6, alpha: 0.75 });
+  g.circle(-1.4, -2.4, 1.1).fill({ color: 0xffffff, alpha: 0.6 });
+  return g;
 }
