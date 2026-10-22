@@ -86,6 +86,15 @@ function pickRecommended(tanks: TankState[], card: ChoiceCard): string | null {
 }
 
 export function midgamePlayer(seed: number, days = 36): MidgameNight[] {
+  return run(seed, days).nights;
+}
+
+/** 中期劇本玩完之後的所有缸（上傳檢查的劇本用）。 */
+export function midgamePlayerTanks(seed: number, days = 36): TankState[] {
+  return run(seed, days).tanks;
+}
+
+function run(seed: number, days: number): { nights: MidgameNight[]; tanks: TankState[] } {
   const s = newGameState(seed);
   const tanks = [s];
   linkTanks(tanks);
@@ -135,5 +144,5 @@ export function midgamePlayer(seed: number, days = 36): MidgameNight[] {
     const line = morningLine(report);
     out.push({ day: Math.floor(s.hours / 24) + 1, choice: card?.id, quiet: line === '安靜的一晚。', coins: economy(s).coins, line: `${why ? `（選不了：${why}）` : ''}${line} ${report.items.map((i) => i.kind).join(',')}` });
   }
-  return out;
+  return { nights: out, tanks };
 }

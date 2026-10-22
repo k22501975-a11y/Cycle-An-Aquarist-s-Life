@@ -37,6 +37,9 @@ class SimTest {
     static class FakeSim implements SimClient {
         final ObjectMapper json = new ObjectMapper();
         List<Problem> problems = List.of();
+        /** 沒有上一份可比（第一次上傳、強制覆蓋）時，這份自己的問題。 */
+        List<Problem> aloneProblems = List.of();
+        int aloneChecks;
         boolean down;
         boolean unreadable;
         final List<Long> verifiedElapsed = new ArrayList<>();
@@ -66,6 +69,10 @@ class SimTest {
         public List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs, List<JsonNode> shipped, List<JsonNode> received) {
             if (down) throw new Unavailable("down", null);
             if (unreadable) throw new HttpSimClient.BadSave("讀不出這份存檔");
+            if (previous.isNull()) {
+                aloneChecks++;
+                return aloneProblems;
+            }
             verifiedElapsed.add(elapsedMs);
             verifiedShipped.add(shipped);
             verifiedReceived.add(received);
@@ -118,6 +125,8 @@ class SimTest {
     @BeforeEach
     void reset() {
         sim.problems = List.of();
+        sim.aloneProblems = List.of();
+        sim.aloneChecks = 0;
         sim.down = false;
         sim.unreadable = false;
         sim.verifiedElapsed.clear();
@@ -212,6 +221,31 @@ class SimTest {
         sim.down = false;
         sim.inspect = new SimClient.Inspect(true, true, json.readTree("{\"id\":7,\"species\":\"guppy\",\"sex\":\"male\"}"));
         send(post("/api/market/listings"), me, FISH).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("save_replaced"));
+    }
+
+    @Test
+    void 雲端第一次上傳也檢查_改出來的魚不收_強制也不收() throws Exception {
+        // #76：以前第一次上傳完全不檢查，偽造的存檔直接成為基準
+        String me = player();
+        sim.aloneProblems = List.of(new SimClient.Problem("genome_forged", "#9 這條魚不是店裡買得到的，也不是市場來的"));
+        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("genome_forged"));
+        send(put("/api/save"), me, saveBody(0, true)).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("genome_forged"));
+        sim.aloneProblems = List.of();
+        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        assertThat(sim.aloneChecks).isEqualTo(3);
+        assertThat(sim.verifiedElapsed).isEmpty();
+    }
+
+    @Test
+    void 強制覆蓋_跟上一份對不上可以收_但這份自己有改出來的魚不收() throws Exception {
+        String me = player();
+        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        sim.problems = List.of(new SimClient.Problem("identity_changed", "#7 這條魚的身分跟伺服器上的不一樣"));
+        sim.aloneProblems = List.of(new SimClient.Problem("genome_forged", "#7 這條魚不是店裡買得到的，也不是市場來的"));
+        send(put("/api/save"), me, saveBody(1, true)).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("genome_forged"));
+        assertThat(read(send(get("/api/save"), me, null)).get("revision").asLong()).isEqualTo(1);
+        sim.aloneProblems = List.of();
+        send(put("/api/save"), me, saveBody(1, true)).andExpect(status().isOk());
     }
 
     @Test

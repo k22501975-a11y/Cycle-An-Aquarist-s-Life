@@ -54,6 +54,15 @@ describe('模擬小服務（L2）', () => {
     expect(problems.map((p) => p.code)).toEqual(['time_ahead']);
   });
 
+  it('上傳檢查：另一缸自己跑得比伺服器快、或拿更舊的存檔回來，都會被擋下（#76）', () => {
+    const { state, raw } = saveAt(T0, (s) => simulate(s, 24));
+    const extra = newGameState(7);
+    extra.hours = state.hours + 24 * 7;
+    expect(verify(raw, JSON.parse(serializeSave(state, 7, T0 + HOUR_MS, undefined, { tanks: [extra], active: 0 })), HOUR_MS).map((p) => p.code)).toEqual(['time_ahead']);
+    state.hours -= 12;
+    expect(verify(raw, JSON.parse(serializeSave(state, 7, T0 + HOUR_MS)), HOUR_MS).map((p) => p.code)).toEqual(['time_back']);
+  });
+
   it('上傳檢查：改了已經存在的魚的基因或性別會被擋下，老闆送的魚不能改成可以賣', () => {
     const { state, raw } = saveAt(T0, (s) => {
       addFish(s, 'guppy', { carriesIch: false, sex: 'female' }).gift = true;
