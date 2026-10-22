@@ -6,9 +6,14 @@ import {
   crowdingRatio,
   bacteriaCapacity,
   BACKUP_MAX,
+  MAX_KEEPERS,
   hasDreamGenes,
   orderDreamNote,
   tradeCheck,
+  maxLengthCm,
+  SECOND_BROOD_KEEP,
+  SECOND_BROOD_SHOWS,
+  takeSecondBrood,
   buyTank,
   setTankPurpose,
   breedingProgress,
@@ -28,6 +33,8 @@ import {
   reservedForPick,
   suggestPurpose,
   takeChoice,
+  takeMilestones,
+  nextMilestone,
   TANK_AFTER_BROOD_DAYS,
   type ShopOrder,
   type TankState,
@@ -152,7 +159,7 @@ describe('中期的選擇點（design/midgame.md）', () => {
     const pick = c4!.options.find((o) => o.recommended)!;
     expect(chooseOption(tanks, 'C4', pick.key)).toBeNull();
     expect(choiceState(tanks).pair).toEqual([c4!.motherId, Number(pick.key)]);
-    expect(breedingProgress(tanks)).toMatch(/^留種的那對長到 .* cm，再約 \d+ 天成熟可以配$/);
+    expect(breedingProgress(tanks)).toMatch(/^留種的那對長到 .* cm，下一步：肛鰭變尖、出現胎斑，約 \d+ 天$/);
   });
 
   it('C5 相對門檻：便宜的單會拿走留著能提高孫代機率的魚就問；選過留著之後同類的單自動留，同一天最多一張（#316）', () => {
@@ -211,6 +218,137 @@ describe('中期的選擇點（design/midgame.md）', () => {
     expect(s.equipment.heater!.targetC).toBe(FAST_TEMP_C);
     expect(s.feedPlan).toEqual({ kind: 'floating', grade: 3 });
     expect(choiceState(tanks).plan).toBe('fast');
+  });
+
+  it('成長里程碑：配好對之後，看得出公母、公魚顯色、可以配各報一次；養快會寫提前幾天（#316）', () => {
+    const { s, tanks, kids } = withBrood(6, PICK_AFTER_BROOD_DAYS * 24);
+    Object.assign(choiceState(tanks).picked, { C1: 'box', C3: 'had' });
+    takeChoice(tanks);
+    chooseOption(tanks, 'C2', 'pick', [kids[0].id, kids[1].id, kids[3].id]);
+    s.hours += 2 * 24;
+    const c4 = takeChoice(tanks)!;
+    chooseOption(tanks, 'C4', c4.options.find((o) => o.recommended)!.key);
+    const [momId, dadId] = choiceState(tanks).pair!;
+    const mom = s.fish.find((f) => f.id === momId)!;
+    const dad = s.fish.find((f) => f.id === dadId)!;
+    // 剛配好對：已經到了的不報
+    expect(takeMilestones(tanks)).toEqual([]);
+    expect(nextMilestone(tanks)?.step).toBe('sex');
+    expect(chooseOption(tanks, 'C7', 'fast')).toBeNull();
+    // 長到成體一半就看得出公母（企劃 2026-10-22）
+    mom.lengthCm = maxLengthCm(mom) * 0.5 - 0.01;
+    dad.lengthCm = maxLengthCm(dad) * 0.5 - 0.01;
+    expect(takeMilestones(tanks)).toEqual([]);
+    mom.lengthCm = maxLengthCm(mom) * 0.5;
+    dad.lengthCm = maxLengthCm(dad) * 0.5;
+    const sex = takeMilestones(tanks);
+    expect(sex.map((m) => m.step)).toEqual(['sex', 'sex']);
+    expect(sex.find((m) => m.fishId === dadId)!.text).toMatch(/肛鰭開始變尖了，是公魚！/);
+    expect(sex.find((m) => m.fishId === momId)!.text).toMatch(/看得到胎斑了，是母魚！/);
+    expect(sex[0].earlierDays).toBeGreaterThan(0);
+    expect(takeMilestones(tanks)).toEqual([]);
+    expect(nextMilestone(tanks)?.step).toBe('color');
+    dad.lengthCm = 2.8;
+    expect(takeMilestones(tanks).map((m) => m.step)).toEqual(['color']);
+    mom.lengthCm = dad.lengthCm = 3.1;
+    const ready = takeMilestones(tanks);
+    expect(ready).toMatchObject([{ step: 'ready', fishId: dadId, partnerId: momId }]);
+    expect(nextMilestone(tanks)).toBeNull();
+  });
+
+  it('C9 生過一窩的母魚又快生了：問第二窩怎麼辦；選挑備用種魚，生下來就挑離夢想魚最近的標留種（#316）', () => {
+    const { s, tanks, mom, dad } = withBrood(4, 20 * 24);
+    const st = choiceState(tanks);
+    Object.assign(st.picked, { C1: 'box', C2: 'later', C3: 'had', C4: 'x', C5: 'sell', C6: 'stay', C7: 'standard', C8: 'wait' });
+    mom.pregnancy = SECOND_BROOD_SHOWS - 0.05;
+    expect(takeChoice(tanks)).toBeNull();
+    mom.pregnancy = SECOND_BROOD_SHOWS;
+    const c9 = takeChoice(tanks);
+    expect(c9?.id).toBe('C9');
+    expect(c9!.title).toBe('第二窩快生了，要怎麼辦？');
+    expect(c9!.options.map((o) => o.key)).toEqual(['grow', 'sell', 'keep']);
+    expect(c9!.options.find((o) => o.key === 'sell')!.outcome).toMatch(/約 \d+ 元/);
+    expect(chooseOption(tanks, 'C9', 'keep')).toBeNull();
+    expect(st.secondBrood).toMatchObject({ momId: mom.id, prevKids: 4 });
+    // 還沒生：沒有報告
+    expect(takeSecondBrood(tanks)).toBeNull();
+    s.hours += 7 * 24;
+    mom.pregnancy = 0;
+    const rng = { seed: 9 };
+    const fry = Array.from({ length: 8 }, (_, i) => {
+      const sex = i % 2 === 0 ? 'male' : 'female';
+      const f = addFish(s, 'guppy', { sex, pregnant: false });
+      f.genome = cross(rng, mom.genome!, dad.genome!, sex);
+      f.generation = 1;
+      f.motherId = mom.id;
+      f.bornHours = s.hours;
+      return f;
+    });
+    const news = takeSecondBrood(tanks);
+    expect(news).toMatchObject({ count: 8, prevKids: 4, choice: 'keep' });
+    expect(news!.kept).toBeGreaterThanOrEqual(1);
+    expect(news!.kept).toBeLessThanOrEqual(SECOND_BROOD_KEEP);
+    expect(fry.filter((f) => f.keeper).length).toBe(news!.kept);
+    expect(news!.text).toMatch(/第二窩生了 8 尾（第一窩現在還有 4 尾）/);
+    expect(takeSecondBrood(tanks)).toBeNull();
+  });
+
+  it('C9 挑備用種魚但留種名額滿了：報告講清楚，不默默略過', () => {
+    const { s, tanks, mom, dad, kids } = withBrood(MAX_KEEPERS, 20 * 24);
+    const st = choiceState(tanks);
+    Object.assign(st.picked, { C1: 'box', C2: 'later', C3: 'had', C4: 'x', C5: 'sell', C6: 'stay', C7: 'standard', C8: 'wait' });
+    for (const k of kids) k.keeper = true;
+    mom.pregnancy = 0.8;
+    expect(takeChoice(tanks)?.id).toBe('C9');
+    expect(chooseOption(tanks, 'C9', 'keep')).toBeNull();
+    s.hours += 6 * 24;
+    const rng = { seed: 9 };
+    for (let i = 0; i < 4; i++) {
+      const f = addFish(s, 'guppy', { sex: 'female', pregnant: false });
+      f.genome = cross(rng, mom.genome!, dad.genome!, 'female');
+      f.generation = 1;
+      f.motherId = mom.id;
+      f.bornHours = s.hours;
+    }
+    const news = takeSecondBrood(tanks)!;
+    expect(news.kept).toBe(0);
+    expect(news.text).toMatch(/留種名額滿了/);
+  });
+
+  it('C9 選交小魚單：這窩之後交單不再出 C5', () => {
+    const { s, tanks, mom, dad } = withBrood(4, 20 * 24);
+    const st = choiceState(tanks);
+    Object.assign(st.picked, { C1: 'box', C2: 'later', C3: 'had', C4: 'x', C6: 'stay', C7: 'standard', C8: 'wait' });
+    mom.pregnancy = 0.8;
+    expect(takeChoice(tanks)?.id).toBe('C9');
+    expect(chooseOption(tanks, 'C9', 'sell')).toBeNull();
+    s.hours += 6 * 24;
+    mom.pregnancy = 0;
+    const rng = { seed: 9 };
+    const fry = Array.from({ length: 6 }, () => {
+      const f = addFish(s, 'guppy', { sex: 'female', pregnant: false });
+      f.genome = cross(rng, mom.genome!, dad.genome!, 'female');
+      f.generation = 1;
+      f.motherId = mom.id;
+      f.bornHours = s.hours;
+      f.lengthCm = 2.2;
+      return f;
+    });
+    expect(takeSecondBrood(tanks)?.choice).toBe('sell');
+    expect(st.secondBrood!.fry).toEqual(fry.map((f) => f.id));
+    // 第一窩的魚都先留種，單只會拿到第二窩
+    for (const k of s.fish.filter((f) => f.motherId === mom.id && !fry.includes(f))) k.keeper = true;
+    orderBoard(s).orders = [{ id: 97, kind: 'fish', species: 'guppy', size: 'juvenile', sex: 'female', count: 1, unitPrice: 40, postedHours: s.hours } as ShopOrder];
+    // 對照：不是交單的那窩的話，這張單會問
+    const sold = st.secondBrood!.fry!;
+    st.secondBrood!.fry = [];
+    const o = orderBoard(s).orders[0];
+    st.picked.C5 = 'sell';
+    expect(orderDreamNote(tanks, o)).toBe('有夢想魚基因');
+    st.secondBrood!.fry = sold;
+    expect(orderDreamNote(tanks, o)).toBeNull();
+    delete st.picked.C5;
+    expect(tradeCheck(tanks, 97)).toBeNull();
   });
 
   it('C7 的養法管到種魚長大：兩尾都能配了就收掉養法飼料、加熱棒調回原本的溫度（#319 架構）', () => {

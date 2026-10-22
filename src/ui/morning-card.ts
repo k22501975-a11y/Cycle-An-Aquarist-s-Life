@@ -42,6 +42,7 @@ const KIND_ICON: Record<ReportKind, ArtIcon> = {
   choice: 'owner',
   breeding: 'owner',
   milestone: 'owner',
+  second_brood: 'owner',
   observe: 'owner',
   quiet: 'owner',
 };
@@ -108,6 +109,7 @@ const GOOD_LINE: Partial<Record<ReportKind, string>> = {
   choice: '今天有件事要你決定！',
   breeding: '選育有進展。',
   milestone: '種魚又長大一步了！',
+  second_brood: '第二窩生了！',
   cycled: '水養好了，好消息！',
   rescued: '你救回來了！',
   fish_relaxed: '魚慢慢習慣新家了。',

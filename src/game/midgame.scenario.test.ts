@@ -6,7 +6,8 @@ import { midgamePlayer, midgamePlayerTanks } from './midgame-player';
  * 中期驗收（design/midgame.md §5）：基準玩法玩 36 天，種子 1～3。
  * - C1～C4 都出現，這四張相鄰最多隔 6 天（第一窩早生的話 C1 會在第 10 天前，一起算）
  * - 第 10～36 天「安靜的一晚」≤ 5 個（g17 是 11 個）
- * - C5（交單還是留著）36 天內出現
+ * - C5（交單還是留著）、C9（第二窩快生了）36 天內出現
+ * - 第 20～36 天至少 3 個選擇點（交單時的 C5 也算），相鄰隔 ≤ 6 天，同一天最多一張
  * - 第二缸（#305）：第 25 天前買到（C3 選繁殖缸就買）；養好了出 C6，搬過去之後繁殖缸裡有魚
  */
 describe('中期劇本（design/midgame.md §5）', () => {
@@ -32,6 +33,13 @@ describe('中期劇本（design/midgame.md §5）', () => {
       expect(nights.find((n) => n.tanks >= 2)!.day, log).toBeLessThanOrEqual(25);
       // C5 交單還是留著（#318）：36 天內一定要出現（早上的卡或交單時的卡）
       expect(nights.some((n) => n.choice === 'C5' || n.orderChoice === 'C5'), log).toBe(true);
+      // 第二窩快生了（C9）：36 天內出現
+      expect(order, log).toContain('C9');
+      // 第 20～36 天也要有選擇（midgame.md §5.4）：至少 3 個，相鄰隔 ≤ 6 天，交單時的卡也算、同一天最多一張
+      const late = nights.filter((n) => n.day >= 20 && (n.choice || n.orderChoice));
+      expect(late.filter((n) => n.choice && n.orderChoice), log).toEqual([]);
+      expect(late.length, log).toBeGreaterThanOrEqual(3);
+      for (let i = 1; i < late.length; i++) expect(late[i].day - late[i - 1].day, log).toBeLessThanOrEqual(6);
       const moved = nights.find((n) => n.choice === 'C6')!.day;
       expect(nights.filter((n) => n.day > moved).every((n) => n.inBreeding > 0), log).toBe(true);
     }, 300_000);
