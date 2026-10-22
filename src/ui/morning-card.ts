@@ -1,7 +1,8 @@
 import { artUrl, ownerImg, type ArtIcon } from './art-icons';
 import { ownerMood } from './owner-mood';
 import { h } from './dom';
-import { choiceVisual } from './choice-card';
+import { keeperRibbon } from './keeper-ribbon';
+import { choiceVisual, type FishLookup } from './choice-card';
 import { lookalikeVisual } from './lookalike-card';
 import { choiceFollowUp, isBadNews, type MorningReport, type ReportItem, type ReportKind } from './morning-report';
 
@@ -88,6 +89,8 @@ export interface MorningCardDeps {
    * 選了要去做的（放育幼盒、買缸），報告卡關掉再帶過去；其他留在報告卡上。
    */
   choose?: (item: ReportItem, key: string, picks: number[]) => string | null;
+  /** 選擇卡上只有魚的編號（C4 的母魚、C5 那尾），照編號找牠的樣子來畫。 */
+  fishLook?: FishLookup;
   /** 今天的小事（F3，#185）：早上一起列出來，點一件就關掉報告卡帶去做。 */
   daily?: { tasks: Array<{ id: string; art: string; text: string; done: boolean }>; go: (id: string) => void };
 }
@@ -163,12 +166,14 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
           deps.go({ ...item, action: go });
         }
         return null;
-      })),
+      }, deps.fishLook)),
     );
     return box;
   };
   const row = (item: ReportItem) => {
     if (item.choice) return choiceRow(item);
+    // 選育進度（midgame.md §2）：緞帶開頭的一行，不是可以點的事
+    if (item.kind === 'breeding') return h(`div.morning-item.${item.tone}.breeding-item`, {}, h('div.bc-line', {}, keeperRibbon('bc-line-ribbon'), h('span.bc-line-text', {}, item.text)));
     const pic = deps.picture?.(item) ?? artUrl(item.kind === 'crisis' && item.action ? ACTION_ICON[item.action] : KIND_ICON[item.kind]);
     const img = h('img', { src: pic, alt: '', draggable: 'false' });
     img.addEventListener('error', () => img.remove());

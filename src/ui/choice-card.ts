@@ -1,84 +1,65 @@
-import type { ChoiceCard, GuppyPhenotype, PairCandidate, PickFish } from '../sim';
+import type { ChoiceCard } from '../sim';
+import type { FishLook } from './breeding-cards';
 import { h } from './dom';
-import { femaleArtOf, guppyArt, maleFinOf } from './shop-cards';
 
 /**
- * 早上報告裡的選擇卡（design/midgame.md C1～C5，資料在 sim/choices.ts）：選項一列，每個寫後果，推薦的標出來。
- * C2 選種卡是一窩魚排一排，點了標留種（最多 1 公 2 母）；C4 是候選公魚並排，附這對生出夢想魚的機率。
- * 先用玻璃面板的簡單樣子，選種卡、配對比較卡的正式版由美術換掉。
+ * 早上報告裡的選擇卡（design/midgame.md C1～C5，資料在 sim/choices.ts）：
+ * C2 是選種卡（一窩寶貝卡，點了掛留種緞帶），C4 是配對比較卡（候選公魚並排、機率星星），
+ * C5 是交單還是留著，C1、C3 是二選一的圖卡。卡片的樣子在 breeding-cards.ts，
+ * 早上報告出卡時才載入（開機必載的預算留給開局）。
  */
-
-const ART = `${import.meta.env.BASE_URL}art/`;
-
-function fishImg(look: number, p: GuppyPhenotype, sex: 'male' | 'female'): HTMLElement {
-  const src = ART + (sex === 'female' ? femaleArtOf(p) : guppyArt(look, maleFinOf(p)));
-  return h(`img${p.albino ? '.albino' : ''}`, { src, alt: '', draggable: 'false' });
-}
 
 /** 選了一個選項：picks 是 C2 要留種的魚。回傳錯誤訊息（顯示在卡上），成功回傳 null。 */
 export type ChoosePick = (key: string, picks: number[]) => string | null;
 
-function pickRow(card: ChoiceCard, chosen: Set<number>, refresh: () => void): HTMLElement {
-  const limit = card.pickLimit ?? { male: 1, female: 2 };
-  const count = (sex: 'male' | 'female') => card.fish!.filter((f) => f.sex === sex && chosen.has(f.fishId)).length;
-  const chip = (f: PickFish) =>
-    h(
-      `button.choice-fish${chosen.has(f.fishId) ? '.on' : ''}`,
-      {
-        type: 'button',
-        'aria-pressed': String(chosen.has(f.fishId)),
-        onclick: (e: Event) => {
-          e.stopPropagation();
-          if (chosen.has(f.fishId)) chosen.delete(f.fishId);
-          else {
-            // 同性別滿了：換掉先選的那尾
-            if (count(f.sex) >= limit[f.sex]) {
-              const old = card.fish!.find((x) => x.sex === f.sex && chosen.has(x.fishId));
-              if (old) chosen.delete(old.fishId);
-            }
-            chosen.add(f.fishId);
-          }
-          refresh();
-        },
-      },
-      fishImg(f.look, f.pheno, f.sex),
-      h('b', {}, `${f.sex === 'male' ? '♂' : '♀'} ${f.name}`),
-      h('small', {}, f.missing.length ? `還差：${f.missing.join('、')}` : '就是夢想魚！'),
-    );
-  return h('div.choice-fish-row', {}, ...card.fish!.map(chip));
-}
+/** 照魚的編號找牠的樣子（C4 的母魚、C5 那尾魚；卡上只有編號）。 */
+export type FishLookup = (fishId: number) => FishLook | null;
 
-function candidateLine(c: PairCandidate): HTMLElement {
-  return h('span.choice-cand', {}, fishImg(c.look, c.pheno, 'male'), h('small', {}, c.kids.map((k) => `${k.name} ${k.pct}%`).join('、')));
-}
-
-export function choiceVisual(card: ChoiceCard, choose: ChoosePick): HTMLElement {
-  const chosen = new Set<number>((card.fish ?? []).filter((f) => f.keeper).map((f) => f.fishId));
+export function choiceVisual(card: ChoiceCard, choose: ChoosePick, lookup: FishLookup = () => null): HTMLElement {
   const msg = h('p.choice-msg', { hidden: true });
-  const fishBox = h('div', {});
-  const draw = () => {
-    if (card.fish) fishBox.replaceChildren(pickRow(card, chosen, draw));
+  const pick = (key: string, picks: number[] = []) => {
+    const why = choose(key, picks);
+    msg.textContent = why ?? '';
+    msg.hidden = !why;
   };
-  draw();
-  const options = card.options.map((o) => {
-    const cand = card.candidates?.find((c) => String(c.fishId) === o.key);
-    return h(
-      `button.choice-opt${o.recommended ? '.rec' : ''}`,
-      {
-        type: 'button',
-        onclick: (e: Event) => {
-          e.stopPropagation();
-          const why = choose(o.key, [...chosen]);
-          if (why) {
-            msg.textContent = why;
-            msg.hidden = false;
-          }
-        },
-      },
-      h('b', {}, o.label, o.recommended ? h('em', {}, '推薦') : null),
-      cand ? candidateLine(cand) : null,
-      h('small', {}, o.outcome),
-    );
-  });
-  return h('div.choice', {}, h('p.choice-owner', {}, card.owner), card.fish ? fishBox : null, h('div.choice-opts', {}, ...options), msg);
+  const box = h('div.choice', {}, h('p.choice-owner', {}, card.owner));
+  void import('./breeding-cards').then((bc) => fill(bc, card, box, pick, lookup)).then(() => box.append(msg));
+  return box;
+}
+
+function fill(bc: typeof import('./breeding-cards'), card: ChoiceCard, box: HTMLElement, pick: (key: string, picks?: number[]) => void, lookup: FishLookup): void {
+  const { CHOICE_ART, choiceCard, keepOrSellCard, keeperPickCard, sireCompareCard } = bc;
+
+  if (card.fish && card.id === 'C2') {
+    const limit = card.pickLimit ?? { male: 1, female: 2 };
+    const chosen = new Set<number>(card.fish.filter((f) => f.keeper).map((f) => f.fishId));
+    const slot = h('div', {});
+    const later = card.options.find((o) => o.key === 'later');
+    const draw = () =>
+      slot.replaceChildren(
+        keeperPickCard(
+          card.fish!.map((f) => ({ ...f, keeper: chosen.has(f.fishId) })),
+          limit,
+          (id, on) => {
+            if (on) chosen.add(id);
+            else chosen.delete(id);
+            draw();
+          },
+          () => pick('pick', [...chosen]),
+          later ? { label: later.label, go: () => pick('later') } : undefined,
+        ),
+      );
+    draw();
+    box.append(slot);
+  } else if (card.candidates && card.id === 'C4') {
+    const mother = card.motherId !== undefined ? lookup(card.motherId) : null;
+    // 第一窩配對多半只有孫代會出夢想魚：機率取小魚、孫代高的那個
+    const cands = card.candidates.map((c) => ({ ...c, dreamPct: Math.max(c.dreamPct, c.grandPct) }));
+    box.append(sireCompareCard(mother ?? { sex: 'female', name: '', look: 0, fins: [] }, cands, (id) => pick(String(id))));
+  } else if (card.trade && card.id === 'C5') {
+    const fish = lookup(card.trade.fishId);
+    box.append(fish ? keepOrSellCard(fish, card.trade, () => pick('sell'), () => pick('keep')) : choiceCard(card.title, card.options, (key) => pick(key), CHOICE_ART));
+  } else {
+    box.append(choiceCard(card.title, card.options, (key) => pick(key), CHOICE_ART));
+  }
 }

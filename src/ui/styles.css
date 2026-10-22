@@ -1349,7 +1349,8 @@ body.watching .toast:not(.bad) { opacity: 0; pointer-events: none; }
 .bc-complete { font-size: 11px; color: var(--gold-bright); font-weight: 700; }
 .bc-mark { margin-top: 2px; padding: 3px 14px; border-radius: 999px; font-size: 12px; font-weight: 700; background: rgba(227, 189, 109, 0.16); color: var(--gold); border: 1px solid rgba(227, 189, 109, 0.4); }
 .bc-kid.kept .bc-mark { background: linear-gradient(180deg, #e8495a, #a91f35); color: #fff4d8; border-color: #f6d891; }
-.bc-done { align-self: flex-end; }
+.bc-foot { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+.bc-later { width: auto; margin: 0; }
 .pp-dots i { flex: 0 0 auto; }
 .bc-sires-row { display: flex; align-items: center; gap: 8px; }
 .bc-mom { position: relative; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 8px 6px; border-radius: 14px; background: radial-gradient(ellipse at 50% 35%, rgba(243, 166, 192, 0.2), rgba(6, 26, 36, 0.8) 72%); border: 1px solid rgba(243, 166, 192, 0.35); }
@@ -1394,3 +1395,50 @@ span.bc-ks-icon { width: 32px; height: 42px; }
 .bc-line-bar { flex: 0 0 60px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
 .bc-line-bar i { display: block; height: 100%; background: linear-gradient(90deg, #e8495a, var(--gold-bright)); }
 @media (prefers-reduced-motion: reduce) { .bc-fish, .bc-kid-ribbon { animation: none; } }
+.bc-wait { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.bc-wait b { color: var(--text); }
+.choice .bc { box-shadow: none; padding: 4px 0 0; gap: 8px; border: 0; background: none; }
+/* 早上報告裡：標題已經在條目上，卡片自己的標題收起來，只留緞帶和名額 */
+.choice .bc-head { min-height: 0; }
+.choice .bc-head > b, .choice .bc-head > small, .choice .bc-head-ribbon { display: none; }
+.choice .bc-choice .bc-head, .choice .bc-ks .bc-head { display: none; }
+.choice .bc-pick .bc-head { position: absolute; top: 2px; right: 0; }
+.choice .bc-pick { position: relative; }
+.choice .bc-dream-goal { font-size: 11px; padding: 2px 8px 2px 2px; }
+.choice .bc-dream-goal img { width: 36px; height: 20px; }
+.choice .bc-kids { padding-top: 8px; gap: 8px; }
+.choice .bc-kid { flex: 0 0 116px; max-width: none; padding: 8px 6px 6px; gap: 4px; }
+.choice .bc-kid .bc-fish { width: 92px; height: 50px; }
+.choice .bc-trait { width: 30px; }
+.choice .bc-trait svg { width: 18px; height: 18px; }
+.choice .bc-sires-row { align-items: flex-start; }
+.choice .bc-mom { padding: 8px 6px 4px; }
+.choice .bc-mom .bc-fish { width: 64px; height: 36px; }
+.choice .bc-sire-cols { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.choice .bc-sire .bc-fish { width: 92px; height: 50px; }
+.choice .bc-mini img { width: 40px; height: 24px; }
+.choice .bc-opt-art { width: 72px; height: 54px; }
+.breeding-item { cursor: default; padding: 0; background: none; border: 0; }
+.breeding-item .bc-line { flex: 1; }
+.choice .bc-kid.female .bc-fish { width: 80px; }
+/* 早上報告裡比較窄：媽媽縮成一顆小標放上面，候選公魚三尾一排 */
+.choice .bc-sires-row { flex-direction: column; align-items: stretch; gap: 4px; }
+.choice .bc-mom { flex-direction: row; align-self: flex-start; gap: 6px; padding: 3px 12px 3px 6px; border-radius: 999px; }
+.choice .bc-mom .bc-kid-ribbon { position: static; width: 14px; height: 19px; order: 3; }
+.choice .bc-x { display: none; }
+.choice .bc-sire-cols { grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); }
+.choice .bc-sire { padding: 8px 4px; gap: 4px; }
+.choice .bc-mini { padding: 2px; }
+.choice .bc-mini img { width: 32px; height: 20px; }
+.choice .bc-dream b { font-size: 13px; }
+.choice .bc-stars i { font-size: 12px; }
+.choice .bc-kidstrip { width: 100%; gap: 3px; }
+.choice .bc-mini { flex: 1 1 0; min-width: 0; }
+.choice .bc-mini img { width: 100%; height: 20px; }
+.choice .bc-mini .pp-dots i { width: 2px; height: 2px; }
+.choice .bc-pick-btn, .choice .bc-done { min-height: 0; padding: 6px 14px; font-size: 13px; }
+.choice .bc-pick-btn { width: 100%; }
+.choice .bc-pick { padding-bottom: 0; }
+.bc-pick-btn, .bc-done, .bc-later { flex: 0 0 auto; }
+.keeper-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.keeper-btn .keeper-ribbon { margin-left: 0; }
