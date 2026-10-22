@@ -20,12 +20,15 @@ import {
   suggestedWaterChange,
   takeGearNote,
   takeLookalike,
+  takeChoice,
+  breedingProgress,
   tankLabel,
   usesNursery,
   waterLook,
   youngGettingHungry,
   type FishSpeciesId,
   type LookalikeCard,
+  type ChoiceCard,
   type SimEvent,
   type TankState,
 } from '../sim';
@@ -51,7 +54,8 @@ export type ReportAction =
   | 'snails' // 螺
   | 'trim' // 修剪水草
   | 'fry_box' // 育幼盒或檢疫盒（把仔魚撈進去）
-  | 'nursery'; // 把快生的母魚放進育幼盒
+  | 'nursery' // 把快生的母魚放進育幼盒
+  | 'shop_tank'; // 我的水缸（買第二缸）
 
 export type ReportKind =
   | 'crisis'
@@ -80,6 +84,8 @@ export type ReportKind =
   | 'new_leaf' // 水草長出新葉（G8）
   | 'rescued' // 測到氨或亞硝、換了水、讀數降下來（G8）
   | 'lookalike' // 第一窩小魚轉色，長得像誰（G2）
+  | 'choice' // 中期的選擇點 C1～C5（design/midgame.md）
+  | 'breeding' // 選育進度（midgame.md §2）：有第一窩或留種的魚就每天一行
   | 'observe' // 平淡早上的小觀察（morning-observe.ts）
   | 'quiet';
 
@@ -98,6 +104,8 @@ export interface ReportItem {
   plantId?: number;
   /** kind 'lookalike' 的比較卡資料：爸爸、媽媽、小魚的外觀和每個特徵跟誰的。 */
   lookalike?: LookalikeCard;
+  /** kind 'choice' 的選擇卡（sim/choices.ts）：選項和選種、配對的資料。 */
+  choice?: ChoiceCard;
 }
 
 export interface MorningReport {
@@ -342,8 +350,14 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     const where = tanks.length > 1 ? `${tankLabel(tanks, look.tank)}：` : '';
     items.push({ kind: 'lookalike', tank: look.tank, tone: 'good', text: where + lookalikeLine(look), action: 'fish', subjectId: look.childId, lookalike: look });
   }
+  // 中期的選擇點（design/midgame.md）：一個早上最多一張
+  const choice = takeChoice(tanks);
+  if (choice) items.push({ kind: 'choice', tank: choice.tank, tone: 'good', text: choice.title, choice, action: CHOICE_FOLLOW[choice.id] });
+  // 選育進度（midgame.md §2）：有第一窩或留種的魚就每天一行，取代一般的小觀察
+  const progress = crisis ? null : breedingProgress(tanks);
+  if (progress) items.push({ kind: 'breeding', tank: 0, tone: 'good', text: progress });
   // 安靜的一晚（沒好事、沒壞事、也沒要留意的）：帶一句缸裡的小變化（#258）
-  if (!crisis && tanks[0] && before.tanks[0] && items.every((i) => i.tone === 'info')) {
+  if (!crisis && !progress && tanks[0] && before.tanks[0] && items.every((i) => i.tone === 'info')) {
     const text = quietObservation(tanks[0], tanks[0], before.tanks[0]);
     if (text) items.push({ kind: 'observe', tank: 0, tone: 'info', text });
   }
@@ -351,6 +365,15 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   items.sort((a, b) => (a.kind === 'crisis' ? -1 : b.kind === 'crisis' ? 1 : TONE_ORDER[a.tone] - TONE_ORDER[b.tone]));
   const day = Math.floor(tanks[0].hours / 24) + 1;
   return { title: crisis ? '半夜出狀況了' : `早安，第 ${day} 天`, hours: sleptHours, stopped: !!crisis, items };
+}
+
+/** 選了以後要帶玩家去哪裡（C1 放育幼盒、C3 買缸；其他選了就好）。 */
+const CHOICE_FOLLOW: Partial<Record<ChoiceCard['id'], ReportAction>> = { C1: 'fry_box', C3: 'shop_tank' };
+
+/** 選了這個選項，要不要帶玩家去做（C1 選留在主缸、C3 都要去買缸）。 */
+export function choiceFollowUp(card: ChoiceCard, key: string): ReportAction | undefined {
+  if (card.id === 'C1') return key === 'box' ? 'fry_box' : undefined;
+  return CHOICE_FOLLOW[card.id];
 }
 
 /** 一條死魚的報告文字（魚撈掉了就叫「一條魚」）。 */

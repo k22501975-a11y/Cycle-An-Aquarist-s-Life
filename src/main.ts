@@ -1794,6 +1794,9 @@ async function start(): Promise<void> {
         if (game.state.nurseryBox) withPanels((p) => p.putDueInNursery(ctx));
         else panelSheet('育幼盒', (p) => p.nurseryPanel(ctx));
         break;
+      case 'shop_tank':
+        panelSheet('我的水缸', (p) => p.tanksPanel(ctx));
+        break;
       case 'fish':
       case 'treat':
         if (item.subjectId !== undefined) select(item.subjectId);
@@ -1843,7 +1846,8 @@ async function start(): Promise<void> {
       const daily = today
         ? { tasks: today.tasks.map((t) => ({ id: t.id, art: dailyArt(t.id), text: DAILY_SHORT[t.id], done: t.done })), go: (id: string) => goDaily(id as sim.DailyTaskId) }
         : undefined;
-      const card = morningCard(report, { picture: reportPicture, go: goReport, daily }, () => {
+      const choose = (item: ReportItem, key: string, picks: number[]) => (item.choice ? game.actAll((tanks) => sim.chooseOption(tanks, item.choice!.id, key, picks)) : null);
+      const card = morningCard(report, { picture: reportPicture, go: goReport, daily, choose }, () => {
         shade.classList.remove('in');
         window.setTimeout(() => shade.remove(), 450);
         sleepingNow = false;

@@ -640,7 +640,6 @@ export function conditionLine(fish: Fish): string {
   return parts.join(' · ');
 }
 
-/** 把魚撈到別缸：繁殖時把母魚隔開、把挑出來的種魚放專缸。 */
 /** 留種（design/midgame.md C2）：標了之後訂單、店家收購都不會拿走這尾。蝦子不出。 */
 function keeperRow(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish): Node | null {
   if (isShrimpSpecies(fish.species)) return null;
@@ -658,6 +657,7 @@ function keeperRow(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish): Node |
   );
 }
 
+/** 把魚撈到別缸：繁殖時把母魚隔開、把挑出來的種魚放專缸。 */
 function moveFishRow(game: Game, sheet: Sheet, toasts: Toasts, fish: Fish): Node {
   return h(
     'div.stack',
