@@ -1,5 +1,5 @@
 import { catchUp, parseSave, serializeSave, type SaveFile } from '../game/save';
-import { arrivalStatus, carriedDiseases, DEFAULT_TIME_SCALE, earnCap, economy, forgedGenomes, marketItem, type ArrivalStatus, type Fish, type TankState } from '../sim';
+import { arrivalStatus, carriedDiseases, DEFAULT_TIME_SCALE, earnCap, economy, forgedGenomes, marketItem, type ArrivalStatus, type Fish, type ForgedFish, type TankState, type UntracedFish } from '../sim';
 
 /**
  * 伺服器權威模擬（L2）：Spring Boot 把存檔丟過來，這裡用跟遊戲同一份模擬程式計算。
@@ -11,8 +11,14 @@ import { arrivalStatus, carriedDiseases, DEFAULT_TIME_SCALE, earnCap, economy, f
  */
 
 export interface Problem {
-  code: 'time_ahead' | 'time_back' | 'identity_changed' | 'gift_removed' | 'shipped_fish' | 'coins_jump' | 'genome_forged';
+  code: 'time_ahead' | 'time_back' | 'identity_changed' | 'gift_removed' | 'shipped_fish' | 'coins_jump' | 'genome_forged' | 'lineage_unknown';
   message: string;
+  /** lineage_unknown：不擋存檔，伺服器記下這尾（編號＋基因），之後不能上架。 */
+  fish?: UntracedFish;
+}
+
+function genomeProblems(found: ForgedFish[]): Problem[] {
+  return found.map((f) => (f.untraced ? { code: 'lineage_unknown', message: f.reason, fish: { id: f.id, genome: f.untraced.genome } } : { code: 'genome_forged', message: f.reason }));
 }
 
 /** 遊戲時間可以比現實 × 7 多跑一點：存檔、上傳之間的延遲，加上 2% 的誤差。 */
@@ -67,8 +73,15 @@ export function advance(raw: unknown, now: number): AdvanceResult {
  * received 是這個玩家在市場買到、已經到貨的魚的基因（和牠們肚子裡的精子）：新出現的魚是這些就不用照店魚的範圍查。
  * 回傳發現的問題（空的代表沒問題）。
  */
-export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number, shipped: readonly ShippedFish[] = [], received: readonly unknown[] = []): Problem[] {
-  if (previousRaw === null || previousRaw === undefined) return verifyAlone(nextRaw, shipped, received);
+export function verify(
+  previousRaw: unknown,
+  nextRaw: unknown,
+  elapsedMs: number,
+  shipped: readonly ShippedFish[] = [],
+  received: readonly unknown[] = [],
+  untraced: readonly UntracedFish[] = [],
+): Problem[] {
+  if (previousRaw === null || previousRaw === undefined) return verifyAlone(nextRaw, shipped, received, untraced);
   const prev = load(previousRaw);
   const next = load(nextRaw);
   const problems: Problem[] = [];
@@ -111,7 +124,7 @@ export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number
 
   // 新出現的魚、母魚換了的精子：基因要生得出來、買得到（#76，genome-check.ts）
   const known = [...shipped.map((f) => f.genome), ...received];
-  for (const f of forgedGenomes(tanksOf(prev), tanksOf(next), known)) problems.push({ code: 'genome_forged', message: f.reason });
+  problems.push(...genomeProblems(forgedGenomes(tanksOf(prev), tanksOf(next), known, { untraced })));
 
   // 編號和身分都一樣才是同一條：新遊戲或換裝置從頭玩，編號會重來，同編號的是另一條魚
   for (const f of allFish(next)) {
@@ -123,15 +136,15 @@ export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number
 /**
  * 沒有上一份可以比（雲端第一次上傳，或強制覆蓋時當成另一台裝置的進度，#76）：只看這份自己可不可能。
  * 單機可以先玩很久才註冊，所以時間和錢都不看；魚要照新遊戲（沒有魚）比：每一尾都要是店裡買得到、市場來的，
- * 或缸裡的媽媽生得出來（媽媽不在了就看時間夠不夠長）。已經出貨的魚一樣不能在。
+ * 或缸裡的媽媽生得出來。媽媽不在的查不到來歷：存檔照收，但標 lineage_unknown（不能上架）。已經出貨的魚一樣不能在。
  */
-function verifyAlone(nextRaw: unknown, shipped: readonly ShippedFish[], received: readonly unknown[]): Problem[] {
+function verifyAlone(nextRaw: unknown, shipped: readonly ShippedFish[], received: readonly unknown[], untraced: readonly UntracedFish[]): Problem[] {
   const next = load(nextRaw);
   const problems: Problem[] = [];
   if (!Number.isFinite(economy(next.state).coins)) problems.push({ code: 'coins_jump', message: '存檔裡的錢不是正常的數字' });
   const empty = { ...next.state, hours: 0, fish: [], quarantine: undefined } as TankState;
   const known = [...shipped.map((f) => f.genome), ...received];
-  for (const f of forgedGenomes([empty], tanksOf(next), known)) problems.push({ code: 'genome_forged', message: f.reason });
+  problems.push(...genomeProblems(forgedGenomes([empty], tanksOf(next), known, { alone: true, untraced })));
   for (const f of allFish(next)) {
     if (shipped.some((s) => s.id === f.id && sameIdentity(s, f))) problems.push({ code: 'shipped_fish', message: `#${f.id} 這條魚已經在市場賣出了，存檔裡不該還有` });
   }

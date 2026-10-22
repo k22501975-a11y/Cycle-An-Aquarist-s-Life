@@ -63,6 +63,7 @@ public class SaveController {
     private final TransactionTemplate afterSave;
     /** 已經在市場出貨的魚又出現在存檔裡。 */
     private static final String SHIPPED = "shipped_fish";
+    private static final String UNTRACED = "lineage_unknown";
     /** 存檔最上層的欄位（src/game/save.ts 的 SaveFile）。 */
     private static final java.util.Set<String> SAVE_FIELDS = java.util.Set.of("version", "savedAt", "timeScale", "state", "backedUpAt", "tanks", "active");
     /** 補算的最短間隔（#73）。 */
@@ -115,20 +116,26 @@ public class SaveController {
         OffsetDateTime now = OffsetDateTime.now(clock);
         Map<String, Object> out = new LinkedHashMap<>();
         boolean firstUpload = save.getData() == null;
-        List<SimClient.Problem> problems = check(accountId, save, file, now, upload.force());
+        List<SimClient.Problem> found = check(accountId, save, file, now, upload.force());
+        // 來歷查不到的魚（lineage_unknown）不擋存檔，記下來不能上架
+        List<SimClient.Problem> untraced = found.stream().filter(p -> UNTRACED.equals(p.code())).toList();
+        List<SimClient.Problem> problems = found.stream().filter(p -> !UNTRACED.equals(p.code())).toList();
         if (!problems.isEmpty()) {
             SimClient.Problem first = problems.stream().filter(p -> SHIPPED.equals(p.code())).findFirst().orElse(problems.get(0));
             // 第一次上傳的問題是這份自己不可能（沒有上一份可以對不上），強制也不收
             if (!upload.force() || SHIPPED.equals(first.code()) || firstUpload) throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, first.code(), first.message());
             // 強制覆蓋只放過「跟上一份對不上」：這份自己不可能的（改出來的魚）照樣不收（#76）
             List<SimClient.Problem> alone = checkAlone(accountId, file, true);
-            if (!alone.isEmpty()) throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, alone.get(0).code(), alone.get(0).message());
+            untraced = alone.stream().filter(p -> UNTRACED.equals(p.code())).toList();
+            var impossible = alone.stream().filter(p -> !UNTRACED.equals(p.code())).findFirst();
+            if (impossible.isPresent()) throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, impossible.get().code(), impossible.get().message());
             // 強制覆蓋：可能是另一台裝置上完全不同的進度，收下，但這幾天的魚不能拿去市場賣
             save.lockMarketUntil(now.plusDays(Math.max(1, props.marketMinAccountDays())));
             out.put("notice", "這份存檔跟雲端上的對不上（" + first.message() + "），覆蓋後 " + Math.max(1, props.marketMinAccountDays()) + " 天內不能在市場上架魚");
         }
         save.update(file.path("savedAt").asLong(), file.path("version").asInt(), data, now);
         saves.save(save);
+        market.markUntraced(accountId, untraced);
         // 對得上的存檔才拿來查市場買來的魚活得怎樣（賣家的 30 天存活率）：等存檔交易 commit 之後另開一個交易查，
         // 查失敗（模擬服務掛了、SQL 出錯）只記 log，不能拖垮已經收下的上傳
         if (problems.isEmpty()) afterCommit(() -> market.recordArrivals(accountId, file));
@@ -183,7 +190,7 @@ public class SaveController {
         // 雲端第一次上傳：沒有上一份可比，只看這份自己可不可能（以前完全不檢查，偽造的存檔直接成為基準，#76）
         if (previous.getData() == null) return checkAlone(accountId, next, force);
         try {
-            return sim.verify(json.readTree(previous.getData()), next, Duration.between(previous.getUpdatedAt(), now).toMillis(), market.shippedFish(accountId), market.receivedFish(accountId));
+            return sim.verify(json.readTree(previous.getData()), next, Duration.between(previous.getUpdatedAt(), now).toMillis(), market.shippedFish(accountId), market.receivedFish(accountId), market.untracedFish(accountId));
         } catch (SimClient.Unavailable | HttpSimClient.BadSave e) {
             log.warn("模擬服務檢查不了這次上傳（{}）：{}", force ? "強制覆蓋，鎖市場" : "不收", e.getMessage());
             if (!force) throw e;
@@ -198,7 +205,7 @@ public class SaveController {
     private List<SimClient.Problem> checkAlone(long accountId, JsonNode next, boolean force) throws Exception {
         if (!sim.enabled()) return List.of();
         try {
-            return sim.verify(NullNode.getInstance(), next, 0, market.shippedFish(accountId), market.receivedFish(accountId));
+            return sim.verify(NullNode.getInstance(), next, 0, market.shippedFish(accountId), market.receivedFish(accountId), market.untracedFish(accountId));
         } catch (SimClient.Unavailable | HttpSimClient.BadSave e) {
             log.warn("模擬服務檢查不了這份存檔（{}）：{}", force ? "強制覆蓋，鎖市場" : "不收", e.getMessage());
             if (!force) throw e;

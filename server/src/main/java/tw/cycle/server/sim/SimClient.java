@@ -17,8 +17,10 @@ public interface SimClient {
      * 上傳的存檔跟伺服器上一份比：遊戲時間有沒有跑得比現實快、已經存在的魚身分有沒有被改、
      * 已經在市場出貨的魚（shipped：市場用的魚資料，編號＋身分都一樣才算同一條）有沒有又出現、
      * 新出現的魚基因生不生得出來、買不買得到（received：市場買到的魚的基因和精子，是這些就不用照店魚的範圍查）。
+     * previous 是 JSON null：沒有上一份可比，只看這份自己可不可能。
+     * untraced：之前記下的來歷查不到的魚（編號＋基因），牠們生的小魚也查不到。回傳的 lineage_unknown 不擋存檔，fish 是那尾的編號＋基因。
      */
-    List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs, List<JsonNode> shipped, List<JsonNode> received);
+    List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs, List<JsonNode> shipped, List<JsonNode> received, List<JsonNode> untraced);
 
     /** 在存檔裡找一條魚；item 是市場用的魚資料。 */
     Inspect inspect(JsonNode save, long fishId);
@@ -31,7 +33,11 @@ public interface SimClient {
 
     record Advance(JsonNode save, double hours, boolean capped, int deaths, int births) {}
 
-    record Problem(String code, String message) {}
+    record Problem(String code, String message, JsonNode fish) {
+        public Problem(String code, String message) {
+            this(code, message, null);
+        }
+    }
 
     record Inspect(boolean found, boolean alive, JsonNode item) {}
 
