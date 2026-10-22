@@ -60,8 +60,8 @@ function simulateAll(tanks: TankState[], hours: number): void {
 const alive = (s: TankState) => s.fish.filter((f) => f.alive);
 const meal = (s: TankState) => alive(s).reduce((a, f) => a + FISH_SPECIES[f.species].dailyFoodMg, 0) / 2;
 
-/** 照推薦選；選種挑排最前面的 1 公 2 母。 */
-function pickRecommended(tanks: TankState[], card: ChoiceCard): string | null {
+/** 照推薦選；選種挑排最前面的 1 公 2 母。只做選擇本身（C3 買缸由劇本自己決定）。 */
+export function chooseRecommended(tanks: TankState[], card: ChoiceCard): { key: string; why: string | null } {
   const opt = card.options.find((o) => o.recommended) ?? card.options[0];
   const picks: number[] = [];
   if (card.fish) {
@@ -69,12 +69,17 @@ function pickRecommended(tanks: TankState[], card: ChoiceCard): string | null {
     if (male) picks.push(male.fishId);
     picks.push(...card.fish.filter((f) => f.sex === 'female').slice(0, 2).map((f) => f.fishId));
   }
-  const why = chooseOption(tanks, card.id, opt.key, picks);
+  return { key: opt.key, why: chooseOption(tanks, card.id, opt.key, picks) };
+}
+
+/** 照推薦選；C3 就照選的用途買 20L 第二缸。 */
+function pickRecommended(tanks: TankState[], card: ChoiceCard): string | null {
+  const { key, why } = chooseRecommended(tanks, card);
   if (card.id === 'C3') {
     const t = buyTank(tanks, 'nano20');
     if (t) {
       linkTanks(tanks);
-      setTankPurpose(t, opt.key === 'display' ? 'display' : 'breeding');
+      setTankPurpose(t, key === 'display' ? 'display' : 'breeding');
     }
   }
   return why;
