@@ -91,7 +91,7 @@ export function earnCap(prev: TankState[], next: TankState[]): EarnCapDetail {
   const quests = Math.min(newQuests * QUEST_REWARD_MAX, QUEST_REWARD_TOTAL);
 
   // 收掉空缸：少了幾缸，就算收掉的是最貴的那幾缸
-  const refunds = prev.map((t) => Math.round((TANK_SETS[t.equipment.tank.id as TankSizeId]?.price ?? 0) * TANK_RESALE_SHARE)).sort((a, b) => b - a);
+  const refunds = prev.map((t) => Math.round((TANK_SETS[t.equipment.tank.id as TankSizeId]?.tankPrice ?? 0) * TANK_RESALE_SHARE)).sort((a, b) => b - a);
   const tanks = refunds.slice(0, Math.max(0, prev.length - next.length)).reduce((n, x) => n + x, 0);
 
   // 寶箱：一天一次；第 60 天前累計有上限

@@ -45,6 +45,11 @@ describe('多缸與缸位', () => {
     expect(newTankCost(tanks, 'nano20')).toBe(tankSetPrice('nano20') + RACK_PRICE);
   });
 
+  it('套缸整組價跟 mvp.md §4.3 一樣：20L 1,430、90L 3,500（#283）', () => {
+    expect(tankSetPrice('nano20')).toBe(1430);
+    expect(tankSetPrice('std90')).toBe(3500);
+  });
+
   it('錢包共用：在哪一缸花錢都扣同一個錢包', () => {
     const tanks = rich();
     const second = buyTank(tanks, 'nano20')!;
