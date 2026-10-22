@@ -267,7 +267,7 @@ let feedChoice: { kind: FoodKind; grade: FoodGrade } = { ...DEFAULT_FOOD };
  * 缸裡沒魚回傳 null。
  */
 export function feedTap(ctx: PanelContext): TapFeedResult | null {
-  const got = ctx.game.act((st) => tapFeed(st, feedChoice));
+  const got = ctx.game.act((st) => tapFeed(st, st.feedPlan ?? feedChoice));
   if (got.mg <= 0) return null;
   ctx.sound?.('feed');
   return got;

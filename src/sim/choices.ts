@@ -1,5 +1,8 @@
 import { DREAM_FISH } from './dream';
-import { economy, keeperRefusal, MAX_KEEPERS, setKeeper } from './economy';
+import { setHeaterTarget } from './actions';
+import { temperatureFactor } from './chemistry';
+import { economy, keeperRefusal, MAX_KEEPERS, PRICES, setKeeper, spend } from './economy';
+import { FOOD_GRADES, nutritionFactor, type FoodGrade, type FoodKind } from './food';
 import { cross, finWords, lookIndex, phenotype, strainName, type GuppyGenome, type GuppyPhenotype } from './genetics';
 import { daysToLength, growthStage } from './growth';
 import { moveFish, newTankCost } from './household';
@@ -7,7 +10,7 @@ import { crowdingRatio } from './processes/fauna';
 import { isCycled } from './processes/nitrogen';
 import { sizeRatio } from './processes/population';
 import { CROWD_WARN } from './split';
-import { mediaAvailable, transferMedia } from './gifts';
+import { addBottledBacteria, mediaAvailable, transferMedia } from './gifts';
 import { guppyTraits } from './lookalike';
 import { daysToBirth, releaseNursery, rescueFryToNursery, usesNursery } from './nursery';
 import { fulfillOrder, matchingFish, orderBoard, orderSupply, type ShopOrder } from './orders';
@@ -24,11 +27,14 @@ import { ADULT_SIZE, isJuvenile, type Fish, type TankState } from './state';
  * - C4 選種後：留種的母魚配哪一尾公魚（各自附這對生出夢想魚的機率）
  * - C5 訂單會拿走一尾還沒留種、留著會讓孫代機率變高的魚（#316 相對門檻）：交單拿錢，還是留著當備用種魚
  * - C6 繁殖缸養好了（C3 選繁殖缸之後，#305）：留種的魚、快生的母魚、第一窩小魚搬過去
+ * - C7 配好對、種魚還要一陣子才長大（#316）：標準、養快一點（高級飼料＋27～28°C）、活餌
+ * - C8 買了第二缸、還沒養水（#316）：分舊缸濾材、倒硝化菌液、自己等
  * 不管選哪個都能玩下去。只出資料和套用選擇；卡片的樣子由畫面負責（選種卡、配對比較卡交美術）。
  */
 
-export type ChoiceId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6';
-export const CHOICE_IDS: ChoiceId[] = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+export type ChoiceId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | 'C7' | 'C8';
+/** 同一天有好幾張可以出時，照這個順序挑一張（C8 新缸養水排在搬魚 C6 前面）。 */
+export const CHOICE_IDS: ChoiceId[] = ['C1', 'C2', 'C3', 'C8', 'C4', 'C5', 'C6', 'C7'];
 
 export interface ChoiceOption {
   key: string;
@@ -120,6 +126,9 @@ export interface ChoiceState {
   firstBrood?: number;
   /** C4 選定的一對：[母魚, 公魚]。 */
   pair?: [number, number];
+  /** C7 選的養法，和選的時間（遊戲小時）：成長里程碑算提前幾天用。 */
+  plan?: GrowPlan;
+  planHours?: number;
   /** C5 問過的訂單（每張只問一次）。選過之後 picked.C5 就是之後同類的單的處理方式（keep 自動標留種）。 */
   tradeAsked?: number[];
 }
@@ -135,6 +144,44 @@ export const PAIR_AFTER_PICK_DAYS = 2;
 export const PICK_AFTER_BROOD_DAYS = 12;
 /** 第一窩出生滿幾天、錢又夠，才出第二缸卡（C3）：小魚快長到 1.6 cm 要離開育幼盒，需要地方長大（midgame.md C3）。 */
 export const TANK_AFTER_BROOD_DAYS = 6;
+/** 種魚至少還要幾天才長大，才出 C7（快長大了就不用問怎麼養）。 */
+export const PLAN_MIN_DAYS = 5;
+/** C7 養快一點、活餌的水溫（企劃：27～28°C；缸裡有怕熱的就照牠的上限）。 */
+export const FAST_TEMP_C = 27.5;
+/** C8 倒硝化菌液的價錢（商店的硝化菌液）。 */
+const BOTTLE_PRICE = PRICES['care:bacteria'] ?? 30;
+
+export type GrowPlan = 'standard' | 'fast' | 'live';
+/** C7 各養法餵的飼料：標準照現在、養快一點是高級薄片、活餌是冷凍紅蟲（專業等級營養最好，但最髒水）。 */
+export const GROW_PLAN_FOOD: Record<GrowPlan, { kind: FoodKind; grade: FoodGrade } | null> = {
+  standard: null,
+  fast: { kind: 'floating', grade: 3 },
+  live: { kind: 'meat', grade: 4 },
+};
+
+/** 這缸養快的水溫：有加熱棒才調得了，缸裡有怕熱的就照牠的適溫上限。 */
+function planTemp(t: TankState, plan: GrowPlan): number {
+  const now = t.equipment.heater?.targetC ?? t.water.tempC;
+  if (plan === 'standard' || !t.equipment.heater) return now;
+  const cap = Math.min(FAST_TEMP_C, ...t.fish.filter((f) => f.alive).map((f) => FISH_SPECIES[f.species].temp.max));
+  return Math.max(now, cap);
+}
+
+/**
+ * 照這個養法，這尾還要幾天長大能配（成長公式：溫度係數 × 營養係數，其他照現在）。
+ * 標準就是 daysToMature；養快、活餌照水溫和飼料營養等比例縮短。
+ */
+export function planMatureDays(t: TankState, f: Fish, plan: GrowPlan): number {
+  const std = daysToMature(f);
+  if (std <= 0 || plan === 'standard') return std;
+  const food = GROW_PLAN_FOOD[plan]!;
+  const speed = (temperatureFactor(planTemp(t, plan)) / temperatureFactor(planTemp(t, 'standard'))) * (nutritionFactor(FOOD_GRADES[food.grade].nutrition) / nutritionFactor(f.nutrition));
+  return Math.max(1, Math.ceil(std / Math.max(1, speed)));
+}
+
+/** 遊戲第幾天（跟早上報告的「第 N 天」一樣）。 */
+const dayOf = (hours: number) => Math.floor(hours / 24) + 1;
+
 /** C2 一窩最多排幾尾。 */
 const PICK_SHOW = 8;
 /** 夢想魚機率模擬幾尾小魚（固定種子，同一對每次一樣）。 */
@@ -406,6 +453,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState): ChoiceCard |
     case 'C6': {
       const m = breedingMove(tanks);
       if (!m) return null;
+      // C8 選了倒菌液或自己等：等繁殖缸養好才問要不要搬（不然搬魚又會自己分濾材，跟玩家選的不一樣）
+      if (!isCycled(tanks[m.to]) && s.picked.C8 && s.picked.C8 !== 'media') return null;
       const keepers = m.fish.filter(({ fish }) => fish.keeper).length;
       const moms = m.fish.filter(({ fish }) => !fish.keeper && fish.pregnancy > 0.5).length;
       const young = m.fish.length - keepers - moms;
@@ -421,6 +470,44 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState): ChoiceCard |
           { key: 'stay', label: '先不要', outcome: '之後在魚卡上也能一尾一尾搬' },
         ],
         move: m.fish.map(({ fish }) => fish.id),
+      };
+    }
+    case 'C7': {
+      if (!s.pair || s.shown.C4 === undefined || home.hours - s.shown.C4 < 24) return null;
+      const all = located(tanks);
+      const pair = s.pair.map((id) => all.find(({ fish }) => fish.id === id));
+      if (!pair[0] || !pair[1]) return null;
+      const t = tanks[pair[0].tank];
+      const days = (plan: GrowPlan) => Math.max(...pair.map((p) => planMatureDays(t, p!.fish, plan)));
+      if (days('standard') < PLAN_MIN_DAYS) return null;
+      const on = (plan: GrowPlan) => `約第 ${dayOf(home.hours + days(plan) * 24)} 天`;
+      const temp = planTemp(t, 'fast');
+      return {
+        id,
+        tank: pair[0].tank,
+        title: '種魚要怎麼養大？',
+        owner: '吃得好、水溫高一點，長得就快，但要多照顧。',
+        options: [
+          { key: 'standard', label: '標準', outcome: `照現在，${on('standard')}可以配` },
+          { key: 'fast', label: '養快一點', outcome: `高級飼料${temp > planTemp(t, 'standard') ? `、水溫 ${Math.round(temp * 10) / 10}°C` : ''}，${on('fast')}；飼料錢多一點，水質要多注意`, recommended: true },
+          { key: 'live', label: '活餌', outcome: `冷凍紅蟲，${on('live')}；最快但最髒水，要多換水` },
+        ],
+      };
+    }
+    case 'C8': {
+      const to = tanks.findIndex((t, i) => i > 0 && !!t.equipment.filter && !isCycled(t) && fishIn(t).length === 0);
+      if (to < 0) return null;
+      const media = tanks.some((t, i) => i !== to && mediaAvailable(t) > 0);
+      return {
+        id,
+        tank: to,
+        title: '新缸要怎麼養水？',
+        owner: '新缸還沒有硝化菌，直接放魚會冒氨。',
+        options: [
+          ...(media ? [{ key: 'media', label: '分舊缸濾材', outcome: '約 2 天；主缸的菌會少一點，這幾天多測水', recommended: true }] : []),
+          { key: 'bottle', label: '硝化菌液', outcome: `${BOTTLE_PRICE} 元，約 3 天`, recommended: !media },
+          { key: 'wait', label: '自己等', outcome: '不花錢，3～7 天' },
+        ],
       };
     }
   }
@@ -529,6 +616,33 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
         const why = setKeeper(tanks[hit.tank], hit.fish.id, true);
         if (why) return why;
       } else if (fulfillOrder(tanks, card.trade.orderId) <= 0) return '現在交不出這張單';
+      break;
+    }
+    case 'C7': {
+      const plan = key as GrowPlan;
+      if (!(plan in GROW_PLAN_FOOD)) return '沒有這個養法';
+      const mom = s.pair && find(s.pair[0]);
+      if (!mom) return '留種的那對不在了';
+      const t = tanks[mom.tank];
+      const food = GROW_PLAN_FOOD[plan];
+      if (food) t.feedPlan = { ...food };
+      else delete t.feedPlan;
+      if (t.equipment.heater) setHeaterTarget(t, planTemp(t, plan));
+      s.plan = plan;
+      s.planHours = tanks[0].hours;
+      break;
+    }
+    case 'C8': {
+      const card = cardFor('C8', tanks, s);
+      if (!card) return '新缸已經養好了';
+      const to = tanks[card.tank];
+      if (key === 'media') {
+        const from = tanks.filter((t) => t !== to).sort((a, b) => mediaAvailable(b) - mediaAvailable(a))[0];
+        if (!from || !transferMedia(from, to)) return '舊缸的濾材還不夠成熟';
+      } else if (key === 'bottle') {
+        if (!spend(tanks[0], BOTTLE_PRICE)) return `錢不夠：硝化菌液要 ${BOTTLE_PRICE} 元`;
+        addBottledBacteria(to);
+      }
       break;
     }
     case 'C6': {
