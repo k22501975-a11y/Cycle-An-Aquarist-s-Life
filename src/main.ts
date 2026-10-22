@@ -33,6 +33,7 @@ import type { ScapeBar } from './ui/scape-bar';
 import * as sim from './sim';
 import { FISH_SPECIES, isFilterRunning, isLightOn, removeDeadFish, useTestKit } from './sim';
 import { h } from './ui/dom';
+import { keeperRibbon } from './ui/keeper-ribbon';
 import { ICONS } from './ui/icons';
 import { DEATH_ADVICE, describeEvent, FIRST_PESTS_LINE, firstDeathOwnerLine, fishName, fishStrain, pluralEventText } from './ui/labels';
 import { mergeEventToasts, type EventToast } from './ui/notify-gate';
@@ -421,7 +422,7 @@ async function start(): Promise<void> {
     const cond = fish?.alive ? sim.fishCondition(game.state, fish) : null;
     // 肖像有快取，同一個外觀拿到的是同一個字串；長大換外觀時卡片跟著換圖
     const pic = fish?.alive ? view.portrait(fish) : null;
-    if (!selChanged(fish ? `${fish.id}:${pic?.length}:${fish.alive}:${Math.round(fish.health * 50)}:${Math.round(fish.stress * 50)}:${fishName(fish)}:${cond?.hunger}:${cond?.causes[0]?.key}` : '-')) return;
+    if (!selChanged(fish ? `${fish.id}:${pic?.length}:${fish.alive}:${Math.round(fish.health * 50)}:${Math.round(fish.stress * 50)}:${fishName(fish)}:${cond?.hunger}:${cond?.causes[0]?.key}:${!!fish.keeper}` : '-')) return;
     selCard.classList.toggle('empty', !fish);
     if (!fish) {
       selCard.replaceChildren(h('div.card-title', {}, '觀察'), h('p.hint', {}, '點缸裡的魚，看看牠的狀況。'));
@@ -447,7 +448,7 @@ async function start(): Promise<void> {
     selCard.replaceChildren(
       close,
       ...(pic ? [h('img.sel-pic', { src: pic, alt: '', draggable: 'false' })] : []),
-      h('div.card-title', {}, title, h(`span.hunger-chip.${cond.hunger}`, {}, HUNGER_LABEL[cond.hunger])),
+      h('div.card-title', {}, title, fish.keeper ? keeperRibbon() : null, h(`span.hunger-chip.${cond.hunger}`, {}, HUNGER_LABEL[cond.hunger])),
       h('div.card-sub', {}, sub, personaChip(fish)),
       bar('健康', fish.health, fish.health > 0.6 ? 'ok' : fish.health > 0.3 ? 'warn' : 'bad'),
       bar('壓力', fish.stress, fish.stress < 0.4 ? 'warn' : 'bad'),
