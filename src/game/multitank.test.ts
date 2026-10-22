@@ -2,10 +2,19 @@ import { describe, expect, it } from 'vitest';
 import {
   addFish,
   buyTank,
+  createTank,
+  FILTERS,
+  HEATERS,
+  LIGHTS,
+  TANKS,
   buyTankRefusal,
   goalState,
   economy,
+  feed,
+  feedTarget,
   FREE_SLOTS,
+  mealMg,
+  simulate,
   ID_BLOCK,
   MAX_TANKS,
   moveFish,
@@ -48,6 +57,33 @@ describe('多缸與缸位', () => {
   it('套缸整組價跟 mvp.md §4.3 一樣：20L 1,430、90L 3,500（#283）', () => {
     expect(tankSetPrice('nano20')).toBe(1430);
     expect(tankSetPrice('std90')).toBe(3500);
+  });
+
+  it('停在剛買的空缸按餵食：改餵別缸最餓的那缸，主缸的小魚 7 天不會餓死（#315）', () => {
+    const run = (target: (tanks: TankState[]) => number) => {
+      // 養好水的主缸（評測裡是第 20 天的孔雀魚之家）
+      const home = createTank({ tank: TANKS.std40, filter: FILTERS.hangOn, heater: { spec: HEATERS.h50, targetC: 25 }, light: { spec: LIGHTS.basic }, roomTempC: 24, seed: 21, matureMedia: true });
+      economy(home).coins = 100_000;
+      const tanks = [home];
+      for (let i = 0; i < 3; i++) addFish(home, 'guppy', { carriesIch: false, sex: i === 0 ? 'male' : 'female' });
+      for (let i = 0; i < 12; i++) {
+        const fry = addFish(home, 'guppy', { carriesIch: false });
+        fry.lengthCm = 0.8;
+        fry.ageDays = 10;
+      }
+      buyTank(tanks, 'nano20');
+      // 畫面停在第 2 缸（空的），每天早晚各按一次「餵食」
+      for (let half = 0; half < 14; half++) {
+        const t = tanks[target(tanks)];
+        if (mealMg(t) > 0) feed(t, mealMg(t));
+        for (const x of tanks) simulate(x, 12);
+      }
+      return home.events.filter((e) => e.type === 'fish_died' && e.cause === 'starvation').length;
+    };
+    expect(feedTarget(rich(), 0)).toBe(0);
+    expect(run((tanks) => feedTarget(tanks, 1))).toBe(0);
+    // 對照：餵食落在空缸就會餓死（評測 g18 看到的）
+    expect(run(() => 1)).toBeGreaterThan(0);
   });
 
   it('錢包共用：在哪一缸花錢都扣同一個錢包', () => {
