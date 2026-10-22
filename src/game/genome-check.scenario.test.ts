@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { addFish, forgedGenomes, genomeKey, STORE_TAIL_MAX, type Fish, type TankState } from '../sim';
+import { verify } from '../simsvc/handlers';
+import { serializeSave } from './save';
+import { midgamePlayerTanks } from './midgame-player';
 import { seriousPlayer } from './serious-player';
 
 /**
@@ -19,7 +22,8 @@ describe('新生魚的基因檢查（L2，#76）', () => {
       for (const step of [1, 7, 30]) {
         for (let a = 0; a + step < days.length; a += step) {
           const b = a + step;
-          expect(forgedGenomes(days[a], days[b]), `第 ${a + 1}～${b + 1} 天`).toEqual([]);
+          // 媽媽在這段時間裡死掉的小魚是「查不到來歷」（不擋存檔，只是不能上架）
+          expect(forgedGenomes(days[a], days[b]).filter((f) => !f.untraced), `第 ${a + 1}～${b + 1} 天`).toEqual([]);
           if (step === 1) born += fishOf(days[b]).filter((f) => f.bornHours !== undefined && !fishOf(days[a]).some((o) => o.id === f.id)).length;
         }
       }
@@ -86,4 +90,17 @@ describe('新生魚的基因檢查（L2，#76）', () => {
     expect(forgedGenomes(prev, next).map((x) => x.id)).toContain(bought.id);
     expect(genomeKey(bought.genome)).not.toBe(genomeKey(bought.sire!.genome));
   }, 120_000);
+
+  it('雲端第一次上傳（沒有上一份可比）：認真玩家第 30、60、120 天、中期劇本第 36 天的整份存檔都收（媽媽不在的只標查不到來歷）；憑空多一條好魚不收', () => {
+    const raw = (tanks: TankState[]) => JSON.parse(serializeSave(tanks[0], 7, 0, undefined, { tanks: tanks.slice(1), active: 0 }));
+    const days: TankState[][] = [];
+    seriousPlayer(1, 3, true, { onDay: (tanks) => days.push(snap(tanks)) });
+    const blocking = (problems: { code: string }[]) => problems.filter((p) => p.code !== 'lineage_unknown');
+    for (const d of [30, 60, 120]) expect(blocking(verify(null, raw(days[d - 1]), 0)), `第 ${d} 天`).toEqual([]);
+    for (const seed of [1, 2, 3]) expect(blocking(verify(null, raw(midgamePlayerTanks(seed, 36)), 0)), `中期 seed ${seed}`).toEqual([]);
+    const forged = snap(days[59]);
+    const f = addFish(forged[0], 'guppy', { carriesIch: false, sex: 'male' });
+    f.genome = { ...f.genome!, tail: STORE_TAIL_MAX + 30 };
+    expect(verify(null, raw(forged), 0).map((p) => p.code)).toEqual(['genome_forged']);
+  }, 300_000);
 });

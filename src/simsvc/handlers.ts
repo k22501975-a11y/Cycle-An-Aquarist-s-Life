@@ -1,18 +1,24 @@
 import { catchUp, parseSave, serializeSave, type SaveFile } from '../game/save';
-import { arrivalStatus, carriedDiseases, DEFAULT_TIME_SCALE, earnCap, economy, forgedGenomes, marketItem, type ArrivalStatus, type Fish, type TankState } from '../sim';
+import { arrivalStatus, carriedDiseases, DEFAULT_TIME_SCALE, earnCap, economy, forgedGenomes, marketItem, type ArrivalStatus, type Fish, type ForgedFish, type TankState, type UntracedFish } from '../sim';
 
 /**
  * 伺服器權威模擬（L2）：Spring Boot 把存檔丟過來，這裡用跟遊戲同一份模擬程式計算。
  * - advance：離線補算到伺服器的現在時間（玩家改裝置時鐘也沒用）
- * - verify：上傳的存檔跟伺服器上一份比，遊戲時間不能跑得比現實快，已經存在的魚身分（基因、品種、性別）不能被改，
+ * - verify：上傳的存檔跟伺服器上一份比，遊戲時間不能跑得比現實快、不能倒退（每一缸都看），已經存在的魚身分（基因、品種、性別）不能被改，
  *   已經在市場出貨的魚不能又出現，錢不能多出單機賺不到的數目（earn-cap.ts）
  * - inspect：找出存檔裡的某一條魚（市場上架用伺服器這份的資料，不信任遊戲端送來的）
  * - arrivals：買家存檔裡市場買來的魚到貨後的狀況（賣家 30 天存活率，arrivals.ts）
  */
 
 export interface Problem {
-  code: 'time_ahead' | 'identity_changed' | 'gift_removed' | 'shipped_fish' | 'coins_jump' | 'genome_forged';
+  code: 'time_ahead' | 'time_back' | 'identity_changed' | 'gift_removed' | 'shipped_fish' | 'coins_jump' | 'genome_forged' | 'lineage_unknown';
   message: string;
+  /** lineage_unknown：不擋存檔，伺服器記下這尾（編號＋基因），之後不能上架。 */
+  fish?: UntracedFish;
+}
+
+function genomeProblems(found: ForgedFish[]): Problem[] {
+  return found.map((f) => (f.untraced ? { code: 'lineage_unknown', message: f.reason, fish: { id: f.id, genome: f.untraced.genome } } : { code: 'genome_forged', message: f.reason }));
 }
 
 /** 遊戲時間可以比現實 × 7 多跑一點：存檔、上傳之間的延遲，加上 2% 的誤差。 */
@@ -67,19 +73,35 @@ export function advance(raw: unknown, now: number): AdvanceResult {
  * received 是這個玩家在市場買到、已經到貨的魚的基因（和牠們肚子裡的精子）：新出現的魚是這些就不用照店魚的範圍查。
  * 回傳發現的問題（空的代表沒問題）。
  */
-export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number, shipped: readonly ShippedFish[] = [], received: readonly unknown[] = []): Problem[] {
+export function verify(
+  previousRaw: unknown,
+  nextRaw: unknown,
+  elapsedMs: number,
+  shipped: readonly ShippedFish[] = [],
+  received: readonly unknown[] = [],
+  untraced: readonly UntracedFish[] = [],
+): Problem[] {
+  if (previousRaw === null || previousRaw === undefined) return verifyAlone(nextRaw, shipped, received, untraced);
   const prev = load(previousRaw);
   const next = load(nextRaw);
   const problems: Problem[] = [];
 
   // 遊戲時鐘由伺服器統一：遊戲時間最多比現實 × 7 多一點（暫停時會少，沒關係）
   const allowed = (Math.max(0, elapsedMs) / 3_600_000) * DEFAULT_TIME_SCALE * TIME_SLACK_RATIO + TIME_SLACK_HOURS;
-  const ran = next.state.hours - prev.state.hours;
+  // 每一缸都看（#76：以前只看主缸，另一缸自己快轉就看不到）
+  const hours = tanksOf(next).map((t) => t.hours);
+  const ran = Math.max(...hours) - prev.state.hours;
   if (ran > allowed) {
     problems.push({
       code: 'time_ahead',
       message: `遊戲時間跑得比伺服器快（多了約 ${Math.round(ran - allowed)} 個遊戲小時），可能是裝置的時間不對`,
     });
+  }
+
+  // 時間倒退：拿伺服器收過的更舊進度回來覆蓋（例如出貨前的存檔），要走強制覆蓋（#76）
+  const back = prev.state.hours - Math.min(...hours);
+  if (back > TIME_SLACK_HOURS) {
+    problems.push({ code: 'time_back', message: `遊戲時間比伺服器上一份還早（少了約 ${Math.round(back)} 個遊戲小時），可能是舊的存檔` });
   }
 
   // 已經存在的魚：身分不會變（基因、品種、性別、第幾代）；老闆送的魚不能變成可以賣的
@@ -102,9 +124,27 @@ export function verify(previousRaw: unknown, nextRaw: unknown, elapsedMs: number
 
   // 新出現的魚、母魚換了的精子：基因要生得出來、買得到（#76，genome-check.ts）
   const known = [...shipped.map((f) => f.genome), ...received];
-  for (const f of forgedGenomes(tanksOf(prev), tanksOf(next), known)) problems.push({ code: 'genome_forged', message: f.reason });
+  problems.push(...genomeProblems(forgedGenomes(tanksOf(prev), tanksOf(next), known, { untraced })));
 
   // 編號和身分都一樣才是同一條：新遊戲或換裝置從頭玩，編號會重來，同編號的是另一條魚
+  for (const f of allFish(next)) {
+    if (shipped.some((s) => s.id === f.id && sameIdentity(s, f))) problems.push({ code: 'shipped_fish', message: `#${f.id} 這條魚已經在市場賣出了，存檔裡不該還有` });
+  }
+  return problems;
+}
+
+/**
+ * 沒有上一份可以比（雲端第一次上傳，或強制覆蓋時當成另一台裝置的進度，#76）：只看這份自己可不可能。
+ * 單機可以先玩很久才註冊，所以時間和錢都不看；魚要照新遊戲（沒有魚）比：每一尾都要是店裡買得到、市場來的，
+ * 或缸裡的媽媽生得出來。媽媽不在的查不到來歷：存檔照收，但標 lineage_unknown（不能上架）。已經出貨的魚一樣不能在。
+ */
+function verifyAlone(nextRaw: unknown, shipped: readonly ShippedFish[], received: readonly unknown[], untraced: readonly UntracedFish[]): Problem[] {
+  const next = load(nextRaw);
+  const problems: Problem[] = [];
+  if (!Number.isFinite(economy(next.state).coins)) problems.push({ code: 'coins_jump', message: '存檔裡的錢不是正常的數字' });
+  const empty = { ...next.state, hours: 0, fish: [], quarantine: undefined } as TankState;
+  const known = [...shipped.map((f) => f.genome), ...received];
+  problems.push(...genomeProblems(forgedGenomes([empty], tanksOf(next), known, { alone: true, untraced })));
   for (const f of allFish(next)) {
     if (shipped.some((s) => s.id === f.id && sameIdentity(s, f))) problems.push({ code: 'shipped_fish', message: `#${f.id} 這條魚已經在市場賣出了，存檔裡不該還有` });
   }

@@ -37,12 +37,16 @@ class SimTest {
     static class FakeSim implements SimClient {
         final ObjectMapper json = new ObjectMapper();
         List<Problem> problems = List.of();
+        /** 沒有上一份可比（第一次上傳、強制覆蓋）時，這份自己的問題。 */
+        List<Problem> aloneProblems = List.of();
+        int aloneChecks;
         boolean down;
         boolean unreadable;
         final List<Long> verifiedElapsed = new ArrayList<>();
         final List<Long> advancedFrom = new ArrayList<>();
         final List<List<JsonNode>> verifiedShipped = new ArrayList<>();
         final List<List<JsonNode>> verifiedReceived = new ArrayList<>();
+        final List<List<JsonNode>> verifiedUntraced = new ArrayList<>();
         Inspect inspect = new Inspect(false, false, null);
         /** 到貨查詢：照收到的訂單回答；記下每次問了哪些訂單。 */
         java.util.function.Function<ArrivalQuery, Arrival> arrival = q -> new Arrival(q.order(), "unknown", false, false);
@@ -63,9 +67,14 @@ class SimTest {
         }
 
         @Override
-        public List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs, List<JsonNode> shipped, List<JsonNode> received) {
+        public List<Problem> verify(JsonNode previous, JsonNode next, long elapsedMs, List<JsonNode> shipped, List<JsonNode> received, List<JsonNode> untraced) {
+            verifiedUntraced.add(untraced);
             if (down) throw new Unavailable("down", null);
             if (unreadable) throw new HttpSimClient.BadSave("讀不出這份存檔");
+            if (previous.isNull()) {
+                aloneChecks++;
+                return aloneProblems;
+            }
             verifiedElapsed.add(elapsedMs);
             verifiedShipped.add(shipped);
             verifiedReceived.add(received);
@@ -118,12 +127,15 @@ class SimTest {
     @BeforeEach
     void reset() {
         sim.problems = List.of();
+        sim.aloneProblems = List.of();
+        sim.aloneChecks = 0;
         sim.down = false;
         sim.unreadable = false;
         sim.verifiedElapsed.clear();
         sim.advancedFrom.clear();
         sim.verifiedShipped.clear();
         sim.verifiedReceived.clear();
+        sim.verifiedUntraced.clear();
         sim.inspect = new SimClient.Inspect(false, false, null);
         sim.arrival = q -> new SimClient.Arrival(q.order(), "unknown", false, false);
         sim.arrivalQueries.clear();
@@ -212,6 +224,54 @@ class SimTest {
         sim.down = false;
         sim.inspect = new SimClient.Inspect(true, true, json.readTree("{\"id\":7,\"species\":\"guppy\",\"sex\":\"male\"}"));
         send(post("/api/market/listings"), me, FISH).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("save_replaced"));
+    }
+
+    @Test
+    void 雲端第一次上傳也檢查_改出來的魚不收_強制也不收() throws Exception {
+        // #76：以前第一次上傳完全不檢查，偽造的存檔直接成為基準
+        String me = player();
+        sim.aloneProblems = List.of(new SimClient.Problem("genome_forged", "#9 這條魚不是店裡買得到的，也不是市場來的"));
+        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("genome_forged"));
+        send(put("/api/save"), me, saveBody(0, true)).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("genome_forged"));
+        sim.aloneProblems = List.of();
+        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        assertThat(sim.aloneChecks).isEqualTo(3);
+        assertThat(sim.verifiedElapsed).isEmpty();
+    }
+
+    @Test
+    void 強制覆蓋_跟上一份對不上可以收_但這份自己有改出來的魚不收() throws Exception {
+        String me = player();
+        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+        sim.problems = List.of(new SimClient.Problem("identity_changed", "#7 這條魚的身分跟伺服器上的不一樣"));
+        sim.aloneProblems = List.of(new SimClient.Problem("genome_forged", "#7 這條魚不是店裡買得到的，也不是市場來的"));
+        send(put("/api/save"), me, saveBody(1, true)).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("genome_forged"));
+        assertThat(read(send(get("/api/save"), me, null)).get("revision").asLong()).isEqualTo(1);
+        sim.aloneProblems = List.of();
+        send(put("/api/save"), me, saveBody(1, true)).andExpect(status().isOk());
+    }
+
+    @Test
+    void 來歷查不到的魚_存檔照收_那尾不能上架_之後的檢查會帶上牠() throws Exception {
+        // #76：第一次上傳的魚媽媽不在存檔裡，基因沒辦法查；不擋存檔，但不能拿去市場賣
+        String me = player();
+        clock.advance(Duration.ofDays(3));
+        JsonNode fake = json.readTree("{\"id\":7,\"genome\":{\"tail\":100}}");
+        sim.aloneProblems = List.of(new SimClient.Problem("lineage_unknown", "#7 這條小魚的媽媽不在存檔裡，查不到來歷", fake));
+        send(put("/api/save"), me, saveBody(0, false)).andExpect(status().isOk());
+
+        sim.inspect = new SimClient.Inspect(true, true, json.readTree("{\"id\":7,\"species\":\"guppy\",\"sex\":\"male\",\"genome\":{\"tail\":100}}"));
+        send(post("/api/market/listings"), me, withRevision(FISH, 1)).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("lineage_unknown"));
+        // 同編號、不同基因（新遊戲的另一條）可以上架
+        sim.inspect = new SimClient.Inspect(true, true, json.readTree("{\"id\":7,\"species\":\"guppy\",\"sex\":\"male\",\"genome\":{\"tail\":60}}"));
+        send(post("/api/market/listings"), me, withRevision(FISH, 1)).andExpect(status().isCreated());
+
+        // 下次上傳把記下的帶給模擬服務（牠生的小魚也查不到）；再標一次不會重複記
+        sim.problems = List.of(new SimClient.Problem("lineage_unknown", "#7 這條小魚的媽媽不在存檔裡，查不到來歷", fake));
+        send(put("/api/save"), me, saveBody(2, false, 1)).andExpect(status().isOk());
+        assertThat(lastUntraced()).containsExactly("7:{\"tail\":100}");
+        upload(me);
+        assertThat(lastUntraced()).containsExactly("7:{\"tail\":100}");
     }
 
     @Test
@@ -364,6 +424,11 @@ class SimTest {
         JsonNode economy = r.get("save").get("state").get("economy");
         assertThat(economy.get("coins").asInt()).isEqualTo(9_998);
         assertThat(economy.get("ledgerSeq").asInt()).isEqualTo(1);
+    }
+
+    /** 最近一次存檔檢查帶給模擬服務的來歷查不到的魚（編號:基因）。 */
+    private List<String> lastUntraced() {
+        return sim.verifiedUntraced.get(sim.verifiedUntraced.size() - 1).stream().map(f -> f.get("id").asLong() + ":" + f.get("genome")).toList();
     }
 
     /** 照雲端那份的版本和帳本筆數上傳一次（魚、錢都沒變）。 */

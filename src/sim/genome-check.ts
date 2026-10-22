@@ -10,6 +10,10 @@ import { type Fish, type TankState } from './state';
  * - 不是缸裡生的：要跟伺服器知道的魚一樣（上一份裡的、市場出貨或買到的），不然就是店裡的魚，要在店魚的範圍裡。
  * - 母魚存的精子換了：要是缸裡某尾公魚的基因，或是店魚範圍內的。
  * 範圍都放寬（4.5 個標準差），正常繁殖幾乎不會碰到；只擋一看就不可能的。
+ *
+ * 來歷查不到（untraced，#76）：媽媽不在存檔裡、時間又夠長（或沒有上一份可比）的小魚，基因沒辦法查。
+ * 不擋存檔（正常養很久，媽媽早就死了），但標出來，伺服器記下這幾尾不能上架；牠們生的小魚也跟著標
+ * （媽媽是查不到的，或媽媽存的精子是查不到的公魚的）。
  */
 
 /** 子代尾鰭分數的變異（cross：每尾加 gaussian × 8）、鰭長的變異（× 12），幾個標準差以上算不可能。 */
@@ -27,6 +31,20 @@ const FIN_PAIRS = ['swallow', 'ribbon', 'dumbo'] as const;
 export interface ForgedFish {
   id: number;
   reason: string;
+  /** 來歷查不到：不擋存檔，只是不能上架。 */
+  untraced?: { genome: unknown };
+}
+
+/** 伺服器記得的來歷查不到的魚（編號＋基因：新遊戲編號會重來，同編號不同基因是另一條）。 */
+export interface UntracedFish {
+  id: number;
+  genome: unknown;
+}
+
+export interface GenomeCheckOptions {
+  /** 沒有上一份可比（雲端第一次上傳、強制覆蓋）：媽媽不在的都算查不到，不看時間。 */
+  alone?: boolean;
+  untraced?: readonly UntracedFish[];
 }
 
 const allFish = (tanks: TankState[]): Fish[] => tanks.flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])]);
@@ -77,7 +95,7 @@ const storeOk = (g: GuppyGenome) => couldBeStoreGenome(g);
  * 兩份存檔之間新出現、或精子換了的孔雀魚，基因不可能的列出來。
  * known 是伺服器知道的魚資料（這個玩家在市場出貨的、買到的）：一樣的基因就是那條魚。
  */
-export function forgedGenomes(prev: TankState[], next: TankState[], known: readonly unknown[] = []): ForgedFish[] {
+export function forgedGenomes(prev: TankState[], next: TankState[], known: readonly unknown[] = [], opts: GenomeCheckOptions = {}): ForgedFish[] {
   const before = new Map(allFish(prev).map((f) => [f.id, f]));
   const after = allFish(next);
   const nowById = new Map(after.map((f) => [f.id, f]));
@@ -88,8 +106,17 @@ export function forgedGenomes(prev: TankState[], next: TankState[], known: reado
   const maleKeys = new Set(males.map((f) => genomeKey(f.genome)));
   const days = (next[0].hours - prev[0].hours) / 24;
   const out: ForgedFish[] = [];
+  // 查不到來歷的：伺服器記得的，加上這次新標的（照編號順序，媽媽一定比小魚早）
+  const lost = new Set((opts.untraced ?? []).map((u) => `${u.id}|${genomeKey(u.genome)}`));
+  const lostGenomes = new Set((opts.untraced ?? []).map((u) => genomeKey(u.genome)));
+  const isLost = (f: Fish) => lost.has(`${f.id}|${genomeKey(f.genome)}`);
+  const markLost = (c: Fish, reason: string) => {
+    out.push({ id: c.id, reason, untraced: { genome: c.genome } });
+    lost.add(`${c.id}|${genomeKey(c.genome)}`);
+    lostGenomes.add(genomeKey(c.genome));
+  };
 
-  for (const c of after) {
+  for (const c of [...after].sort((a, b) => a.id - b.id)) {
     if (c.species !== 'guppy' || !c.genome) continue;
     const old = before.get(c.id);
     // 精子換了（重新配對、新買來懷孕的）：要是缸裡公魚的、伺服器知道的，或店魚範圍內的
@@ -106,26 +133,40 @@ export function forgedGenomes(prev: TankState[], next: TankState[], known: reado
     }
     const mother = c.motherId !== undefined ? (before.get(c.motherId) ?? nowById.get(c.motherId)) : undefined;
     if (!mother?.genome) {
-      if (days < MIN_MOTHER_DAYS) out.push({ id: c.id, reason: `#${c.id} 這條小魚的媽媽不在存檔裡` });
+      if (!opts.alone && days < MIN_MOTHER_DAYS) out.push({ id: c.id, reason: `#${c.id} 這條小魚的媽媽不在存檔裡` });
+      else markLost(c, `#${c.id} 這條小魚的媽媽不在存檔裡，查不到來歷`);
       continue;
     }
     const m = mother.genome;
+    // 媽媽存的精子：上一份和這一份都要看（中間可能換成查不到來歷的公魚的）
+    const momSires = [before.get(mother.id), nowById.get(mother.id)].flatMap((f) => (f?.sire ? [f.sire.genome] : []));
+    const lostSire = (s: GuppyGenome) => lostGenomes.has(genomeKey(s));
+    if (isLost(mother) || momSires.some(lostSire)) {
+      markLost(c, `#${c.id} 爸媽的來歷查不到`);
+      continue;
+    }
     // 媽媽沒存精子就生的（舊存檔、市場買來懷孕但沒附精子）：讀檔時照編號補的舊基因，尾鰭 50，不用查
-    const sires = [before.get(mother.id), nowById.get(mother.id)].filter((f) => f?.sire);
-    if (sires.length === 0 && genomeKey(g) === genomeKey(legacyGenome(c.id, c.sex))) continue;
+    if (momSires.length === 0 && genomeKey(g) === genomeKey(legacyGenome(c.id, c.sex))) continue;
     if (!maternalOk(g, m)) {
       out.push({ id: c.id, reason: `#${c.id} 這條小魚的基因不可能是牠媽媽生的` });
       continue;
     }
     // 爸爸：媽媽存的精子，或缸裡夠大的公魚（同一胎、剛出生的兄弟不算）
     const born = c.bornHours ?? next[0].hours;
-    const grown = males.filter((f) => f.bornHours === undefined || f.bornHours <= born - MIN_MOTHER_DAYS * 24).map((f) => f.genome!);
-    const fathers = [before.get(mother.id), nowById.get(mother.id)].flatMap((f) => (f?.sire ? [f.sire.genome] : [])).concat(grown);
+    const adults = males.filter((f) => f.bornHours === undefined || f.bornHours <= born - MIN_MOTHER_DAYS * 24);
+    // 來歷查不到的公魚不能當「查得到」的爸爸：只有牠對得上的小魚也查不到
+    const grown = adults.filter((f) => !isLost(f)).map((f) => f.genome!);
+    const fathers = momSires.filter((s) => !lostSire(s)).concat(grown);
+    const fitsAny = (dads: GuppyGenome[]) => dads.some((f) => paternalOk(g, f) && quantOk(g, m, f.tail, f.fins));
+    if (fitsAny(fathers)) continue;
+    if (fitsAny(adults.filter(isLost).map((f) => f.genome!).concat(momSires.filter(lostSire)))) {
+      markLost(c, `#${c.id} 爸爸的來歷查不到`);
+      continue;
+    }
     // 已經賣掉的店魚當爸爸：尾鰭分數照店魚偏好的或缸裡最好的公魚算
     const anyFatherTail = Math.max(UNKNOWN_FATHER_TAIL, ...grown.map((f) => f.tail));
     const anyFatherFins = Math.max(45 + 2 * FINS_SD, ...grown.map((f) => f.fins ?? 45));
-    const fits = fathers.some((f) => paternalOk(g, f) && quantOk(g, m, f.tail, f.fins));
-    if (!fits && !quantOk(g, m, anyFatherTail, anyFatherFins)) out.push({ id: c.id, reason: `#${c.id} 這條小魚的尾鰭比爸媽能生出來的好太多` });
+    if (!quantOk(g, m, anyFatherTail, anyFatherFins)) out.push({ id: c.id, reason: `#${c.id} 這條小魚的尾鰭比爸媽能生出來的好太多` });
   }
   return out;
 }

@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
+import type { UntracedFish } from '../sim';
 import { advance, arrivals, BadSave, inspect, verify, type ArrivalQuery, type ShippedFish } from './handlers';
 
 /**
@@ -61,6 +62,11 @@ function shippedList(v: unknown): ShippedFish[] {
   return Array.isArray(v) ? v.filter((x): x is ShippedFish => !!x && typeof x === 'object' && typeof (x as ShippedFish).id === 'number') : [];
 }
 
+/** 伺服器記得的來歷查不到的魚（編號＋基因）。 */
+function untracedList(v: unknown): UntracedFish[] {
+  return Array.isArray(v) ? v.filter((x): x is UntracedFish => !!x && typeof x === 'object' && typeof (x as UntracedFish).id === 'number') : [];
+}
+
 /** 要查的市場訂單（訂單編號＋出貨時的魚資料）。 */
 function arrivalList(v: unknown): ArrivalQuery[] {
   if (!Array.isArray(v)) throw new HttpError(400, '缺少 orders');
@@ -69,7 +75,7 @@ function arrivalList(v: unknown): ArrivalQuery[] {
 
 const routes: Record<string, (body: Record<string, unknown>) => unknown> = {
   '/advance': (b) => advance(b.save, num(b, 'now')),
-  '/verify': (b) => ({ problems: verify(b.previous, b.next, num(b, 'elapsedMs'), shippedList(b.shipped), Array.isArray(b.received) ? b.received.filter((g) => !!g && typeof g === 'object') : []) }),
+  '/verify': (b) => ({ problems: verify(b.previous ?? null, b.next, num(b, 'elapsedMs'), shippedList(b.shipped), Array.isArray(b.received) ? b.received.filter((g) => !!g && typeof g === 'object') : [], untracedList(b.untraced)) }),
   '/inspect': (b) => inspect(b.save, num(b, 'fishId')),
   '/arrivals': (b) => ({ arrivals: arrivals(b.save, arrivalList(b.orders)) }),
 };

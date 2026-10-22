@@ -139,6 +139,8 @@ public class MarketService {
         if (!found.found()) throw new ApiException(HttpStatus.CONFLICT, "not_in_save", "雲端存檔裡找不到這條魚，先同步存檔再上架");
         if (!found.alive()) throw new ApiException(HttpStatus.CONFLICT, "dead", "這條魚已經死了");
         if (!species.equals(found.item().path("species").asText())) throw bad("bad_species", "品種跟魚對不上");
+        if (untraced(me, id.asLong(), found.item().path("genome")))
+            throw new ApiException(HttpStatus.FORBIDDEN, "lineage_unknown", "這條魚的來歷查不到（存檔裡找不到牠的媽媽），不能上架");
         return found.item();
     }
 
@@ -469,6 +471,36 @@ public class MarketService {
             if (item.path("sire").path("genome").isObject()) out.add(item.get("sire").get("genome"));
         }
         return out;
+    }
+
+    /** 這個帳號來歷查不到的魚（編號＋基因）：存檔檢查時帶給模擬服務，牠們生的小魚也跟著標（#76）。 */
+    public List<JsonNode> untracedFish(long me) throws Exception {
+        List<JsonNode> out = new ArrayList<>();
+        for (Map<String, Object> row : db.queryForList("select fish_id, genome from market_untraced_fish where account_id = ? order by fish_id", me)) {
+            ObjectNode fish = json.createObjectNode();
+            fish.put("id", ((Number) row.get("fish_id")).longValue());
+            fish.set("genome", json.readTree((String) row.get("genome")));
+            out.add(fish);
+        }
+        return out;
+    }
+
+    /** 記下這次存檔檢查標成來歷查不到的魚（lineage_unknown）；已經記過的不重複。 */
+    public void markUntraced(long me, List<SimClient.Problem> problems) throws Exception {
+        for (SimClient.Problem p : problems) {
+            if (p.fish() == null || !p.fish().path("id").canConvertToLong()) continue;
+            long id = p.fish().get("id").asLong();
+            String genome = json.writeValueAsString(p.fish().path("genome"));
+            if (untraced(me, id, p.fish().path("genome"))) continue;
+            db.update("insert into market_untraced_fish(account_id, fish_id, genome) values (?, ?, ?)", me, id, genome);
+        }
+    }
+
+    /** 這條魚（編號＋基因）是不是來歷查不到的。 */
+    private boolean untraced(long me, long fishId, JsonNode genome) throws Exception {
+        for (String g : db.queryForList("select genome from market_untraced_fish where account_id = ? and fish_id = ?", String.class, me, fishId))
+            if (json.readTree(g).equals(genome)) return true;
+        return false;
     }
 
     private int openListings(long me) {
