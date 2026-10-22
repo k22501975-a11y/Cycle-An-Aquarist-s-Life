@@ -32,6 +32,7 @@ import {
 import { advanceQuest, currentQuest, newProgress } from '../ui/tutorial';
 import { morningLine } from '../ui/morning-card';
 import { morningReport, snapshot } from '../ui/morning-report';
+import { waterAlarms } from './crisis';
 import { doAllDaily } from './daily-player';
 
 /**
@@ -55,6 +56,8 @@ export interface MidgameNight {
   inBreeding: number;
   /** 這天早上報告的開場白和每條（除錯看）。 */
   line: string;
+  /** 早上各缸的水質警報（「第幾缸:警報」，例如 1:too_hot）。 */
+  alarms: string[];
 }
 
 /** 所有缸一起跑（跟遊戲一樣每個 tick 輪流推每一缸）。 */
@@ -120,7 +123,7 @@ function run(seed: number, days: number): { nights: MidgameNight[]; tanks: TankS
       for (let i = 0; i < 2; i++) addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'female', strain: DREAM_FISH.parents.female, pregnant: true });
     }
     act();
-    for (const t of tanks) feed(t, meal(t) * PINCH_MEALS);
+    for (const t of tanks) feed(t, meal(t) * PINCH_MEALS, t.feedPlan?.kind, t.feedPlan?.grade);
     act();
     if (currentQuest(p)?.id === 'plant') buyPlant(s, 'anubias');
     act();
@@ -154,7 +157,7 @@ function run(seed: number, days: number): { nights: MidgameNight[]; tanks: TankS
     const card = report.items.find((i) => i.choice)?.choice;
     const why = card ? pickRecommended(tanks, card) : null;
     const line = morningLine(report);
-    out.push({ day: Math.floor(s.hours / 24) + 1, choice: card?.id, orderChoice, quiet: line === '安靜的一晚。', coins: economy(s).coins, tanks: tanks.length, inBreeding: tanks.find((t) => t.purpose === 'breeding')?.fish.filter((f) => f.alive).length ?? 0, line: `${why ? `（選不了：${why}）` : ''}${line} ${report.items.map((i) => i.kind).join(',')}` });
+    out.push({ day: Math.floor(s.hours / 24) + 1, choice: card?.id, orderChoice, quiet: line === '安靜的一晚。', coins: economy(s).coins, tanks: tanks.length, inBreeding: tanks.find((t) => t.purpose === 'breeding')?.fish.filter((f) => f.alive).length ?? 0, alarms: tanks.flatMap((t, i) => [...waterAlarms(t)].map((x) => `${i}:${x}`)), line: `${why ? `（選不了：${why}）` : ''}${line} ${report.items.map((i) => i.kind).join(',')}` });
   }
   return { nights: out, tanks };
 }

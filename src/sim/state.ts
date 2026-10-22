@@ -1,7 +1,7 @@
 import type { Personality } from './personality';
 import type { SnailState } from './snails';
 import type { Brood } from './parental';
-import type { FoodLot } from './food';
+import type { FoodGrade, FoodKind, FoodLot } from './food';
 import { co2Equilibrium, oxygenSaturation, phFromCo2 } from './chemistry';
 import type { Placement } from './aquascape';
 import type { AirPumpSpec, ChillerSpec, Co2Spec, FanSpec, FilterSpec, HardscapeSpec, HeaterSpec, LightSpec, SubstrateSpec, TankSpec } from './equipment';
@@ -22,6 +22,8 @@ export interface TankState {
   label?: string;
   /** 這缸的用途（第二缸起，tank-purpose.ts，polish-to-9.md G4）；沒選就沒有。 */
   purpose?: 'breeding' | 'display';
+  /** 點水面餵食預設用的飼料（中期選擇 C7「種魚怎麼養」選的，#316）；沒有就用玩家在面板選的。 */
+  feedPlan?: { kind: FoodKind; grade: FoodGrade };
   /** 已模擬的遊戲小時數。 */
   hours: number;
   rng: RngState;
