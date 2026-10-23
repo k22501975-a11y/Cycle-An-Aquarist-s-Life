@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { takeChoice, type TankState } from '../sim';
+import { type TankState } from '../sim';
+import { takeChoice } from '../sim/choices';
 import { chooseRecommended } from './midgame-player';
 import { seriousPlayer } from './serious-player';
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { choiceState } from '../sim';
+import { choiceState } from '../sim/choices';
 import { midgamePlayer, midgamePlayerTanks } from './midgame-player';
 
 /**

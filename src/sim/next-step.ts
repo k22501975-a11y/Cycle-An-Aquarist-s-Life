@@ -1,5 +1,4 @@
 import { economy } from './economy';
-import { breedingStep } from './choices';
 import { HUNGRY } from './readings';
 import { CALM_DAYS, GOALS, goalState, nextGoals, PURPOSE_GOAL_COUNT, raisedCount, type Goal } from './goals';
 import { COLORING_AT, daysToLength, growthStage, maxLengthCm } from './growth';
@@ -11,6 +10,15 @@ import { hasVisible } from './processes/disease';
 import { FISH_SPECIES, isShrimpSpecies } from './species';
 import type { Fish, TankState } from './state';
 import { breedingTankRaised, displayTankHighPlants, purposeTanks } from './tank-purpose';
+
+/**
+ * 任務卡「選育走到哪」那一行（choices.ts 的 breedingStep）。choices.ts 跟早上報告一起延後載入（開機必載的預算），
+ * 由 ui/deferred-ui.ts 載好時登記；還沒載好就先照舊說餵小魚。
+ */
+let breedingStep: ((tanks: TankState[]) => string | null) | null = null;
+export function setBreedingStep(fn: (tanks: TankState[]) => string | null): void {
+  breedingStep = fn;
+}
 
 /**
  * 主畫面的「下一步」（polish-to-9.md U1）：教學結束後，時鐘下方一直看得到現在該做什麼，點下去帶到要按的按鈕。
@@ -159,7 +167,7 @@ function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
       const feedStep = { text: `小魚一天餵兩次，養到轉色（${Math.min(5, raisedCount(tanks))}/5）`, target: 'feed' } as const;
       // 「一天餵兩次」只在小魚真的餓了才說；其他時候說選育走到哪（midgame.md §2）
       if (bredFry(tanks).some((f) => f.hunger >= HUNGRY)) return feedStep;
-      const breeding = breedingStep(tanks);
+      const breeding = breedingStep?.(tanks) ?? null;
       return raiseStuckStep(tanks) ?? (breeding ? { text: breeding, target: 'fastest' } : feedStep);
     }
     case 'sale': {

@@ -1,4 +1,5 @@
-import { chooseOption, compareOrders, orderDreamNote, tradeCheck, dismissOrder, FIN_NAMES, fulfillOrder, markDaily, ORDER_BOARD_SIZE, ORDER_STRAINS, orderStarter, orderBoard, orderRefusal, orderSupply, orderTitle, orderUnit, outlookDaysLine, outlookFishLine, updateOrders, type OrderOutlook, type ShopOrder, type TankState } from '../sim';
+import { compareOrders, dismissOrder, FIN_NAMES, fulfillOrder, markDaily, ORDER_BOARD_SIZE, ORDER_STRAINS, orderStarter, orderBoard, orderRefusal, orderSupply, orderTitle, orderUnit, outlookDaysLine, outlookFishLine, updateOrders, type OrderOutlook, type ShopOrder, type TankState } from '../sim';
+import { chooseOption, orderDreamNote, tradeCheck } from '../sim/choices';
 import { artUrl, ownerImg } from './art-icons';
 import { orderArt } from './order-alert';
 import { ownerMood } from './owner-mood';

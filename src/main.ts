@@ -1825,7 +1825,7 @@ async function start(): Promise<void> {
   };
   // 早上報告在拆出去的檔案裡（通常開機後早就載好了，照舊同步）
   const goNight = () => withPanels(goNightWith);
-  const goNightWith = ({ snapshot, morningReport, morningCard }: DeferredUi) => {
+  const goNightWith = ({ snapshot, morningReport, morningCard, chooseOption }: DeferredUi) => {
     if (sleepingNow) return;
     // 開缸演出還在演：演完會跳「你的第一個缸」，夜幕會把它蓋掉
     if (view.settingUp) {
@@ -1868,7 +1868,7 @@ async function start(): Promise<void> {
         : undefined;
       const choose = (item: ReportItem, key: string, picks: number[]) => {
         const card = item.choice ?? item.broodSetting;
-        return card ? game.actAll((tanks) => sim.chooseOption(tanks, card.id, key, picks)) : null;
+        return card ? game.actAll((tanks) => chooseOption(tanks, card.id, key, picks)) : null;
       };
       const fishLook = (id: number) => {
         // 母魚可能在產卵盒（quarantine）裡

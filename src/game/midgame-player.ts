@@ -1,39 +1,6 @@
 import { newGameState } from './game';
-import {
-  addFish,
-  addHardscape,
-  buyPlant,
-  buyTank,
-  checkGoals,
-  chooseOption,
-  choiceState,
-  claimDaily,
-  doseIchMedication,
-  DREAM_FISH,
-  economy,
-  FISH_SPECIES,
-  feed,
-  fulfillOrder,
-  HARDSCAPE,
-  ICH_MED_WORKING,
-  linkTanks,
-  moveDueToNursery,
-  orderBoard,
-  orderSupply,
-  PINCH_MEALS,
-  setTankPurpose,
-  splitTank,
-  transferMedia,
-  step,
-  TICK_HOURS,
-  tradeCheck,
-  updateDaily,
-  useTestKit,
-  waterChange,
-  type ChoiceCard,
-  type ChoiceId,
-  type TankState,
-} from '../sim';
+import { addFish, addHardscape, buyPlant, buyTank, checkGoals, claimDaily, doseIchMedication, DREAM_FISH, economy, FISH_SPECIES, feed, fulfillOrder, HARDSCAPE, ICH_MED_WORKING, linkTanks, moveDueToNursery, orderBoard, orderSupply, PINCH_MEALS, setTankPurpose, splitTank, transferMedia, step, TICK_HOURS, updateDaily, useTestKit, waterChange, type TankState } from '../sim';
+import { chooseOption, choiceState, tradeCheck, type ChoiceCard, type ChoiceId } from '../sim/choices';
 import { advanceQuest, currentQuest, newProgress } from '../ui/tutorial';
 import { morningLine } from '../ui/morning-card';
 import { morningReport, snapshot } from '../ui/morning-report';
