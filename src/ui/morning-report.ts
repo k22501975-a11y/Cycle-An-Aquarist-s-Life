@@ -115,6 +115,8 @@ export interface ReportItem {
   lookalike?: LookalikeCard;
   /** kind 'choice' 的選擇卡（sim/choices.ts）：選項和選種、配對的資料。 */
   choice?: ChoiceCard;
+  /** C9 自動照上次的那一行（midgame.md §6.5）：點了展開這張卡改設定。 */
+  broodSetting?: ChoiceCard;
   /** kind 'milestone' 的圖卡資料：哪一步、哪尾魚、配對的另一半、C7 養快提前了幾天。 */
   milestone?: Milestone;
   /** kind 'reveal' 的開獎卡：夢想魚叫什麼、每尾小魚帶不帶白子、蛇紋（含隱性）。 */
@@ -393,7 +395,7 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   // 夢想魚那窩懷孕後段的里程碑、生病拖慢配對（midgame.md §6.4）
   for (const n of takeBellyNotes(tanks)) {
     const at = tanks.findIndex((t) => t.fish.some((f) => f.id === n.fishId));
-    items.push({ kind: 'belly', tank: Math.max(0, at), tone: 'good', text: n.text, action: 'fish', subjectId: n.fishId });
+    items.push({ kind: 'belly', tank: Math.max(0, at), tone: 'good', text: n.text, action: 'fish', subjectId: n.fishId, broodSetting: n.setting });
   }
   // 開獎（midgame.md §6.1 C15）：夢想魚配方那窩生了，小魚一尾一尾亮出來
   const reveal = takeReveal(tanks);

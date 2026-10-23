@@ -268,6 +268,20 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     other.pregnancy = BROOD_AGAIN_SHOWS;
     expect(nextDay(tanks)?.id).not.toBe('C9');
     expect(st.broodQueue!.map((b) => b.momId)).toEqual([other.id]);
+    // 改得回來：點那一行跳 C9 的選項加「每次都問我」
+    const setting = takeBellyNotes(tanks).find((n) => n.setting)!.setting!;
+    expect(setting.options.map((o) => o.key)).toEqual(['auto:grow', 'auto:sell', 'auto:keep', 'ask']);
+    expect(setting.options.find((o) => o.recommended)?.key).toBe('auto:keep');
+    expect(chooseOption(tanks, 'C9', 'auto:grow')).toBeNull();
+    expect(st.picked.C9).toBe('grow');
+    expect(chooseOption(tanks, 'C9', 'ask')).toBeNull();
+    other.pregnancy = 0;
+    takeSecondBrood(tanks);
+    s.hours += 30 * 24;
+    storeMom.pregnancy = BROOD_AGAIN_SHOWS;
+    const back = nextDay(tanks);
+    expect(back?.id).toBe('C9');
+    expect(back!.options[0].label).toBe('照上次：留在繁殖缸長大');
   });
 
   it('C9 問過的那胎沒生出小魚（流產、被吃光）就收掉，這尾母魚下一胎還會再問', () => {

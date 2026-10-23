@@ -1194,6 +1194,22 @@ function queueBroods(tanks: TankState[], s: ChoiceState, moms: Array<{ fish: Fis
   s.broods = (s.broods ?? 0) + 1;
 }
 
+/** C9 自動照上次之後改設定的卡（midgame.md §6.5）：三個選項換成新的自動設定，或「每次都問我」恢復跳卡。 */
+function broodSettingCard(mom: Fish, tank: number, now: string): ChoiceCard {
+  const coins = Math.round((FISH_SPECIES[mom.species].breeding!.broodMean * mom.health * 0.5 * JUVENILE_ORDER_PRICE) / 10) * 10;
+  return {
+    id: 'C9',
+    tank,
+    title: '之後快生的母魚要怎麼處理？',
+    owner: `現在照你的設定：${BROOD_AUTO_DO[now] ?? '處理'}。`,
+    options: [
+      ...broodOptions(coins).map((o) => ({ ...o, key: `auto:${o.key}`, recommended: o.key === now })),
+      { key: 'ask', label: '每次都問我', outcome: '快生的時候再跳卡問你' },
+    ],
+    motherId: mom.id,
+  };
+}
+
 /**
  * C9 重複版不跳卡、直接照上次（midgame.md §6.5）：連續選了 BROOD_AUTO_AFTER 次「照上次」，
  * 或上次選完還不到 BROOD_AGAIN_GAP_DAYS 天。早上報告寫一行。
@@ -1386,14 +1402,14 @@ function noteSickDelay(tanks: TankState[], s: ChoiceState): void {
 /**
  * 早上報告用：夢想魚那窩的懷孕後段里程碑（每個說一次），和生病拖慢配對的那一句（懷上之後說一次）。
  */
-export function takeBellyNotes(tanks: TankState[]): Array<{ fishId: number; text: string }> {
+export function takeBellyNotes(tanks: TankState[]): Array<{ fishId: number; text: string; setting?: ChoiceCard }> {
   const s = choiceState(tanks);
   const p = pairFish(tanks, s);
-  const out: Array<{ fishId: number; text: string }> = [];
-  // C9 自動照上次（midgame.md §6.5）：點這一行打開母魚的魚卡
+  const out: Array<{ fishId: number; text: string; setting?: ChoiceCard }> = [];
+  // C9 自動照上次（midgame.md §6.5）：點這一行再跳一次 C9 的選項改設定（多「每次都問我」）
   for (const n of s.broodAutoNotes?.splice(0) ?? []) {
-    const mom = located(tanks).find(({ fish }) => fish.id === n.momId)?.fish;
-    if (mom) out.push({ fishId: mom.id, text: `${callName(mom)}快生了，照你的設定${BROOD_AUTO_DO[n.choice] ?? '處理'}` });
+    const mom = located(tanks).find(({ fish }) => fish.id === n.momId);
+    if (mom) out.push({ fishId: mom.fish.id, text: `${callName(mom.fish)}快生了，照你的設定${BROOD_AUTO_DO[n.choice] ?? '處理'}`, setting: broodSettingCard(mom.fish, mom.tank, n.choice) });
   }
   if (!p) return out;
   if (!s.sickNoted && (s.sickDays ?? 0) > 0 && p.mom.pregnancy > 0) {
@@ -1563,6 +1579,19 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
       break;
     }
     case 'C9': {
+      // 改自動設定（broodSettingCard）：不動這一胎，之後快生的照新設定，或恢復每次都問
+      if (key === 'ask') {
+        s.sameStreak = 0;
+        delete s.broodPickedAt;
+        return null;
+      }
+      if (key.startsWith('auto:')) {
+        const to = key.slice(5);
+        if (!['grow', 'sell', 'keep'].includes(to)) return '沒有這個選項';
+        s.picked.C9 = to;
+        s.sameStreak = BROOD_AUTO_AFTER;
+        return null;
+      }
       // 簡化版的「照上次」
       const repeat = broodRepeat(s);
       const same = key === 'same' && !!s.picked.C9;

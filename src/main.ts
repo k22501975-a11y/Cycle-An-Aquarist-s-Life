@@ -1866,7 +1866,10 @@ async function start(): Promise<void> {
       const daily = today
         ? { tasks: today.tasks.map((t) => ({ id: t.id, art: dailyArt(t.id), text: DAILY_SHORT[t.id], done: t.done })), go: (id: string) => goDaily(id as sim.DailyTaskId) }
         : undefined;
-      const choose = (item: ReportItem, key: string, picks: number[]) => (item.choice ? game.actAll((tanks) => sim.chooseOption(tanks, item.choice!.id, key, picks)) : null);
+      const choose = (item: ReportItem, key: string, picks: number[]) => {
+        const card = item.choice ?? item.broodSetting;
+        return card ? game.actAll((tanks) => sim.chooseOption(tanks, card.id, key, picks)) : null;
+      };
       const fishLook = (id: number) => {
         // 母魚可能在產卵盒（quarantine）裡
         const f = game.tanks.flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])]).find((x) => x.id === id && x.genome);

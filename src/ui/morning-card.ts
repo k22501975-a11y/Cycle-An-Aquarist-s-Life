@@ -5,6 +5,7 @@ import { keeperRibbon } from './keeper-ribbon';
 import { choiceVisual, type FishLookup } from './choice-card';
 import { lookalikeVisual } from './lookalike-card';
 import { choiceFollowUp, isBadNews, type Milestone, type MorningReport, type Reveal, type ReportItem, type ReportKind } from './morning-report';
+import type { ChoiceCard } from '../sim';
 
 /**
  * 「過一晚」醒來的早上報告卡（first-10-minutes.md F2）：阿德老闆一句話、一條一條的圖卡，
@@ -192,8 +193,28 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
     void import('./breeding-cards').then((bc) => pic.append(bc.revealVisual(r.fry))).catch(() => pic.remove());
     return h(`div.morning-item.${item.tone}.reveal-item`, {}, h('span.morning-body', {}, h('b.rv-title', {}, `開獎！${r.fry.length} 尾小魚出生了`), pic, reportText(item.text)));
   };
+  // C9 自動照上次的那一行（midgame.md §6.5）：點了展開 C9 的選項改設定（多「每次都問我」）
+  const settingRow = (item: ReportItem, card: ChoiceCard) => {
+    const box = h(`div.morning-item.${item.tone}.choice-item`, {});
+    const open = () =>
+      box.replaceChildren(
+        h(
+          'span.morning-body',
+          {},
+          h('span.morning-text', {}, h('b', {}, card.title)),
+          choiceVisual(card, (key, picks) => {
+            const why = deps.choose?.(item, key, picks) ?? null;
+            if (!why) box.replaceChildren(h('span.morning-text', {}, `${item.text} ✓ ${card.options.find((o) => o.key === key)?.label ?? ''}`));
+            return why;
+          }),
+        ),
+      );
+    box.append(h('span.morning-body', {}, reportText(item.text), h('button.btn.small', { type: 'button', onclick: open }, '改設定 ›')));
+    return box;
+  };
   const row = (item: ReportItem) => {
     if (item.choice) return choiceRow(item);
+    if (item.broodSetting) return settingRow(item, item.broodSetting);
     // 選育進度（midgame.md §2）：緞帶開頭的一行，不是可以點的事
     if (item.reveal) return revealRow(item, item.reveal);
     if (item.milestone) return milestoneRow(item, item.milestone);
