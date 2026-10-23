@@ -188,8 +188,8 @@ export interface ChoiceState {
   sires?: number[];
   /** C13 選了加活餌：哪尾母魚（生完就收掉活餌）。 */
   pregPlan?: number;
-  /** C13 選了調高水溫：哪尾母魚、哪缸、原本加熱棒設幾度（生完就調回來，#335）。 */
-  warmPlan?: { momId: number; tank: number; prevC: number };
+  /** C13 選了調高水溫：哪幾尾母魚、哪缸、第一次調之前加熱棒設幾度（都生完才調回來，#335）。 */
+  warmPlan?: { momIds: number[]; tank: number; prevC: number };
   /** C13 問過的母魚（C12 配的那幾尾，每尾問一次）。 */
   pregAsked?: number[];
   /** C12 選了 1 公配 2 母：第二尾母魚。 */
@@ -1433,8 +1433,8 @@ function lateHousekeeping(tanks: TankState[], s: ChoiceState): void {
   }
   if (s.warmPlan) {
     const w = s.warmPlan;
-    const mom = located(tanks).find(({ fish }) => fish.id === w.momId);
-    if (!mom || mom.fish.pregnancy === 0) {
+    const all = located(tanks);
+    if (!w.momIds.some((id) => (all.find(({ fish }) => fish.id === id)?.fish.pregnancy ?? 0) > 0)) {
       if (tanks[w.tank]) setHeaterTarget(tanks[w.tank], w.prevC);
       delete s.warmPlan;
     }
@@ -1742,7 +1742,9 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
         s.pregPlan = m.fish.id;
       }
       if (key === 'warm' || key === 'both') {
-        s.warmPlan = { momId: m.fish.id, tank: m.tank, prevC: t.equipment.heater!.targetC };
+        // 1 公配 2 母：第二尾也選調溫時沿用第一次調之前的溫度，兩尾都生完才調回來
+        const w = s.warmPlan?.tank === m.tank ? s.warmPlan : undefined;
+        s.warmPlan = w ? { ...w, momIds: [...w.momIds, m.fish.id] } : { momIds: [m.fish.id], tank: m.tank, prevC: t.equipment.heater!.targetC };
         setHeaterTarget(t, warmTarget(t));
         // 水溫高、溶氧少：有打氣機就開著
         if (t.equipment.airPump) t.equipment.airPump.on = true;
