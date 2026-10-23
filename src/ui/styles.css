@@ -1519,6 +1519,8 @@ span.bc-ks-icon { width: 32px; height: 42px; }
   .sp-swim.mom { animation: none; left: 66%; transform: translateY(4px) scale(0.9); }
   .rv-fry, .rv-legend { animation: none; opacity: 1; }
 }
+/* 已取名品系的小名牌（strain-fixing.md §2.2）：選育卡上魚的圖下面、魚的詳細卡標題旁 */
+.line-tag { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 7px; border-radius: 999px; font-size: 11px; line-height: 17px; font-weight: 700; color: #3a2808; background: linear-gradient(90deg, #ffe7ee, #f6d891); box-shadow: 0 0 6px rgba(246, 216, 145, 0.6); }
 /* C18 為你的品系取名（strain-fixing.md §2.2）：一窩排開，夢想魚一尾一尾亮起來，穩定度條越過 75% 的線，最後是名字框和金色名牌 */
 .nm { display: flex; flex-direction: column; gap: 8px; }
 .nm-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; padding: 8px; border-radius: 14px; background: radial-gradient(ellipse at 50% 40%, rgba(110, 200, 220, 0.22), rgba(6, 22, 32, 0.8) 80%); }

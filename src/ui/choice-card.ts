@@ -40,6 +40,11 @@ function fill(bc: typeof import('./breeding-cards'), card: ChoiceCard, box: HTML
   const { CHOICE_ART, choiceCard, keepOrSellCard, keeperPickCard, sireCompareCard } = bc;
   const naming = namingOf(card);
 
+  // 已取名品系的魚：從 lookup 拿品系名（核心的 PickFish／PairCandidate 不帶）
+  const withLine = <T extends { fishId: number }>(f: T): T & { line?: string | null } => ({ ...f, line: lookup(f.fishId)?.line });
+  if (card.fish) card = { ...card, fish: card.fish.map(withLine) };
+  if (card.candidates) card = { ...card, candidates: card.candidates.map(withLine) };
+
   if (naming && card.fish) {
     // C18：錯誤訊息（字詞檢查不過）顯示在名字框下面，不用卡底下那行
     const later = card.options.find((o) => o.key === 'later');

@@ -20,6 +20,8 @@ export interface FishLook {
   name: string;
   look: number;
   fins: string[];
+  /** 已取名的品系（strain-fixing.md §2.2，sim 的 lineName）：卡上在魚的圖上方掛金色名牌。 */
+  line?: string | null;
 }
 
 /** 選種卡上的一尾（ChoiceCard.fish）。 */
@@ -55,6 +57,7 @@ export interface PairCandidate {
   /** 這對還要幾天才都長大能配（0 是現在就能配）。 */
   matureDays?: number;
   keeper?: boolean;
+  line?: string | null;
 }
 
 /** 交單還是留著（ChoiceCard.trade）。 */
@@ -143,6 +146,11 @@ function fishArt(f: FishLook): HTMLElement {
   return h(`img.bc-fish${f.name.includes('白子') ? '.albino' : ''}`, { src, alt: '', draggable: 'false' });
 }
 
+/** 已取名品系的小名牌（「阿德系」）；沒有品系就不畫。 */
+export function lineTag(line: string | null | undefined): HTMLElement | null {
+  return line ? h('span.line-tag', { title: `${line}（你取名的品系）` }, line) : null;
+}
+
 function sexBadge(sex: 'male' | 'female'): HTMLElement {
   return h(`i.bc-sex.${sex}`, { 'aria-label': sex === 'male' ? '公' : '母' }, sex === 'male' ? '♂' : '♀');
 }
@@ -210,6 +218,7 @@ export function keeperPickCard(fish: PickFish[], limit: PickLimit, onToggle: (fi
       k.keeper ? keeperRibbon('bc-kid-ribbon') : null,
       sexBadge(k.sex),
       fishArt(k),
+      lineTag(k.line),
       h('span.bc-traits', {}, ...k.traits.map((t) => traitChip(t))),
       k.missing.length ? h('span.bc-missing', {}, ...k.missing.map(missingChip)) : h('span.bc-complete', {}, '★ 都有了'),
       h('span.bc-mark', {}, k.keeper ? '已留種' : swap ? '換這尾' : '留種'),
@@ -246,7 +255,7 @@ export function sireCompareCard(mother: FishLook, candidates: PairCandidate[], o
       {},
       c.dreamPct === best && best > 0 ? h('span.bc-best', {}, '機率最高') : null,
       c.keeper ? keeperRibbon('bc-kid-ribbon') : null,
-      h('div.bc-sire-pic', {}, sexBadge('male'), fishArt({ ...c, sex: 'male' })),
+      h('div.bc-sire-pic', {}, sexBadge('male'), fishArt({ ...c, sex: 'male' }), lineTag(c.line)),
       c.traits ? h('span.bc-traits', {}, ...c.traits.map((t) => traitChip(t))) : null,
       dreamMeter(c.dreamPct),
       c.matureDays ? h('span.bc-wait', { title: `還要 ${c.matureDays} 天長大才能配` }, '⏳', h('b', {}, `${c.matureDays} 天`)) : null,
@@ -271,7 +280,7 @@ export function sireCompareCard(mother: FishLook, candidates: PairCandidate[], o
     h(
       'div.bc-sires-row',
       {},
-      h('div.bc-mom', {}, keeperRibbon('bc-kid-ribbon'), sexBadge('female'), fishArt(mother), h('small', {}, '媽媽')),
+      h('div.bc-mom', {}, keeperRibbon('bc-kid-ribbon'), sexBadge('female'), fishArt(mother), lineTag(mother.line), h('small', {}, '媽媽')),
       h('span.bc-x', { 'aria-hidden': 'true' }, '×'),
       h('div.bc-sire-cols', {}, ...candidates.map(col)),
     ),
@@ -285,7 +294,7 @@ export function keepOrSellCard(fish: FishLook, c: TradeEstimate, onSell: () => v
     'div.bc.bc-ks.glass',
     {},
     h('div.bc-head', {}, h('b', {}, '交單還是留著？')),
-    h('div.bc-ks-fish', {}, sexBadge(fish.sex), fishArt(fish)),
+    h('div.bc-ks-fish', {}, sexBadge(fish.sex), fishArt(fish), lineTag(fish.line)),
     h(
       'div.bc-ks-row',
       {},
