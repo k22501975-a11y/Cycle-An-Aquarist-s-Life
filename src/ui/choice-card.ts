@@ -12,8 +12,6 @@ import { h } from './dom';
 /** 選了一個選項：picks 是 C2 要留種的魚，text 是 C18 玩家打的品系名。回傳錯誤訊息（顯示在卡上），成功回傳 null。 */
 export type ChoosePick = (key: string, picks: number[], text?: string) => string | null;
 
-
-
 /** 照魚的編號找牠的樣子（C4 的母魚、C5 那尾魚；卡上只有編號）。 */
 export type FishLookup = (fishId: number) => FishLook | null;
 
