@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from './game';
-import { addFish, addPlant, dailyTasks, doseIchMedication, feed, FISH_SPECIES, ICH_HEAT_C, nextStep, PINCH_MEALS, setHeaterTarget, simulate, updateDaily, useTestKit, waterChange, type TankState } from '../sim';
+import { addFish, addPlant, dailyTasks, doseIchMedication, feed, FISH_SPECIES, ichHeatC, ichTreatment, nextStep, PINCH_MEALS, setHeaterTarget, simulate, updateDaily, useTestKit, waterChange, type TankState } from '../sim';
 
 /**
- * 照下一步治白點（#324，評測 g20）：開局魚第 4 天出現白點，照任務卡做——叫下藥就下一份、說藥效中就把加熱棒調到 29°C 等——
+ * 照下一步治白點（#324，評測 g20）：開局魚第 4 天出現白點，照任務卡做——叫下藥就下一份、說藥效中就把加熱棒調到說的溫度（孔雀魚缸 28°C，不超過適溫上限）等——
  * 每天餵、測水、該換水就換。一次白點最多花一份藥，而且 14 天內治好。
  */
 const alive = (s: TankState) => s.fish.filter((f) => f.alive);
@@ -27,7 +27,7 @@ function followSteps(seed: number) {
     if (step?.text.includes('去下藥')) {
       doseIchMedication(s);
       doses++;
-    } else if (step?.text.includes('藥效中') && s.equipment.heater && s.equipment.heater.targetC < 28) setHeaterTarget(s, ICH_HEAT_C);
+    } else if (step?.text.includes('藥效中') && s.equipment.heater && s.equipment.heater.targetC < ichHeatC(s)) setHeaterTarget(s, ichHeatC(s));
     simulate(s, 24);
     updateDaily(tanks);
     feed(s, meal(s) * PINCH_MEALS);
@@ -45,7 +45,22 @@ describe('照下一步治白點（#324）', () => {
       const log = steps.join(' / ');
       expect(doses, log).toBe(1);
       expect(cured, log).toBe(true);
-      expect(steps[1], log).toMatch(/^藥效中，水溫調到 28～30°C，約 \d+ 天會好$/);
+      expect(steps[1], log).toMatch(/^藥效中，水溫調到 28°C，約 \d+ 天會好$/);
     });
   }
+
+  it('調幾度看缸裡的魚：孔雀魚缸 28°C；有水晶蝦（上限 24°C）的缸不叫你調高（架構 #329）', () => {
+    const s = newGameState(1);
+    addFish(s, 'guppy', { sex: 'female', carriesIch: false });
+    expect(ichHeatC(s)).toBe(28);
+    s.fish[0].ich = { stage: 'visible', progress: 0, cause: 'new_fish' };
+    s.water.medication = 1;
+    expect(ichTreatment([s])?.heatC).toBe(28);
+    addFish(s, 'crystal_shrimp', { carriesIch: false });
+    expect(ichHeatC(s)).toBe(24);
+    s.water.tempC = 24;
+    if (s.equipment.heater) setHeaterTarget(s, 24);
+    expect(ichTreatment([s])?.heatC).toBeNull();
+    expect(nextStep([s])?.text).toMatch(/^藥效中，約 \d+ 天會好$/);
+  });
 });

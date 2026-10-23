@@ -172,7 +172,7 @@ import {
   rinseFilterMedia,
   seasonName,
   setHeaterTarget,
-  ICH_HEAT_C,
+  ichHeatC,
   ICH_MED_WORKING,
   topUp,
   unplugHeater,
@@ -1603,12 +1603,13 @@ function medicineRow({ game, sheet, toasts, undoable }: Pick<PanelContext, 'game
  */
 export function treatPanel(ctx: PanelContext, advice: string): Node {
   const s = ctx.game.state;
-  // 白點藥效中（#324）：加熱棒還沒調高的話，給一顆直接調到 29°C 的按鈕（藥在高溫下見效快）
-  const heat = s.water.medication >= ICH_MED_WORKING && s.equipment.heater && s.equipment.heater.targetC < 28;
+  // 白點藥效中（#324）：加熱棒還沒調高的話，給一顆直接調高的按鈕（藥在高溫下見效快；不超過缸裡魚的適溫上限）
+  const heatC = ichHeatC(s);
+  const heat = s.water.medication >= ICH_MED_WORKING && s.equipment.heater && s.equipment.heater.targetC < heatC - 0.5;
   const heatBtn = heat
-    ? button(`水溫調到 ${ICH_HEAT_C}°C`, () => {
-        ctx.game.act((st) => setHeaterTarget(st, ICH_HEAT_C));
-        ctx.toasts.show(`加熱棒調到 ${ICH_HEAT_C}°C，白點會掉得快一點`);
+    ? button(`水溫調到 ${heatC}°C`, () => {
+        ctx.game.act((st) => setHeaterTarget(st, heatC));
+        ctx.toasts.show(`加熱棒調到 ${heatC}°C，白點會掉得快一點`);
         ctx.sheet.refresh();
       }, 'primary')
     : null;

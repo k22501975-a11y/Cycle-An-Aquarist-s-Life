@@ -8,7 +8,7 @@ import { BELLY_SHOWS, daysToBirth, dueMothers } from './nursery';
 import { orderBoard, orderSupply } from './orders';
 import { temperatureFactor } from './chemistry';
 import { hasVisible } from './processes/disease';
-import { isShrimpSpecies } from './species';
+import { FISH_SPECIES, isShrimpSpecies } from './species';
 import type { Fish, TankState } from './state';
 import { breedingTankRaised, displayTankHighPlants, purposeTanks } from './tank-purpose';
 
@@ -50,31 +50,40 @@ const anySick = (tanks: TankState[]) => living(tanks).some((f) => f.ich.stage ==
 
 /** 水裡的白點藥還有多少算「藥效中」（一份是 1，約一週退到這裡）。 */
 export const ICH_MED_WORKING = 0.25;
-/** 白點藥幾天見效最快的水溫範圍。 */
+/** 白點藥見效快的水溫（缸裡有怕熱的就照牠的適溫上限，ichHeatC）。 */
 export const ICH_HEAT_C = 29;
 
+/** 這缸治白點要調到幾度：ICH_HEAT_C，但不超過缸裡每種魚蝦的適溫上限（孔雀魚 28°C）。 */
+export function ichHeatC(t: TankState): number {
+  return Math.min(ICH_HEAT_C, ...t.fish.filter((f) => f.alive).map((f) => FISH_SPECIES[f.species].temp.max));
+}
+
 /**
- * 看得到的病只有白點、而且那幾缸水裡都還有藥：不用再下（#324）。回傳白點大約幾天會掉（照現在的水溫或加熱棒設的溫度，取高的），
- * 和藥效還剩幾天。有別的病、或有一缸沒藥了回 null。
+ * 看得到的病只有白點、而且那幾缸水裡都還有藥：不用再下（#324）。回傳白點大約幾天會掉（照現在的水溫或加熱棒設的溫度，取高的）、
+ * 藥效還剩幾天，和該調到幾度（每缸 ichHeatC 取低的；不比現在高就是 null，不用調）。有別的病、或有一缸沒藥了回 null。
  */
-export function ichTreatment(tanks: TankState[]): { days: number; medDays: number } | null {
+export function ichTreatment(tanks: TankState[]): { days: number; medDays: number; heatC: number | null } | null {
   const sick = tanks.map((t) => ({ t, fish: t.fish.filter((f) => f.alive && (f.ich.stage === 'visible' || hasVisible(f))) })).filter((x) => x.fish.length > 0);
   if (sick.length === 0) return null;
   if (sick.some(({ t, fish }) => t.water.medication < ICH_MED_WORKING || fish.some((f) => hasVisible(f)))) return null;
   let days = 1;
   let medDays = Infinity;
+  let heatC = Infinity;
+  let warm = true;
   for (const { t, fish } of sick) {
+    heatC = Math.min(heatC, ichHeatC(t));
+    warm &&= Math.max(t.water.tempC, t.equipment.heater?.targetC ?? 0) >= ichHeatC(t) - 0.5;
     const tf = temperatureFactor(Math.max(t.water.tempC, t.equipment.heater?.targetC ?? 0));
     for (const f of fish) days = Math.max(days, Math.ceil(((1 - f.ich.progress) * 96) / tf / 24));
     medDays = Math.min(medDays, Math.max(1, Math.floor(Math.log(t.water.medication / ICH_MED_WORKING) / 0.01 / 24)));
   }
-  return { days, medDays };
+  return { days, medDays, heatC: warm ? null : heatC };
 }
 
 /** 生病時的下一步：白點藥效中就叫玩家調水溫等，不要再叫下藥（#324）。 */
 function sickStep(tanks: TankState[]): Omit<NextStep, 'goal'> {
   const ich = ichTreatment(tanks);
-  if (ich) return { text: `藥效中，水溫調到 28～30°C，約 ${ich.days} 天會好`, target: 'treat' };
+  if (ich) return { text: `藥效中，${ich.heatC ? `水溫調到 ${ich.heatC}°C，` : ''}約 ${ich.days} 天會好`, target: 'treat' };
   return { text: '有魚生病了，去下藥', target: 'treat' };
 }
 const bredFry = (tanks: TankState[]) => living(tanks).filter((f) => (f.generation ?? 0) >= 1 && !isShrimpSpecies(f.species) && growthStage(f) === 'fry');
