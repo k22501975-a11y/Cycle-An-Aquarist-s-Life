@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addFish, crowdingRatio, DEFAULT_TIME_SCALE, linkTanks, type TankState } from '../sim';
+import { takeCrowdNotes } from '../sim/choices';
 import { awayReport } from '../ui/morning-report';
 import { newGameState } from './game';
 import { catchUp } from './save';
@@ -54,6 +55,14 @@ describe('離線時擠缸', () => {
     const second = away(s, 1 / 12);
     expect(awayReport([s], second.since, second.r.hours)).toBeNull();
     expect(s.crowdNotices).toBe(notices);
+  });
+
+  it('早上報告說過太擠了：同一天短離開回來不再說一次', () => {
+    const s = crowdedHome();
+    expect(takeCrowdNotes([s]).some((n) => n.full)).toBe(true);
+    const { r, since } = away(s, 1 / 12);
+    expect(Math.floor(s.hours / 24)).toBe(Math.floor(since / 24));
+    expect(awayReport([s], since, r.hours)).toBeNull();
   });
 
   it('離開期間沒擠過：沒有離線報告', () => {

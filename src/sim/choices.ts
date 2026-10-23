@@ -1691,6 +1691,8 @@ export function takeCrowdNotes(tanks: TankState[], cardTank?: number): Array<{ t
     if (r >= CROWD_FULL) {
       out.push({ tank: i, full: true, text: `${tankLabel(tanks, i)}太擠了，魚擠到水面喘氣。` });
       t.crowdNotices = (t.crowdNotices ?? 0) + 1;
+      // 早上報告說過了：今天切回前景不再說一次「你不在的時候太擠了」
+      (s.awayNoted ??= {})[i] = Math.floor(tanks[0].hours / 24);
       return;
     }
     const due = dueFry(t);
