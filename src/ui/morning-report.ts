@@ -23,6 +23,9 @@ import {
   takeLookalike,
   takeChoice,
   takeMilestones,
+  takeBellyNotes,
+  takeReveal,
+  choiceState,
   takeSecondBrood,
   breedingProgress,
   tankLabel,
@@ -270,9 +273,11 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     const grown = allFish(t).filter((f) => f.alive && !isJuvenile(f) && snap.fish.get(f.id)?.juvenile);
     if (grown.length > 0) push({ kind: 'grown', tone: 'good', text: `${grown.length} 尾小魚長大了，看得出公母`, action: 'fish', subjectId: grown[0].id, count: grown.length });
     // 缸裡真的發生的事（polish-to-9.md G8）：母魚肚子變大、出現胎斑；公魚追母魚
+    // 夢想魚那窩的母魚由懷孕後段的里程碑說（takeBellyNotes）
+    const dreamMom = choiceState(tanks).reveal?.momId;
     const mom = allFish(t).find((f) => {
       const was = snap.fish.get(f.id);
-      return f.alive && f.sex === 'female' && was && usesNursery(f.species) && bellyStage(f.pregnancy) > bellyStage(was.pregnancy);
+      return f.alive && f.sex === 'female' && f.id !== dreamMom && was && usesNursery(f.species) && bellyStage(f.pregnancy) > bellyStage(was.pregnancy);
     });
     if (mom)
       push(
@@ -384,6 +389,17 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     const at = tanks.findIndex((t) => t.fish.some((f) => f.id === m.fishId));
     items.push({ kind: 'milestone', tank: Math.max(0, at), tone: 'good', text: m.text, action: 'fish', subjectId: m.fishId, milestone: { step: m.step, fishId: m.fishId, partnerId: m.partnerId, earlierDays: m.earlierDays } });
   }
+  // 夢想魚那窩懷孕後段的里程碑、生病拖慢配對（midgame.md §6.4）
+  for (const n of takeBellyNotes(tanks)) {
+    const at = tanks.findIndex((t) => t.fish.some((f) => f.id === n.fishId));
+    items.push({ kind: 'belly', tank: Math.max(0, at), tone: 'good', text: n.text, action: 'fish', subjectId: n.fishId });
+  }
+  // 開獎（midgame.md §6.1 C15）：夢想魚配方那窩生了，小魚一尾一尾亮出來
+  const reveal = takeReveal(tanks);
+  if (reveal) {
+    const at = tanks.findIndex((t) => t.fish.some((f) => f.id === reveal.momId));
+    items.push({ kind: 'reveal', tank: Math.max(0, at), tone: 'good', text: reveal.text, action: 'fish', subjectId: reveal.momId, count: reveal.fry.length, reveal: { dream: reveal.dream, fry: reveal.fry } });
+  }
   // C9 第二窩生了（midgame.md §5.2）：照玩家選的處理，和第一窩一起比
   const brood2 = takeSecondBrood(tanks);
   if (brood2) {
@@ -414,6 +430,8 @@ const CHOICE_FOLLOW: Partial<Record<ChoiceCard['id'], ReportAction>> = { C1: 'fr
 /** 選了這個選項，要不要帶玩家去做（C1 選留在主缸、C3 都要去買缸）。 */
 export function choiceFollowUp(card: ChoiceCard, key: string): ReportAction | undefined {
   if (card.id === 'C1') return key === 'box' ? 'fry_box' : undefined;
+  // C14 缸快滿了：再買一缸、換大缸都帶去買缸
+  if (card.id === 'C14') return key === 'tank' || key === 'big' ? 'shop_tank' : undefined;
   return CHOICE_FOLLOW[card.id];
 }
 

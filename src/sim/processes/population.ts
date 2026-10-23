@@ -1,4 +1,4 @@
-import { breedingFactor } from '../food';
+import { breedingFactor, broodFactor } from '../food';
 import { temperatureFactor } from '../chemistry';
 import { chance, nextRandom } from '../random';
 import { FISH_SPECIES, type FishSpeciesId } from '../species';
@@ -220,7 +220,8 @@ export function giveBirth(state: TankState, mother: Fish, population: number): F
   const u = Math.max(1e-9, nextRandom(state.rng));
   const v = nextRandom(state.rng);
   const normal = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-  const mean = b.broodMean * mother.health;
+  // 孕期吃得好（繁殖意願高）一窩多幾尾（midgame.md C13）
+  const mean = b.broodMean * mother.health * broodFactor(mother.breedingCondition);
   let n = Math.round(Math.min(b.broodMax, Math.max(b.broodMin, mean + normal * mean * 0.25)));
   n = Math.max(0, Math.min(n, MAX_FAUNA - population));
   if (n === 0) return [];

@@ -1,19 +1,20 @@
 import { DREAM_FISH } from './dream';
 import { setHeaterTarget } from './actions';
 import { temperatureFactor } from './chemistry';
-import { economy, keeperRefusal, MAX_KEEPERS, PRICES, setKeeper, spend } from './economy';
-import { FOOD_GRADES, nutritionFactor, type FoodGrade, type FoodKind } from './food';
-import { cross, finWords, lookIndex, phenotype, strainName, type GuppyGenome, type GuppyPhenotype } from './genetics';
+import { buybackRefusal, economy, fishBuybackPrice, keeperRefusal, MAX_KEEPERS, PRICES, sellFish, sellsLeftToday, setKeeper, spend } from './economy';
+import { broodFactor, FOOD_GRADES, nutritionFactor, type FoodGrade, type FoodKind } from './food';
+import { cross, finWords, lookIndex, matingSuccess, phenotype, strainName, type GuppyGenome, type GuppyPhenotype } from './genetics';
+import { tankLock } from './goals';
 import { daysToLength, growthStage, maxLengthCm } from './growth';
-import { moveFish, newTankCost } from './household';
+import { moveFish, newTankCost, tankLabel } from './household';
 import { crowdingRatio } from './processes/fauna';
 import { isCycled } from './processes/nitrogen';
 import { sizeRatio } from './processes/population';
 import { CROWD_WARN } from './split';
 import { addBottledBacteria, mediaAvailable, transferMedia } from './gifts';
 import { guppyTraits } from './lookalike';
-import { daysToBirth, releaseNursery, rescueFryToNursery, usesNursery } from './nursery';
-import { fulfillOrder, matchingFish, orderBoard, orderRefusal, orderSupply, type ShopOrder } from './orders';
+import { buyNurseryBox, daysToBirth, moveToNursery, nurseryRefusal, releaseNursery, rescueFryToNursery, usesNursery } from './nursery';
+import { fulfillOrder, matchingFish, orderBoard, orderRefusal, orderSupply, orderTitle, type ShopOrder } from './orders';
 import { previewPair, type PreviewKid } from './pair-preview';
 import { FISH_SPECIES, isShrimpSpecies } from './species';
 import { ADULT_SIZE, isJuvenile, type Fish, type TankState } from './state';
@@ -29,12 +30,23 @@ import { ADULT_SIZE, isJuvenile, type Fish, type TankState } from './state';
  * - C6 繁殖缸養好了（C3 選繁殖缸之後，#305）：留種的魚、快生的母魚、第一窩小魚搬過去
  * - C7 配好對、種魚還要一陣子才長大（#316）：標準、養快一點（高級飼料＋27～28°C）、活餌
  * - C8 買了第二缸、還沒養水（#316）：分舊缸濾材、倒硝化菌液、自己等
+ * - C9 母魚又快生了（每一窩都問，第二次之後一鍵照上次）
+ * 第 36～80 天（midgame.md §6，#326）：
+ * - C10 新的一窩裡有比留種更好的：換成這尾、兩尾都留、維持原本的
+ * - C11 留種的那對看得出公母：把同缸別的公魚搬走（分開養），還是一起養
+ * - C12 種魚快長大了：1 公配 2 母、1 公配 1 母、2 尾公魚輪流
+ * - C13 留種的母魚懷孕了：標準飼料，還是加活餌（一窩多幾尾）
+ * - C14 一缸快住不下了：賣一批、再買一缸、買 90L
+ * - C15 夢想魚配方那窩快生了：放育幼盒，還是放密草的繁殖缸；生下來那天早上開獎（takeReveal）
  * 不管選哪個都能玩下去。只出資料和套用選擇；卡片的樣子由畫面負責（選種卡、配對比較卡交美術）。
  */
 
-export type ChoiceId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | 'C7' | 'C8' | 'C9';
-/** 同一天有好幾張可以出時，照這個順序挑一張（C8 新缸養水排在搬魚 C6 前面）。 */
-export const CHOICE_IDS: ChoiceId[] = ['C1', 'C2', 'C3', 'C8', 'C4', 'C5', 'C6', 'C7', 'C9'];
+export type ChoiceId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | 'C7' | 'C8' | 'C9' | 'C10' | 'C11' | 'C12' | 'C13' | 'C14' | 'C15';
+/**
+ * 同一天有好幾張可以出時，照這個順序挑一張（C8 新缸養水排在搬魚 C6 前面）。
+ * 有時效的排前面：C12 錯過就配上了、C13 孕期一開始就要決定、C15 生了就來不及。
+ */
+export const CHOICE_IDS: ChoiceId[] = ['C1', 'C2', 'C3', 'C8', 'C4', 'C5', 'C6', 'C7', 'C11', 'C12', 'C13', 'C15', 'C9', 'C10', 'C14'];
 
 export interface ChoiceOption {
   key: string;
@@ -42,6 +54,8 @@ export interface ChoiceOption {
   /** 選了會怎樣（一行）。 */
   outcome: string;
   recommended?: boolean;
+  /** 現在不能選的原因（例如錢不夠）；畫面把這個選項灰掉。 */
+  disabled?: string;
 }
 
 /** 選種卡（C2）上的一尾魚。 */
@@ -153,7 +167,32 @@ export interface ChoiceState {
    * C9 第二窩：哪尾母魚、選的時間（遊戲小時）、那時她第一窩還活著幾尾。
    * 生下來之後記 born（幾尾）和 fry（這窩的編號；選交單的話 C5 不再問這幾尾）。
    */
-  secondBrood?: { momId: number; hours: number; prevKids: number; born?: number; fry?: number[] };
+  secondBrood?: { momId: number; hours: number; prevKids: number; born?: number; fry?: number[]; choice?: string };
+  /** C9 之後每一窩（#326）：問過、還沒生的（生了就照 choice 處理、拿掉）。選交單的小魚也記進 secondBrood.fry。 */
+  broodQueue?: Array<{ momId: number; hours: number; prevKids: number; choice: string }>;
+  /** C9 問過幾窩（第二次之後是「又快生了」的簡化版）。 */
+  broods?: number;
+  /** C12 選了 2 尾公魚輪流：另一尾也是指定的爸爸（C11 分開養不會把牠搬走）。 */
+  sires?: number[];
+  /** C13 選了加活餌：哪尾母魚（生完就收掉活餌）。 */
+  pregPlan?: number;
+  /** C13 問過的母魚（C12 配的那幾尾，每尾問一次）。 */
+  pregAsked?: number[];
+  /** C12 選了 1 公配 2 母：第二尾母魚。 */
+  mates?: number[];
+  /** C10 這次要問的那尾（新的一窩裡比留種好的），和已經比過的魚（每尾只比一次）。 */
+  better?: { fishId: number; oldId: number; newPct: number; oldPct: number };
+  compared?: number[];
+  /** C10 每一窩（「媽媽:出生日:公母」）問過的最高機率。 */
+  betterAsked?: Record<string, number>;
+  /** 上一張卡出現的時間（一天最多一張；每窩都問的卡選了之後 shown 會清掉，靠這個擋）。 */
+  lastCard?: number;
+  /** C15 開獎：哪尾母魚、從什麼時候算（這之後生的就是那一窩），開過了沒、生了幾尾。 */
+  reveal?: { momId: number; hours: number; done?: boolean; born?: number; box?: boolean };
+  /** 種魚都長大了、母魚卻因為生病沒配上的天數（早上報告說「因為白點，配對晚了約 N 天」），生病的原因，說過了沒。 */
+  sickDays?: number;
+  sickCause?: 'ich' | 'other';
+  sickNoted?: boolean;
 }
 
 /** 卡出過、玩家沒選，隔幾天再出一次。 */
@@ -173,6 +212,8 @@ export const PLAN_MIN_DAYS = 5;
 export const FAST_TEMP_C = 27.5;
 /** C9：第二胎懷孕到多少算「看得出快生了」（肚子圓、胎斑黑；28 天的孕期約剩 8 天，種子 1～3 落在第 26～31 天，跟前後的選擇點隔 ≤ 6 天）。 */
 export const SECOND_BROOD_SHOWS = 0.7;
+/** C9 第二次之後（簡化版）：懷孕到多少就問（比第一次早一點，肚子開始圓就問，跟前後的卡排得開）。 */
+export const BROOD_AGAIN_SHOWS = 0.6;
 /** C9 選「挑備用種魚」：最多挑幾尾（企劃：2～3 尾）。 */
 export const SECOND_BROOD_KEEP = 3;
 /** C9 卡上估交單的錢：一尾中魚單的價錢（orders.ts 中魚 40～55 元），一窩約一半長得到能交。 */
@@ -557,7 +598,11 @@ function breedingMove(tanks: TankState[]): { to: number; fish: { fish: Fish; tan
   let room = CROWD_WARN * tanks[to].equipment.tank.volumeL - crowdingRatio(tanks[to]) * tanks[to].equipment.tank.volumeL;
   // 育幼盒裡留種的、自家的小魚也搬（繁殖缸就是讓牠們長大的地方，#322）
   const movable = (f: Fish) => f.alive && !f.listing && f.species === 'guppy' && (!f.nursery || f.keeper || (bred(f) && isJuvenile(f)));
-  const others = tanks.flatMap((t, tank) => (tank === to || t.purpose === 'breeding' ? [] : t.fish.filter(movable).map((fish) => ({ fish, tank }))));
+  // C11 選了分開養：留種母魚在繁殖缸的話，不是指定爸爸的公魚不搬進去（#326）
+  const s = economy(tanks[0]).choices;
+  const split = s?.picked.C11 === 'split' && !s.reveal?.done ? pairFish(tanks, s) : null;
+  const rival = (f: Fish) => !!split && split.tank === to && f.sex === 'male' && growthStage(f) !== 'fry' && !sireIds(s!).includes(f.id);
+  const others = tanks.flatMap((t, tank) => (tank === to || t.purpose === 'breeding' ? [] : t.fish.filter((f) => movable(f) && !rival(f)).map((fish) => ({ fish, tank }))));
   const rank = (f: Fish) => (f.keeper ? 0 : f.sex === 'female' && f.pregnancy > 0.5 ? 1 : bred(f) && isJuvenile(f) ? 2 : 3);
   let fish = others
     .filter(({ fish }) => rank(fish) < 3)
@@ -600,6 +645,189 @@ function moveAgain(tanks: TankState[], s: ChoiceState): boolean {
   if (s.picked.C6 !== 'move') return false;
   const m = breedingMove(tanks);
   return !!m && (m.fish.some(({ fish }) => fish.keeper) || m.fish.filter(({ fish }) => bred(fish) && isJuvenile(fish)).length >= 3);
+}
+
+/** C12：兩尾都還要幾天以內長大就問怎麼配（長大當天就可能配上，早一點問）。 */
+export const PAIR_PLAN_DAYS = 2;
+/** C11：在 C12（快長大）前幾天問。 */
+const C11_BEFORE_PAIR = 5;
+/** C13：懷孕到多少（約 2～4 天）問孕期怎麼養；超過這個就太晚了。 */
+const PREG_ASK = [0.07, 0.4] as const;
+/** C15：夢想魚配方那窩懷孕過半就問什麼時候移到產房（midgame.md §6.4）。 */
+export const REVEAL_SHOWS = 0.5;
+/** C15 選等快生再放育幼盒：懷孕到多少就放進去（約剩 3 天；每天早上看一次，太晚會來不及）。 */
+export const BOX_DUE = 0.88;
+/** 懷孕後段的里程碑（midgame.md §6.4）：胎斑變大變黑、看得到小魚的眼睛。 */
+export const BELLY_MILESTONES = [
+  { key: 'dark', at: 0.7 },
+  { key: 'eyes', at: BOX_DUE },
+] as const;
+/** C14 問過之後，隔幾天還是很擠再問一次。 */
+const CROWD_REASK_DAYS = 5;
+/** C10：新的那尾比原本的好多少（百分點）才問。 */
+const BETTER_BY = 1;
+/** C13 加活餌、C7 活餌餵的飼料（冷凍紅蟲，專業等級）。 */
+const LIVE_FOOD = GROW_PLAN_FOOD.live!;
+
+/** 指定的爸爸：C4 配的那尾，加上 C12 選了輪流的另一尾。 */
+const sireIds = (s: Readonly<ChoiceState>) => (s.pair ? [s.pair[1], ...(s.sires ?? [])] : []);
+
+/** 公魚當爸爸的權重（跟族群模擬一樣：尾鰭大的受青睞，配不了的鰭型不算）。 */
+const sireWeight = (f: Fish) => (0.5 + (f.genome?.tail ?? 50) / 100) * (f.genome ? matingSuccess(f.genome) : 1);
+
+/** C11：留種母魚那缸裡、不是指定爸爸的孔雀魚公魚（小小魚不算，育幼盒裡的不算）。 */
+function rivals(tanks: TankState[], s: Readonly<ChoiceState>, tank: number): Fish[] {
+  const sires = sireIds(s);
+  return tanks[tank].fish.filter((f) => f.alive && f.species === 'guppy' && f.sex === 'male' && !f.nursery && !sires.includes(f.id) && growthStage(f) !== 'fry');
+}
+
+/** 一起養的話孫代機率 %：同缸的公魚照當爸爸的權重平均。 */
+function mixedPct(mom: Fish, males: Fish[]): number {
+  const ok = males.filter((m) => m.genome && sireWeight(m) > 0);
+  const w = ok.reduce((a, m) => a + sireWeight(m), 0);
+  if (w <= 0) return 0;
+  return Math.round((ok.reduce((a, m) => a + sireWeight(m) * pairDream(mom.genome!, m.genome!), 0) / w) * 10) / 10;
+}
+
+/** 別的公魚要搬去哪缸：不是那對在的缸，繁殖缸以外、最不擠的。 */
+function otherTank(tanks: TankState[], not: number): number {
+  const idx = tanks.map((_, i) => i).filter((i) => i !== not);
+  idx.sort((a, b) => Number(tanks[a].purpose === 'breeding') - Number(tanks[b].purpose === 'breeding') || crowdingRatio(tanks[a]) - crowdingRatio(tanks[b]));
+  return idx[0] ?? -1;
+}
+
+/**
+ * C11 選了分開養：把留種母魚那缸裡別的公魚搬去另一缸。太小的（另一缸大魚吞得下）先留著，快長大（PAIR_PLAN_DAYS + 1 天內）再搬。
+ * 每天早上都會再看一次（之後長大的、搬進來的），直到開獎。回傳搬了幾尾。
+ */
+function splitMove(tanks: TankState[], s: ChoiceState): number {
+  const p = pairFish(tanks, s);
+  if (!p) return 0;
+  const to = otherTank(tanks, p.tank);
+  if (to < 0) return 0;
+  const mouth = Math.max(0, ...tanks[to].fish.filter((f) => f.alive && !f.nursery && !isJuvenile(f)).map(mouthCm));
+  let n = 0;
+  for (const f of rivals(tanks, s, p.tank)) {
+    if (f.lengthCm <= mouth && daysToMature(f) > PAIR_PLAN_DAYS + 1) continue;
+    if (moveFish(tanks[p.tank], tanks[to], f.id)) n++;
+  }
+  return n;
+}
+
+/** C12 的第二尾母魚：別的留種母魚裡，配指定公魚機率最高的。 */
+function secondMom(tanks: TankState[], mom: Fish, dad: Fish): { fish: Fish; tank: number } | null {
+  const cands = located(tanks).filter(({ fish }) => fish.keeper && fish.id !== mom.id && fish.sex === 'female' && fish.species === 'guppy' && fish.genome && !fish.listing);
+  return cands.sort((a, b) => pairDream(b.fish.genome!, dad.genome!) - pairDream(a.fish.genome!, dad.genome!))[0] ?? null;
+}
+
+/** C12 輪流的第二尾公魚：可以當種魚的公魚裡（留種的優先），配這尾母魚機率最高的。 */
+function secondDad(tanks: TankState[], s: Readonly<ChoiceState>, mom: Fish): { fish: Fish; tank: number } | null {
+  const sires = sireIds(s);
+  const cands = located(tanks).filter(({ fish }) => !sires.includes(fish.id) && breederMale(fish) && sireWeight(fish) > 0);
+  const score = (f: Fish) => pairDream(mom.genome!, f.genome!) + (f.keeper ? 0.05 : 0);
+  return cands.sort((a, b) => score(b.fish) - score(a.fish))[0] ?? null;
+}
+
+const avgPct = (...p: number[]) => Math.round((p.reduce((a, b) => a + b, 0) / p.length) * 10) / 10;
+
+/** C14 賣一批：現在交得出、錢最多的魚單。 */
+function bestSellOrder(tanks: TankState[]): ShopOrder | null {
+  const ok = orderBoard(tanks[0]).orders.filter((o) => o.kind === 'fish' && !o.preview && orderSupply(tanks, o) >= o.count && !orderRefusal(tanks, o.id));
+  return ok.sort((a, b) => b.unitPrice * b.count - a.unitPrice * a.count)[0] ?? null;
+}
+
+/** C14 沒有交得出的單：賣給阿德收購，賣到這缸剩快養滿的四分之三（不賣留種的、有夢想魚基因的）。 */
+function shopBatch(tanks: TankState[], tank: number): Fish[] {
+  const t = tanks[tank];
+  const vol = t.equipment.tank.volumeL;
+  let over = (crowdingRatio(t) - CROWD_WARN * 0.75) * vol;
+  const cands = t.fish.filter((f) => !buybackRefusal(f) && !f.nursery && growthStage(f) !== 'fry' && !(f.genome && hasDreamGenes(f)) && !sireIds(choiceState(tanks)).includes(f.id));
+  const out: Fish[] = [];
+  for (const f of cands.sort((a, b) => b.lengthCm * sizeRatio(b) - a.lengthCm * sizeRatio(a))) {
+    if (over <= 0 || out.length >= sellsLeftToday(tanks[0])) break;
+    out.push(f);
+    over -= f.lengthCm * sizeRatio(f);
+  }
+  return out;
+}
+
+/** C14：最擠、到了快養滿（CROWD_WARN，跟分缸提示同一把尺）的那缸。 */
+function crowdedTank(tanks: TankState[]): number {
+  let best = -1;
+  tanks.forEach((t, i) => {
+    if (crowdingRatio(t) >= CROWD_WARN && (best < 0 || crowdingRatio(t) > crowdingRatio(tanks[best]))) best = i;
+  });
+  return best;
+}
+
+/** C9 的三個選項（第一次問的完整版）。 */
+function broodOptions(coins: number): ChoiceOption[] {
+  return [
+    { key: 'grow', label: '留在繁殖缸長大', outcome: '整窩留著長大，之後再看要留哪幾尾' },
+    { key: 'sell', label: '交小魚單', outcome: `長到能交就照訂單交，約 ${coins} 元；有夢想魚基因的也不再問` },
+    { key: 'keep', label: `挑 2～${SECOND_BROOD_KEEP} 尾當備用種魚`, outcome: '一生下來就挑離夢想魚最近的標留種，萬一種魚出事還有備用', recommended: true },
+  ];
+}
+
+/**
+ * C10：一窩裡長到幼魚的有 ≥ 3 尾，裡面，有沒有比留種的那對更好的（同性別那尾換掉，孫代機率高 BETTER_BY 以上）。
+ * 每尾只比一次（記在 compared）；找到就記在 better 等著出卡。
+ */
+function scanBetter(tanks: TankState[], s: ChoiceState): void {
+  if (s.better) {
+    const all = located(tanks);
+    const f = all.find(({ fish }) => fish.id === s.better!.fishId)?.fish;
+    if (f && !f.keeper && !f.listing && all.some(({ fish }) => fish.id === s.better!.oldId)) return;
+    delete s.better;
+  }
+  const p = pairFish(tanks, s);
+  if (!p?.mom.genome || !p.dad.genome) return;
+  const seen = (s.compared ??= []);
+  // 照一窩分（同一尾媽媽、同一天生），長到幼魚的才比（一窩有快有慢，長到的就比）
+  const broods = new Map<string, Fish[]>();
+  for (const { fish } of located(tanks)) {
+    if (!bredGuppy(fish) || fish.motherId === undefined || growthStage(fish) === 'fry') continue;
+    const key = `${fish.motherId}:${Math.floor((fish.bornHours ?? 0) / 24)}`;
+    broods.set(key, [...(broods.get(key) ?? []), fish]);
+  }
+  const oldPct = pairDream(p.mom.genome, p.dad.genome);
+  const asked = (s.betterAsked ??= {});
+  for (const [key, brood] of broods) {
+    if (brood.length < 3) continue;
+    for (const f of brood) {
+      if (f.keeper || f.listing || seen.includes(f.id)) continue;
+      seen.push(f.id);
+      const newPct = f.sex === 'female' ? pairDream(f.genome!, p.dad.genome) : pairDream(p.mom.genome, f.genome!);
+      // 同一窩問過的話，要比上次問的那尾還好才再問（不然一窩兄弟一尾一尾問一樣的事）
+      const bar = Math.max(oldPct + BETTER_BY, (asked[`${key}:${f.sex}`] ?? -Infinity) + BETTER_BY);
+      if (newPct >= bar && (!s.better || newPct > s.better.newPct)) {
+        s.better = { fishId: f.id, oldId: f.sex === 'female' ? p.mom.id : p.dad.id, newPct, oldPct };
+        asked[`${key}:${f.sex}`] = newPct;
+      }
+    }
+  }
+}
+
+/**
+ * C13：照 C12 配的母魚（留種那對的母魚、1 公配 2 母的第二尾；第二尾要懷的是指定爸爸的），剛懷孕幾天，還沒問過。
+ * 那缸已經在餵活餌就不用再問。
+ */
+function pregnantMom(tanks: TankState[], s: Readonly<ChoiceState>): { fish: Fish; tank: number } | null {
+  const p = pairFish(tanks, s);
+  if (!p) return null;
+  const sires = sireIds(s);
+  const asked = s.pregAsked ?? [];
+  const live = (t: TankState) => t.feedPlan?.kind === LIVE_FOOD.kind && t.feedPlan.grade === LIVE_FOOD.grade;
+  const mates = [p.mom.id, ...(s.mates ?? [])];
+  const moms = located(tanks).filter(({ fish, tank }) => mates.includes(fish.id) && (fish.id === p.mom.id || (fish.sire?.id !== undefined && sires.includes(fish.sire.id))) && !asked.includes(fish.id) && !live(tanks[tank]));
+  return moms.find(({ fish }) => fish.pregnancy >= PREG_ASK[0] && fish.pregnancy <= PREG_ASK[1]) ?? null;
+}
+
+/** C15 開獎準備：留種那對的母魚，夢想魚配方那窩快生了（她第一次懷這對的小孩）。 */
+function revealMom(tanks: TankState[], s: Readonly<ChoiceState>): { fish: Fish; tank: number } | null {
+  if (!s.pair || s.reveal?.done) return null;
+  const m = located(tanks).find(({ fish }) => fish.id === s.pair![0]);
+  return m && m.fish.pregnancy >= REVEAL_SHOWS ? m : null;
 }
 
 /** 這張卡現在該不該出、出的話卡片資料（不記錄）。 */
@@ -749,29 +977,184 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
     }
     case 'C9': {
       if (s.firstBrood === undefined) return null;
-      const mom = secondBroodMom(tanks);
+      const mom = secondBroodMom(tanks, s);
       if (!mom) return null;
       const coins = Math.round((FISH_SPECIES[mom.fish.species].breeding!.broodMean * mom.fish.health * 0.5 * JUVENILE_ORDER_PRICE) / 10) * 10;
+      const options = broodOptions(coins);
+      const last = s.picked.C9 && options.find((o) => o.key === s.picked.C9);
+      if (last && (s.broods ?? 0) >= 1) {
+        // 第二次之後（midgame.md §6.1）：一鍵照上次，或直接點另外兩個
+        return {
+          id,
+          tank: mom.tank,
+          title: `${callName(mom.fish)}又快生了`,
+          owner: '照上次的處理，還是這次改一下？',
+          options: [{ ...last, key: 'same', label: `照上次：${last.label}`, recommended: true }, ...options.filter((o) => o !== last).map((o) => ({ ...o, recommended: false }))],
+          motherId: mom.fish.id,
+        };
+      }
       return {
         id,
         tank: mom.tank,
         title: '第二窩快生了，要怎麼辦？',
         owner: `${callName(mom.fish)}的肚子又圓了，黑點也出來了。生下來之後照你選的處理。`,
-        options: [
-          { key: 'grow', label: '留在繁殖缸長大', outcome: '整窩留著長大，之後再看要留哪幾尾' },
-          { key: 'sell', label: '交小魚單', outcome: `長到能交就照訂單交，約 ${coins} 元；有夢想魚基因的也不再問` },
-          { key: 'keep', label: `挑 2～${SECOND_BROOD_KEEP} 尾當備用種魚`, outcome: '一生下來就挑離夢想魚最近的標留種，萬一種魚出事還有備用', recommended: true },
-        ],
+        options,
         motherId: mom.fish.id,
+      };
+    }
+    case 'C10': {
+      const b = s.better;
+      if (!b) return null;
+      const all = located(tanks);
+      const nu = all.find(({ fish }) => fish.id === b.fishId);
+      const old = all.find(({ fish }) => fish.id === b.oldId);
+      if (!nu || !old) return null;
+      const room = all.filter(({ fish }) => fish.keeper).length < MAX_KEEPERS;
+      return {
+        id,
+        tank: nu.tank,
+        title: '這尾比你留的種魚更好！',
+        owner: `${callName(nu.fish)}的孫代機率約 ${b.newPct}%，原本的${callName(old.fish)}約 ${b.oldPct}%。`,
+        options: [
+          { key: 'swap', label: '換成這尾', outcome: `${nu.fish.sex === 'male' ? '牠當爸爸' : '牠當媽媽'}，原本的不再留種` },
+          ...(room ? [{ key: 'both', label: '兩尾都留', outcome: '多一尾種魚，原本的計畫照走，萬一出事還有備用', recommended: true }] : []),
+          // 留種名額滿了：照原本的計畫走最穩（換掉那對的其中一尾，要從頭等牠長大）
+          { key: 'keep', label: '維持原本的', outcome: room ? '照原本的計畫' : `留種名額滿了（最多 ${MAX_KEEPERS} 尾），照原本的計畫`, recommended: !room },
+        ],
+        fish: [pickFish(nu.fish, nu.tank), pickFish(old.fish, old.tank)],
+      };
+    }
+    case 'C11': {
+      if (tanks.length < 2) return null;
+      const p = pairFish(tanks, s);
+      if (!p?.mom.genome || !p.dad.genome || p.mom.pregnancy > 0) return null;
+      // 快長大、要配之前（C12 前幾天）問：這時候公母都看得出來了
+      const plan = s.planDone ? 'standard' : (s.plan ?? 'standard');
+      if (planMatureDays(tanks[p.tank], p.mom, plan) > PAIR_PLAN_DAYS + C11_BEFORE_PAIR) return null;
+      const r = rivals(tanks, s, p.tank);
+      if (r.length === 0) return null;
+      const keepPct = pairDream(p.mom.genome, p.dad.genome);
+      const mixPct = mixedPct(p.mom, [p.dad, ...r]);
+      const to = otherTank(tanks, p.tank);
+      return {
+        id,
+        tank: p.tank,
+        title: '留種的魚看得出公母了！',
+        owner: '母魚會把精子存起來好幾個月。想讓指定的公魚當爸爸，現在就要把母魚分開。',
+        options: [
+          { key: 'split', label: '分開養', outcome: `孫代出現${DREAM_FISH.name}的機率約 ${keepPct}%；同缸另外 ${r.length} 尾公魚搬去${tankLabel(tanks, to)}`, recommended: true },
+          { key: 'together', label: '一起養', outcome: `可能被別尾公魚配到，機率約 ${mixPct}%` },
+        ],
+        motherId: p.mom.id,
+        fatherId: p.dad.id,
+      };
+    }
+    case 'C12': {
+      const p = pairFish(tanks, s);
+      if (!p?.mom.genome || !p.dad.genome || p.mom.pregnancy > 0) return null;
+      const t = tanks[p.tank];
+      const plan = s.planDone ? 'standard' : (s.plan ?? 'standard');
+      const wait = Math.max(planMatureDays(t, p.mom, plan), planMatureDays(t, p.dad, plan));
+      if (wait > PAIR_PLAN_DAYS) return null;
+      const one = pairDream(p.mom.genome, p.dad.genome);
+      const mom2 = secondMom(tanks, p.mom, p.dad);
+      const dad2 = secondDad(tanks, s, p.mom);
+      // 配上（約 2 天）＋懷孕（孕期照水溫）
+      const sp = FISH_SPECIES[p.mom.species].breeding!;
+      const born = Math.round(wait + 2 + sp.gestationDays / Math.sqrt(temperatureFactor(t.water.tempC)));
+      return {
+        id,
+        tank: p.tank,
+        title: '種魚長大了，怎麼配？',
+        owner: `配上之後大約 ${born} 天生（約第 ${dayOf(home.hours + born * 24)} 天）。`,
+        options: [
+          ...(mom2 ? [{ key: 'two', label: '1 公配 2 母', outcome: `母魚壓力小，約 ${avgPct(one, pairDream(mom2.fish.genome!, p.dad.genome))}%`, recommended: true }] : []),
+          { key: 'one', label: '1 公配 1 母', outcome: `血統最單純，約 ${one}%`, recommended: !mom2 },
+          ...(dad2 ? [{ key: 'rotate', label: '2 尾公魚輪流', outcome: `看哪尾比較好，約 ${avgPct(one, pairDream(p.mom.genome, dad2.fish.genome!))}%` }] : []),
+        ],
+        motherId: p.mom.id,
+        fatherId: p.dad.id,
+      };
+    }
+    case 'C13': {
+      const m = pregnantMom(tanks, s);
+      if (!m) return null;
+      const d = Math.max(1, Math.round(daysToBirth(tanks[m.tank], m.fish) ?? 1));
+      const sp = FISH_SPECIES[m.fish.species].breeding!;
+      const more = Math.max(1, Math.round(sp.broodMean * m.fish.health * (broodFactor(1) - broodFactor(m.fish.breedingCondition))));
+      return {
+        id,
+        tank: m.tank,
+        title: `${callName(m.fish)}懷孕了！`,
+        owner: `再約 ${d} 天生。孕期吃得好，一窩可能多幾尾。`,
+        options: [
+          { key: 'standard', label: '標準飼料', outcome: '照現在餵，水比較好顧' },
+          { key: 'live', label: '加活餌', outcome: `一窩可能多 ${more} 尾左右，水比較髒要多換水` },
+        ],
+        motherId: m.fish.id,
+      };
+    }
+    case 'C14': {
+      if (!s.pair) return null;
+      const i = crowdedTank(tanks);
+      if (i < 0) return null;
+      const o = bestSellOrder(tanks);
+      const batch = o ? [] : shopBatch(tanks, i);
+      const big = !tankLock(tanks, 'std90');
+      const sell = o ? `${orderTitle(o)} ${o.unitPrice * o.count} 元` : batch.length > 0 ? `${batch.length} 尾賣給阿德，約 ${batch.reduce((a, f) => a + fishBuybackPrice(f), 0)} 元` : null;
+      // 擠的多半是還賣不了的小小魚：等牠們長到能賣再問（不然只剩花大錢買缸）
+      if (!sell) return null;
+      return {
+        id,
+        tank: i,
+        title: `${tankLabel(tanks, i)}快住不下了`,
+        owner: '魚太擠，水質會變差，也容易生病。',
+        options: [
+          { key: 'sell', label: '賣一批', outcome: sell, recommended: true },
+          { key: 'tank', label: tanks.length === 2 ? '買第三缸' : '再買一缸', outcome: `20L 套缸 ${newTankCost(tanks, 'nano20')} 元` },
+          ...(big ? [{ key: 'big', label: '換大缸', outcome: `90L，${newTankCost(tanks, 'std90')} 元` }] : []),
+        ],
+      };
+    }
+    case 'C15': {
+      const m = revealMom(tanks, s);
+      if (!m) return null;
+      const box = !!tanks[m.tank].nurseryBox;
+      const price = PRICES['nursery:box'] ?? 150;
+      const breeding = tanks.findIndex((t) => t.purpose === 'breeding');
+      // 沒有盒子要先買：價錢寫在選項上，點了才算同意花錢；錢不夠就不能選
+      const poor = !box && economy(home).coins < price;
+      return {
+        id,
+        tank: m.tank,
+        title: '夢想魚的那窩過一半了！',
+        owner: `這一窩裡可能有${DREAM_FISH.name}的寶寶。什麼時候把${callName(m.fish)}移到產房？`,
+        options: [
+          { key: 'plants', label: breeding >= 0 ? '現在移去密草的繁殖缸' : '現在就留在缸裡躲草', outcome: '母魚適應得好，但小魚出生後一部分要躲', recommended: poor },
+          {
+            key: 'box',
+            label: box ? '等快生再放育幼盒' : `等快生再放育幼盒（買一個 ${price} 元）`,
+            outcome: '保護最好，但移太晚母魚會緊迫',
+            recommended: !poor,
+            ...(poor ? { disabled: `錢不夠：育幼盒要 ${price} 元` } : {}),
+          },
+        ],
+        motherId: m.fish.id,
       };
     }
   }
 }
 
-/** C9：已經生過一窩、這一胎又快生了的孔雀魚母魚（肚子最大的那尾）。 */
-function secondBroodMom(tanks: TankState[]): { fish: Fish; tank: number } | null {
+/** C9：已經生過一窩、這一胎又快生了的孔雀魚母魚（肚子最大的那尾）。每一窩都問（#326）。 */
+function secondBroodMom(tanks: TankState[], s: Readonly<ChoiceState>): { fish: Fish; tank: number } | null {
   const all = located(tanks);
-  const moms = all.filter(({ fish }) => fish.species === 'guppy' && fish.sex === 'female' && fish.pregnancy >= SECOND_BROOD_SHOWS && all.some((k) => k.fish.motherId === fish.id));
+  // 留種那對的母魚，夢想魚配方那窩由 C15 問
+  const dream = s.pair && !s.reveal?.done ? s.pair[0] : undefined;
+  // 問過、還沒生的不再問
+  const asked = [...(s.secondBrood && s.secondBrood.born === undefined ? [s.secondBrood.momId] : []), ...(s.broodQueue ?? []).map((b) => b.momId)];
+  // 第一次問的是「第二窩」（生過的母魚）；之後每一窩都問，自家第一次當媽媽的也問
+  const before = (f: Fish) => !!s.secondBrood || all.some((k) => k.fish.motherId === f.id);
+  const moms = all.filter(({ fish }) => fish.species === 'guppy' && fish.sex === 'female' && fish.id !== dream && !asked.includes(fish.id) && fish.pregnancy >= (s.secondBrood ? BROOD_AGAIN_SHOWS : SECOND_BROOD_SHOWS) && before(fish));
   return moms.sort((a, b) => b.fish.pregnancy - a.fish.pregnancy)[0] ?? null;
 }
 
@@ -795,14 +1178,26 @@ export interface SecondBroodNews {
 export function takeSecondBrood(tanks: TankState[]): SecondBroodNews | null {
   const s = choiceState(tanks);
   const sb = s.secondBrood;
-  if (!sb || sb.born !== undefined) return null;
-  const fry = located(tanks).filter(({ fish }) => fish.motherId === sb.momId && (fish.bornHours ?? -Infinity) >= sb.hours);
-  if (fry.length === 0) return null;
-  sb.born = fry.length;
-  const choice = s.picked.C9 ?? 'grow';
+  if (!sb) return null;
+  const fryOf = (b: { momId: number; hours: number }) => located(tanks).filter(({ fish }) => fish.motherId === b.momId && (fish.bornHours ?? -Infinity) >= b.hours);
+  // 第一次問的那窩（第二窩），或之後問過的那幾窩裡先生的
+  let b: { momId: number; prevKids: number; choice: string } | null = null;
+  let fry: ReturnType<typeof fryOf> = [];
+  let again = false;
+  if (sb.born === undefined && (fry = fryOf(sb)).length > 0) {
+    sb.born = fry.length;
+    b = { ...sb, choice: sb.choice ?? s.picked.C9 ?? 'grow' };
+  } else {
+    const q = s.broodQueue ?? [];
+    const i = q.findIndex((x) => (fry = fryOf(x)).length > 0);
+    if (i < 0) return null;
+    b = q.splice(i, 1)[0];
+    again = true;
+  }
+  const choice = b.choice;
   let kept = 0;
   let full = false;
-  if (choice === 'sell') sb.fry = fry.map(({ fish }) => fish.id);
+  if (choice === 'sell') (sb.fry ??= []).push(...fry.map(({ fish }) => fish.id));
   if (choice === 'keep') {
     const rank = (f: Fish) => (hasDreamGenes(f) ? 0 : 100) + dreamMissing(f).length * 10 - (f.sex === 'female' ? bestDreamPct(tanks, undefined, f.id) / 10 : 0);
     for (const { fish, tank } of fry.filter(({ fish }) => fish.genome).sort((a, b) => rank(a.fish) - rank(b.fish))) {
@@ -820,10 +1215,44 @@ export function takeSecondBrood(tanks: TankState[]): SecondBroodNews | null {
       kept++;
     }
   }
-  const mom = located(tanks).find(({ fish }) => fish.id === sb.momId)?.fish;
+  const mom = located(tanks).find(({ fish }) => fish.id === b.momId)?.fish;
   const who = mom ? callName(mom) : '母魚';
   const then = choice === 'sell' ? '長到能交就照訂單交。' : choice === 'keep' ? (full && kept === 0 ? `留種名額滿了（最多 ${MAX_KEEPERS} 尾），先取消幾尾才挑得了。` : kept > 0 ? `挑了 ${kept} 尾離夢想魚最近的當備用種魚。` : '這窩還挑不到能留的，先讓牠們長大。') : '整窩留著長大。';
-  return { momId: sb.momId, count: fry.length, prevKids: sb.prevKids, kept, choice, text: `${who}的第二窩生了 ${fry.length} 尾（第一窩現在還有 ${sb.prevKids} 尾）。${then}` };
+  const what = again ? `又生了 ${fry.length} 尾（之前的還有 ${b.prevKids} 尾）` : `的第二窩生了 ${fry.length} 尾（第一窩現在還有 ${b.prevKids} 尾）`;
+  return { momId: b.momId, count: fry.length, prevKids: b.prevKids, kept, choice, text: `${who}${what}。${then}` };
+}
+
+/** 開獎卡（midgame.md §6.1 C15）：每尾小魚帶不帶白子、蛇紋（含隱性），和老闆那句話。 */
+export interface RevealNews {
+  momId: number;
+  dream: string;
+  fry: Array<{ fishId: number; albino: boolean; snake: boolean }>;
+  /** 兩樣都帶的有幾尾。 */
+  both: number;
+  text: string;
+}
+
+/**
+ * 早上報告用：夢想魚配方那窩生了就開獎一次（之後回 null）。母魚不在了、或過了很久都沒生（流產、被配走）就收掉。
+ */
+export function takeReveal(tanks: TankState[]): RevealNews | null {
+  const s = choiceState(tanks);
+  const r = s.reveal;
+  if (!r || r.done) return null;
+  const fry = located(tanks).filter(({ fish }) => fish.motherId === r.momId && (fish.bornHours ?? -Infinity) >= r.hours);
+  if (fry.length === 0) {
+    const mom = located(tanks).find(({ fish }) => fish.id === r.momId);
+    if (!mom || (mom.fish.pregnancy === 0 && tanks[0].hours - r.hours > 10 * 24)) r.done = true;
+    return null;
+  }
+  r.done = true;
+  r.born = fry.length;
+  const out = fry
+    .filter(({ fish }) => fish.genome)
+    .map(({ fish }) => ({ fishId: fish.id, albino: fish.genome!.albino.includes(1), snake: fish.genome!.snakeX.includes(1) || fish.genome!.y?.snake === 1 }));
+  const both = out.filter((f) => f.albino && f.snake).length;
+  const text = both > 0 ? `有 ${both} 尾兩樣都有，長大後可能就是${DREAM_FISH.name}！` : '這窩沒有，但牠們身上都帶著基因，下一代還有機會';
+  return { momId: r.momId, dream: DREAM_FISH.name, fry: out, both, text };
 }
 
 /**
@@ -843,6 +1272,83 @@ function endGrowPlan(tanks: TankState[], s: ChoiceState): void {
   if (t.equipment.heater && s.planPrevTemp !== undefined) setHeaterTarget(t, s.planPrevTemp);
 }
 
+/** 選過了還會再問的卡：C6 又有魚可以搬、C9 每一窩、C10 每次有更好的、C14 隔幾天還是很擠。 */
+function again(id: ChoiceId, tanks: TankState[], s: ChoiceState): boolean {
+  if (id === 'C6') return moveAgain(tanks, s);
+  if (id === 'C9' || id === 'C10' || id === 'C13') return true;
+  if (id === 'C14') return tanks[0].hours - (s.shown.C14 ?? -Infinity) >= CROWD_REASK_DAYS * 24;
+  return false;
+}
+
+/**
+ * 第 36～80 天每天早上的小事（#326）：C11 選了分開養就繼續把長大的別尾公魚搬走（開獎前）；
+ * C13 的活餌生完就收掉；夢想魚配方那窩快生了就記下開獎（沒選 C15 也照樣開）；找新的一窩裡更好的魚（C10）。
+ */
+function lateHousekeeping(tanks: TankState[], s: ChoiceState): void {
+  if (s.picked.C11 === 'split' && !s.reveal?.done) splitMove(tanks, s);
+  if (s.pregPlan !== undefined) {
+    const mom = located(tanks).find(({ fish }) => fish.id === s.pregPlan);
+    if (!mom || mom.fish.pregnancy === 0) {
+      for (const t of tanks) if (t.feedPlan?.kind === LIVE_FOOD.kind && t.feedPlan.grade === LIVE_FOOD.grade && (!s.plan || s.planDone)) delete t.feedPlan;
+      delete s.pregPlan;
+    }
+  }
+  const m = revealMom(tanks, s);
+  if (m && s.reveal?.momId !== m.fish.id) s.reveal = { momId: m.fish.id, hours: tanks[0].hours };
+  boxDue(tanks, s);
+  noteSickDelay(tanks, s);
+  scanBetter(tanks, s);
+}
+
+/** C15 選了等快生再放：快生了就把母魚放進那缸的育幼盒（盒裡放得出去的小魚先放出去）。 */
+function boxDue(tanks: TankState[], s: ChoiceState): void {
+  const r = s.reveal;
+  if (!r?.box || r.done) return;
+  const m = located(tanks).find(({ fish }) => fish.id === r.momId);
+  if (!m || m.fish.nursery || m.fish.pregnancy < BOX_DUE) return;
+  const t = tanks[m.tank];
+  if (!t.nurseryBox) return;
+  if (nurseryRefusal(t, m.fish)) releaseNursery(t, t.fish.filter((f) => f.nursery && isJuvenile(f) && f.lengthCm > mouthCm(m.fish)).map((f) => f.id));
+  moveToNursery(t, m.fish.id);
+}
+
+/** 種魚都長大了、母魚還沒懷上：身體差（生病）的話記一天，看是不是白點。 */
+function noteSickDelay(tanks: TankState[], s: ChoiceState): void {
+  if (s.reveal || s.sickNoted) return;
+  const p = pairFish(tanks, s);
+  if (!p || p.mom.pregnancy > 0 || isJuvenile(p.mom) || isJuvenile(p.dad)) return;
+  const t = tanks[p.tank];
+  const ich = t.fish.some((f) => f.alive && f.ich.stage === 'visible');
+  if (!ich && p.mom.health > 0.7) return;
+  s.sickDays = (s.sickDays ?? 0) + 1;
+  if (ich) s.sickCause = 'ich';
+  else s.sickCause ??= 'other';
+}
+
+/**
+ * 早上報告用：夢想魚那窩的懷孕後段里程碑（每個說一次），和生病拖慢配對的那一句（懷上之後說一次）。
+ */
+export function takeBellyNotes(tanks: TankState[]): Array<{ fishId: number; text: string }> {
+  const s = choiceState(tanks);
+  const p = pairFish(tanks, s);
+  const out: Array<{ fishId: number; text: string }> = [];
+  if (!p) return out;
+  if (!s.sickNoted && (s.sickDays ?? 0) > 0 && p.mom.pregnancy > 0) {
+    s.sickNoted = true;
+    out.push({ fishId: p.mom.id, text: `因為${s.sickCause === 'ich' ? '白點' : '生病'}，配對晚了約 ${s.sickDays} 天` });
+  }
+  const r = s.reveal;
+  if (!r || r.done || r.momId !== p.mom.id) return out;
+  const seen = (s.milestoneSeen ??= []);
+  for (const m of BELLY_MILESTONES) {
+    const key = `${r.momId}@${Math.round(r.hours)}:${m.key}`;
+    if (p.mom.pregnancy < m.at || seen.includes(key)) continue;
+    seen.push(key);
+    out.push({ fishId: p.mom.id, text: m.key === 'dark' ? `${callName(p.mom)}的胎斑變大、變黑了` : '胎斑裡看得到小魚的眼睛了！快生了' });
+  }
+  return out;
+}
+
 /** 已經不用問的卡（例如已經有第二缸）直接記成選過，不再出。 */
 function settleImplicit(tanks: TankState[], s: ChoiceState): void {
   if (!s.picked.C3 && tanks.length >= 2) s.picked.C3 = tanks[1].purpose ?? 'had';
@@ -859,12 +1365,13 @@ export function takeChoice(tanks: TankState[]): ChoiceCard | null {
   noteFirstBrood(tanks, s);
   settleImplicit(tanks, s);
   endGrowPlan(tanks, s);
+  lateHousekeeping(tanks, s);
   const now = tanks[0].hours;
   // 同一個遊戲天最多一張（#316）：同一天又過一晚、或別的地方再拿一次，都不再出第二張
   const today = Math.floor(now / 24);
-  if (Object.values(s.shown).some((h) => h !== undefined && Math.floor(h / 24) === today)) return null;
+  if ([...Object.values(s.shown), s.lastCard].some((h) => h !== undefined && Math.floor(h / 24) === today)) return null;
   for (const id of CHOICE_IDS) {
-    if (id !== 'C5' && s.picked[id] && !(id === 'C6' && moveAgain(tanks, s))) continue;
+    if (id !== 'C5' && s.picked[id] && !again(id, tanks, s)) continue;
     const asked = (s.tradeAsked ??= []);
     const card = cardFor(id, tanks, s, id === 'C5' && !s.picked.C5 ? asked : []);
     if (!card) continue;
@@ -886,6 +1393,7 @@ export function takeChoice(tanks: TankState[]): ChoiceCard | null {
       if (last !== undefined && now - last < CHOICE_RESHOW_DAYS * 24) continue;
     }
     s.shown[id] = now;
+    s.lastCard = now;
     return card;
   }
   return null;
@@ -992,11 +1500,113 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
       break;
     }
     case 'C9': {
+      // 簡化版的「照上次」
+      if (key === 'same' && s.picked.C9) key = s.picked.C9;
       if (!['grow', 'sell', 'keep'].includes(key)) return '沒有這個選項';
-      const mom = secondBroodMom(tanks);
+      const mom = secondBroodMom(tanks, s);
       if (!mom) return '這一胎已經生了';
       const prevKids = located(tanks).filter(({ fish }) => fish.motherId === mom.fish.id).length;
-      s.secondBrood = { momId: mom.fish.id, hours: tanks[0].hours, prevKids };
+      const b = { momId: mom.fish.id, hours: tanks[0].hours, prevKids, choice: key };
+      if (!s.secondBrood) s.secondBrood = b;
+      else (s.broodQueue ??= []).push(b);
+      s.broods = (s.broods ?? 0) + 1;
+      break;
+    }
+    case 'C10': {
+      const b = s.better;
+      if (!b || !['swap', 'both', 'keep'].includes(key)) return '這尾已經不在了';
+      const nu = find(b.fishId);
+      const old = find(b.oldId);
+      if (!nu || !old) return '這尾已經不在了';
+      // 換掉的話先取消原本那尾，名額才空得出來
+      if (key === 'swap') setKeeper(tanks[old.tank], old.fish.id, false);
+      if (key !== 'keep') {
+        const why = setKeeper(tanks[nu.tank], nu.fish.id, true);
+        if (why) {
+          if (key === 'swap') setKeeper(tanks[old.tank], old.fish.id, true);
+          return why;
+        }
+      }
+      if (key === 'swap') {
+        // 換掉留種那對的其中一尾：新的這尾搬去那對的缸
+        const p = pairFish(tanks, s);
+        if (s.pair && p) {
+          s.pair = nu.fish.sex === 'female' ? [nu.fish.id, s.pair[1]] : [s.pair[0], nu.fish.id];
+          if (nu.tank !== p.tank) moveFish(tanks[nu.tank], tanks[p.tank], nu.fish.id);
+        }
+      } else if (key === 'both') (s.backups ??= []).push(nu.fish.id);
+      delete s.better;
+      break;
+    }
+    case 'C11': {
+      if (key !== 'split' && key !== 'together') return '沒有這個選項';
+      if (key === 'split') {
+        if (!pairFish(tanks, s)) return '留種的那對不在了';
+        splitMove(tanks, s);
+      }
+      break;
+    }
+    case 'C12': {
+      const p = pairFish(tanks, s);
+      if (!p?.mom.genome || !p.dad.genome) return '留種的那對不在了';
+      if (key === 'two') {
+        const m2 = secondMom(tanks, p.mom, p.dad);
+        if (!m2) return '沒有別的留種母魚';
+        if (m2.tank !== p.tank) moveFish(tanks[m2.tank], tanks[p.tank], m2.fish.id);
+        s.mates = [m2.fish.id];
+      } else if (key === 'rotate') {
+        const d2 = secondDad(tanks, s, p.mom);
+        if (!d2) return '沒有別的公魚可以輪流';
+        const why = d2.fish.keeper ? null : setKeeper(tanks[d2.tank], d2.fish.id, true);
+        if (why) return why;
+        if (d2.tank !== p.tank) moveFish(tanks[d2.tank], tanks[p.tank], d2.fish.id);
+        s.sires = [...(s.sires ?? []), d2.fish.id];
+      } else if (key !== 'one') return '沒有這個選項';
+      break;
+    }
+    case 'C13': {
+      const m = pregnantMom(tanks, s);
+      if (!m) return '已經過了孕期剛開始的時候';
+      if (key === 'live') {
+        tanks[m.tank].feedPlan = { ...LIVE_FOOD };
+        s.pregPlan = m.fish.id;
+      } else if (key !== 'standard') return '沒有這個選項';
+      (s.pregAsked ??= []).push(m.fish.id);
+      break;
+    }
+    case 'C14': {
+      // 再買一缸、換大缸：畫面帶去買缸（這裡只記下來）
+      if (key === 'sell') {
+        const o = bestSellOrder(tanks);
+        const i = crowdedTank(tanks);
+        if (o) {
+          if (!fulfillOrder(tanks, o.id)) return orderRefusal(tanks, o.id) ?? '現在交不出這張單';
+        } else {
+          const batch = i < 0 ? [] : shopBatch(tanks, i);
+          if (batch.length === 0) return '現在沒有可以賣的魚';
+          for (const f of batch) sellFish(tanks[i], f.id);
+        }
+      } else if (key !== 'tank' && key !== 'big') return '沒有這個選項';
+      break;
+    }
+    case 'C15': {
+      const m = revealMom(tanks, s);
+      if (!m) return '已經生了';
+      if (s.reveal?.momId !== m.fish.id) s.reveal = { momId: m.fish.id, hours: tanks[0].hours };
+      if (key === 'box') {
+        // 先把盒子準備好，快生了（BOX_DUE）每天早上自己放進去
+        const t = tanks[m.tank];
+        if (!t.nurseryBox) {
+          const price = PRICES['nursery:box'] ?? 150;
+          if (!spend(tanks[0], price)) return `錢不夠：育幼盒要 ${price} 元`;
+          buyNurseryBox(t);
+        }
+        s.reveal.box = true;
+        boxDue(tanks, s);
+      } else if (key === 'plants') {
+        const to = tanks.findIndex((t) => t.purpose === 'breeding');
+        if (to >= 0 && to !== m.tank) moveFish(tanks[m.tank], tanks[to], m.fish.id);
+      } else return '沒有這個選項';
       break;
     }
     case 'C6': {
@@ -1015,6 +1625,8 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
     }
   }
   s.picked[id] = key;
+  // 每一窩都問的卡：選了就不用等隔幾天，下一窩（下一尾）到了就問
+  if (id === 'C9' || id === 'C10' || id === 'C13') delete s.shown[id];
   return null;
 }
 
