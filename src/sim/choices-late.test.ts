@@ -1,36 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import {
-  addFish,
-  ADULT_SIZE,
-  bacteriaCapacity,
-  broodFactor,
-  buyTank,
-  chooseOption,
-  choiceState,
-  CROWD_WARN,
-  crowdingRatio,
-  cross,
-  DREAM_FISH,
-  economy,
-  FISH_SPECIES,
-  linkTanks,
-  orderBoard,
-  PAIR_PLAN_DAYS,
-  REVEAL_SHOWS,
-  BOX_DUE,
-  takeBellyNotes,
-  SECOND_BROOD_SHOWS,
-  BROOD_AGAIN_SHOWS,
-  BROOD_AGAIN_GAP_DAYS,
-  setTankPurpose,
-  takeChoice,
-  takeReveal,
-  takeSecondBrood,
-  type Fish,
-  type GuppyGenome,
-  type TankState,
-} from './index';
+import { addFish, ADULT_SIZE, bacteriaCapacity, broodFactor, buyTank, CROWD_WARN, crowdingRatio, cross, DREAM_FISH, economy, FISH_SPECIES, linkTanks, orderBoard, setTankPurpose, type Fish, type GuppyGenome, type TankState } from './index';
+import { chooseOption, choiceState, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, takeChoice, takeReveal, takeSecondBrood } from './choices';
 
 const calm = { carriesIch: false, carries: [] };
 const ADULT_CM = FISH_SPECIES.guppy.adultLengthCm * ADULT_SIZE;

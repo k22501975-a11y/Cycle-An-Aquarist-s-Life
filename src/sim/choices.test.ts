@@ -1,46 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import {
-  addFish,
-  CROWD_WARN,
-  crowdingRatio,
-  bacteriaCapacity,
-  BACKUP_MAX,
-  MAIN_KEEP_FISH,
-  MAX_KEEPERS,
-  hasDreamGenes,
-  orderDreamNote,
-  tradeCheck,
-  maxLengthCm,
-  SECOND_BROOD_KEEP,
-  SECOND_BROOD_SHOWS,
-  takeSecondBrood,
-  buyTank,
-  setTankPurpose,
-  breedingProgress,
-  chooseOption,
-  CHOICE_RESHOW_DAYS,
-  choiceState,
-  cross,
-  DREAM_FISH,
-  dreamChance,
-  economy,
-  FAST_TEMP_C,
-  grandDreamChance,
-  linkTanks,
-  matchingFish,
-  orderBoard,
-  orderSupply,
-  PICK_AFTER_BROOD_DAYS,
-  reservedForPick,
-  suggestPurpose,
-  takeChoice,
-  takeMilestones,
-  nextMilestone,
-  TANK_AFTER_BROOD_DAYS,
-  type ShopOrder,
-  type TankState,
-} from './index';
+import { addFish, CROWD_WARN, crowdingRatio, bacteriaCapacity, MAX_KEEPERS, maxLengthCm, buyTank, setTankPurpose, cross, DREAM_FISH, economy, linkTanks, matchingFish, orderBoard, orderSupply, reservedForPick, suggestPurpose, type ShopOrder, type TankState } from './index';
+import { BACKUP_MAX, MAIN_KEEP_FISH, hasDreamGenes, orderDreamNote, tradeCheck, SECOND_BROOD_KEEP, SECOND_BROOD_SHOWS, takeSecondBrood, breedingProgress, chooseOption, CHOICE_RESHOW_DAYS, choiceState, dreamChance, FAST_TEMP_C, grandDreamChance, PICK_AFTER_BROOD_DAYS, takeChoice, takeMilestones, nextMilestone, TANK_AFTER_BROOD_DAYS } from './choices';
 
 const calm = { carriesIch: false, carries: [] };
 

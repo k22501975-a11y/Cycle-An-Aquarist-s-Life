@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, choiceState, createTank, FILTERS, HEATERS, LIGHTS, PLANT_SPECIES, recordEvent, TANKS, testWater, type TankState } from '../sim';
+import { addFish, addPlant, createTank, FILTERS, HEATERS, LIGHTS, PLANT_SPECIES, recordEvent, TANKS, testWater, type TankState } from '../sim';
+import { choiceState } from '../sim/choices';
 import { morningReport, snapshot } from './morning-report';
 
 /** 養好水、一株小榕、一公兩母孔雀魚（都沒懷孕）的缸。 */

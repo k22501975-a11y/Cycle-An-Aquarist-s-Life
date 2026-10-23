@@ -1,4 +1,4 @@
-import type { ChoiceCard } from '../sim';
+import type { ChoiceCard } from '../sim/choices';
 import type { FishLook } from './breeding-cards';
 import { h } from './dom';
 

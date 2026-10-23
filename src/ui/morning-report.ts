@@ -1,43 +1,6 @@
 import { crisisText, type Crisis } from '../game/crisis';
-import {
-  BLOOM_NOTE,
-  cycleMaturity,
-  BELLY_SHOWS,
-  DUE_PREGNANCY,
-  economy,
-  FISH_SPECIES,
-  HUNGRY,
-  isCycled,
-  isJuvenile,
-  isShrimpSpecies,
-  isStarving,
-  orderBoard,
-  BIG_WATER_CHANGE,
-  MEASURED_PROBLEM_LEVEL,
-  testWater,
-  pestCount,
-  PLANT_SPECIES,
-  lookalikeLine,
-  suggestedWaterChange,
-  takeGearNote,
-  takeLookalike,
-  takeChoice,
-  takeMilestones,
-  takeBellyNotes,
-  takeReveal,
-  choiceState,
-  takeSecondBrood,
-  breedingProgress,
-  tankLabel,
-  usesNursery,
-  waterLook,
-  youngGettingHungry,
-  type FishSpeciesId,
-  type LookalikeCard,
-  type ChoiceCard,
-  type SimEvent,
-  type TankState,
-} from '../sim';
+import { BLOOM_NOTE, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
+import { takeChoice, takeMilestones, takeBellyNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 import { quietObservation } from './morning-observe';
 
