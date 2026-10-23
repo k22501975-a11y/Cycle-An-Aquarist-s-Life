@@ -255,6 +255,8 @@ export interface Fish {
   arrivedHours?: number;
   /** 媽媽是哪尾（在缸裡出生的才有；長得像誰比較卡用，G2）。 */
   motherId?: number;
+  /** 爸爸是哪尾（在缸裡出生、爸爸在缸裡的才有；舊存檔沒有）。 */
+  fatherId?: number;
   /** 近交係數 0–1：同血統互配會升高，體質和尾鰭跟著退化。 */
   inbreeding?: number;
   /** 保底起步包送的魚：不能賣回店裡。 */

@@ -241,6 +241,7 @@ export function giveBirth(state: TankState, mother: Fish, population: number): F
     if (mother.genome && sire) {
       fry.genome = cross(state.rng, mother.genome, sire.genome, fry.sex, inbreeding);
       fry.lineage = line;
+      if (sire.id !== undefined) fry.fatherId = sire.id;
       fry.generation = (mother.generation ?? 0) + 1;
       fry.inbreeding = inbreeding;
       // 近親繁殖讓體質變差

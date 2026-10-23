@@ -67,8 +67,8 @@ function fill(bc: typeof import('./breeding-cards'), card: ChoiceCard, box: HTML
     box.append(slot);
   } else if (card.candidates && card.id === 'C4') {
     const mother = card.motherId !== undefined ? lookup(card.motherId) : null;
-    // 第一窩配對多半只有孫代會出夢想魚：機率取小魚、孫代高的那個
-    const cands = card.candidates.map((c) => ({ ...c, dreamPct: Math.max(c.dreamPct, c.grandPct) }));
+    // 公魚帶白子的話小魚就有機會出夢想魚，不然要等孫代：機率取小魚、孫代高的那個
+    const cands = card.candidates.map((c) => ({ ...c, direct: c.dreamPct > 0 && c.dreamPct >= c.grandPct, dreamPct: Math.max(c.dreamPct, c.grandPct) }));
     box.append(sireCompareCard(mother ?? { sex: 'female', name: '', look: 0, fins: [] }, cands, (id) => pick(String(id))));
   } else if (card.trade && card.id === 'C5') {
     const fish = lookup(card.trade.fishId);
