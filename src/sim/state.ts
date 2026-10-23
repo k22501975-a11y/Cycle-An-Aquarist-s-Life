@@ -141,6 +141,8 @@ export interface Equipment {
   heater: {
     spec: HeaterSpec;
     targetC: number;
+    /** 恆溫器現在照的溫度：調了目標後一小時只走 HEATER_RAMP_C_PER_HOUR，慢慢走到 targetC 就拿掉。舊存檔沒有這個欄位。 */
+    setpointC?: number;
     broken: boolean;
     heating: boolean;
     /** 故障時卡在加熱狀態（恆溫器失靈），插著電就會一直加熱。舊存檔沒有這個欄位。 */

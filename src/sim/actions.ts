@@ -314,8 +314,12 @@ export function doseDewormer(state: TankState, doses = 1): void {
   state.water.dewormer = (state.water.dewormer ?? 0) + doses;
 }
 
+/** 調加熱棒目標：恆溫器從現在照的溫度慢慢走過去（thermal 的 HEATER_RAMP_C_PER_HOUR），水溫不會一天差到 3°C 引來白點（#355）。 */
 export function setHeaterTarget(state: TankState, targetC: number): void {
-  if (state.equipment.heater) state.equipment.heater.targetC = targetC;
+  const heater = state.equipment.heater;
+  if (!heater || heater.targetC === targetC) return;
+  heater.setpointC ??= heater.targetC;
+  heater.targetC = targetC;
 }
 
 /** 拔掉卡住的加熱棒插頭：停止加熱，但加熱棒還是壞的，要換一支。 */
