@@ -1,4 +1,4 @@
-import { DREAM_FISH, economy, GUPPY_STRAIN_PRICES, GUPPY_STRAINS, HARDSCAPE, PLANT_PRICES, PLANT_SPECIES, price, type PlantSpeciesId, type TankState } from '../sim';
+import { DREAM_FISH, DREAM_MALE, economy, GUPPY_STRAIN_PRICES, GUPPY_STRAINS, HARDSCAPE, PLANT_PRICES, PLANT_SPECIES, price, type PlantSpeciesId, type TankState } from '../sim';
 import { h } from './dom';
 import { guppyArt, HARDSCAPE_ART, plantArt, priceTag } from './shop-cards';
 
@@ -13,7 +13,7 @@ const ART = `${import.meta.env.BASE_URL}art/`;
 export type QuickKind = 'fish' | 'plant' | 'stone';
 export type HardscapeId = keyof typeof HARDSCAPE;
 
-export type QuickPick = { kind: 'fish'; strains: [male: number, female: number] } | { kind: 'plant'; id: PlantSpeciesId } | { kind: 'stone'; id: HardscapeId };
+export type QuickPick = { kind: 'fish'; strains: [male: number, female: number]; /** 夢想魚一鍵買：公魚是帶白子的紅蛇王（DREAM_MALE）。 */ dream?: boolean } | { kind: 'plant'; id: PlantSpeciesId } | { kind: 'stone'; id: HardscapeId };
 
 interface Choice {
   pick: QuickPick;
@@ -29,13 +29,13 @@ interface Choice {
 const DREAM_PAIR: [number, number] = [DREAM_FISH.parents.male, DREAM_FISH.parents.female];
 const STONES: HardscapeId[] = ['lava', 'slate', 'driftwood'];
 
-const pairPrice = ([m, f]: [number, number]) => GUPPY_STRAIN_PRICES[m] + GUPPY_STRAIN_PRICES[f] * 2;
+const pairPrice = ([m, f]: [number, number], dream = false) => (dream ? DREAM_MALE.price : GUPPY_STRAIN_PRICES[m]) + GUPPY_STRAIN_PRICES[f] * 2;
 
 export function quickChoices(kind: QuickKind): Choice[] {
   if (kind === 'fish') {
     const blue: [number, number] = [0, 0];
     return [
-      { pick: { kind: 'fish', strains: DREAM_PAIR }, art: guppyArt(DREAM_PAIR[0]), name: '夢想魚配對', sub: `${GUPPY_STRAINS[DREAM_PAIR[0]]}♂＋${GUPPY_STRAINS[DREAM_PAIR[1]]}♀×2`, price: pairPrice(DREAM_PAIR), dream: true },
+      { pick: { kind: 'fish', strains: DREAM_PAIR, dream: true }, art: guppyArt(DREAM_PAIR[0]), name: '夢想魚配對', sub: `${DREAM_MALE.name}♂＋${GUPPY_STRAINS[DREAM_PAIR[1]]}♀×2`, price: pairPrice(DREAM_PAIR, true), dream: true },
       { pick: { kind: 'fish', strains: blue }, art: guppyArt(0), name: `${GUPPY_STRAINS[0]}一公兩母`, sub: '最便宜、好養', price: pairPrice(blue) },
     ];
   }

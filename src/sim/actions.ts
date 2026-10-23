@@ -148,6 +148,8 @@ export interface AddFishOptions {
   drip?: boolean | DripOutcome;
   /** 帶著哪些潛伏的病（柱狀病、鰓吸蟲）。不指定時依店家機率決定。 */
   carries?: DiseaseKind[];
+  /** 帶一個白子基因（夢想魚一鍵買的紅蛇王公魚，dream.ts 的 DREAM_MALE）。 */
+  albinoCarrier?: boolean;
 }
 
 /** 店裡的母魚、母蝦已經懷孕的機率：孔雀魚母魚跟公魚養在一起，買回來的大多已經懷孕（design/mvp.md §4.6）。 */
@@ -216,6 +218,7 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
     ich: carries ? { stage: 'incubating', progress: 0, cause: 'new_fish' } : { stage: 'none', progress: 0 },
   });
   if (species === 'guppy') fish.genome = storeGenome(state.rng, fish.sex, options.strain, options.fin);
+  if (fish.genome && options.albinoCarrier && fish.genome.albino[0] + fish.genome.albino[1] === 0) fish.genome.albino = [0, 1];
   // 店裡的魚習慣魚場的水；直接倒進差很多的缸會休克
   fish.acclimated = farmHabit(species);
   const drip = options.drip ?? true;

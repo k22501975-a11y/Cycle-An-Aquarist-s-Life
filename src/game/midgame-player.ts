@@ -86,8 +86,8 @@ function pickRecommended(tanks: TankState[], card: ChoiceCard): string | null {
   return why;
 }
 
-/** neglectCrowd：擠缸都不處理（C14 每次都選先多換水，midgame.md §7.4 的「都不處理」）。 */
-export function midgamePlayer(seed: number, days = 36, opts: { neglectCrowd?: boolean } = {}): MidgameNight[] {
+/** neglectCrowd：擠缸都不處理（C14 每次都選先多換水，midgame.md §7.4 的「都不處理」）；onDay：每晚結束後看一下缸（長期劇本驗收用）。 */
+export function midgamePlayer(seed: number, days = 36, opts: { neglectCrowd?: boolean; onDay?: (tanks: TankState[], day: number) => void } = {}): MidgameNight[] {
   return run(seed, days, opts).nights;
 }
 
@@ -96,7 +96,7 @@ export function midgamePlayerTanks(seed: number, days = 36): TankState[] {
   return run(seed, days).tanks;
 }
 
-function run(seed: number, days: number, opts: { neglectCrowd?: boolean } = {}): { nights: MidgameNight[]; tanks: TankState[] } {
+function run(seed: number, days: number, opts: { neglectCrowd?: boolean; onDay?: (tanks: TankState[], day: number) => void } = {}): { nights: MidgameNight[]; tanks: TankState[] } {
   const s = newGameState(seed);
   const tanks = [s];
   linkTanks(tanks);
@@ -113,7 +113,7 @@ function run(seed: number, days: number, opts: { neglectCrowd?: boolean } = {}):
     simulateAll(tanks, 0.5);
     act();
     if (currentQuest(p)?.id === 'fish') {
-      addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'male', strain: DREAM_FISH.parents.male });
+      addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'male', strain: DREAM_FISH.parents.male, albinoCarrier: true });
       // 夢想魚一鍵買：店裡最快生的那兩尾（#335）
       const due = takeStoreFemales(s, DREAM_FISH.parents.female, 2);
       for (let i = 0; i < 2; i++) addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'female', strain: DREAM_FISH.parents.female, pregnancy: due[i] });
@@ -168,6 +168,7 @@ function run(seed: number, days: number, opts: { neglectCrowd?: boolean } = {}):
     const deaths = died.flat().map((e) => String(e.cause));
     const crowdDeaths = died.reduce((a, d, i) => a + (Math.max(evening[i] ?? 0, crowdingRatio(tanks[i])) >= 1 ? d.length : 0), 0);
     out.push({ crowdDeaths, crowd: tanks.map((t) => Math.round(crowdingRatio(t) * 100) / 100), deaths, bellyMilestone, sickDays: cs.sickDays ?? 0, day: Math.floor(s.hours / 24) + 1, choice: card?.id, orderChoice, quiet: line === '安靜的一晚。', coins: economy(s).coins, tanks: tanks.length, inBreeding: tanks.find((t) => t.purpose === 'breeding')?.fish.filter((f) => f.alive).length ?? 0, alarms: tanks.flatMap((t, i) => [...waterAlarms(t)].map((x) => `${i}:${x}`)), line: `${card ? `<${(card.options.find((o) => o.recommended) ?? card.options[0]).key}>` : ''}${why ? `（選不了：${why}）` : ''}${line} ${report.items.map((i) => i.kind).join(',')}` });
+    opts.onDay?.(tanks, Math.floor(s.hours / 24) + 1);
   }
   return { nights: out, tanks };
 }

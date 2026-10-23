@@ -1,5 +1,5 @@
 import { economy } from './economy';
-import { GUPPY_FIN_STRAINS, GUPPY_STRAINS, lookIndex, phenotype, strainName } from './genetics';
+import { GUPPY_FIN_STRAINS, GUPPY_STRAIN_PRICES, GUPPY_STRAINS, lookIndex, phenotype, strainName } from './genetics';
 import { sexVisible } from './growth';
 import { cycleMaturity } from './processes/nitrogen';
 import type { TankState } from './state';
@@ -21,7 +21,17 @@ export const DREAM_FISH = {
   /** 配方的爸媽（GUPPY_STRAINS 的索引）：紅蛇王公魚配全紅白子母魚；商店一鍵買和「配一對看看」的預設都用這組。 */
   parents: { male: GUPPY_STRAINS.indexOf('紅蛇王'), female: GUPPY_STRAINS.indexOf('全紅白子') },
   /** 怎麼做（點卡片看）。 */
-  recipe: ['買全紅白子的母魚和紅蛇王的公魚', '等小魚長大，挑兄妹配一窩', '孫代裡找紅眼睛的蛇紋公魚'],
+  recipe: ['買紅蛇王（帶白子）公魚，配全紅白子母魚', '等第一窩：紅眼睛又有蛇紋的，就是白子紅蛇王', '留下夢想魚，一代一代配，固定你的品系'],
+} as const;
+
+/**
+ * 夢想魚一鍵買的紅蛇王公魚固定挑帶白子基因的（strain-fixing.md §6）：開獎那窩就有夢想魚，
+ * 不然店裡的紅蛇王多半不帶白子，要到孫代才有。比一般的紅蛇王貴兩成；一般的照常賣。
+ */
+export const DREAM_MALE = {
+  strain: DREAM_FISH.parents.male,
+  name: `${GUPPY_STRAINS[DREAM_FISH.parents.male]}（帶白子）`,
+  price: Math.round(GUPPY_STRAIN_PRICES[DREAM_FISH.parents.male] * 1.2),
 } as const;
 
 export type DreamStepId = 'tank' | 'brood' | 'bred' | 'fixed';
@@ -29,7 +39,7 @@ export type DreamStepId = 'tank' | 'brood' | 'bred' | 'fixed';
 /** 穩定度到多少 % 算品系完成（路線第 4 步、「品系完成」里程碑；strain-fixing.md §5）。 */
 export const LINE_FIXED_PCT = 75;
 /** 穩定度第一次到多少 % 出 C18 取名（初步固定；strain-fixing.md §5）。 */
-export const LINE_NAME_PCT = 50;
+export const LINE_NAME_PCT = 40;
 /** 品系名最多幾個字。 */
 export const LINE_NAME_MAX = 8;
 

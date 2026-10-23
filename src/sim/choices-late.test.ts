@@ -806,7 +806,7 @@ describe('固定品系：C17 誰配誰、C19 引進新血（strain-fixing.md §2
   });
 });
 
-describe('固定品系：C18 取名（穩定度 50%）和品系完成（75%）（strain-fixing.md §5，#344）', () => {
+describe('固定品系：C18 取名（穩定度 40%）和品系完成（75%）（strain-fixing.md §5、§7，#344、#351）', () => {
   /** 開獎那窩（起點）加上下一代一窩 n 尾、k 尾夢想魚，出生滿 25 天。 */
   function named(n: number, k: number) {
     const ctx = latePair();
@@ -833,7 +833,7 @@ describe('固定品系：C18 取名（穩定度 50%）和品系完成（75%）�
     return { ...ctx, kids, first };
   }
 
-  it('穩定度第一次 ≥ 50% 出 C18：預設「自家系」，字詞檢查不過不收；取了名之後品系的夢想魚都掛名牌', () => {
+  it('穩定度第一次 ≥ 40% 出 C18：預設「自家系」，字詞檢查不過不收；取了名之後品系的夢想魚都掛名牌', () => {
     const { tanks, st, kids } = named(8, 5);
     expect(st.line!.broods[1]).toMatchObject({ n: 8, k: 5, told: true });
     const c = takeChoice(tanks)!;
@@ -855,8 +855,8 @@ describe('固定品系：C18 取名（穩定度 50%）和品系完成（75%）�
     expect(takeChoice(tanks)?.id).not.toBe('C18');
   });
 
-  it('還沒到 50% 不出；選晚點再取，過幾天再問', () => {
-    const low = named(10, 4);
+  it('還沒到 40% 不出；選晚點再取，過幾天再問', () => {
+    const low = named(10, 3);
     expect(takeChoice(low.tanks)?.id).not.toBe('C18');
     const { tanks, st } = named(8, 6);
     expect(takeChoice(tanks)?.id).toBe('C18');

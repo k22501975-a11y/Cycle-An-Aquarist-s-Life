@@ -1,4 +1,4 @@
-import { DREAM_FISH, LINE_FIXED_PCT, LINE_NAME_MAX, LINE_NAME_PCT, stabilityPct } from './dream';
+import { DREAM_FISH, DREAM_MALE, LINE_FIXED_PCT, LINE_NAME_MAX, LINE_NAME_PCT, stabilityPct } from './dream';
 import { addFish, setHeaterTarget, waterChange } from './actions';
 import { temperatureFactor } from './chemistry';
 import { buybackRefusal, economy, FISH_PRICES, FRY_BAG, fishBuybackPrice, isFrySale, keeperRefusal, MAX_KEEPERS, PRICES, sellFish, sellsLeftToday, setKeeper, spend } from './economy';
@@ -250,12 +250,16 @@ export interface ChoiceState {
 /** 品系的一窩：媽媽、出生時間、幾尾、幾尾是夢想魚、第幾代。 */
 export interface LineBrood {
   momId: number;
+  /** 爸爸是哪尾（舊存檔、店裡買來就懷孕的沒有）。 */
+  dadId?: number;
   born: number;
   n: number;
   k: number;
   gen: number;
+  albino?: boolean;
   snake?: boolean;
   told?: boolean;
+  sexing?: boolean;
 }
 
 /** 卡出過、玩家沒選，隔幾天再出一次。 */
@@ -769,6 +773,8 @@ export const BELLY_MILESTONES = [
   { key: 'dark', at: 0.7 },
   { key: 'eyes', at: BOX_DUE },
 ] as const;
+/** 品系下一代懷孕前段的里程碑（開獎那窩有 C15 開獎準備，之後的每代沒有）。 */
+const LINE_BELLY = { key: 'round', at: 0.3 } as const;
 /** C14 問過之後，隔幾天還是很擠再問一次；超過建議量（加強版）隔 CROWD_FULL_REASK_DAYS 天。 */
 const CROWD_REASK_DAYS = 7;
 const CROWD_FULL_REASK_DAYS = 2;
@@ -852,9 +858,10 @@ function worstKeeper(tanks: TankState[], s: Readonly<ChoiceState>, nu: Fish): { 
 }
 
 /** C12 的第二尾母魚：別的留種母魚裡，配指定公魚機率最高的。 */
-function secondMom(tanks: TankState[], mom: Fish, dad: Fish): { fish: Fish; tank: number } | null {
+function secondMom(tanks: TankState[], mom: Fish, dad: Fish, line = false): { fish: Fish; tank: number } | null {
   const cands = located(tanks).filter(({ fish }) => fish.keeper && fish.id !== mom.id && fish.sex === 'female' && fish.species === 'guppy' && fish.genome && !fish.listing);
-  return cands.sort((a, b) => pairDream(b.fish.genome!, dad.genome!) - pairDream(a.fish.genome!, dad.genome!))[0] ?? null;
+  const odds = (f: Fish) => (line ? dreamShare(f.genome!, dad.genome!) : pairDream(f.genome!, dad.genome!));
+  return cands.sort((a, b) => odds(b.fish) - odds(a.fish))[0] ?? null;
 }
 
 /** C12 輪流的第二尾公魚：可以當種魚的公魚裡（留種的優先），配這尾母魚機率最高的。 */
@@ -883,7 +890,9 @@ function shopBatch(tanks: TankState[], tank: number): Fish[] {
   const vol = t.equipment.tank.volumeL;
   let over = (crowdingRatio(t) - CROWD_SELL_TO) * vol;
   const sires = sireIds(choiceState(tanks));
-  const spare = new Set([...dreamSpares(tanks), ...(choiceState(tanks).lineKeep ?? [])]);
+  // 品系候選和其他有夢想魚基因的加起來最多留 DREAM_SPARE 尾（品系候選優先），缸才不會一直爆
+  const line = choiceState(tanks).lineKeep ?? [];
+  const spare = new Set([...line, ...[...dreamSpares(tanks)].filter((id) => !line.includes(id)).slice(0, Math.max(0, DREAM_SPARE - line.length))]);
   // 育幼盒裡的小魚也撈出來賣（盒子也在同一缸水裡）
   const cands = t.fish.filter((f) => !buybackRefusal(f, true) && !spare.has(f.id) && !sires.includes(f.id));
   const out: Fish[] = [];
@@ -1374,8 +1383,13 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       const plan = s.planDone ? 'standard' : (s.plan ?? 'standard');
       const wait = Math.max(planMatureDays(t, p.mom, plan), planMatureDays(t, p.dad, plan));
       if (wait > PAIR_PLAN_DAYS) return null;
-      const one = pairDream(p.mom.genome, p.dad.genome);
-      const mom2 = secondMom(tanks, p.mom, p.dad);
+      // 開獎之後（品系的下一代）看這一窩的穩定度：第二尾母魚差太多會拉低穩定度，就不推
+      const line = !!s.reveal?.done;
+      const odds = (m: GuppyGenome, d: GuppyGenome) => (line ? dreamShare(m, d) : pairDream(m, d));
+      const one = odds(p.mom.genome, p.dad.genome);
+      const mom2 = secondMom(tanks, p.mom, p.dad, line);
+      const two = mom2 ? odds(mom2.fish.genome!, p.dad.genome) : 0;
+      const recTwo = !!mom2 && (!line || two >= one - TAIL_TIE_PCT);
       const dad2 = secondDad(tanks, s, p.mom);
       // 配上（約 2 天）＋懷孕（孕期照水溫）
       const sp = FISH_SPECIES[p.mom.species].breeding!;
@@ -1390,9 +1404,9 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
         title: '種魚長大了，怎麼配？',
         owner: `配上之後大約 ${born} 天生（約第 ${dayOf(home.hours + born * 24)} 天）。`,
         options: [
-          ...(mom2 ? [{ key: 'two', label: '1 公配 2 母', outcome: `母魚壓力小，約 ${avgPct(one, pairDream(mom2.fish.genome!, p.dad.genome))}%`, recommended: true }] : []),
-          { key: 'one', label: '1 公配 1 母', outcome: `血統最單純，約 ${one}%`, recommended: !mom2 },
-          ...(dad2 ? [{ key: 'rotate', label: '2 尾公魚輪流', outcome: `看哪尾比較好，約 ${avgPct(one, pairDream(p.mom.genome, dad2.fish.genome!))}%` }] : []),
+          ...(mom2 ? [{ key: 'two', label: '1 公配 2 母', outcome: `母魚壓力小，約 ${avgPct(one, two)}%`, recommended: recTwo }] : []),
+          { key: 'one', label: '1 公配 1 母', outcome: `血統最單純，約 ${one}%`, recommended: !recTwo },
+          ...(dad2 ? [{ key: 'rotate', label: '2 尾公魚輪流', outcome: `看哪尾比較好，約 ${avgPct(one, odds(p.mom.genome, dad2.fish.genome!))}%` }] : []),
         ],
         motherId: p.mom.id,
         fatherId: p.dad.id,
@@ -1881,7 +1895,7 @@ function again(id: ChoiceId, tanks: TankState[], s: ChoiceState): boolean {
   if (id === 'C6') return moveAgain(tanks, s);
   if (id === 'C9' || id === 'C10' || id === 'C13') return true;
   // 每一代的候選看得出公母都問一次；C19 近交係數每再多 INBREEDING_STEP 再問
-  if (id === 'C17') return lineGen(s) !== s.c17Gen;
+  if (id === 'C17') return lineGen(s) !== s.c17Gen || pairLost(tanks, s);
   // 晚點再取：隔幾天再問，取了名就不再問
   if (id === 'C18') return !s.lineNamed;
   if (id === 'C19') return true;
@@ -1903,7 +1917,7 @@ function lateHousekeeping(tanks: TankState[], s: ChoiceState): void {
   const keep = [...lineCandidates(tanks, s)];
   if (keep.length > 0 || s.lineKeep) s.lineKeep = keep;
   // 換了一對（C17、C19）：那對的母魚生了下一窩，這一代的分開養就結束
-  if (s.nextGen !== undefined && s.pair && s.line?.broods.some((b) => b.momId === s.pair![0] && b.born >= s.nextGen!)) delete s.nextGen;
+  if (s.nextGen !== undefined && s.pair && s.line?.broods.some((b) => b.momId === s.pair![0] && (b.dadId === undefined || b.dadId === s.pair![1]) && b.born >= s.nextGen!)) delete s.nextGen;
   if (splitting(s)) splitMove(tanks, s);
   crowdHousekeeping(tanks, s);
   if (s.pregPlan !== undefined) {
@@ -1972,21 +1986,30 @@ export function takeBellyNotes(tanks: TankState[]): Array<{ fishId: number; text
     out.push({ fishId: p.mom.id, text: `因為${s.sickCause === 'ich' ? '白點' : '生病'}，配對晚了約 ${s.sickDays} 天` });
   }
   const r = s.reveal;
-  if (!r || r.done || r.momId !== p.mom.id) return out;
+  // 開獎那窩；之後 C17、C19 換了一對、等這對的下一代那段也一樣（strain-fixing.md §2.1「懷孕期間同 midgame §6.4」）
+  const line = !!r?.done && s.nextGen !== undefined && p.mom.sire?.id === p.dad.id;
+  if (!r || (!line && (r.done || r.momId !== p.mom.id))) return out;
+  const since = line ? s.nextGen! : r.hours;
   const seen = (s.milestoneSeen ??= []);
-  for (const m of BELLY_MILESTONES) {
-    const key = `${r.momId}@${Math.round(r.hours)}:${m.key}`;
+  // 品系的下一代沒有開獎準備（C15），懷孕前段多一句肚子圓起來了
+  for (const m of line ? [LINE_BELLY, ...BELLY_MILESTONES] : BELLY_MILESTONES) {
+    const key = `${p.mom.id}@${Math.round(since)}:${m.key}`;
     if (p.mom.pregnancy < m.at || seen.includes(key)) continue;
     seen.push(key);
-    out.push({ fishId: p.mom.id, text: m.key === 'dark' ? `${callName(p.mom)}的胎斑變大、變黑了` : '胎斑裡看得到小魚的眼睛了！快生了' });
+    const text = m.key === 'round' ? `${callName(p.mom)}的肚子圓起來了，下一代懷上了` : m.key === 'dark' ? `${callName(p.mom)}的胎斑變大、變黑了` : '胎斑裡看得到小魚的眼睛了！快生了';
+    out.push({ fishId: p.mom.id, text });
   }
   return out;
 }
 
+/** 小魚出生幾天後看得出紅眼睛（白子里程碑）。 */
+export const ALBINO_DAYS = 5;
 /** 小魚出生幾天後蛇紋看得出來（蛇紋里程碑）。 */
 export const SNAKE_DAYS = 20;
 /** 出生幾天後算得出穩定度（公母、蛇紋都看得出來，出穩定度卡）。 */
 export const STABILITY_DAYS = 25;
+/** 出生幾天後說一次長得怎樣（穩定度卡到挑下一代 C17 之間的空檔，strain-fixing.md §2.1）。 */
+export const SEXING_DAYS = 31;
 
 /** 品系的媽媽：開獎那尾、現在留種那對的母魚、輪流配的第二尾母魚。 */
 function lineMoms(s: Readonly<ChoiceState>): number[] {
@@ -1994,13 +2017,28 @@ function lineMoms(s: Readonly<ChoiceState>): number[] {
   return [...new Set([s.reveal.momId, ...(s.pair ? [s.pair[0]] : []), ...(s.mates ?? [])])];
 }
 
-/** 這尾媽媽生的那窩算第幾代：她自己出生的那窩下一代；開獎的媽媽（店裡買的）生的是第 1 代。 */
-function broodGen(tanks: TankState[], broods: readonly LineBrood[], momId: number): number {
-  const own = broods.find((b) => b.momId === momId);
-  if (own) return own.gen;
-  const mom = located(tanks).find(({ fish }) => fish.id === momId)?.fish;
-  const from = mom && broods.find((b) => b.momId === mom.motherId && mom.bornHours !== undefined && Math.abs(b.born - mom.bornHours) < 24);
-  return from ? from.gen + 1 : 1;
+/** 這尾魚是品系的第幾代：品系記過的那窩生的就是那窩的代數，店裡買的、品系以外的是 0。 */
+function fishGen(fish: Fish | undefined, broods: readonly LineBrood[]): number {
+  if (!fish || fish.motherId === undefined || fish.bornHours === undefined) return 0;
+  return broods.find((b) => b.momId === fish.motherId && Math.abs(b.born - fish.bornHours!) < 24)?.gen ?? 0;
+}
+
+/** 這窩算第幾代：爸媽裡代數比較大的那尾的下一代（開獎那窩爸媽都是店裡買的，是第 1 代；兒子配媽媽也是下一代）。 */
+function broodGen(tanks: TankState[], broods: readonly LineBrood[], momId: number, dadId: number | undefined): number {
+  const fish = located(tanks).map(({ fish }) => fish);
+  const mom = fish.find((f) => f.id === momId);
+  const dad = dadId === undefined ? undefined : fish.find((f) => f.id === dadId);
+  // 媽媽之前生過、這次找不到爸爸：至少跟她上一窩同一代
+  const own = broods.filter((b) => b.momId === momId && (dadId === undefined || b.dadId === dadId)).map((b) => b.gen);
+  return Math.max(fishGen(mom, broods) + 1, fishGen(dad, broods) + 1, ...(dad ? [] : own));
+}
+
+/** 這尾公魚是不是品系的魚：品系生的、開獎那窩的爸爸、現在留種的、輪流配的。品系的媽媽配到別的公魚，那窩不算品系。 */
+function lineDad(tanks: TankState[], s: Readonly<ChoiceState>, dadId: number | undefined): boolean {
+  const broods = s.line?.broods ?? [];
+  if (dadId === undefined || broods.length === 0) return true;
+  if (broods[0].dadId === dadId || s.pair?.[1] === dadId || (s.sires ?? []).includes(dadId)) return true;
+  return fishGen(located(tanks).find(({ fish }) => fish.id === dadId)?.fish, broods) > 0;
 }
 
 /** 記下品系新出生的一窩（出生那天就記，之後賣掉、挑掉都不影響這窩的穩定度）。 */
@@ -2014,11 +2052,13 @@ function noteLineBroods(tanks: TankState[], s: ChoiceState): void {
     const key = `${fish.motherId}@${Math.floor(fish.bornHours / 24)}`;
     groups.set(key, [...(groups.get(key) ?? []), fish]);
   }
-  for (const kids of groups.values()) {
+  const fresh = [...groups.values()].map((kids) => ({ kids, born: Math.min(...kids.map((f) => f.bornHours!)) })).sort((a, b) => a.born - b.born);
+  for (const { kids, born } of fresh) {
     const momId = kids[0].motherId!;
-    const born = Math.min(...kids.map((f) => f.bornHours!));
+    const dadId = kids.find((f) => f.fatherId !== undefined)?.fatherId;
     if (line.broods.some((b) => b.momId === momId && Math.abs(b.born - born) < 24)) continue;
-    line.broods.push({ momId, born, n: kids.length, k: kids.filter((f) => isDreamLook(f.genome!)).length, gen: broodGen(tanks, line.broods, momId) });
+    if (!lineDad(tanks, s, dadId)) continue;
+    line.broods.push({ momId, ...(dadId !== undefined ? { dadId } : {}), born, n: kids.length, k: kids.filter((f) => isDreamLook(f.genome!)).length, gen: broodGen(tanks, line.broods, momId, dadId) });
   }
 }
 
@@ -2035,6 +2075,13 @@ export function takeLineNotes(tanks: TankState[]): Array<{ fishId: number; text:
   for (const [i, b] of broods.entries()) {
     const age = (now - b.born) / 24;
     const kids = located(tanks).filter(({ fish }) => fish.motherId === b.momId && fish.bornHours !== undefined && Math.abs(fish.bornHours - b.born) < 24 && fish.genome);
+    // 開獎那窩開獎卡已經亮過；之後的每窩出生一週說一次有幾尾紅眼睛
+    if (!b.albino && age >= ALBINO_DAYS) {
+      b.albino = true;
+      const red = kids.filter(({ fish }) => phenotype(fish.genome!).albino);
+      // 舊存檔早就過了一週的那幾窩不補說
+      if (i > 0 && red.length > 0 && age < ALBINO_DAYS + 3) return [{ fishId: red[0].fish.id, text: `新的這窩小魚眼睛看得清楚了：${kids.length} 尾裡有 ${red.length} 尾是紅眼睛的白子。` }];
+    }
     if (!b.snake && age >= SNAKE_DAYS) {
       b.snake = true;
       const male = kids.map(({ fish }) => fish).sort((x, y) => Number(!!y.keeper) - Number(!!x.keeper)).find((f) => f.sex === 'male' && phenotype(f.genome!).snake);
@@ -2056,6 +2103,12 @@ export function takeLineNotes(tanks: TankState[]): Array<{ fishId: number; text:
         return [{ fishId, stability: pct, done: true, text: `${s.lineNamed.name}這窩有 ${pct}% 是${DREAM_FISH.name}，品系完成了！指定的客人出價會高一半。` }];
       }
       return [{ fishId, stability: pct, text: `這窩 ${b.n} 尾裡，${b.k} 尾是${DREAM_FISH.name}，穩定度 ${pct}%${more}。${tail}` }];
+    }
+    if (b.told && !b.sexing && age >= SEXING_DAYS) {
+      b.sexing = true;
+      const dream = kids.map(({ fish }) => fish).filter((f) => isDreamLook(f.genome!));
+      // 舊存檔早就過了的那幾窩不補說
+      if (i > 0 && dream.length > 0 && age < SEXING_DAYS + 3) return [{ fishId: dream[0].id, text: `新的這窩${DREAM_FISH.name}越長越大，快可以挑下一代的爸媽了。` }];
     }
   }
   // 取名之前那窩就已經 ≥ LINE_FIXED_PCT：取了名之後的早上說品系完成
@@ -2125,6 +2178,15 @@ function splitting(s: Readonly<ChoiceState>): boolean {
   return s.picked.C11 === 'split' && (!s.reveal?.done || s.nextGen !== undefined);
 }
 
+/** 留種那對有一尾不在了（死了、賣了），而且母魚肚子裡也不是這對的小孩：品系要重挑一對（C17 再問）。 */
+function pairLost(tanks: TankState[], s: Readonly<ChoiceState>): boolean {
+  if (!s.pair || !s.reveal?.done) return false;
+  const alive = (id: number) => located(tanks).find(({ fish }) => fish.id === id && fish.alive)?.fish;
+  const mom = alive(s.pair[0]);
+  if (mom && alive(s.pair[1])) return false;
+  return !(mom && mom.pregnancy > 0 && mom.sire?.id === s.pair[1]);
+}
+
 /** 品系最新的一代（開獎那窩是 1）；還沒開獎回 0。 */
 function lineGen(s: Readonly<ChoiceState>): number {
   return Math.max(0, ...(s.line?.broods ?? []).map((b) => b.gen));
@@ -2151,6 +2213,9 @@ function dreamShare(mother: GuppyGenome, father: GuppyGenome): number {
   return Math.round((n / DREAM_SAMPLES) * 100);
 }
 
+/** 爸媽有沒有一尾帶 X 蛇紋（母魚任一條 X、公魚那條 X）。 */
+const carriesX = (mother: GuppyGenome, father: GuppyGenome) => mother.snakeX.includes(1) || father.snakeX[0] === 1;
+
 /** 這對的小魚的近交係數（照模擬生小魚的算法：同一條血統才算近親）。 */
 function pairInbreeding(mom: Fish, dad: Fish): number {
   return childInbreeding(mom.inbreeding ?? 0, dad.inbreeding ?? 0, (dad.lineage ?? dad.id) === (mom.lineage ?? mom.id));
@@ -2167,6 +2232,20 @@ interface LinePair {
   buy?: { sex: 'male' | 'female'; strain: number; price: number };
   pct: number;
   inbreeding: number;
+  /** 爸媽有沒有帶 X 染色體上的蛇紋：都沒帶的話，往下只有公魚有蛇紋，穩定度最多一半。 */
+  x: boolean;
+  /** 爸媽尾鰭分數的平均（店裡的新魚照店裡的平均）。 */
+  tail: number;
+}
+
+/** C17 比例差這麼多以內，挑尾鰭好的那組（strain-fixing.md §7）。 */
+const TAIL_TIE_PCT = 5;
+
+/** 挑一組：先保住 X 蛇紋，比例最高的那組差 TAIL_TIE_PCT 以內的裡面挑尾鰭好的。 */
+function pickPair<T extends LinePair>(list: readonly T[]): T | null {
+  const keep = list.some((o) => o.x) ? list.filter((o) => o.x) : list;
+  const top = Math.max(...keep.map((o) => o.pct));
+  return [...keep].filter((o) => o.pct >= top - TAIL_TIE_PCT).sort((a, b) => b.tail - a.tail || b.pct - a.pct || a.inbreeding - b.inbreeding)[0] ?? null;
 }
 
 /**
@@ -2182,9 +2261,7 @@ function linePairs(tanks: TankState[], s: Readonly<ChoiceState>, anySex = false)
   const females = cands.filter(({ fish }) => fish.sex === 'female').map(({ fish }) => fish);
   if (anySex ? cands.length === 0 : males.length === 0 || females.length === 0) return null;
   const best = (pairs: Array<[Fish, Fish]>, key: LinePair['key']): LinePair | null =>
-    pairs
-      .map(([mom, dad]) => ({ key, mom, dad, pct: dreamShare(mom.genome!, dad.genome!), inbreeding: pairInbreeding(mom, dad) }))
-      .sort((a, b) => b.pct - a.pct || a.inbreeding - b.inbreeding)[0] ?? null;
+    pickPair(pairs.map(([mom, dad]) => ({ key, mom, dad, pct: dreamShare(mom.genome!, dad.genome!), inbreeding: pairInbreeding(mom, dad), x: carriesX(mom.genome!, dad.genome!), tail: (mom.genome!.tail + dad.genome!.tail) / 2 })));
   const pairs: LinePair[] = [];
   const sib = best(females.flatMap((f) => males.map((m) => [f, m] as [Fish, Fish])), 'sib');
   if (sib) pairs.push(sib);
@@ -2195,22 +2272,26 @@ function linePairs(tanks: TankState[], s: Readonly<ChoiceState>, anySex = false)
     if (back) pairs.push(back);
   }
   // 配店裡的新魚：候選母魚配紅蛇王公魚，或候選公魚配全紅白子母魚（夢想魚配方的兩個品系），挑比例高的
+  // 公魚買帶白子的紅蛇王（跟夢想魚一鍵買同一種，DREAM_MALE）：配回來的下一代才有白子
   const store = (sex: 'male' | 'female') => {
-    const strain = sex === 'male' ? DREAM_FISH.parents.male : DREAM_FISH.parents.female;
+    if (sex === 'male') return { genome: { ...typicalStoreGenome(sex, DREAM_MALE.strain), albino: [0, 1] as [0, 1] }, buy: { sex, strain: DREAM_MALE.strain, price: DREAM_MALE.price } };
+    const strain = DREAM_FISH.parents.female;
     return { genome: typicalStoreGenome(sex, strain), buy: { sex, strain, price: GUPPY_STRAIN_PRICES[strain] ?? FISH_PRICES.guppy } };
   };
-  const fresh = [
-    ...females.map((mom) => ({ key: 'new' as const, mom, buy: store('male').buy, pct: dreamShare(mom.genome!, store('male').genome), inbreeding: (mom.inbreeding ?? 0) / 2 })),
-    ...males.map((dad) => ({ key: 'new' as const, dad, buy: store('female').buy, pct: dreamShare(store('female').genome, dad.genome!), inbreeding: (dad.inbreeding ?? 0) / 2 })),
-  ].sort((a, b) => b.pct - a.pct)[0];
+  const buys = [
+    ...females.map((mom) => ({ key: 'new' as const, mom, buy: store('male').buy, pct: dreamShare(mom.genome!, store('male').genome), inbreeding: (mom.inbreeding ?? 0) / 2, x: carriesX(mom.genome!, store('male').genome), tail: (mom.genome!.tail + store('male').genome.tail) / 2 })),
+    ...males.map((dad) => ({ key: 'new' as const, dad, buy: store('female').buy, pct: dreamShare(store('female').genome, dad.genome!), inbreeding: (dad.inbreeding ?? 0) / 2, x: carriesX(store('female').genome, dad.genome!), tail: (dad.genome!.tail + store('female').genome.tail) / 2 })),
+  ];
+  const fresh = pickPair(buys);
   if (fresh) pairs.push(fresh);
   const tank = cands[0].tank;
   return pairs.length >= 2 ? { pairs, cands, tank } : null;
 }
 
-/** C17 推薦：近交係數 < INBREEDING_LIMIT 推比例最高的那組，到了改推配新魚（買不起就照比例）。 */
+/** C17 推薦：近交係數 < INBREEDING_LIMIT 推保得住 X 蛇紋、比例最高的那組，到了改推配新魚（買不起就照比例）。 */
 function recommendedPair(o: { pairs: LinePair[] }, coins: number): LinePair {
-  const near = o.pairs.filter((x) => x.key !== 'new').sort((a, b) => b.pct - a.pct)[0];
+  // 先保住 X 蛇紋（不然穩定度卡在一半），比例差不多的挑尾鰭好的
+  const near = pickPair(o.pairs.filter((x) => x.key !== 'new'));
   const fresh = o.pairs.find((x) => x.key === 'new');
   if (fresh && (!near || near.inbreeding >= INBREEDING_LIMIT) && coins >= fresh.buy!.price) return fresh;
   return near ?? o.pairs[0];
@@ -2225,7 +2306,7 @@ function takeLinePair(tanks: TankState[], s: ChoiceState, o: LinePair, at: numbe
   if (o.buy) {
     if (economy(tanks[0]).coins < o.buy.price) return `錢不夠：要 ${o.buy.price} 元`;
     if (!spend(tanks[0], o.buy.price)) return `錢不夠：要 ${o.buy.price} 元`;
-    const f = addFish(tanks[to], 'guppy', { sex: o.buy.sex, strain: o.buy.strain, carriesIch: false, carries: [], pregnant: false });
+    const f = addFish(tanks[to], 'guppy', { sex: o.buy.sex, strain: o.buy.strain, carriesIch: false, carries: [], pregnant: false, albinoCarrier: o.buy.sex === 'male' });
     if (o.buy.sex === 'male') dad = f;
     else mom = f;
   }
@@ -2470,7 +2551,7 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
       const p = pairFish(tanks, s);
       if (!p?.mom.genome || !p.dad.genome) return '留種的那對不在了';
       if (key === 'two') {
-        const m2 = secondMom(tanks, p.mom, p.dad);
+        const m2 = secondMom(tanks, p.mom, p.dad, !!s.reveal?.done);
         if (!m2) return '沒有別的留種母魚';
         if (m2.tank !== p.tank) moveFish(tanks[m2.tank], tanks[p.tank], m2.fish.id);
         s.mates = [m2.fish.id];

@@ -1,4 +1,4 @@
-import { DREAM_FISH, type PreviewKid } from '../sim';
+import { DREAM_FISH, LINE_FIXED_PCT, LINE_NAME_PCT, type PreviewKid } from '../sim';
 import { h } from './dom';
 import { keeperRibbon } from './keeper-ribbon';
 import { dotsOn, kidArt } from './pair-preview-card';
@@ -50,6 +50,8 @@ export interface PairCandidate {
   fins: string[];
   /** 這對配下去，孫代出現夢想魚的機率（%）。 */
   dreamPct: number;
+  /** 這對直接生得出夢想魚（不用等孫代）：機率和文字改寫「第一窩就有機會」。 */
+  direct?: boolean;
   /** 看得出來的特徵（guppyTraits）；有就畫成小圖示。 */
   traits?: Array<{ key: string; name: string }>;
   /** 和母魚配出來的小魚（previewPair 前 3 種）。 */
@@ -161,11 +163,11 @@ function dots(pct: number): HTMLElement {
 }
 
 /** 夢想魚機率的星星徽章：越高越亮。 */
-function dreamMeter(pct: number): HTMLElement {
+function dreamMeter(pct: number, direct = false): HTMLElement {
   const lit = pct >= 20 ? 3 : pct >= 8 ? 2 : pct > 0 ? 1 : 0;
   return h(
     `div.bc-dream${lit === 3 ? '.hot' : ''}`,
-    { title: `孫代出現${DREAM_FISH.name}約 ${pct}%` },
+    { title: direct ? `第一窩就有機會：${DREAM_FISH.name}約 ${pct}%` : `孫代出現${DREAM_FISH.name}約 ${pct}%` },
     h('span.bc-stars', { 'aria-hidden': 'true' }, ...[0, 1, 2].map((i) => h(`i${i < lit ? '.on' : ''}`, {}, '★'))),
     h('b', {}, `${pct}%`),
   );
@@ -257,7 +259,7 @@ export function sireCompareCard(mother: FishLook, candidates: PairCandidate[], o
       c.keeper ? keeperRibbon('bc-kid-ribbon') : null,
       h('div.bc-sire-pic', {}, sexBadge('male'), fishArt({ ...c, sex: 'male' }), lineTag(c.line)),
       c.traits ? h('span.bc-traits', {}, ...c.traits.map((t) => traitChip(t))) : null,
-      dreamMeter(c.dreamPct),
+      dreamMeter(c.dreamPct, c.direct),
       c.matureDays ? h('span.bc-wait', { title: `還要 ${c.matureDays} 天長大才能配` }, '⏳', h('b', {}, `${c.matureDays} 天`)) : null,
       h(
         'div.bc-kidstrip',
@@ -276,7 +278,7 @@ export function sireCompareCard(mother: FishLook, candidates: PairCandidate[], o
   return h(
     'div.bc.bc-sires.glass',
     {},
-    h('div.bc-head', {}, h('b', {}, '配哪一尾？'), h('small', {}, `★ 孫代出${DREAM_FISH.name}`)),
+    h('div.bc-head', {}, h('b', {}, '配哪一尾？'), h('small', {}, candidates.some((c) => c.direct) ? `★ 這窩就有機會出${DREAM_FISH.name}` : `★ 孫代出${DREAM_FISH.name}`)),
     h(
       'div.bc-sires-row',
       {},
@@ -589,10 +591,10 @@ export interface StrainNaming {
   maxLen: number;
 }
 
-/** 穩定度條上的兩條線（企劃 2026-10-23）：50% 初步固定（出 C18 取名）、75% 品系完成。 */
+/** 穩定度條上的兩條線（企劃 2026-10-23）：40% 初步固定（出 C18 取名，strain-fixing.md §7）、75% 品系完成。 */
 export const STABLE_MARKS: ReadonlyArray<{ at: number; label: string }> = [
-  { at: 50, label: '初步固定' },
-  { at: 75, label: '品系完成' },
+  { at: LINE_NAME_PCT, label: '初步固定' },
+  { at: LINE_FIXED_PCT, label: '品系完成' },
 ];
 /** 卡上最多排幾尾。 */
 export const NAMING_MAX = 24;
