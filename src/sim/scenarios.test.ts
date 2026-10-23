@@ -383,8 +383,8 @@ describe('疾病', () => {
     runDays(calm, 14);
     expect(calm.fish.some((f) => f.ich.stage !== 'none')).toBe(false);
     expect(calm.events.some((e) => e.type === 'ich_visible')).toBe(false);
-    // 加熱棒一天調高一天調低：24 小時內溫差超過 3°C
-    runDays(swing, 14, { onDay: (st, d) => setHeaterTarget(st, d % 2 === 0 ? 29 : 24) });
+    // 每兩天換一半 18°C 的冷水：24 小時內溫差超過 3°C（加熱棒調目標是慢慢走的，調高調低不會，#355）
+    runDays(swing, 14, { onDay: (st, d) => { if (d % 2 === 0) waterChange(st, 0.5, { tempC: 18 }); } });
     const spots = swing.events.filter((e) => e.type === 'ich_visible');
     expect(spots.length).toBeGreaterThan(0);
     expect(spots.every((e) => e.cause === 'temp_swing')).toBe(true);

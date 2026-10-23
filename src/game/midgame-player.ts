@@ -1,5 +1,5 @@
 import { newGameState } from './game';
-import { addFish, crowdingRatio, takeStoreFemales, addHardscape, buyPlant, buyTank, checkGoals, claimDaily, doseIchMedication, DREAM_FISH, economy, FISH_SPECIES, feed, fulfillOrder, HARDSCAPE, ICH_MED_WORKING, linkTanks, moveDueToNursery, orderBoard, orderSupply, PINCH_MEALS, setTankPurpose, splitTank, transferMedia, step, TICK_HOURS, updateDaily, useTestKit, waterChange, type TankState } from '../sim';
+import { addFish, crowdingRatio, takeStoreFemales, addHardscape, buyPlant, buyTank, checkGoals, claimDaily, doseIchMedication, DREAM_FISH, economy, FISH_SPECIES, feed, fulfillOrder, HARDSCAPE, ICH_MED_WORKING, ichHeatC, linkTanks, moveDueToNursery, orderBoard, orderSupply, PINCH_MEALS, setHeaterTarget, setTankPurpose, splitTank, transferMedia, step, TICK_HOURS, updateDaily, useTestKit, waterChange, type TankState } from '../sim';
 import { chooseOption, choiceState, tradeCheck, type ChoiceCard, type ChoiceId } from '../sim/choices';
 import { advanceQuest, currentQuest, newProgress } from '../ui/tutorial';
 import { morningLine } from '../ui/morning-card';
@@ -108,6 +108,8 @@ function run(seed: number, days: number, opts: { neglectCrowd?: boolean; onDay?:
     while (advanceQuest(p, s));
   };
   const out: MidgameNight[] = [];
+  /** 治白點調高水溫之前加熱棒設幾度。 */
+  const ichWarm = new Map<TankState, number>();
   for (let night = 1; night < days; night++) {
     updateDaily(tanks);
     simulateAll(tanks, 0.5);
@@ -128,8 +130,20 @@ function run(seed: number, days: number, opts: { neglectCrowd?: boolean; onDay?:
       const heater = t.equipment.heater;
       if (heater && (heater.stuckOn || heater.broken)) t.equipment.heater = { spec: heater.spec, targetC: heater.targetC, broken: false, heating: false };
     }
-    // 長白點就照任務卡下一份藥（#324：藥效中不再下）
-    for (const t of tanks) if (t.fish.some((f) => f.alive && f.ich.stage === 'visible') && t.water.medication < ICH_MED_WORKING) doseIchMedication(t);
+    // 長白點就照任務卡下一份藥（#324：藥效中不再下），藥效中再照任務卡把水溫調高；這缸白點都好了再調回去
+    for (const t of tanks) {
+      const heater = t.equipment.heater;
+      if (t.fish.some((f) => f.alive && f.ich.stage === 'visible')) {
+        if (t.water.medication < ICH_MED_WORKING) doseIchMedication(t);
+        else if (heater && heater.targetC < ichHeatC(t) - 0.5) {
+          if (!ichWarm.has(t)) ichWarm.set(t, heater.targetC);
+          setHeaterTarget(t, ichHeatC(t));
+        }
+      } else if (ichWarm.has(t) && !t.fish.some((f) => f.alive && f.ich.stage !== 'none')) {
+        if (heater && heater.targetC === ichHeatC(t)) setHeaterTarget(t, ichWarm.get(t)!);
+        ichWarm.delete(t);
+      }
+    }
     for (const t of tanks) {
       const r = useTestKit(t);
       if ((t === s && currentQuest(p)?.id === 'water') || r.ammonia > 0 || r.nitrite > 0) waterChange(t, 0.3);

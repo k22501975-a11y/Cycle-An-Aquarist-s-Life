@@ -1472,8 +1472,9 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       const noTank = buyTankRefusal(tanks, 'nano20');
       const noBig = buyTankRefusal(tanks, 'std90');
       // 推薦順序：停生 → 搬過去就不擠 → 賣一批就回到建議量以下 → 買缸、（超過建議量）換大缸 → 賣一點、搬一點 → 先多換水撐著
-      // 還沒超過建議量時，買了缸手上還有 CROWD_TANK_RESERVE 才推買缸（不然先換水撐著）
-      const tankOk = !noTank && (full || economy(home).coins - tankCost >= CROWD_TANK_RESERVE);
+      // 買了缸手上還有 CROWD_TANK_RESERVE 才推買缸（不然先換水撐著）；超過建議量時第二、三缸不看錢，
+      // 第四缸起一樣要留（後期一缸兩千多，賣魚很久賺不回來，strain-fixing.md §9）
+      const tankOk = !noTank && ((full && tanks.length < 3) || economy(home).coins - tankCost >= CROWD_TANK_RESERVE);
       const rec = recSplit ? 'split' : moveEnough ? 'move' : sellEnough ? 'sell' : tankOk ? 'tank' : full && big && !noBig ? 'big' : sell ? 'sell' : move ? 'move' : 'water';
       const recSell = rec === 'sell';
       const recMove = rec === 'move';

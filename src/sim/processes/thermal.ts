@@ -66,6 +66,22 @@ export function lightHeatC(state: TankState): number {
   return (light.spec.heatC ?? 0) * Math.cbrt(40 / state.equipment.tank.volumeL);
 }
 
+/** 調了加熱棒目標後，恆溫器每小時最多走幾度（一天約 2°C，升溫治白點、孕期加溫都不會一天差到 ICH_SWING_C）。 */
+export const HEATER_RAMP_C_PER_HOUR = 0.08;
+
+/** 恆溫器現在照的溫度：往 targetC 走 dt 小時，走到了就拿掉 setpointC。 */
+function heaterSetpoint(heater: NonNullable<TankState['equipment']['heater']>, dt: number): number {
+  if (heater.setpointC === undefined) return heater.targetC;
+  const step = HEATER_RAMP_C_PER_HOUR * dt;
+  const gap = heater.targetC - heater.setpointC;
+  if (Math.abs(gap) <= step) {
+    delete heater.setpointC;
+    return heater.targetC;
+  }
+  heater.setpointC += Math.sign(gap) * step;
+  return heater.setpointC;
+}
+
 export function updateTemperature(state: TankState, dt: number): void {
   const { water, equipment } = state;
   const volume = equipment.tank.volumeL;
@@ -79,9 +95,10 @@ export function updateTemperature(state: TankState, dt: number): void {
   const powered = !state.environment.powerOut;
   const level = waterLevelL(state) / volume;
   if (heater && !heater.broken && powered) {
-    // 恆溫器：低於目標 0.2°C 開，達到目標關。
-    if (water.tempC < heater.targetC - 0.2) heater.heating = true;
-    else if (water.tempC >= heater.targetC) heater.heating = false;
+    // 恆溫器：低於目標 0.2°C 開，達到目標關。調過目標時照慢慢走的 setpointC。
+    const set = heaterSetpoint(heater, dt);
+    if (water.tempC < set - 0.2) heater.heating = true;
+    else if (water.tempC >= set) heater.heating = false;
     // 新手期照樣擲骰（亂數順序不變），只是不會壞
     if (chance(state.rng, HEATER_FAILURE_PER_HOUR, dt) && state.hours >= NEWBIE_HEALTHY_DAYS * 24) breakHeater(state);
   }

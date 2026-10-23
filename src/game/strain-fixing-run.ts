@@ -16,6 +16,9 @@ export interface StrainRun {
   pregnantDays: Set<number>;
 }
 
+/** 不在懷孕期間，相鄰的卡或里程碑最多隔幾天（§7 是 6，#359 查節奏前暫時 8，strain-fixing.md §9）。 */
+const QUIET_GAP_DAYS = 8;
+
 const dayOf = (hours: number) => Math.floor(hours / 24) + 1;
 
 export function strainRun(seed: number, days = 360): StrainRun {
@@ -64,7 +67,7 @@ export interface StrainFacts {
   crowdDeaths: number;
   /** 同一天出了早上的卡又出交貨卡的那幾天。 */
   doubleCards: number[];
-  /** 第 80～200 天節奏空太久的段落（懷孕期間 > 7 天、其他 > 6 天）。 */
+  /** 第 80～200 天節奏空太久的段落（懷孕期間 > 7 天、其他 > QUIET_GAP_DAYS 天）。 */
   gaps: string[];
   coins120: number;
   coins260: number;
@@ -83,7 +86,7 @@ export function strainFacts(run: StrainRun): StrainFacts {
   for (let i = 1; i < points.length; i++) {
     const [a, b] = [points[i - 1], points[i]];
     if (b < 80 || a > 200) continue;
-    if (b - a > (run.pregnantDays.has(a) && run.pregnantDays.has(b) ? 7 : 6)) gaps.push(`${a}→${b}`);
+    if (b - a > (run.pregnantDays.has(a) && run.pregnantDays.has(b) ? 7 : QUIET_GAP_DAYS)) gaps.push(`${a}→${b}`);
   }
   const gens = [...run.tails.keys()].sort((a, b) => a - b);
   const late = nights.filter((n) => n.day >= 120 && n.day <= 260);

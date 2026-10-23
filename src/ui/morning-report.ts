@@ -215,8 +215,10 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
         push({ kind: 'plant_died', tone: 'warn', text: '有一株水草溶光了', action: 'trim' });
       }
     }
-    // 出生：一胎一條
-    const births = events.filter((x) => x.type === 'fry_born');
+    // 出生：一胎一條。夢想魚那窩由開獎卡說，不再說一次「昨晚生了 N 尾」；同一晚別尾母魚生的照說（#357）
+    const pending = choiceState(tanks).reveal;
+    const dreamMom = pending && !pending.done ? pending.momId : undefined;
+    const births = events.filter((x) => x.type === 'fry_born' && x.subjectId !== dreamMom);
     const born = births.reduce((n, e) => n + (e.count ?? 0), 0);
     if (born > 0) {
       const mother = allFish(t).find((f) => f.id === births[0].subjectId);
@@ -246,8 +248,6 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     if (grown.length > 0) push({ kind: 'grown', tone: 'good', text: `${grown.length} 尾小魚長大了，看得出公母`, action: 'fish', subjectId: grown[0].id, count: grown.length });
     // 缸裡真的發生的事（polish-to-9.md G8）：母魚肚子變大、出現胎斑；公魚追母魚
     // 夢想魚那窩的母魚由懷孕後段的里程碑說（takeBellyNotes）
-    const reveal = choiceState(tanks).reveal;
-    const dreamMom = reveal && !reveal.done ? reveal.momId : undefined;
     const mom = allFish(t).find((f) => {
       const was = snap.fish.get(f.id);
       return f.alive && f.sex === 'female' && f.id !== dreamMom && was && usesNursery(f.species) && bellyStage(f.pregnancy) > bellyStage(was.pregnancy);
@@ -367,8 +367,6 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   if (reveal) {
     const at = tanks.findIndex((t) => t.fish.some((f) => f.id === reveal.momId));
     items.push({ kind: 'reveal', tank: Math.max(0, at), tone: 'good', text: reveal.text, action: 'fish', subjectId: reveal.momId, count: reveal.fry.length, reveal: { dream: reveal.dream, fry: reveal.fry } });
-    // 同一窩不要再說一次「昨晚生了 N 尾」（#357）
-    for (let i = items.length - 1; i >= 0; i--) if (items[i].kind === 'birth' && items[i].subjectId === reveal.momId) items.splice(i, 1);
   }
   // C9 第二窩生了（midgame.md §5.2）：照玩家選的處理，和第一窩一起比
   const brood2 = takeSecondBrood(tanks);
