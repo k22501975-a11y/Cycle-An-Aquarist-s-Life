@@ -257,7 +257,8 @@ function computeDamage(state: TankState, fish: Fish, sp: FishSpecies): Damage[] 
 /** 早上報告、老闆說的白點病原因。 */
 export const ICH_CAUSE_LABELS: Record<IchCause, string> = {
   temp_swing: '一天內水溫差了 3°C 以上',
-  new_fish: '新魚沒先檢疫就放進缸裡，把白點蟲帶進來',
+  // 開局的魚也是店裡買的，教學沒教檢疫：寫成常見的事，不寫成玩家的錯（#324）
+  new_fish: '店裡買的魚常帶白點蟲進來，下次新魚可以先放檢疫缸',
   crowding: '魚太多，超過這缸的建議量',
 };
 

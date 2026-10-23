@@ -6,6 +6,7 @@ import { COLORING_AT, daysToLength, growthStage, maxLengthCm } from './growth';
 import { newTankCost } from './household';
 import { BELLY_SHOWS, daysToBirth, dueMothers } from './nursery';
 import { orderBoard, orderSupply } from './orders';
+import { temperatureFactor } from './chemistry';
 import { hasVisible } from './processes/disease';
 import { isShrimpSpecies } from './species';
 import type { Fish, TankState } from './state';
@@ -46,6 +47,36 @@ export interface NextStep {
 const living = (tanks: TankState[]) => tanks.flatMap((t) => t.fish.filter((f) => f.alive));
 /** 有魚看得出生病（白點、棉絮、鰓吸蟲）。 */
 const anySick = (tanks: TankState[]) => living(tanks).some((f) => f.ich.stage === 'visible' || hasVisible(f));
+
+/** 水裡的白點藥還有多少算「藥效中」（一份是 1，約一週退到這裡）。 */
+export const ICH_MED_WORKING = 0.25;
+/** 白點藥幾天見效最快的水溫範圍。 */
+export const ICH_HEAT_C = 29;
+
+/**
+ * 看得到的病只有白點、而且那幾缸水裡都還有藥：不用再下（#324）。回傳白點大約幾天會掉（照現在的水溫或加熱棒設的溫度，取高的），
+ * 和藥效還剩幾天。有別的病、或有一缸沒藥了回 null。
+ */
+export function ichTreatment(tanks: TankState[]): { days: number; medDays: number } | null {
+  const sick = tanks.map((t) => ({ t, fish: t.fish.filter((f) => f.alive && (f.ich.stage === 'visible' || hasVisible(f))) })).filter((x) => x.fish.length > 0);
+  if (sick.length === 0) return null;
+  if (sick.some(({ t, fish }) => t.water.medication < ICH_MED_WORKING || fish.some((f) => hasVisible(f)))) return null;
+  let days = 1;
+  let medDays = Infinity;
+  for (const { t, fish } of sick) {
+    const tf = temperatureFactor(Math.max(t.water.tempC, t.equipment.heater?.targetC ?? 0));
+    for (const f of fish) days = Math.max(days, Math.ceil(((1 - f.ich.progress) * 96) / tf / 24));
+    medDays = Math.min(medDays, Math.max(1, Math.floor(Math.log(t.water.medication / ICH_MED_WORKING) / 0.01 / 24)));
+  }
+  return { days, medDays };
+}
+
+/** 生病時的下一步：白點藥效中就叫玩家調水溫等，不要再叫下藥（#324）。 */
+function sickStep(tanks: TankState[]): Omit<NextStep, 'goal'> {
+  const ich = ichTreatment(tanks);
+  if (ich) return { text: `藥效中，水溫調到 28～30°C，約 ${ich.days} 天會好`, target: 'treat' };
+  return { text: '有魚生病了，去下藥', target: 'treat' };
+}
 const bredFry = (tanks: TankState[]) => living(tanks).filter((f) => (f.generation ?? 0) >= 1 && !isShrimpSpecies(f.species) && growthStage(f) === 'fry');
 
 /** 沒寫到的目標用的保底句。 */
@@ -135,7 +166,7 @@ function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
       return { text: `再存 ${need} 魚幣買第二個缸`, target: 'orders' };
     }
     case 'cure':
-      return anySick(tanks) ? { text: '有魚生病了，去下藥', target: 'treat' } : { text: '每天測水，魚生病就治好牠', target: 'test' };
+      return anySick(tanks) ? sickStep(tanks) : { text: '每天測水，魚生病就治好牠', target: 'test' };
     case 'shrimp':
       return living(tanks).some((f) => f.species === 'cherry_shrimp') ? { text: '顧好水質，等母蝦抱蛋', target: 'test' } : { text: '買幾隻米蝦，開個蝦缸', target: 'shop_fish' };
     case 'calm': {
@@ -164,6 +195,6 @@ export function nextStep(tanks: TankState[]): NextStep | null {
   const [goal] = nextGoals(tanks, 1);
   if (!goal || !tanks[0]) return null;
   // 生病不等人：不管現在是哪個目標，先叫玩家治療（體驗第 15 輪 #291：白點 5 天，下一步還在說母魚倒數）
-  if (anySick(tanks)) return { goal: goal.id, text: '有魚生病了，去下藥', target: 'treat' };
+  if (anySick(tanks)) return { goal: goal.id, ...sickStep(tanks) };
   return { goal: goal.id, ...stepFor(goal, tanks) };
 }

@@ -172,6 +172,8 @@ import {
   rinseFilterMedia,
   seasonName,
   setHeaterTarget,
+  ICH_HEAT_C,
+  ICH_MED_WORKING,
   topUp,
   unplugHeater,
   trimPlant,
@@ -1600,7 +1602,17 @@ function medicineRow({ game, sheet, toasts, undoable }: Pick<PanelContext, 'game
  * advice 是老闆看那尾魚說的病名和該下什麼藥；藥的按鈕跟設備面板同一排。
  */
 export function treatPanel(ctx: PanelContext, advice: string): Node {
-  return h('div.stack', {}, h('p.hint.treat-advice', {}, advice), medicineRow(ctx));
+  const s = ctx.game.state;
+  // 白點藥效中（#324）：加熱棒還沒調高的話，給一顆直接調到 29°C 的按鈕（藥在高溫下見效快）
+  const heat = s.water.medication >= ICH_MED_WORKING && s.equipment.heater && s.equipment.heater.targetC < 28;
+  const heatBtn = heat
+    ? button(`水溫調到 ${ICH_HEAT_C}°C`, () => {
+        ctx.game.act((st) => setHeaterTarget(st, ICH_HEAT_C));
+        ctx.toasts.show(`加熱棒調到 ${ICH_HEAT_C}°C，白點會掉得快一點`);
+        ctx.sheet.refresh();
+      }, 'primary')
+    : null;
+  return h('div.stack', {}, h('p.hint.treat-advice', {}, advice), heatBtn, medicineRow(ctx));
 }
 
 export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: PanelContext): Node {
