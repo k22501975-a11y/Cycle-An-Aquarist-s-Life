@@ -11,7 +11,7 @@ test('夢想魚路線與配一對看看', async ({ page }) => {
   await expect(strip).toContainText('養好缸');
   await strip.click(NO_WAIT);
   await expect(page.locator('.sheet.open .dream-name')).toContainText('白子紅蛇王');
-  await expect(page.locator('.sheet.open .dream-steps li')).toHaveCount(3);
+  await expect(page.locator('.sheet.open .dream-steps li')).toHaveCount(4);
 
   await tool(page, '商店');
   await page.locator('.sheet.open button.icon-tab', { hasText: '魚' }).click();
