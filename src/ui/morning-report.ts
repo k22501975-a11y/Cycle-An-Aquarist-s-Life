@@ -274,7 +274,8 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     if (grown.length > 0) push({ kind: 'grown', tone: 'good', text: `${grown.length} 尾小魚長大了，看得出公母`, action: 'fish', subjectId: grown[0].id, count: grown.length });
     // 缸裡真的發生的事（polish-to-9.md G8）：母魚肚子變大、出現胎斑；公魚追母魚
     // 夢想魚那窩的母魚由懷孕後段的里程碑說（takeBellyNotes）
-    const dreamMom = choiceState(tanks).reveal?.momId;
+    const reveal = choiceState(tanks).reveal;
+    const dreamMom = reveal && !reveal.done ? reveal.momId : undefined;
     const mom = allFish(t).find((f) => {
       const was = snap.fish.get(f.id);
       return f.alive && f.sex === 'female' && f.id !== dreamMom && was && usesNursery(f.species) && bellyStage(f.pregnancy) > bellyStage(was.pregnancy);

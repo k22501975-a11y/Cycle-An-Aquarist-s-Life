@@ -169,9 +169,15 @@ export interface ChoiceState {
    */
   secondBrood?: { momId: number; hours: number; prevKids: number; born?: number; fry?: number[]; choice?: string };
   /** C9 之後每一窩（#326）：問過、還沒生的（生了就照 choice 處理、拿掉）。選交單的小魚也記進 secondBrood.fry。 */
-  broodQueue?: Array<{ momId: number; hours: number; prevKids: number; choice: string }>;
+  broodQueue?: Array<{ momId: number; hours: number; prevKids: number; choice: string; preg?: number }>;
   /** C9 問過幾窩（第二次之後是「又快生了」的簡化版）。 */
   broods?: number;
+  /** C9 重複版上次選的時間（遊戲小時）：重複版 BROOD_AGAIN_GAP_DAYS 天內最多一張（midgame.md §6.5）。 */
+  broodPickedAt?: number;
+  /** C9 重複版連續選「照上次」幾次：BROOD_AUTO_AFTER 次之後不再跳卡，自動照上次。 */
+  sameStreak?: number;
+  /** 自動照上次處理的母魚（早上報告寫一行，寫過就拿掉）。 */
+  broodAutoNotes?: Array<{ momId: number; choice: string }>;
   /** C12 選了 2 尾公魚輪流：另一尾也是指定的爸爸（C11 分開養不會把牠搬走）。 */
   sires?: number[];
   /** C13 選了加活餌：哪尾母魚（生完就收掉活餌）。 */
@@ -214,6 +220,14 @@ export const FAST_TEMP_C = 27.5;
 export const SECOND_BROOD_SHOWS = 0.7;
 /** C9 第二次之後（簡化版）：懷孕到多少就問（比第一次早一點，肚子開始圓就問，跟前後的卡排得開）。 */
 export const BROOD_AGAIN_SHOWS = 0.6;
+/** C9 重複版（midgame.md §6.5）：這幾天內也會到 BROOD_AGAIN_SHOWS 的母魚合成一張卡。 */
+export const BROOD_GROUP_DAYS = 3;
+/** C9 重複版：上次選完幾天內又有母魚快生，就直接照上次，不跳卡。 */
+export const BROOD_AGAIN_GAP_DAYS = 7;
+/** C9 重複版：連續選幾次「照上次」之後就自動照做。 */
+export const BROOD_AUTO_AFTER = 2;
+/** C9 自動照上次時早上報告那一行的做法。 */
+const BROOD_AUTO_DO: Record<string, string> = { grow: '整窩留著長大', sell: '長到能交就照訂單交', keep: '生下來挑備用種魚' };
 /** C9 選「挑備用種魚」：最多挑幾尾（企劃：2～3 尾）。 */
 export const SECOND_BROOD_KEEP = 3;
 /** C9 卡上估交單的錢：一尾中魚單的價錢（orders.ts 中魚 40～55 元），一窩約一半長得到能交。 */
@@ -977,7 +991,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
     }
     case 'C9': {
       if (s.firstBrood === undefined) return null;
-      const mom = secondBroodMom(tanks, s);
+      const group = broodRepeat(s) ? broodMoms(tanks, s, BROOD_GROUP_DAYS) : broodMoms(tanks, s, 0).slice(0, 1);
+      const mom = group[0];
       if (!mom) return null;
       const coins = Math.round((FISH_SPECIES[mom.fish.species].breeding!.broodMean * mom.fish.health * 0.5 * JUVENILE_ORDER_PRICE) / 10) * 10;
       const options = broodOptions(coins);
@@ -987,8 +1002,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
         return {
           id,
           tank: mom.tank,
-          title: `${callName(mom.fish)}又快生了`,
-          owner: '照上次的處理，還是這次改一下？',
+          title: group.length > 1 ? `${group.length} 尾母魚這幾天快生了` : `${callName(mom.fish)}又快生了`,
+          owner: group.length > 1 ? '照上次的處理，還是這次改一下？選一次全部套用。' : '照上次的處理，還是這次改一下？',
           options: [{ ...last, key: 'same', label: `照上次：${last.label}`, recommended: true }, ...options.filter((o) => o !== last).map((o) => ({ ...o, recommended: false }))],
           motherId: mom.fish.id,
         };
@@ -1145,8 +1160,12 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
   }
 }
 
-/** C9：已經生過一窩、這一胎又快生了的孔雀魚母魚（肚子最大的那尾）。每一窩都問（#326）。 */
-function secondBroodMom(tanks: TankState[], s: Readonly<ChoiceState>): { fish: Fish; tank: number } | null {
+/**
+ * C9：已經生過一窩、這一胎又快生了的孔雀魚母魚。每一窩都問（#326）。
+ * C9 的母魚，肚子大的在前：懷孕到門檻的，加上 aheadDays 天內也會到的（重複版合成一張卡，midgame.md §6.5）。
+ * 沒有一尾到門檻就是空的。
+ */
+function broodMoms(tanks: TankState[], s: Readonly<ChoiceState>, aheadDays: number): Array<{ fish: Fish; tank: number }> {
   const all = located(tanks);
   // 留種那對的母魚，夢想魚配方那窩由 C15 問
   const dream = s.pair && !s.reveal?.done ? s.pair[0] : undefined;
@@ -1154,8 +1173,39 @@ function secondBroodMom(tanks: TankState[], s: Readonly<ChoiceState>): { fish: F
   const asked = [...(s.secondBrood && s.secondBrood.born === undefined ? [s.secondBrood.momId] : []), ...(s.broodQueue ?? []).map((b) => b.momId)];
   // 第一次問的是「第二窩」（生過的母魚）；之後每一窩都問，自家第一次當媽媽的也問
   const before = (f: Fish) => !!s.secondBrood || all.some((k) => k.fish.motherId === f.id);
-  const moms = all.filter(({ fish }) => fish.species === 'guppy' && fish.sex === 'female' && fish.id !== dream && !asked.includes(fish.id) && fish.pregnancy >= (s.secondBrood ? BROOD_AGAIN_SHOWS : SECOND_BROOD_SHOWS) && before(fish));
-  return moms.sort((a, b) => b.fish.pregnancy - a.fish.pregnancy)[0] ?? null;
+  const at = s.secondBrood ? BROOD_AGAIN_SHOWS : SECOND_BROOD_SHOWS;
+  const soon = at - aheadDays / FISH_SPECIES.guppy.breeding!.gestationDays;
+  const moms = all.filter(({ fish }) => fish.species === 'guppy' && fish.sex === 'female' && fish.id !== dream && !asked.includes(fish.id) && fish.pregnancy >= soon && before(fish));
+  moms.sort((a, b) => b.fish.pregnancy - a.fish.pregnancy);
+  return moms[0] && moms[0].fish.pregnancy >= at ? moms : [];
+}
+
+/** C9 已經是重複版（第一次選過了）。 */
+const broodRepeat = (s: Readonly<ChoiceState>) => !!s.secondBrood && !!s.picked.C9 && (s.broods ?? 0) >= 1;
+
+/** 記下這幾尾母魚這一胎照 choice 處理（生了由 takeSecondBrood 處理）。 */
+function queueBroods(tanks: TankState[], s: ChoiceState, moms: Array<{ fish: Fish }>, choice: string): void {
+  for (const mom of moms) {
+    const prevKids = located(tanks).filter(({ fish }) => fish.motherId === mom.fish.id).length;
+    const b = { momId: mom.fish.id, hours: tanks[0].hours, prevKids, choice, preg: mom.fish.pregnancy };
+    if (!s.secondBrood) s.secondBrood = b;
+    else (s.broodQueue ??= []).push(b);
+  }
+  s.broods = (s.broods ?? 0) + 1;
+}
+
+/**
+ * C9 重複版不跳卡、直接照上次（midgame.md §6.5）：連續選了 BROOD_AUTO_AFTER 次「照上次」，
+ * 或上次選完還不到 BROOD_AGAIN_GAP_DAYS 天。早上報告寫一行。
+ */
+function autoBrood(tanks: TankState[], s: ChoiceState): void {
+  if (!broodRepeat(s)) return;
+  const auto = (s.sameStreak ?? 0) >= BROOD_AUTO_AFTER || (s.broodPickedAt !== undefined && tanks[0].hours - s.broodPickedAt < BROOD_AGAIN_GAP_DAYS * 24);
+  if (!auto) return;
+  const moms = broodMoms(tanks, s, 0);
+  if (moms.length === 0) return;
+  queueBroods(tanks, s, moms, s.picked.C9!);
+  for (const m of moms) (s.broodAutoNotes ??= []).push({ momId: m.fish.id, choice: s.picked.C9! });
 }
 
 /** C9 第二窩生了的報告（早上報告的比較卡用）。 */
@@ -1184,6 +1234,13 @@ export function takeSecondBrood(tanks: TankState[]): SecondBroodNews | null {
   let b: { momId: number; prevKids: number; choice: string } | null = null;
   let fry: ReturnType<typeof fryOf> = [];
   let again = false;
+  // 問過的那胎沒生出小魚就結束了（流產、小魚當晚被吃光、母魚不在了）：收掉，這尾母魚下一胎還會再問
+  const over = (x: { momId: number; preg?: number }) => {
+    const mom = located(tanks).find(({ fish }) => fish.id === x.momId)?.fish;
+    return !mom || mom.pregnancy < (x.preg ?? BROOD_AGAIN_SHOWS);
+  };
+  if (sb.born === undefined && fryOf(sb).length === 0 && over(sb)) sb.born = 0;
+  if (s.broodQueue) s.broodQueue = s.broodQueue.filter((x) => fryOf(x).length > 0 || !over(x));
   if (sb.born === undefined && (fry = fryOf(sb)).length > 0) {
     sb.born = fry.length;
     b = { ...sb, choice: sb.choice ?? s.picked.C9 ?? 'grow' };
@@ -1298,6 +1355,7 @@ function lateHousekeeping(tanks: TankState[], s: ChoiceState): void {
   boxDue(tanks, s);
   noteSickDelay(tanks, s);
   scanBetter(tanks, s);
+  autoBrood(tanks, s);
 }
 
 /** C15 選了等快生再放：快生了就把母魚放進那缸的育幼盒（盒裡放得出去的小魚先放出去）。 */
@@ -1332,6 +1390,11 @@ export function takeBellyNotes(tanks: TankState[]): Array<{ fishId: number; text
   const s = choiceState(tanks);
   const p = pairFish(tanks, s);
   const out: Array<{ fishId: number; text: string }> = [];
+  // C9 自動照上次（midgame.md §6.5）：點這一行打開母魚的魚卡
+  for (const n of s.broodAutoNotes?.splice(0) ?? []) {
+    const mom = located(tanks).find(({ fish }) => fish.id === n.momId)?.fish;
+    if (mom) out.push({ fishId: mom.id, text: `${callName(mom)}快生了，照你的設定${BROOD_AUTO_DO[n.choice] ?? '處理'}` });
+  }
   if (!p) return out;
   if (!s.sickNoted && (s.sickDays ?? 0) > 0 && p.mom.pregnancy > 0) {
     s.sickNoted = true;
@@ -1501,15 +1564,17 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
     }
     case 'C9': {
       // 簡化版的「照上次」
-      if (key === 'same' && s.picked.C9) key = s.picked.C9;
+      const repeat = broodRepeat(s);
+      const same = key === 'same' && !!s.picked.C9;
+      if (same) key = s.picked.C9!;
       if (!['grow', 'sell', 'keep'].includes(key)) return '沒有這個選項';
-      const mom = secondBroodMom(tanks, s);
-      if (!mom) return '這一胎已經生了';
-      const prevKids = located(tanks).filter(({ fish }) => fish.motherId === mom.fish.id).length;
-      const b = { momId: mom.fish.id, hours: tanks[0].hours, prevKids, choice: key };
-      if (!s.secondBrood) s.secondBrood = b;
-      else (s.broodQueue ??= []).push(b);
-      s.broods = (s.broods ?? 0) + 1;
+      const moms = repeat ? broodMoms(tanks, s, BROOD_GROUP_DAYS) : broodMoms(tanks, s, 0).slice(0, 1);
+      if (moms.length === 0) return '這一胎已經生了';
+      queueBroods(tanks, s, moms, key);
+      if (repeat) {
+        s.sameStreak = same ? (s.sameStreak ?? 0) + 1 : 0;
+        s.broodPickedAt = tanks[0].hours;
+      }
       break;
     }
     case 'C10': {
