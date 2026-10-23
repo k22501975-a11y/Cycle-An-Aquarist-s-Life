@@ -1,6 +1,6 @@
 import { crisisText, type Crisis } from '../game/crisis';
 import { BLOOM_NOTE, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
-import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, type ChoiceCard } from '../sim/choices';
+import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 import { quietObservation } from './morning-observe';
 
@@ -59,6 +59,7 @@ export type ReportKind =
   | 'milestone' // 種魚長到一個里程碑：肛鰭／胎斑、顯色、可以配（midgame.md §5.3）
   | 'second_brood' // C9 那尾母魚的第二窩生了：跟第一窩比、照選的處理（midgame.md §5.2）
   | 'crowd' // 擠缸（midgame.md §7.1）：快生的那窩會住不下的預告、超過建議量、自動賣／自動搬公魚
+  | 'line' // 固定品系（design/strain-fixing.md）：蛇紋出來、每窩的穩定度
   | 'observe' // 平淡早上的小觀察（morning-observe.ts）
   | 'quiet';
 
@@ -388,6 +389,11 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   for (const n of takeBellyNotes(tanks)) {
     const at = tanks.findIndex((t) => t.fish.some((f) => f.id === n.fishId));
     items.push({ kind: 'belly', tank: Math.max(0, at), tone: 'good', text: n.text, action: 'fish', subjectId: n.fishId, broodSetting: n.setting });
+  }
+  // 固定品系（strain-fixing.md）：蛇紋出來、這窩的穩定度
+  for (const n of takeLineNotes(tanks)) {
+    const at = tanks.findIndex((t) => t.fish.some((f) => f.id === n.fishId));
+    items.push({ kind: 'line', tank: Math.max(0, at), tone: 'good', text: n.text, action: 'fish', subjectId: n.fishId });
   }
   // 選育進度（midgame.md §2）：有第一窩或留種的魚就每天一行，取代一般的小觀察
   const progress = crisis ? null : breedingProgress(tanks);

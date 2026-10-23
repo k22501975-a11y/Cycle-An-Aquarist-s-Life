@@ -165,7 +165,7 @@ export interface Economy {
   /** 市場買來的魚到貨後的紀錄（伺服器算賣家 30 天存活率用，arrivals.ts）；舊存檔沒有。 */
   arrivals?: MarketArrival[];
   /** 夢想魚路線做到的步驟（§6 P2）；做到就不會倒退。 */
-  dreamSteps?: Array<'tank' | 'brood' | 'bred'>;
+  dreamSteps?: Array<'tank' | 'brood' | 'bred' | 'fixed'>;
   /** 已經選育出夢想魚。 */
   dreamAchieved?: boolean;
   /** 玩過幾次對水小遊戲（前幾次強制玩，F5）。 */

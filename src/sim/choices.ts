@@ -1,4 +1,4 @@
-import { DREAM_FISH } from './dream';
+import { DREAM_FISH, LINE_FIXED_PCT, stabilityPct } from './dream';
 import { setHeaterTarget, waterChange } from './actions';
 import { temperatureFactor } from './chemistry';
 import { buybackRefusal, economy, FRY_BAG, fishBuybackPrice, isFrySale, keeperRefusal, MAX_KEEPERS, PRICES, sellFish, sellsLeftToday, setKeeper, spend } from './economy';
@@ -208,6 +208,11 @@ export interface ChoiceState {
   crowdNotes?: Array<{ tank: number; text: string }>;
   /** C16 開獎版 C10 問過了。 */
   revealCullAsked?: boolean;
+  /**
+   * 固定品系（strain-fixing.md §2）：開獎那窩起，品系的每一窩出生時記下幾尾、幾尾是夢想魚（gen 第幾代，開獎那窩是 1），
+   * 蛇紋出來說過了沒（snake）、穩定度卡說過了沒（told）。
+   */
+  line?: { broods: LineBrood[] };
   /** C13 問過的母魚（C12 配的那幾尾，每尾問一次）。 */
   pregAsked?: number[];
   /** C12 選了 1 公配 2 母：第二尾母魚。 */
@@ -225,6 +230,17 @@ export interface ChoiceState {
   sickDays?: number;
   sickCause?: 'ich' | 'other';
   sickNoted?: boolean;
+}
+
+/** 品系的一窩：媽媽、出生時間、幾尾、幾尾是夢想魚、第幾代。 */
+export interface LineBrood {
+  momId: number;
+  born: number;
+  n: number;
+  k: number;
+  gen: number;
+  snake?: boolean;
+  told?: boolean;
 }
 
 /** 卡出過、玩家沒選，隔幾天再出一次。 */
@@ -1828,6 +1844,78 @@ export function takeBellyNotes(tanks: TankState[]): Array<{ fishId: number; text
     out.push({ fishId: p.mom.id, text: m.key === 'dark' ? `${callName(p.mom)}的胎斑變大、變黑了` : '胎斑裡看得到小魚的眼睛了！快生了' });
   }
   return out;
+}
+
+/** 小魚出生幾天後蛇紋看得出來（蛇紋里程碑）。 */
+export const SNAKE_DAYS = 20;
+/** 出生幾天後算得出穩定度（公母、蛇紋都看得出來，出穩定度卡）。 */
+export const STABILITY_DAYS = 25;
+
+/** 品系的媽媽：開獎那尾、現在留種那對的母魚、輪流配的第二尾母魚。 */
+function lineMoms(s: Readonly<ChoiceState>): number[] {
+  if (!s.reveal?.done) return [];
+  return [...new Set([s.reveal.momId, ...(s.pair ? [s.pair[0]] : []), ...(s.mates ?? [])])];
+}
+
+/** 這尾媽媽生的那窩算第幾代：她自己出生的那窩下一代；開獎的媽媽（店裡買的）生的是第 1 代。 */
+function broodGen(tanks: TankState[], broods: readonly LineBrood[], momId: number): number {
+  const own = broods.find((b) => b.momId === momId);
+  if (own) return own.gen;
+  const mom = located(tanks).find(({ fish }) => fish.id === momId)?.fish;
+  const from = mom && broods.find((b) => b.momId === mom.motherId && mom.bornHours !== undefined && Math.abs(b.born - mom.bornHours) < 24);
+  return from ? from.gen + 1 : 1;
+}
+
+/** 記下品系新出生的一窩（出生那天就記，之後賣掉、挑掉都不影響這窩的穩定度）。 */
+function noteLineBroods(tanks: TankState[], s: ChoiceState): void {
+  const moms = lineMoms(s);
+  if (moms.length === 0) return;
+  const line = (s.line ??= { broods: [] });
+  const groups = new Map<string, Fish[]>();
+  for (const { fish } of located(tanks)) {
+    if (fish.motherId === undefined || !moms.includes(fish.motherId) || fish.bornHours === undefined || fish.bornHours < s.reveal!.hours || !fish.genome) continue;
+    const key = `${fish.motherId}@${Math.floor(fish.bornHours / 24)}`;
+    groups.set(key, [...(groups.get(key) ?? []), fish]);
+  }
+  for (const kids of groups.values()) {
+    const momId = kids[0].motherId!;
+    const born = Math.min(...kids.map((f) => f.bornHours!));
+    if (line.broods.some((b) => b.momId === momId && Math.abs(b.born - born) < 24)) continue;
+    line.broods.push({ momId, born, n: kids.length, k: kids.filter((f) => isDreamLook(f.genome!)).length, gen: broodGen(tanks, line.broods, momId) });
+  }
+}
+
+/**
+ * 早上報告的品系里程碑（strain-fixing.md §2.2）：一個早上最多一行。
+ * - 每窩出生 SNAKE_DAYS 天：「{魚名}身上的蛇紋出來了。」（那窩有看得出蛇紋的公魚才說）
+ * - 開獎之後的每窩出生 STABILITY_DAYS 天：穩定度卡「這窩 n 尾裡，k 尾是白子紅蛇王，穩定度 X%」
+ */
+export function takeLineNotes(tanks: TankState[]): Array<{ fishId: number; text: string; stability?: number }> {
+  const s = choiceState(tanks);
+  noteLineBroods(tanks, s);
+  const now = tanks[0].hours;
+  const broods = s.line?.broods ?? [];
+  for (const [i, b] of broods.entries()) {
+    const age = (now - b.born) / 24;
+    const kids = located(tanks).filter(({ fish }) => fish.motherId === b.momId && fish.bornHours !== undefined && Math.abs(fish.bornHours - b.born) < 24 && fish.genome);
+    if (!b.snake && age >= SNAKE_DAYS) {
+      b.snake = true;
+      const male = kids.map(({ fish }) => fish).sort((x, y) => Number(!!y.keeper) - Number(!!x.keeper)).find((f) => f.sex === 'male' && phenotype(f.genome!).snake);
+      if (male) return [{ fishId: male.id, text: `${callName(male)}身上的蛇紋出來了。` }];
+    }
+    // 開獎那窩是起點（開獎卡已經說過有幾尾），之後的每窩才出穩定度卡
+    if (!b.told && age >= STABILITY_DAYS) {
+      b.told = true;
+      if (i === 0) continue;
+      const pct = stabilityPct(b);
+      const prev = broods.slice(0, i).reverse().find((x) => x.gen < b.gen) ?? broods[0];
+      const d = pct - stabilityPct(prev);
+      const more = d > 0 ? `（比上一代多 ${d}%）` : '';
+      const tail = pct < LINE_FIXED_PCT ? '再配一代，穩定度會更高。' : '';
+      return [{ fishId: kids[0]?.fish.id ?? b.momId, stability: pct, text: `這窩 ${b.n} 尾裡，${b.k} 尾是${DREAM_FISH.name}，穩定度 ${pct}%${more}。${tail}` }];
+    }
+  }
+  return [];
 }
 
 /** 已經不用問的卡（例如已經有第二缸）直接記成選過，不再出。 */
