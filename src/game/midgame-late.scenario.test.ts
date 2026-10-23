@@ -7,6 +7,7 @@ import { midgamePlayer } from './midgame-player';
  * - 同一天最多一張卡
  * - 相鄰兩個選擇點隔 ≤ 6 天；留種母魚懷孕期間（C13 到開獎）選擇卡或懷孕里程碑卡隔 ≤ 7 天
  * - 經濟（mvp.md §4.3）：第 60 天 ≥ 800 元
+ * - C9 重複版別太吵（§6.5）：第 36～90 天每個種子 ≤ 3 張
  * - 開獎（自家配的那窩出生）：沒生病 ≤ 第 85 天；種魚長大後生病晚配的 ≤ 第 90 天
  */
 describe('第 36～80 天的選擇點（design/midgame.md §6）', () => {
@@ -40,6 +41,8 @@ describe('第 36～80 天的選擇點（design/midgame.md §6）', () => {
         expect(b - a, `${a}→${b} ${log}`).toBeLessThanOrEqual(pregnant(a) && pregnant(b) ? 7 : 6);
       }
       expect(nights.find((n) => n.day === 60)!.coins, log).toBeGreaterThanOrEqual(800);
+      // C9 別太吵（§6.5）：第 36～90 天每個種子 ≤ 3 張
+      expect(nights.filter((n) => n.day >= 36 && n.choice === 'C9').length, log).toBeLessThanOrEqual(3);
     }, 600_000);
   }
 });

@@ -21,6 +21,8 @@ import {
   BOX_DUE,
   takeBellyNotes,
   SECOND_BROOD_SHOWS,
+  BROOD_AGAIN_SHOWS,
+  BROOD_AGAIN_GAP_DAYS,
   setTankPurpose,
   takeChoice,
   takeReveal,
@@ -221,6 +223,100 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     const news = takeSecondBrood(tanks);
     expect(news?.text).toMatch(/又生了 5 尾/);
     expect(st.broodQueue).toEqual([]);
+  });
+
+  it('C9 重複版別太吵（§6.5）：幾天內會生的合成一張、7 天內不再跳、連選兩次照上次就自動照做', () => {
+    const { tanks, s, st, storeMom, mom } = latePair();
+    Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard' });
+    mom.lengthCm = ADULT_CM + 0.2;
+    st.secondBrood = { momId: storeMom.id, hours: s.hours - 30 * 24, prevKids: 4, born: 12, choice: 'keep' };
+    st.broods = 1;
+    // 另一尾生過的母魚，兩天後也會到門檻
+    const other = addFish(s, 'guppy', { ...calm, sex: 'female', pregnant: false });
+    const kid = addFish(s, 'guppy', { ...calm, sex: 'female', pregnant: false });
+    kid.motherId = other.id;
+    storeMom.pregnancy = BROOD_AGAIN_SHOWS;
+    other.pregnancy = BROOD_AGAIN_SHOWS - 2 / 28;
+    const c9 = takeChoice(tanks);
+    expect(c9?.title).toBe('2 尾母魚這幾天快生了');
+    expect(c9!.owner).toMatch(/選一次全部套用/);
+    expect(chooseOption(tanks, 'C9', 'same')).toBeNull();
+    expect(st.broodQueue!.map((b) => b.momId)).toEqual([storeMom.id, other.id]);
+    // 兩尾都生完（小魚被吃光）；7 天內又有一尾快生：不跳卡，照上次、早上報告寫一行
+    for (const f of [storeMom, other]) f.pregnancy = 0;
+    s.hours += 3 * 24;
+    takeSecondBrood(tanks);
+    const third = addFish(s, 'guppy', { ...calm, sex: 'female', pregnant: false });
+    addFish(s, 'guppy', { ...calm, sex: 'female', pregnant: false }).motherId = third.id;
+    third.pregnancy = BROOD_AGAIN_SHOWS;
+    expect(nextDay(tanks)?.id).not.toBe('C9');
+    expect(st.broodQueue!.map((b) => b.momId)).toEqual([third.id]);
+    expect(takeBellyNotes(tanks).map((n) => n.text)).toContainEqual(expect.stringMatching(/快生了，照你的設定生下來挑備用種魚$/));
+    expect(takeBellyNotes(tanks).some((n) => /照你的設定/.test(n.text))).toBe(false);
+    // 過了 7 天又快生：跳卡，選第二次照上次
+    third.pregnancy = 0;
+    takeSecondBrood(tanks);
+    s.hours += BROOD_AGAIN_GAP_DAYS * 24;
+    storeMom.pregnancy = BROOD_AGAIN_SHOWS;
+    expect(takeChoice(tanks)?.id).toBe('C9');
+    expect(chooseOption(tanks, 'C9', 'same')).toBeNull();
+    expect(st.sameStreak).toBe(2);
+    // 之後就算隔很久也不再跳卡
+    storeMom.pregnancy = 0;
+    takeSecondBrood(tanks);
+    s.hours += 30 * 24;
+    other.pregnancy = BROOD_AGAIN_SHOWS;
+    expect(nextDay(tanks)?.id).not.toBe('C9');
+    expect(st.broodQueue!.map((b) => b.momId)).toEqual([other.id]);
+    // 改得回來：點那一行跳 C9 的選項加「每次都問我」
+    const setting = takeBellyNotes(tanks).find((n) => n.setting)!.setting!;
+    expect(setting.options.map((o) => o.key)).toEqual(['auto:grow', 'auto:sell', 'auto:keep', 'ask']);
+    expect(setting.options.find((o) => o.recommended)?.key).toBe('auto:keep');
+    expect(chooseOption(tanks, 'C9', 'auto:grow')).toBeNull();
+    expect(st.picked.C9).toBe('grow');
+    expect(chooseOption(tanks, 'C9', 'ask')).toBeNull();
+    other.pregnancy = 0;
+    takeSecondBrood(tanks);
+    s.hours += 30 * 24;
+    storeMom.pregnancy = BROOD_AGAIN_SHOWS;
+    const back = nextDay(tanks);
+    expect(back?.id).toBe('C9');
+    expect(back!.options[0].label).toBe('照上次：留在繁殖缸長大');
+  });
+
+  it('C9 問過的那胎沒生出小魚（流產、被吃光）就收掉，這尾母魚下一胎還會再問', () => {
+    const { tanks, s, st, storeMom, mom } = latePair();
+    Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard' });
+    mom.lengthCm = ADULT_CM + 0.2;
+    st.secondBrood = { momId: storeMom.id, hours: s.hours - 30 * 24, prevKids: 4, born: 12, choice: 'keep' };
+    st.broods = 1;
+    storeMom.pregnancy = SECOND_BROOD_SHOWS;
+    expect(takeChoice(tanks)?.id).toBe('C9');
+    expect(chooseOption(tanks, 'C9', 'same')).toBeNull();
+    expect(st.broodQueue).toHaveLength(1);
+    // 這胎生了但小魚當晚被吃光：沒有小魚、肚子也消了
+    s.hours += 5 * 24;
+    storeMom.pregnancy = 0;
+    expect(takeSecondBrood(tanks)).toBeNull();
+    expect(st.broodQueue).toEqual([]);
+    // 下一胎又快生了，還會再問
+    s.hours += 20 * 24;
+    storeMom.pregnancy = SECOND_BROOD_SHOWS;
+    expect(takeChoice(tanks)?.id).toBe('C9');
+  });
+
+  it('C9 第一次問的第二窩沒生出小魚也會收掉，不會卡住之後的窩', () => {
+    const { tanks, s, st, storeMom, mom } = latePair();
+    Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard' });
+    mom.lengthCm = ADULT_CM + 0.2;
+    st.secondBrood = { momId: storeMom.id, hours: s.hours, prevKids: 4, choice: 'keep' };
+    storeMom.pregnancy = 0;
+    expect(takeSecondBrood(tanks)).toBeNull();
+    expect(st.secondBrood.born).toBe(0);
+    s.hours += 20 * 24;
+    storeMom.pregnancy = SECOND_BROOD_SHOWS;
+    delete st.shown.C9;
+    expect(takeChoice(tanks)?.id).toBe('C9');
   });
 
   it('C10 新的一窩長到幼魚、有一尾比留種的好：兩尾都留就多標一尾留種；同一窩不會一尾一尾重問', () => {

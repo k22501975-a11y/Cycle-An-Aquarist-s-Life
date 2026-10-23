@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, createTank, FILTERS, HEATERS, LIGHTS, PLANT_SPECIES, recordEvent, TANKS, testWater, type TankState } from '../sim';
+import { addFish, addPlant, choiceState, createTank, FILTERS, HEATERS, LIGHTS, PLANT_SPECIES, recordEvent, TANKS, testWater, type TankState } from '../sim';
 import { morningReport, snapshot } from './morning-report';
 
 /** 養好水、一株小榕、一公兩母孔雀魚（都沒懷孕）的缸。 */
@@ -27,6 +27,17 @@ describe('早上報告寫缸裡真的發生的事（polish-to-9.md G8）', () =>
     expect(item(reportAfter((x) => (mom(x).pregnancy = 0.55), s), 'belly')).toMatchObject({ tone: 'good', text: '母魚的肚子圓起來了，看得出懷孕', subjectId: mom(s).id });
     expect(item(reportAfter((x) => (mom(x).pregnancy = 0.7), s), 'belly')).toBeUndefined();
     expect(item(reportAfter((x) => (mom(x).pregnancy = 0.96), s), 'belly')?.text).toBe('母魚肚子後面出現黑色胎斑，快生了');
+  });
+
+  it('夢想魚那窩的母魚：開獎前由里程碑說，開獎後之後每一胎照常寫肚子圓起來（#326）', () => {
+    const s = tank();
+    mom(s).pregnancy = 0.4;
+    choiceState([s]).reveal = { momId: mom(s).id, hours: 0 };
+    const round = (r: ReturnType<typeof reportAfter>) => r.items.find((i) => i.kind === 'belly' && i.text === '母魚的肚子圓起來了，看得出懷孕');
+    expect(round(reportAfter((x) => (mom(x).pregnancy = 0.55), s))).toBeUndefined();
+    choiceState([s]).reveal!.done = true;
+    mom(s).pregnancy = 0.4;
+    expect(round(reportAfter((x) => (mom(x).pregnancy = 0.55), s))).toMatchObject({ subjectId: mom(s).id });
   });
 
   it('公魚追母魚：昨晚配對成功就寫一條，配圖用公魚', () => {
