@@ -4,7 +4,7 @@ import { h } from './dom';
 import { keeperRibbon } from './keeper-ribbon';
 import { choiceVisual, type FishLookup } from './choice-card';
 import { lookalikeVisual } from './lookalike-card';
-import { choiceFollowUp, isBadNews, type Milestone, type MorningReport, type ReportItem, type ReportKind } from './morning-report';
+import { choiceFollowUp, isBadNews, type Milestone, type MorningReport, type Reveal, type ReportItem, type ReportKind } from './morning-report';
 
 /**
  * 「過一晚」醒來的早上報告卡（first-10-minutes.md F2）：阿德老闆一句話、一條一條的圖卡，
@@ -42,6 +42,7 @@ const KIND_ICON: Record<ReportKind, ArtIcon> = {
   choice: 'owner',
   breeding: 'owner',
   milestone: 'owner',
+  reveal: 'owner',
   second_brood: 'owner',
   observe: 'owner',
   quiet: 'owner',
@@ -109,6 +110,7 @@ const GOOD_LINE: Partial<Record<ReportKind, string>> = {
   choice: '今天有件事要你決定！',
   breeding: '選育有進展。',
   milestone: '種魚又長大一步了！',
+  reveal: '開獎了！快來看！',
   second_brood: '第二窩生了！',
   cycled: '水養好了，好消息！',
   rescued: '你救回來了！',
@@ -184,9 +186,16 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
     }
     return h(`div.morning-item.${item.tone}.milestone-item`, {}, h('span.morning-body', {}, reportText(item.text), fish ? pic : null));
   };
+  // 開獎卡（midgame.md §6.1）：標題＋小魚一尾一尾亮出來＋老闆那句話
+  const revealRow = (item: ReportItem, r: Reveal) => {
+    const pic = h('div.rv-slot');
+    void import('./breeding-cards').then((bc) => pic.append(bc.revealVisual(r.fry))).catch(() => pic.remove());
+    return h(`div.morning-item.${item.tone}.reveal-item`, {}, h('span.morning-body', {}, h('b.rv-title', {}, `開獎！${r.fry.length} 尾小魚出生了`), pic, reportText(item.text)));
+  };
   const row = (item: ReportItem) => {
     if (item.choice) return choiceRow(item);
     // 選育進度（midgame.md §2）：緞帶開頭的一行，不是可以點的事
+    if (item.reveal) return revealRow(item, item.reveal);
     if (item.milestone) return milestoneRow(item, item.milestone);
     if (item.kind === 'breeding') return h(`div.morning-item.${item.tone}.breeding-item`, {}, h('div.bc-line', {}, keeperRibbon('bc-line-ribbon'), h('span.bc-line-text', {}, item.text)));
     const pic = deps.picture?.(item) ?? artUrl(item.kind === 'crisis' && item.action ? ACTION_ICON[item.action] : KIND_ICON[item.kind]);
