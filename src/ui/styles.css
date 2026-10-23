@@ -1532,8 +1532,10 @@ span.bc-ks-icon { width: 32px; height: 42px; }
 .nm-meter { display: flex; flex-direction: column; gap: 4px; }
 .nm-bar { position: relative; height: 12px; border-radius: 999px; background: rgba(6, 22, 32, 0.8); border: 1px solid rgba(169, 196, 204, 0.35); overflow: visible; }
 .nm-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 999px; background: linear-gradient(90deg, #ffd6e0, #f6d891); box-shadow: 0 0 10px rgba(246, 216, 145, 0.7); animation: nm-fill linear forwards; }
-.nm-mark { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: #fff7dc; box-shadow: 0 0 6px rgba(255, 247, 220, 0.9); }
-.nm-mark small { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font-size: 10px; line-height: 12px; color: #fff7dc; white-space: nowrap; }
+.nm-mark { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: rgba(255, 247, 220, 0.45); }
+.nm-mark.on { background: #fff7dc; box-shadow: 0 0 6px rgba(255, 247, 220, 0.9); }
+.nm-mark small { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font-size: 10px; line-height: 12px; color: rgba(255, 247, 220, 0.6); white-space: nowrap; }
+.nm-mark.on small { color: #fff7dc; }
 .nm-meter { padding-top: 10px; }
 .nm-meter-text { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
 .nm-meter-text b { color: var(--gold-bright); }

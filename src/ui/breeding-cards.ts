@@ -589,8 +589,11 @@ export interface StrainNaming {
   maxLen: number;
 }
 
-/** 達標的門檻（%）：穩定度條上畫一條線。 */
-export const STABLE_AT = 75;
+/** 穩定度條上的兩條線（企劃 2026-10-23）：50% 初步固定（出 C18 取名）、75% 品系完成。 */
+export const STABLE_MARKS: ReadonlyArray<{ at: number; label: string }> = [
+  { at: 50, label: '初步固定' },
+  { at: 75, label: '品系完成' },
+];
 /** 卡上最多排幾尾。 */
 export const NAMING_MAX = 24;
 
@@ -625,11 +628,11 @@ export function strainPlaque(name: string): HTMLElement {
   const medal = keeperRibbon('keeper-ribbon.nm-medal');
   medal.removeAttribute('title');
   medal.setAttribute('aria-hidden', 'true');
-  return h('div.nm-plaque', { role: 'status' }, medal, h('small.nm-plaque-kicker', {}, '你的第一個品系'), h('b.nm-plaque-name', {}, name), h('span.nm-plaque-sub', {}, `${name} ${DREAM_FISH.name}`), h('i.nm-shine', { 'aria-hidden': 'true' }));
+  return h('div.nm-plaque', { role: 'status' }, medal, h('small.nm-plaque-kicker', {}, '你的品系有名字了'), h('b.nm-plaque-name', {}, name), h('span.nm-plaque-sub', {}, `${name} ${DREAM_FISH.name}`), h('i.nm-shine', { 'aria-hidden': 'true' }));
 }
 
 /**
- * C18 取名的演出：一窩魚排開（暗的），夢想魚一尾一尾亮起來，穩定度條跑到這窩的比例、越過 75% 的線，
+ * C18 取名的演出：一窩魚排開（暗的），夢想魚一尾一尾亮起來，穩定度條跑到這窩的比例、越過「初步固定」的線，
  * 最後出現名字輸入框。onName 回傳錯誤訊息（例如字詞檢查不過）就顯示在框下面讓玩家重打，回 null 就換成名牌。
  */
 export function namingScene(fish: PickFish[], n: StrainNaming, onName: (name: string) => string | null, onLater?: { label: string; go: () => void }): HTMLElement {
@@ -650,9 +653,12 @@ export function namingScene(fish: PickFish[], n: StrainNaming, onName: (name: st
   fill.style.setProperty('--pct', `${pct}%`);
   fill.style.animationDelay = '0.4s';
   fill.style.animationDuration = `${Math.max(0.6, end - 0.4).toFixed(2)}s`;
-  const mark = h('i.nm-mark', { title: `${STABLE_AT}% 就算穩定` }, h('small', {}, '穩定'));
-  mark.style.left = `${STABLE_AT}%`;
-  const meter = h('div.nm-meter', {}, h('div.nm-bar', {}, fill, mark), h('div.nm-meter-text', {}, h('span', {}, `${n.total} 尾裡有 ${n.dream} 尾是${DREAM_FISH.name}`), h('b', {}, `穩定度 ${pct}%`)));
+  const marks = STABLE_MARKS.map((m) => {
+    const el = h(`i.nm-mark${pct >= m.at ? '.on' : ''}`, { title: `${m.at}% ${m.label}` }, h('small', {}, m.label));
+    el.style.left = `${m.at}%`;
+    return el;
+  });
+  const meter = h('div.nm-meter', {}, h('div.nm-bar', {}, fill, ...marks), h('div.nm-meter-text', {}, h('span', {}, `${n.total} 尾裡有 ${n.dream} 尾是${DREAM_FISH.name}`), h('b', {}, `穩定度 ${pct}%`)));
 
   const input = h('input.nm-input', { type: 'text', value: n.suggested, maxlength: String(n.maxLen * 2), 'aria-label': '品系名', enterkeyhint: 'done', autocomplete: 'off' }) as HTMLInputElement;
   const count = h('small.nm-count');
