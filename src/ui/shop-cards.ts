@@ -1,6 +1,7 @@
 import type { AppleColor, FishSpeciesId, GuppyPhenotype, PlantSpeciesId, SnailKind } from '../sim';
 import { artImg, ownerImg, type ArtIcon } from './art-icons';
 import { h } from './dom';
+import { pregnancyBadge, pregnancyStage } from './pregnancy-badge';
 import { femaleTint, wholeFin } from '../render/phenotype-art';
 
 /**
@@ -94,6 +95,8 @@ export interface CardSpec {
   chips?: string[];
   /** 角落的小徽章（使用中、缸裡有幾組…）。 */
   badge?: string;
+  /** 母魚的懷孕進度（0～1）：有給就在圖的左下角標「剛懷上／肚子圓了／快生了」（midgame.md §6.6）。 */
+  pregnancy?: number;
   note?: string;
   actions: Node[];
   cls?: string;
@@ -106,12 +109,16 @@ export function priceTag(price: number, unit = ''): HTMLElement {
 
 export function shopCard(c: CardSpec): HTMLElement {
   const pic = h('div.card-pic');
-  if (c.art) {
-    const img = h('img', { src: ART + c.art, alt: '', loading: 'lazy', draggable: 'false' });
+  const stage = c.pregnancy !== undefined ? pregnancyStage(c.pregnancy) : null;
+  // 肚子圓了、快生了的母魚換成大肚子的圖（同尾色），跟徽章對得上
+  const art = c.art && (stage === 'round' || stage === 'due') ? c.art.replace('-base-', '-pregnant-') : c.art;
+  if (art) {
+    const img = h('img', { src: ART + art, alt: '', loading: 'lazy', draggable: 'false' });
     img.addEventListener('error', () => img.remove());
     pic.append(img);
   } else if (c.icon) pic.append(artImg(c.icon, 'card-icon'));
   if (c.badge) pic.append(h('span.card-badge', {}, c.badge));
+  if (stage) pic.append(pregnancyBadge(stage));
   return h(
     `div.shop-card${c.cls ?? ''}`,
     {},
