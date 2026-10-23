@@ -392,11 +392,6 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     const at = tanks.findIndex((t) => t.fish.some((f) => f.id === m.fishId));
     items.push({ kind: 'milestone', tank: Math.max(0, at), tone: 'good', text: m.text, action: 'fish', subjectId: m.fishId, milestone: { step: m.step, fishId: m.fishId, partnerId: m.partnerId, earlierDays: m.earlierDays } });
   }
-  // 夢想魚那窩懷孕後段的里程碑、生病拖慢配對（midgame.md §6.4）
-  for (const n of takeBellyNotes(tanks)) {
-    const at = tanks.findIndex((t) => t.fish.some((f) => f.id === n.fishId));
-    items.push({ kind: 'belly', tank: Math.max(0, at), tone: 'good', text: n.text, action: 'fish', subjectId: n.fishId, broodSetting: n.setting });
-  }
   // 開獎（midgame.md §6.1 C15）：夢想魚配方那窩生了，小魚一尾一尾亮出來
   const reveal = takeReveal(tanks);
   if (reveal) {
@@ -413,6 +408,12 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   // 中期的選擇點（design/midgame.md）：一個早上最多一張
   const choice = takeChoice(tanks);
   if (choice) items.push({ kind: 'choice', tank: choice.tank, tone: 'good', text: choice.title, choice, action: CHOICE_FOLLOW[choice.id] });
+  // 夢想魚那窩懷孕後段的里程碑、生病拖慢配對（midgame.md §6.4）、C9 自動照上次（§6.5）。
+  // 放在 takeChoice 後面：早上的小事（lateHousekeeping）當天記下的，當天就說
+  for (const n of takeBellyNotes(tanks)) {
+    const at = tanks.findIndex((t) => t.fish.some((f) => f.id === n.fishId));
+    items.push({ kind: 'belly', tank: Math.max(0, at), tone: 'good', text: n.text, action: 'fish', subjectId: n.fishId, broodSetting: n.setting });
+  }
   // 選育進度（midgame.md §2）：有第一窩或留種的魚就每天一行，取代一般的小觀察
   const progress = crisis ? null : breedingProgress(tanks);
   if (progress) items.push({ kind: 'breeding', tank: 0, tone: 'good', text: progress });
