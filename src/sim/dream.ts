@@ -26,8 +26,12 @@ export const DREAM_FISH = {
 
 export type DreamStepId = 'tank' | 'brood' | 'bred' | 'fixed';
 
-/** 穩定度到多少 % 算固定了（路線第 4 步、C18 取名；strain-fixing.md §2，企劃依劇本結果調）。 */
+/** 穩定度到多少 % 算品系完成（路線第 4 步、「品系完成」里程碑；strain-fixing.md §5）。 */
 export const LINE_FIXED_PCT = 75;
+/** 穩定度第一次到多少 % 出 C18 取名（初步固定；strain-fixing.md §5）。 */
+export const LINE_NAME_PCT = 50;
+/** 品系名最多幾個字。 */
+export const LINE_NAME_MAX = 8;
 
 /** 穩定度 %：一窩裡夢想魚的比例。 */
 export const stabilityPct = (b: { n: number; k: number }) => (b.n > 0 ? Math.round((b.k / b.n) * 100) : 0);

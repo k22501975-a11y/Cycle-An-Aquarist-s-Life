@@ -23,6 +23,7 @@ import {
   moveToNursery,
   ORDER_BOARD_SIZE,
   ORDER_GAP_HOURS,
+  LINE_NAMED_MULT,
   orderBoard,
   orderContext,
   orderRefusal,
@@ -128,6 +129,36 @@ describe('店家訂單板（M21）', () => {
     const now = board.orders.filter((o) => !o.preview);
     expect(now).toHaveLength(1);
     expect(now[0].id).not.toBe(first.id);
+  });
+
+  it('品系取了名才有指定品系單（只收自家的白子紅蛇王公魚），單價取名後 1.2 倍、品系完成後 1.5 倍', () => {
+    const s = tank();
+    simulate(s, 1);
+    const board = orderBoard(s);
+    expect(orderContext(s).line).toBeUndefined();
+    const e = economy(s);
+    e.choices = { shown: {}, picked: {}, lineNamed: { name: '小德系', hours: s.hours, stability: 60, n: 10, k: 6 } };
+    const ctx = orderContext(s);
+    expect(ctx.line).toEqual({ name: '小德系', mult: LINE_NAMED_MULT });
+    const named = Array.from({ length: 40 }, () => makeOrder(board, s.hours, ctx)).filter((o) => o.line);
+    expect(named.length).toBeGreaterThan(3);
+    expect(orderTitle(named[0])).toMatch(/^[12] 尾指定「小德系」白子紅蛇王公魚$/);
+    const dream = addFish(s, 'guppy', { sex: 'male', strain: 1 });
+    dream.generation = 2;
+    dream.ageDays = 120;
+    dream.lengthCm = FISH_SPECIES.guppy.adultLengthCm;
+    dream.genome!.albino = [1, 1];
+    dream.genome!.red = [1, 1];
+    dream.genome!.snakeX = [1];
+    dream.genome!.gold = [0, 0];
+    dream.genome!.tuxedo = [0, 0];
+    expect(fishMatchesOrder(dream, named[0])).toBe(true);
+    dream.genome!.albino = [1, 0];
+    expect(fishMatchesOrder(dream, named[0])).toBe(false);
+    e.choices.lineNamed!.done = { hours: s.hours, stability: 80 };
+    const done = Array.from({ length: 40 }, () => makeOrder(board, s.hours, orderContext(s))).filter((o) => o.line);
+    const avg = (xs: typeof named) => xs.reduce((a, o) => a + o.unitPrice, 0) / xs.length;
+    expect(avg(done) / avg(named)).toBeGreaterThan(1.15);
   });
 
   it('自己繁殖出品系、鰭型後才有指定的高價單，鰭型單每尾 150～400', () => {

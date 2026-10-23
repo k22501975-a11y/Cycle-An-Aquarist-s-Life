@@ -12,5 +12,5 @@ export { unlockCodex } from './codex';
 export { morningCard } from './morning-card';
 export { awayReport, morningReport, snapshot } from './morning-report';
 // 中期選擇點（sim/choices.ts）也跟著延後載入：早上報告的選擇卡用 chooseOption，任務卡的選育那一行載好才說
-export { chooseOption } from '../sim/choices';
+export { chooseOption, lineName } from '../sim/choices';
 setBreedingStep(breedingStep);

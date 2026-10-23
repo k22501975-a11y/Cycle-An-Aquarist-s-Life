@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
 import { addFish, ADULT_SIZE, bacteriaCapacity, broodFactor, buyTank, CROWD_WARN, crowdingRatio, cross, DREAM_FISH, economy, FISH_SPECIES, linkTanks, orderBoard, setTankPurpose, type Fish, type GuppyGenome, type TankState } from './index';
-import { chooseOption, choiceState, CHOICE_RESHOW_DAYS, CROWD_FULL, CROWD_PREVIEW, REVEAL_CULL_DAYS, takeCrowdNotes, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, WARM_PREG_C, takeChoice, takeLineNotes, takeReveal, takeSecondBrood, SNAKE_DAYS, STABILITY_DAYS } from './choices';
+import { chooseOption, choiceState, CHOICE_RESHOW_DAYS, CROWD_FULL, CROWD_PREVIEW, REVEAL_CULL_DAYS, takeCrowdNotes, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, WARM_PREG_C, takeChoice, takeLineNotes, lineName, lineNameRefusal, LINE_NAME_SUGGESTED, takeReveal, takeSecondBrood, SNAKE_DAYS, STABILITY_DAYS } from './choices';
 import { dreamRoute } from './dream';
 import { reservedForPick } from './orders';
 
@@ -805,3 +805,77 @@ describe('固定品系：C17 誰配誰、C19 引進新血（strain-fixing.md §2
     expect(takeChoice(tanks)?.id).toBe('C19');
   });
 });
+
+describe('固定品系：C18 取名（穩定度 50%）和品系完成（75%）（strain-fixing.md §5，#344）', () => {
+  /** 開獎那窩（起點）加上下一代一窩 n 尾、k 尾夢想魚，出生滿 25 天。 */
+  function named(n: number, k: number) {
+    const ctx = latePair();
+    const { s, t2, st, mom, dad } = ctx;
+    st.reveal = { momId: mom.id, hours: s.hours - 120 * 24, done: true, born: 10 };
+    st.revealCullAsked = true;
+    const mk = (motherId: number, born: number, dream: boolean, sex: 'male' | 'female') => {
+      const f = addFish(t2, 'guppy', { ...calm, sex, pregnant: false });
+      f.genome = { ...dad.genome!, albino: dream ? [1, 1] : [1, 0], red: [1, 1], snakeX: sex === 'male' ? [1] : [1, 1], gold: [0, 0], tuxedo: [0, 0], y: sex === 'male' ? { snake: 0, grass: 0 } : null };
+      f.generation = 2;
+      f.motherId = motherId;
+      f.bornHours = born;
+      f.lengthCm = 1.5;
+      return f;
+    };
+    const first = mk(mom.id, st.reveal.hours + 1, false, 'female');
+    const born = s.hours - 26 * 24;
+    const kids = Array.from({ length: n }, (_, i) => mk(first.id, born, i < k, i % 2 ? 'male' : 'female'));
+    st.pair = [first.id, dad.id];
+    st.compared = [first.id, ...kids.map((f) => f.id)];
+    // 記下兩窩、說過蛇紋，下一次早上才說穩定度
+    takeLineNotes(ctx.tanks);
+    takeLineNotes(ctx.tanks);
+    return { ...ctx, kids, first };
+  }
+
+  it('穩定度第一次 ≥ 50% 出 C18：預設「自家系」，字詞檢查不過不收；取了名之後品系的夢想魚都掛名牌', () => {
+    const { tanks, st, kids } = named(8, 5);
+    expect(st.line!.broods[1]).toMatchObject({ n: 8, k: 5, told: true });
+    const c = takeChoice(tanks)!;
+    expect(c.id).toBe('C18');
+    expect(c.title).toBe('你的品系穩定了！');
+    expect(c.owner).toBe(`5／8 尾都是${DREAM_FISH.name}，品系初步固定了。幫它取個名字吧。`);
+    expect(c.naming).toEqual({ suggested: LINE_NAME_SUGGESTED, stability: 63, dream: 5, total: 8, maxLen: 8 });
+    expect(c.options.map((o) => o.key)).toEqual(['name', 'later']);
+    expect(lineNameRefusal('')).not.toBeNull();
+    expect(lineNameRefusal('一二三四五六七八九')).toBe('名字最多 8 個字');
+    expect(chooseOption(tanks, 'C18', 'name', [], 'ab@c.tw')).toBe('名字不能放網址、帳號或電話');
+    expect(chooseOption(tanks, 'C18', 'name', [], '幹系')).toBe('這個名字不能用，換一個吧');
+    expect(st.lineNamed).toBeUndefined();
+    expect(chooseOption(tanks, 'C18', 'name', [], '  小德  系 ')).toBeNull();
+    expect(st.lineNamed).toMatchObject({ name: '小德 系', stability: 63, n: 8, k: 5 });
+    expect(lineName(tanks, kids[0])).toBe('小德 系');
+    expect(lineName(tanks, kids[7])).toBeNull();
+    tanks[0].hours += 5 * 24;
+    expect(takeChoice(tanks)?.id).not.toBe('C18');
+  });
+
+  it('還沒到 50% 不出；選晚點再取，過幾天再問', () => {
+    const low = named(10, 4);
+    expect(takeChoice(low.tanks)?.id).not.toBe('C18');
+    const { tanks, st } = named(8, 6);
+    expect(takeChoice(tanks)?.id).toBe('C18');
+    expect(chooseOption(tanks, 'C18', 'later')).toBeNull();
+    expect(st.lineNamed).toBeUndefined();
+    tanks[0].hours += 24;
+    expect(takeChoice(tanks)?.id).not.toBe('C18');
+    tanks[0].hours += 3 * 24;
+    expect(takeChoice(tanks)?.id).toBe('C18');
+  });
+
+  it('品系完成：取了名、那窩 ≥ 75% 的隔天早上說一次', () => {
+    const { tanks, st } = named(8, 7);
+    takeChoice(tanks);
+    expect(chooseOption(tanks, 'C18', 'name', [], '小德系')).toBeNull();
+    const done = takeLineNotes(tanks);
+    expect(done).toEqual([expect.objectContaining({ done: true, stability: 88, text: `小德系這窩有 88% 是${DREAM_FISH.name}，品系完成了！指定的客人出價會高一半。` })]);
+    expect(st.lineNamed!.done).toMatchObject({ stability: 88 });
+    expect(takeLineNotes(tanks)).toEqual([]);
+  });
+});
+

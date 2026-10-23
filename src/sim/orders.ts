@@ -1,4 +1,5 @@
 import { BUYBACK_MIN_SIZE, buybackRefusal, economy, FISH_PRICES, guppyBuybackTier, householdTanks, noteBredSale, noteEarned, noteRaisedGone, PLANT_PRICES, sellableCuttings } from './economy';
+import { DREAM_FISH } from './dream';
 import { phenotype, type FinTrait, type GuppyPhenotype } from './genetics';
 import { daysToLength } from './growth';
 import { nextRandom, type RngState } from './random';
@@ -19,6 +20,9 @@ import { hidingFactor } from './processes/population';
 export const ORDER_BOARD_SIZE = 3;
 /** 交完或撕掉一張單後，隔多久補新單（遊戲小時）。 */
 export const ORDER_GAP_HOURS = 24;
+/** 指定品系單的出價倍率：取名之後（初步固定）、品系完成之後（strain-fixing.md §5）。 */
+export const LINE_NAMED_MULT = 1.2;
+export const LINE_DONE_MULT = 1.5;
 
 /** 訂單看的品系外觀（只有公魚看得出來）。 */
 export const ORDER_STRAINS = {
@@ -68,6 +72,8 @@ export interface ShopOrder {
   fin?: FinTrait;
   /** 尾鰭分數至少幾分（孔雀魚）。 */
   minTail?: number;
+  /** 指定品系單（strain-fixing.md §2.2）：取過名的品系，只收自家選育的白子紅蛇王公魚。 */
+  line?: string;
   /** 收入空檔保底單：連續 6 天沒收入時掛的小單，用手上現有的東西就交得出來（polish-to-9.md §4）。 */
   gap?: boolean;
   /** 小孔雀單：只收這個時間（遊戲小時）以前出生的（出生滿幾天）。 */
@@ -118,6 +124,7 @@ export function orderTitle(o: ShopOrder): string {
   const look = `${o.strain ? ORDER_STRAINS[o.strain].name : ''}${o.fin ? FIN_NAMES[o.fin] : ''}`;
   const sex = o.sex ? (o.sex === 'male' ? (shrimp ? '公蝦' : '公魚') : shrimp ? '母蝦' : '母魚') : '';
   const size = o.size === 'juvenile' ? (shrimp ? '幼蝦' : '中魚') : '';
+  if (o.line) return `${o.count} ${unit}指定「${o.line}」${DREAM_FISH.name}${sex}`;
   const name = species === 'guppy' && look ? `${look}${sex || '孔雀魚'}` : `${FISH_SPECIES[species].name}${sex || size}`;
   return `${o.count} ${unit}${name}${o.minTail ? `，尾鰭 ${o.minTail} 分以上` : ''}`;
 }
@@ -130,9 +137,11 @@ export function fishMatchesOrder(fish: Fish, o: ShopOrder): boolean {
   if ((fish.generation ?? 0) < 1) return false;
   if (o.size === 'adult' && isJuvenile(fish)) return false;
   if (o.sex && fish.sex !== o.sex) return false;
-  if (!o.strain && !o.fin && !o.minTail) return true;
+  if (!o.strain && !o.fin && !o.minTail && !o.line) return true;
   if (!fish.genome) return false;
   const p = phenotype(fish.genome);
+  // 夢想魚只能自己選育（店裡沒賣），自家的白子紅蛇王就是這個品系的
+  if (o.line && !(p.albino && p.red && p.snake && !p.gold && !p.tuxedo && !p.grass)) return false;
   if (o.strain && !ORDER_STRAINS[o.strain].test(p)) return false;
   if (o.fin && !hasFin(p, o.fin)) return false;
   return fish.genome.tail >= (o.minTail ?? 0);
@@ -354,6 +363,7 @@ function orderTier(o: ShopOrder): number {
   if (o.strain === 'albinoRed') p.albino = p.red = true;
   if (o.strain === 'tuxedo') p.tuxedo = true;
   if (o.strain === 'redSnake') p.snake = p.red = true;
+  if (o.line) p.albino = p.red = p.snake = true;
   if (o.fin === 'sword') p.sword = 1;
   else if (o.fin === 'halfmoon') p.tailShape = 'halfmoon';
   else if (o.fin === 'bigC') p.ribbon = p.bigC = true;
@@ -377,6 +387,8 @@ export interface OrderContext {
   safeFry?: number;
   /** 水草的躲藏係數 0–0.7（hidingFactor）。 */
   hiding?: number;
+  /** 取過名的品系（C18）：名字和出價倍率（取名 ×1.2、品系完成 ×1.5）。 */
+  line?: { name: string; mult: number };
 }
 
 /** 這株水草現在修剪得下幾株插枝（跟 trimPlant 一樣：留一半，多的剪下來）。 */
@@ -406,7 +418,9 @@ export function orderContext(state: TankState): OrderContext {
   const young = bred.filter((f) => f.species === 'guppy' && f.lengthCm < FISH_SPECIES.guppy.adultLengthCm * 0.5);
   const boxed = new Set(state.quarantine?.fish ?? []);
   const safeFry = young.filter((f) => f.nursery || boxed.has(f)).length;
-  return { stage, cuttings, snails, fry: young.length, safeFry, hiding: hidingFactor(state) };
+  const named = economy(state).choices?.lineNamed;
+  const line = named ? { name: named.name, mult: named.done ? LINE_DONE_MULT : LINE_NAMED_MULT } : undefined;
+  return { stage, cuttings, snails, fry: young.length, safeFry, hiding: hidingFactor(state), ...(line ? { line } : {}) };
 }
 
 /**
@@ -468,6 +482,14 @@ export function makeOrder(board: OrderBoard, hours: number, ctx?: OrderContext):
       o.sex = r() < 0.5 ? 'male' : 'female';
       o.count = 2 + Math.floor(r() * 2);
       o.unitPrice = round5(60 + r() * 20);
+    }],
+    [ctx?.line && !board.orders.some((x) => x.line) ? 3 : 0, () => {
+      // 指定品系（strain-fixing.md §2.2）：一般白子紅蛇王單價的 1.2 倍，品系完成後 1.5 倍
+      o.size = 'adult';
+      o.sex = 'male';
+      o.line = ctx!.line!.name;
+      o.count = 1 + Math.floor(r() * 2);
+      o.unitPrice = round5(FISH_PRICES.guppy * orderTier(o) * (2.2 + r() * 0.3) * ctx!.line!.mult);
     }],
     [stage === 'start' ? 1 : 3, () => {
       // 中魚：客人買回去自己養大（仔魚長到一半大小才收）；有仔魚以後就常出，當作養大的目標
