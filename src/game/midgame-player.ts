@@ -1,5 +1,5 @@
 import { newGameState } from './game';
-import { addFish, storeFemales, addHardscape, buyPlant, buyTank, checkGoals, claimDaily, doseIchMedication, DREAM_FISH, economy, FISH_SPECIES, feed, fulfillOrder, HARDSCAPE, ICH_MED_WORKING, linkTanks, moveDueToNursery, orderBoard, orderSupply, PINCH_MEALS, setTankPurpose, splitTank, transferMedia, step, TICK_HOURS, updateDaily, useTestKit, waterChange, type TankState } from '../sim';
+import { addFish, takeStoreFemales, addHardscape, buyPlant, buyTank, checkGoals, claimDaily, doseIchMedication, DREAM_FISH, economy, FISH_SPECIES, feed, fulfillOrder, HARDSCAPE, ICH_MED_WORKING, linkTanks, moveDueToNursery, orderBoard, orderSupply, PINCH_MEALS, setTankPurpose, splitTank, transferMedia, step, TICK_HOURS, updateDaily, useTestKit, waterChange, type TankState } from '../sim';
 import { chooseOption, choiceState, tradeCheck, type ChoiceCard, type ChoiceId } from '../sim/choices';
 import { advanceQuest, currentQuest, newProgress } from '../ui/tutorial';
 import { morningLine } from '../ui/morning-card';
@@ -108,7 +108,7 @@ function run(seed: number, days: number): { nights: MidgameNight[]; tanks: TankS
     if (currentQuest(p)?.id === 'fish') {
       addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'male', strain: DREAM_FISH.parents.male });
       // 夢想魚一鍵買：店裡最快生的那兩尾（#335）
-      const due = storeFemales(s.hours, DREAM_FISH.parents.female);
+      const due = takeStoreFemales(s, DREAM_FISH.parents.female, 2);
       for (let i = 0; i < 2; i++) addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'female', strain: DREAM_FISH.parents.female, pregnancy: due[i] });
     }
     act();

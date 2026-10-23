@@ -78,6 +78,8 @@ export const PRICES: Record<string, number> = {
 
 export interface Economy {
   coins: number;
+  /** 今天（遊戲天）店裡各品系的母魚賣掉幾尾：連買的照懷孕程度往下挑，隔天換一批（midgame.md §6.6）。 */
+  storeSold?: { day: number; counts: Record<number, number> };
   /** 這一期累積的用電（度）。 */
   kwh: number;
   /** 上次結算電費的時間（遊戲小時）。 */
