@@ -3,7 +3,7 @@ import { FEATURES } from '../features';
 import { substrateName, tankSubstrateLook } from '../render/substrate';
 import { kitColor, type KitParam } from '../render/ops-fx';
 import { isShrimpSpecies, isFrySale, storeOffer, takeStoreFemales, addBottledBacteria, addFish, CARE_EAT_THRESHOLD, careTarget, guardianOf, hasSpawnSite, isBroodParent, PARENTAL, addSnail, APPLE_COLOR_LABELS, catchPests, collectTrap, doseMolluscicide, buyPlant as plantFromShop, isLightOn, PESTS, pestCount, removeClutches, removeDeadSnails, scrapeNeriteEggs, setTrap, snailBloom, SNAILS, type AppleColor, type PestKind, type SnailKind, addFishToQuarantine, addCuttings, addHardscape, addPlant, transferMedia, mediaAvailable, buybackRefusal, setKeeper, cureRefusal, mallBag, useCure, GUPPY_STRAIN_PRICES, GUPPY_FIN_STRAINS, GUPPY_STRAINS, finWords, matingSuccess, predictOffspring, canClaimStarterPack, claimStarterPack, buyTank, addHolidayTablet, buyTankRefusal, HOLIDAY_TABLET_DAYS, installFeeder, LOCKED_SPECIES, speciesUnlocked, tankLock, unlockHint, moveFish, newTankCost, purposeCost, setTankPurpose, suggestPurpose, TANK_PURPOSES, type TankPurpose, removeTank, removeTankRefusal, slotPrice, TANK_SETS, tankLabel, type TankSizeId, chargeMeal, economy, FISH_PRICES, BETTA_FEMALE_PRICE, fishBuybackPrice, PLANT_PRICES, plantBuybackPrice, price, sellCuttings, sellableCuttings, chestCuttingsOf, sellFish, sellsLeftToday, spend, takeCutting, buyQuarantine, HARDSCAPE, removeHardscape, placeFromBag, replaceSubstrate, SUBSTRATES, doseAntibiotic, doseDewormer, doseQuarantine, hasVisible, isJuvenile, crowdingRatio, COMFORT_BAND, dripMinutes, dripGrade, dripTutorialLeft, recordDrip, farmHabit, habitGap, habitOf, phBeyondSurvival, SPLIT_PLAN_LABELS, splitAdvice, splitGroup, splitTank, rescueFryToBox, BOX_CAPACITY, buyNurseryBox, dueMothers, moveDueToNursery, moveToNursery, NURSERY_FRY_CAPACITY, NURSERY_RELEASE_CM, nurseryFish, nurseryRefusal, releaseNursery, rescueFryToNursery, type SplitPlan, daysUntilSexVisible, growthFactors, growthStage, maxLengthCm, sexVisible, stageLabel, phenotype, strainName, QUARANTINE_DAYS, quarantineDays, readyForTank, releaseQuarantine, swallowCm, tooSmallForTank, PINCH_MEALS, orderBoard, matchingFish, orderSupply, moveToQuarantine, AIR_PUMPS, CHILLERS, CO2_KITS, doseIchMedication, DEFAULT_FOOD, feed, FANS, FOOD_GRADES, FOOD_KINDS, mealMg, mealPrice, tapFeed, type TapFeedResult, FILTERS, FISH_SPECIES, freeAmmonia, HEATERS, hidingFactor, LIGHTS, monthOf, observeSymptoms, PLANT_SPECIES, REGION_LABELS, removeDeadFish, replaceFilter, rinseFilterMedia, seasonName, setHeaterTarget, ichHeatC, ICH_MED_WORKING, topUp, unplugHeater, trimPlant, waterChange, suggestedWaterChange, type DripOutcome, type Fish, type FishSpeciesId, type FoodGrade, type FoodKind, type Symptom, type PlantSpeciesId, type Region, type TankState, type TestKitReading, markDaily, needsSetup, type MallItemId } from '../sim';
-import { choiceState } from '../sim/choices';
+import { choiceState, lineName } from '../sim/choices';
 import { applySeason, type Game } from '../game/game';
 import { h } from './dom';
 import { keeperRibbon } from './keeper-ribbon';
@@ -293,7 +293,7 @@ let shopPlay = false;
 const TAIL_SHAPE_LABELS = { round: '圓尾', delta: '扇尾', halfmoon: '大三角' } as const;
 
 /** 孔雀魚的品系、尾鰭分數、代數與近親程度（玩家看得到的外觀與紀錄，看不到隱性基因）。 */
-function geneticsInfo(fish: Fish): Node {
+function geneticsInfo(fish: Fish, line: string | null): Node {
   const g = fish.genome!;
   const p = phenotype(g);
   const rows: [string, string][] = [];
@@ -301,7 +301,7 @@ function geneticsInfo(fish: Fish): Node {
   // 白子一出生就看得出來（紅眼）；花紋要轉色才浮現，鰭型要到亞成魚
   const stage = growthStage(fish);
   const finsShown = stage === 'subadult' || stage === 'adult' || stage === 'old';
-  if (fish.sex === 'male' && sexVisible(fish) && finsShown) rows.push(['品系', strainName(p)]);
+  if (fish.sex === 'male' && sexVisible(fish) && finsShown) rows.push(['品系', line ? `${line} ${strainName(p)}` : strainName(p)]);
   else rows.push(['看得出的特徵', [p.albino ? '紅眼（白子）' : '', sexVisible(fish) && p.gold ? '金色身體' : '', sexVisible(fish) && p.tuxedo ? '後半身深色（禮服）' : '', ...(finsShown ? finWords(p) : [])].filter(Boolean).join('、') || '還看不出來']);
   if (!isJuvenile(fish)) rows.push(['尾鰭', `${g.tail} 分・${TAIL_SHAPE_LABELS[p.tailShape ?? 'delta']}`]);
   if (fish.sex === 'male' && !isJuvenile(fish) && matingSuccess(g) < 1) rows.push(['繁殖', matingSuccess(g) === 0 ? '交接器太長，不能交配（長公）' : '交接器偏長，很難配成']);
@@ -351,16 +351,18 @@ export function fishPanel({ game, sheet, toasts, fishPic, useMall }: PanelContex
   }
   const symptoms = observeSymptoms(game.state, fish);
   const pic = fishPic?.(fish);
+  // 已取名的品系（strain-fixing.md §2.2）：圖的左上角掛金色小名牌
+  const line = lineName(game.tanks, fish);
   return h(
     'div.stack',
     {},
-    pic ? h('div.fish-hero', {}, h('img', { src: pic, alt: '', draggable: 'false' })) : null,
+    pic ? h('div.fish-hero', {}, h('img', { src: pic, alt: '', draggable: 'false' }), line ? h('span.line-tag.fish-hero-line', {}, line) : null) : null,
     h('p', {}, `${fishName(fish)} · 體長約 ${fish.lengthCm.toFixed(1)} cm · ${ageLabel(fish.ageDays)}`),
     personaLine(fish),
     h('p', {}, growthLine(game.state, fish)),
     h('p', {}, habitLine(game.state, fish)),
     broodLine(game.state, fish),
-    fish.genome ? geneticsInfo(fish) : null,
+    fish.genome ? geneticsInfo(fish, line) : null,
     symptoms.length
       ? h('ul.symptoms', {}, ...symptoms.map((s) => h('li', {}, SYMPTOM_LABELS[s])))
       : h('p', {}, '游動正常，看起來很健康。'),

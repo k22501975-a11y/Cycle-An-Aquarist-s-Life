@@ -1,5 +1,5 @@
 import type { ChoiceCard } from '../sim/choices';
-import type { FishLook, StrainNaming } from './breeding-cards';
+import type { FishLook } from './breeding-cards';
 import { h } from './dom';
 
 /**
@@ -12,10 +12,7 @@ import { h } from './dom';
 /** 選了一個選項：picks 是 C2 要留種的魚，text 是 C18 玩家打的品系名。回傳錯誤訊息（顯示在卡上），成功回傳 null。 */
 export type ChoosePick = (key: string, picks: number[], text?: string) => string | null;
 
-/** C18 取名卡（strain-fixing.md §2.2）：有 naming 就畫取名演出。 */
-export function namingOf(card: ChoiceCard): StrainNaming | undefined {
-  return (card as ChoiceCard & { naming?: StrainNaming }).naming;
-}
+
 
 /** 照魚的編號找牠的樣子（C4 的母魚、C5 那尾魚；卡上只有編號）。 */
 export type FishLookup = (fishId: number) => FishLook | null;
@@ -38,7 +35,7 @@ export function choiceVisual(card: ChoiceCard, choose: ChoosePick, lookup: FishL
 
 function fill(bc: typeof import('./breeding-cards'), card: ChoiceCard, box: HTMLElement, pick: (key: string, picks?: number[]) => void, lookup: FishLookup, named: (name: string) => string | null): void {
   const { CHOICE_ART, choiceCard, keepOrSellCard, keeperPickCard, sireCompareCard } = bc;
-  const naming = namingOf(card);
+  const naming = card.naming;
 
   // 已取名品系的魚：從 lookup 拿品系名（核心的 PickFish／PairCandidate 不帶）
   const withLine = <T extends { fishId: number }>(f: T): T & { line?: string | null } => ({ ...f, line: lookup(f.fishId)?.line });

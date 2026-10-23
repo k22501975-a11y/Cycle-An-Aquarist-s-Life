@@ -1536,7 +1536,12 @@ span.bc-ks-icon { width: 32px; height: 42px; }
 .nm-mark.on { background: #fff7dc; box-shadow: 0 0 6px rgba(255, 247, 220, 0.9); }
 .nm-mark small { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font-size: 10px; line-height: 12px; color: rgba(255, 247, 220, 0.6); white-space: nowrap; }
 .nm-mark.on small { color: #fff7dc; }
-.nm-meter { padding-top: 10px; }
+.nm-meter { padding-top: 10px; container-type: inline-size; }
+/* 條太窄：兩條線上的字改成只寫百分比 */
+@container (max-width: 240px) {
+  .nm-mark small span { display: none; }
+  .nm-mark small::after { content: attr(data-short); }
+}
 .nm-meter-text { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
 .nm-meter-text b { color: var(--gold-bright); }
 .nm-form { display: flex; flex-direction: column; gap: 6px; opacity: 0; animation: rv-pop 0.45s ease-out forwards; }
@@ -1554,6 +1559,14 @@ span.bc-ks-icon { width: 32px; height: 42px; }
 .nm-plaque-name { font-size: 22px; letter-spacing: 0.06em; }
 .nm-plaque-sub { font-size: 13px; }
 .nm-shine { position: absolute; top: 0; bottom: 0; left: -40%; width: 30%; background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.8), transparent); transform: skewX(-18deg); animation: nm-shine 1.2s ease-out 0.5s both; }
+/* 品系完成（strain-fixing.md §5）：夢想魚在旋轉的光芒裡，穩定度條越過「品系完成」，最後蓋上名牌 */
+.ld { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.ld-hero { position: relative; display: grid; place-items: center; height: 96px; border-radius: 14px; overflow: hidden; background: radial-gradient(ellipse at 50% 50%, rgba(255, 236, 190, 0.35), rgba(6, 22, 32, 0.85) 75%); }
+.ld-rays { position: absolute; inset: -60%; background: repeating-conic-gradient(from 0deg, rgba(255, 236, 170, 0.32) 0 8deg, transparent 8deg 24deg); -webkit-mask: radial-gradient(circle, #000 20%, transparent 60%); mask: radial-gradient(circle, #000 20%, transparent 60%); animation: rv-rays 14s linear infinite; }
+.ld-fish { position: relative; height: 78px; max-width: 70%; object-fit: contain; filter: drop-shadow(0 0 10px rgba(255, 236, 190, 0.8)); animation: rv-pop 0.6s ease-out both; }
+.ld-fish.albino { filter: brightness(1.2) saturate(0.6) drop-shadow(0 0 10px rgba(255, 236, 190, 0.8)); }
+.fish-hero { position: relative; }
+.fish-hero-line { position: absolute; left: 8px; top: 8px; font-size: 13px; line-height: 20px; padding: 0 10px; }
 @keyframes nm-light { from { filter: brightness(0.45) saturate(0.4) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5)); transform: scale(1); } 60% { filter: brightness(1.6) drop-shadow(0 0 6px rgba(255, 240, 200, 0.9)); transform: scale(1.15); } to { filter: brightness(1.15) drop-shadow(0 0 4px rgba(255, 230, 170, 0.8)); transform: scale(1); } }
 @keyframes nm-glow-in { to { opacity: 1; } }
 @keyframes nm-fill { to { width: var(--pct); } }
@@ -1564,7 +1577,7 @@ span.bc-ks-icon { width: 32px; height: 42px; }
   .nm-glow { animation: none; opacity: 1; }
   .nm-fill { animation: none; width: var(--pct); }
   .nm-form { animation: none; opacity: 1; }
-  .nm-plaque, .nm-shine { animation: none; }
+  .nm-plaque, .nm-shine, .ld-rays, .ld-fish { animation: none; }
 }
 .rv-title { display: block; font-size: 16px; color: var(--gold-bright); text-shadow: 0 0 10px rgba(246, 216, 145, 0.5); }
 
