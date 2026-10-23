@@ -361,7 +361,8 @@ export function breedingLineRow(text: string, fish?: FishLook, progress?: number
 
 // ── 成長里程碑報告卡（midgame.md §5.3） ─────────────────────
 
-export type MilestoneStep = 'sex' | 'color' | 'ready';
+/** sex／color／ready（§5.3），和顯色到可以配之間的成長卡 tail／plump／adult（§6.7）。 */
+export type MilestoneStep = 'sex' | 'color' | 'ready' | 'tail' | 'plump' | 'adult';
 
 /** 放大鏡要對準的地方（佔整張魚圖的比例）：公魚的肛鰭（交接器）、母魚的胎斑。圖都是頭朝右畫的。 */
 export const LENS_AT: Record<'male' | 'female', { x: number; y: number }> = {
@@ -424,15 +425,18 @@ function lensSubject(src: string, at: { x: number; y: number }, albino: boolean)
  * - sex：魚在缸裡（還沒顯色、淡淡的），放大鏡對著肛鰭（公）或胎斑（母）
  * - color：小時候灰灰的樣子 → 現在顯色的樣子，旁邊閃光
  * - ready：公母面對面，中間一顆愛心和留種緞帶
+ * - tail／plump／adult（§6.7）：那尾魚現在的樣子加閃光，進度停在顯色和可以配中間
  * earlierDays：種魚照 C7 養快，比原本提前幾天，掛一個小標。
  */
 export function milestoneVisual(step: MilestoneStep, fish: FishLook, partner?: FishLook, earlierDays?: number): HTMLElement {
   const albino = fish.name.includes('白子');
   const steps: MilestoneStep[] = ['sex', 'color', 'ready'];
+  const grow = !steps.includes(step);
+  const upTo = grow ? 1 : steps.indexOf(step);
   const track = h(
     'span.ms-track',
     { 'aria-hidden': 'true' },
-    ...steps.map((s, i) => h(`i${i <= steps.indexOf(step) ? '.on' : ''}${s === step ? '.now' : ''}`)),
+    ...steps.map((s, i) => h(`i${i <= upTo ? '.on' : ''}${s === step ? '.now' : ''}`)),
   );
   const early = earlierDays ? h('span.ms-early', {}, `提前 ${earlierDays} 天`) : null;
   let scene: HTMLElement;
@@ -453,6 +457,8 @@ export function milestoneVisual(step: MilestoneStep, fish: FishLook, partner?: F
       h('span.ms-arrow', { 'aria-hidden': 'true' }, '➜'),
       h('span.ms-after', {}, h(`img.ms-fish${albino ? '.albino' : ''}`, { src: artSrc(fish), alt: '', draggable: 'false' }), ...[0, 1, 2].map((i) => h(`i.ms-spark.s${i}`))),
     );
+  } else if (grow) {
+    scene = h('div.ms-scene.ms-color.ms-grow', {}, h('span.ms-after', {}, h(`img.ms-fish${albino ? '.albino' : ''}`, { src: artSrc(fish), alt: '', draggable: 'false' }), ...[0, 1, 2].map((i) => h(`i.ms-spark.s${i}`))));
   } else {
     const mate = partner ?? null;
     const male = fish.sex === 'male' ? fish : mate;

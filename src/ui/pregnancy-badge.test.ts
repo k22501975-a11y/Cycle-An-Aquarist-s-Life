@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PREGNANCY_DUE } from '../sim/actions';
 import { BELLY_SHOWS } from '../sim/nursery';
 import { PREGNANCY_STAGE_AT, pregnancyStage, pregnancySvg } from './pregnancy-badge';
 
@@ -10,8 +11,9 @@ describe('商店母魚卡的懷孕程度（midgame.md §6.6）', () => {
     expect(pregnancyStage(0.86)).toBe('due');
   });
 
-  it('「肚子圓了」和早上報告說肚子圓起來是同一個門檻', () => {
+  it('「肚子圓了」和早上報告說肚子圓起來、「快生了」和商店挑母魚是同一個門檻', () => {
     expect(PREGNANCY_STAGE_AT.round).toBe(BELLY_SHOWS);
+    expect(PREGNANCY_STAGE_AT.due).toBe(PREGNANCY_DUE);
   });
 
   it('越後面肚子越鼓、胎斑越黑', () => {

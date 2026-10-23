@@ -132,6 +132,10 @@ export interface ChoiceCard {
   trade?: TradeEstimate;
   /** C6：要搬去繁殖缸的魚（照搬的順序）。 */
   move?: number[];
+  /** C13：可以一起勾的選項（畫面畫成勾選；都沒勾是 standard、都勾是 both，#335）。 */
+  checks?: string[];
+  /** 選項下面的一行小字（C12：照推薦大約第幾天開獎，#335）。 */
+  note?: string;
 }
 
 /** 存在共用錢包上：每張卡上次出現的時間、選了什麼。 */
@@ -150,6 +154,8 @@ export interface ChoiceState {
   /** 成長里程碑：記下的是哪一對（「母-公」），和已經報過的（「魚編號:步驟」）。 */
   milestonePair?: string;
   milestoneSeen?: string[];
+  /** 留種公魚開始顯色的時間（遊戲小時）：顯色到可以配之間的成長卡（§6.7）用。 */
+  colorHours?: number;
   /** C5 問過的訂單（每張只問一次）。選過之後 picked.C5 就是之後同類的單的處理方式（keep 自動標留種）。 */
   tradeAsked?: number[];
   /**
@@ -182,6 +188,8 @@ export interface ChoiceState {
   sires?: number[];
   /** C13 選了加活餌：哪尾母魚（生完就收掉活餌）。 */
   pregPlan?: number;
+  /** C13 選了調高水溫：哪尾母魚、哪缸、原本加熱棒設幾度（生完就調回來，#335）。 */
+  warmPlan?: { momId: number; tank: number; prevC: number };
   /** C13 問過的母魚（C12 配的那幾尾，每尾問一次）。 */
   pregAsked?: number[];
   /** C12 選了 1 公配 2 母：第二尾母魚。 */
@@ -220,6 +228,8 @@ export const FAST_TEMP_C = 27.5;
 export const SECOND_BROOD_SHOWS = 0.7;
 /** C9 第二次之後（簡化版）：懷孕到多少就問（比第一次早一點，肚子開始圓就問，跟前後的卡排得開）。 */
 export const BROOD_AGAIN_SHOWS = 0.6;
+/** C13 孕期調高水溫（midgame.md §6.6）：調到幾度（缸裡有怕熱的魚就照牠們的上限）。 */
+export const WARM_PREG_C = 28;
 /** C9 重複版（midgame.md §6.5）：這幾天內也會到 BROOD_AGAIN_SHOWS 的母魚合成一張卡。 */
 export const BROOD_GROUP_DAYS = 3;
 /** C9 重複版：上次選完幾天內又有母魚快生，就直接照上次，不跳卡。 */
@@ -320,8 +330,13 @@ export function nextMilestone(tanks: TankState[]): { step: MilestoneStep; label:
   return null;
 }
 
+/** 顯色到可以配之間的成長卡（midgame.md §6.7）：尾巴拉長、母魚長大一圈、交接鰭長好。 */
+export type GrowStep = 'tail' | 'plump' | 'adult';
+/** 各張在顯色到可以配之間的哪裡（照時間算）。 */
+export const GROW_AT: Record<GrowStep, number> = { tail: 1 / 3, plump: 1 / 2, adult: 2 / 3 };
+
 export interface Milestone {
-  step: MilestoneStep;
+  step: MilestoneStep | GrowStep;
   fishId: number;
   /** ready：配的那一尾。 */
   partnerId?: number;
@@ -349,7 +364,7 @@ export function takeMilestones(tanks: TankState[]): Milestone[] {
   const name = (f: Fish) => `留種的${f.genome ? strainName(phenotype(f.genome)) : FISH_SPECIES[f.species].name}`;
   const gain = (step: MilestoneStep) => (s.planGain?.[step] ?? 0) > 0 ? s.planGain![step] : undefined;
   const note = (step: MilestoneStep) => (gain(step) ? `（養快提前了 ${gain(step)} 天）` : '');
-  const add = (id: string, m: Omit<Milestone, 'earlierDays'>) => {
+  const add = (id: string, m: Omit<Milestone, 'earlierDays'> & { step: MilestoneStep }) => {
     if (seen.includes(id)) return;
     seen.push(id);
     if (!fresh) out.push({ ...m, earlierDays: gain(m.step), text: m.text + note(m.step) });
@@ -359,10 +374,38 @@ export function takeMilestones(tanks: TankState[]): Milestone[] {
   }
   if (reached(p.dad, 'color')) {
     const traits = p.dad.genome ? guppyTraits(phenotype(p.dad.genome)).filter((x) => !x.key.startsWith('tail:')).map((x) => x.name).join('、') : '';
+    if (!seen.includes(`${p.dad.id}:color`)) s.colorHours = tanks[0].hours;
     add(`${p.dad.id}:color`, { step: 'color', fishId: p.dad.id, text: `${name(p.dad)}開始顯色了${traits ? `，尾巴的${traits}出來了` : ''}` });
   }
   if (reached(p.mom, 'ready') && reached(p.dad, 'ready')) add(`${key}:ready`, { step: 'ready', fishId: p.dad.id, partnerId: p.mom.id, text: `${name(p.dad)}長大了，可以配對了！` });
   return out;
+}
+
+/**
+ * 早上報告用：留種那對顯色到可以配之間的成長卡（midgame.md §6.7），一個早上最多一張。
+ * 照時間算到了 1/3（尾巴拉長）、1/2（母魚長大一圈）、2/3（交接鰭長好）就出；
+ * busy：今天已經有別的卡（選擇卡、里程碑、開獎），往後挪一天。
+ */
+export function takeGrowMilestone(tanks: TankState[], busy: boolean): Milestone | null {
+  const s = choiceState(tanks);
+  const p = pairFish(tanks, s);
+  if (busy || !p || s.colorHours === undefined || s.milestonePair !== `${p.mom.id}-${p.dad.id}`) return null;
+  const t = tanks[p.tank];
+  const plan = s.plan ?? 'standard';
+  const [momDays, dadDays] = [p.mom, p.dad].map((f) => daysToMilestone(t, f, 'ready', plan));
+  const left = Math.max(momDays, dadDays);
+  if (left <= 0) return null;
+  const since = (tanks[0].hours - s.colorHours) / 24;
+  const at = since / (since + left);
+  const seen = (s.milestoneSeen ??= []);
+  const step = (Object.keys(GROW_AT) as GrowStep[]).find((k) => at >= GROW_AT[k] && !seen.includes(`${p.dad.id}:${k}`));
+  if (!step) return null;
+  seen.push(`${p.dad.id}:${step}`);
+  const n = Math.max(1, Math.round(left));
+  if (step === 'tail') return { step, fishId: p.dad.id, text: `${callName(p.dad)}的尾巴開始拉長了，顏色也一天比一天深。` };
+  if (step === 'plump') return { step, fishId: p.mom.id, text: `${callName(p.mom)}這週又長大一圈，身體看起來厚實多了。` };
+  const mom = momDays > dadDays ? `${callName(p.mom)}還要再長一點，大約 ${n} 天` : `${callName(p.mom)}體型也夠了，再大約 ${n} 天就能配對`;
+  return { step, fishId: p.dad.id, partnerId: p.mom.id, text: `${callName(p.dad)}的交接鰭長好了，已經是大人了。${mom}。` };
 }
 
 /** 遊戲第幾天（跟早上報告的「第 N 天」一樣）。 */
@@ -826,6 +869,11 @@ function scanBetter(tanks: TankState[], s: ChoiceState): void {
  * C13：照 C12 配的母魚（留種那對的母魚、1 公配 2 母的第二尾；第二尾要懷的是指定爸爸的），剛懷孕幾天，還沒問過。
  * 那缸已經在餵活餌就不用再問。
  */
+/** C13 孕期要調到的水溫：WARM_PREG_C，缸裡有怕熱的魚就照牠們能忍的上限。 */
+function warmTarget(t: TankState): number {
+  return Math.min(WARM_PREG_C, ...t.fish.filter((f) => f.alive).map((f) => FISH_SPECIES[f.species].temp.max));
+}
+
 function pregnantMom(tanks: TankState[], s: Readonly<ChoiceState>): { fish: Fish; tank: number } | null {
   const p = pairFish(tanks, s);
   if (!p) return null;
@@ -1077,6 +1125,10 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       // 配上（約 2 天）＋懷孕（孕期照水溫）
       const sp = FISH_SPECIES[p.mom.species].breeding!;
       const born = Math.round(wait + 2 + sp.gestationDays / Math.sqrt(temperatureFactor(t.water.tempC)));
+      // 照推薦（C13 孕期調高水溫，#335）：懷上之後問 C13，之後照調高的水溫算
+      const warmC = t.equipment.heater ? Math.max(t.water.tempC, warmTarget(t)) : t.water.tempC;
+      const gest = (f: number, c: number) => (f * sp.gestationDays) / Math.sqrt(temperatureFactor(c));
+      const reveal = Math.round(wait + 2 + gest(PREG_ASK[0], t.water.tempC) + gest(1 - PREG_ASK[0], warmC));
       return {
         id,
         tank: p.tank,
@@ -1089,6 +1141,7 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
         ],
         motherId: p.mom.id,
         fatherId: p.dad.id,
+        note: `照推薦，大約第 ${dayOf(home.hours + reveal * 24)} 天開獎`,
       };
     }
     case 'C13': {
@@ -1097,6 +1150,15 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       const d = Math.max(1, Math.round(daysToBirth(tanks[m.tank], m.fish) ?? 1));
       const sp = FISH_SPECIES[m.fish.species].breeding!;
       const more = Math.max(1, Math.round(sp.broodMean * m.fish.health * (broodFactor(1) - broodFactor(m.fish.breedingCondition))));
+      // 孕期調高水溫（#335）：懷孕天數本來就照水溫走（population.ts），早幾天生
+      const t = tanks[m.tank];
+      const warmC = warmTarget(t);
+      const warmD = Math.max(1, Math.round(((1 - m.fish.pregnancy) * sp.gestationDays) / Math.sqrt(temperatureFactor(warmC))));
+      const early = d - warmD;
+      const today = dayOf(home.hours);
+      const noWarm = !t.equipment.heater ? '這缸沒有加熱棒，調不了水溫' : early < 1 ? '水溫已經夠高了' : undefined;
+      const warm = `水溫調到 ${warmC}°C`;
+      const warmOut = `約早 ${early} 天生（第 ${today + d} → ${today + warmD} 天），水裡的氧少一點，${t.equipment.airPump ? '打氣會幫你開著' : '記得開打氣'}`;
       return {
         id,
         tank: m.tank,
@@ -1105,7 +1167,10 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
         options: [
           { key: 'standard', label: '標準飼料', outcome: '照現在餵，水比較好顧' },
           { key: 'live', label: '加活餌', outcome: `一窩可能多 ${more} 尾左右，水比較髒要多換水` },
+          { key: 'warm', label: warm, outcome: warmOut, recommended: !noWarm, disabled: noWarm },
+          { key: 'both', label: `加活餌＋${warm}`, outcome: `多幾尾，也早 ${early} 天生；水比較髒、氧比較少，要多換水、開打氣`, disabled: noWarm },
         ],
+        checks: ['live', 'warm'],
         motherId: m.fish.id,
       };
     }
@@ -1364,6 +1429,14 @@ function lateHousekeeping(tanks: TankState[], s: ChoiceState): void {
     if (!mom || mom.fish.pregnancy === 0) {
       for (const t of tanks) if (t.feedPlan?.kind === LIVE_FOOD.kind && t.feedPlan.grade === LIVE_FOOD.grade && (!s.plan || s.planDone)) delete t.feedPlan;
       delete s.pregPlan;
+    }
+  }
+  if (s.warmPlan) {
+    const w = s.warmPlan;
+    const mom = located(tanks).find(({ fish }) => fish.id === w.momId);
+    if (!mom || mom.fish.pregnancy === 0) {
+      if (tanks[w.tank]) setHeaterTarget(tanks[w.tank], w.prevC);
+      delete s.warmPlan;
     }
   }
   const m = revealMom(tanks, s);
@@ -1661,10 +1734,19 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
     case 'C13': {
       const m = pregnantMom(tanks, s);
       if (!m) return '已經過了孕期剛開始的時候';
-      if (key === 'live') {
-        tanks[m.tank].feedPlan = { ...LIVE_FOOD };
+      if (!['standard', 'live', 'warm', 'both'].includes(key)) return '沒有這個選項';
+      const t = tanks[m.tank];
+      if ((key === 'warm' || key === 'both') && !t.equipment.heater) return '這缸沒有加熱棒，調不了水溫';
+      if (key === 'live' || key === 'both') {
+        t.feedPlan = { ...LIVE_FOOD };
         s.pregPlan = m.fish.id;
-      } else if (key !== 'standard') return '沒有這個選項';
+      }
+      if (key === 'warm' || key === 'both') {
+        s.warmPlan = { momId: m.fish.id, tank: m.tank, prevC: t.equipment.heater!.targetC };
+        setHeaterTarget(t, warmTarget(t));
+        // 水溫高、溶氧少：有打氣機就開著
+        if (t.equipment.airPump) t.equipment.airPump.on = true;
+      }
       (s.pregAsked ??= []).push(m.fish.id);
       break;
     }

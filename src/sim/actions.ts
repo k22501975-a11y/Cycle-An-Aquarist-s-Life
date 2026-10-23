@@ -135,6 +135,8 @@ export interface AddFishOptions {
   sex?: 'male' | 'female';
   /** 店家母魚是否已經懷孕／抱卵。不指定時依機率決定。 */
   pregnant?: boolean;
+  /** 店家母魚懷孕到哪（商店卡上看得到的那尾，storeFemales）；有給就算懷孕了。 */
+  pregnancy?: number;
   /** 孔雀魚品系（GUPPY_STRAINS 的索引）。不指定時隨機。 */
   strain?: number;
   /** 鰭型品系（GUPPY_FIN_STRAINS）。 */
@@ -153,6 +155,26 @@ const STORE_PREGNANT_CHANCE: Partial<Record<FishSpeciesId, number>> = { guppy: 0
 /** 店裡已懷孕的母魚懷孕到哪裡（0–1，1 就生）。 */
 const PREGNANT_FROM = 0.3;
 const PREGNANT_TO = 0.9;
+/** 店裡一個品系今天有幾尾母魚可挑（#335）。 */
+const STORE_FEMALES = 4;
+/** 店裡一定有一尾「快生了」的（#335：開局挑快生的，第一窩 ≤ 第 10 天）：25°C 約 6～8 天後生，新缸也差不多養好水了。 */
+const STORE_DUE_FROM = 0.7;
+const STORE_DUE_TO = 0.78;
+/** 商店母魚卡「快生了」的門檻（midgame.md §6.6，徽章 ui/pregnancy-badge.ts 用同一個）：店裡最大的那尾一定在這以上。 */
+export const PREGNANCY_DUE = 0.7;
+
+/**
+ * 店裡這個品系今天的母魚懷孕到哪（#335），大的在前：每天換一批，一定有一尾快生了，其他的還沒。
+ * 只看日子和品系（不動缸的亂數），商店卡、推薦組合、一鍵買看到的都一樣。
+ */
+export function storeFemales(hours: number, strain: number): number[] {
+  const rng = { seed: Math.floor(hours / 24) * 7919 + strain * 104729 + 17 };
+  const out = [STORE_DUE_FROM + (STORE_DUE_TO - STORE_DUE_FROM) * nextRandom(rng)];
+  // 其他幾尾都還沒到快生（快生的那尾最早生）
+  while (out.length < STORE_FEMALES) out.push(PREGNANT_FROM + (STORE_DUE_FROM - PREGNANT_FROM) * nextRandom(rng));
+  return out.sort((a, b) => b - a);
+}
+
 
 /** 店家魚帶白點蟲的機率：教學一次買一公兩母，沒檢疫時約 27% 會帶進來（polish-to-9.md §4：前 30 天 ≤ 1/3）。 */
 const STORE_ICH_CHANCE = 0.1;
@@ -185,11 +207,13 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
   fish.generation = 0;
   fish.inbreeding = 0;
   if (fish.sex === 'female' && sp.breeding) {
-    const pregnant = options.pregnant ?? nextRandom(state.rng) < (STORE_PREGNANT_CHANCE[species] ?? 0);
+    const pregnant = options.pregnancy !== undefined || (options.pregnant ?? nextRandom(state.rng) < (STORE_PREGNANT_CHANCE[species] ?? 0));
     if (pregnant) {
       // 店家挑來賣的是看得出懷孕的母魚（懷孕後半段才有胎斑），所以起點落在 0.3～0.9：買回來 3～20 天內生第一胎。
       // 以前 0.05～0.9，兩條母魚都要等快 3 週才生的種子約 1/5，新手任務「母魚懷孕」和第 60 天收入都卡在運氣上
-      fish.pregnancy = PREGNANT_FROM + (PREGNANT_TO - PREGNANT_FROM) * nextRandom(state.rng);
+      // 商店卡上挑的那尾照卡上的（亂數照樣擲，後面的順序不變）
+      const rolled = PREGNANT_FROM + (PREGNANT_TO - PREGNANT_FROM) * nextRandom(state.rng);
+      fish.pregnancy = options.pregnancy ?? rolled;
       // 在店裡跟同品系的公魚配過
       // 鰭型品系在店裡是用帶因的正常公魚配的（緞帶、燕尾公魚配不了）
       if (fish.genome) {

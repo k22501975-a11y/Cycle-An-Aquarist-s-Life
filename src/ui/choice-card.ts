@@ -27,7 +27,7 @@ export function choiceVisual(card: ChoiceCard, choose: ChoosePick, lookup: FishL
     .then((bc) => fill(bc, card, box, pick, lookup))
     // 載不到卡片（離線更新到一半之類）：退回一排文字按鈕，照樣選得了
     .catch(() => box.append(h('div.bc-opts', {}, ...card.options.map((o) => h(`button.btn.small${o.recommended ? '.primary' : ''}`, { type: 'button', onclick: () => pick(o.key) }, o.label)))))
-    .then(() => box.append(msg));
+    .then(() => box.append(...(card.note ? [h('p.choice-note', {}, card.note)] : []), msg));
   return box;
 }
 
@@ -63,6 +63,8 @@ function fill(bc: typeof import('./breeding-cards'), card: ChoiceCard, box: HTML
   } else if (card.trade && card.id === 'C5') {
     const fish = lookup(card.trade.fishId);
     box.append(fish ? keepOrSellCard(fish, card.trade, () => pick('sell'), () => pick('keep')) : choiceCard(card.title, card.options, (key) => pick(key), CHOICE_ART));
+  } else if (card.checks) {
+    box.append(checkCard(card, pick));
   } else if (card.options.some((o) => o.key === 'split')) {
     // C11 公母分開養：母魚游進育幼盒的動畫在選項上面
     const mom = card.motherId !== undefined ? lookup(card.motherId) : null;
@@ -71,4 +73,34 @@ function fill(bc: typeof import('./breeding-cards'), card: ChoiceCard, box: HTML
   } else {
     box.append(choiceCard(card.title, card.options, (key) => pick(key), CHOICE_ART));
   }
+}
+
+/**
+ * 可以一起勾的選項（C13 加活餌、調高水溫，#335）：推薦的先勾好，按「就這樣」送出。
+ * 都沒勾是 standard、都勾是 both、勾一個就是那一個。
+ */
+function checkCard(card: ChoiceCard, pick: (key: string) => void): HTMLElement {
+  const on = new Set(card.checks!.filter((k) => card.options.some((o) => o.key === k && o.recommended && !o.disabled)));
+  const row = (key: string) => {
+    const o = card.options.find((x) => x.key === key)!;
+    const btn = h(
+      `button.choice-check${on.has(key) ? '.on' : ''}`,
+      {
+        type: 'button',
+        disabled: !!o.disabled,
+        'aria-pressed': String(on.has(key)),
+        onclick: () => {
+          if (on.has(key)) on.delete(key);
+          else on.add(key);
+          btn.classList.toggle('on', on.has(key));
+          btn.setAttribute('aria-pressed', String(on.has(key)));
+        },
+      },
+      h('span.choice-check-box', { 'aria-hidden': 'true' }),
+      h('span.choice-check-text', {}, h('b', {}, o.label), h('small', {}, o.disabled ?? o.outcome)),
+    );
+    return btn;
+  };
+  const go = () => pick(on.size === 0 ? 'standard' : on.size === card.checks!.length ? 'both' : [...on][0]);
+  return h('div.choice-checks', {}, ...card.checks!.map(row), h('button.btn.small.primary', { type: 'button', onclick: go }, '就這樣'));
 }

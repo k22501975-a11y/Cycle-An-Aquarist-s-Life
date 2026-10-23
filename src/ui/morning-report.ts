@@ -1,6 +1,6 @@
 import { crisisText, type Crisis } from '../game/crisis';
 import { BLOOM_NOTE, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
-import { takeChoice, takeMilestones, takeBellyNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, type ChoiceCard } from '../sim/choices';
+import { takeChoice, takeMilestones, takeGrowMilestone, takeBellyNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 import { quietObservation } from './morning-observe';
 
@@ -96,7 +96,8 @@ export interface Reveal {
 
 /** 成長里程碑（midgame.md §5.3）：sex 肛鰭變尖或出現胎斑、color 公魚顯色、ready 可以配。 */
 export interface Milestone {
-  step: 'sex' | 'color' | 'ready';
+  /** sex／color／ready（§5.3）；tail／plump／adult 是顯色到可以配之間的成長卡（§6.7）。 */
+  step: 'sex' | 'color' | 'ready' | 'tail' | 'plump' | 'adult';
   fishId: number;
   partnerId?: number;
   earlierDays?: number;
@@ -371,6 +372,12 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   // 中期的選擇點（design/midgame.md）：一個早上最多一張
   const choice = takeChoice(tanks);
   if (choice) items.push({ kind: 'choice', tank: choice.tank, tone: 'good', text: choice.title, choice, action: CHOICE_FOLLOW[choice.id] });
+  // 顯色到可以配之間的成長卡（midgame.md §6.7）：當天已經有別的卡就往後挪
+  const grow = takeGrowMilestone(tanks, items.some((i) => i.kind === 'choice' || i.kind === 'milestone' || i.kind === 'reveal'));
+  if (grow) {
+    const at = tanks.findIndex((t) => t.fish.some((f) => f.id === grow.fishId));
+    items.push({ kind: 'milestone', tank: Math.max(0, at), tone: 'good', text: grow.text, action: 'fish', subjectId: grow.fishId, milestone: { step: grow.step, fishId: grow.fishId, partnerId: grow.partnerId } });
+  }
   // 夢想魚那窩懷孕後段的里程碑、生病拖慢配對（midgame.md §6.4）、C9 自動照上次（§6.5）。
   // 放在 takeChoice 後面：早上的小事（lateHousekeeping）當天記下的，當天就說
   for (const n of takeBellyNotes(tanks)) {
