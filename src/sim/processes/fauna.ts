@@ -310,6 +310,8 @@ export function updateFauna(state: TankState, dt: number): void {
 
   feed(state, living, dt);
   const census = tankCensus(state);
+  // 最後一次超過建議量的時間：離線回來看這段時間有沒有擠過（takeAwayCrowd）
+  if (census.crowding > 1) state.crowdOverHours = state.hours;
   const trigger = ichTrigger(state, census);
   const ichCause = ichCauseNow(state, living, trigger);
   // 溫差、太擠時，缸裡潛伏的蟲會找抵抗力最差的魚上身（還沒有魚帶著時才算新的一波）
@@ -356,7 +358,9 @@ export function updateFauna(state: TankState, dt: number): void {
     }
     fish.health = Math.min(1, fish.health);
 
-    if (fish.health <= 0 && census.crowding > 1 && !crowdDeathAllowed(state)) fish.health = CROWD_HOLD_HEALTH;
+    // 擠出來的死因（midgame.md §7.7）才走「提醒兩次、全家一天兩尾」；病、老、餓、和擠無關的中毒照原本的規則。
+    // 離線補算不會累加 crowdNotices（要看過早上報告才算提醒過），所以沒提醒過的擠缸離線時撐著不死，回來先看到提醒
+    if (fish.health <= 0 && census.crowding > 1 && crowdKilled(fish) && !crowdDeathAllowed(state)) fish.health = CROWD_HOLD_HEALTH;
     if (fish.health <= 0) {
       fish.health = 0;
       fish.alive = false;
@@ -393,6 +397,15 @@ export const CROWD_NOTICES_BEFORE_DEATH = 2;
 export const CROWD_DEATHS_PER_DAY = 2;
 /** 還不能死的魚撐在這個體力（奄奄一息，看得出很糟）。 */
 const CROWD_HOLD_HEALTH = 0.02;
+
+/** 擠缸會造成的死因：太擠讓水質變差（氨、亞硝、缺氧、二氧化碳）、長期緊迫、太擠引發的白點。 */
+const CROWD_CAUSES = new Set(['ammonia', 'nitrite', 'oxygen', 'co2', 'chronic_stress']);
+
+/** 這尾魚是不是擠死的（主要死因是擠缸造成的）。 */
+function crowdKilled(fish: Fish): boolean {
+  const cause = mainCause(fish);
+  return CROWD_CAUSES.has(cause) || (cause === 'ich' && fish.ich.cause === 'crowding');
+}
 
 /**
  * 超過建議量的缸：提醒過兩次以上、全家今天還沒擠死兩尾，才讓這尾死（記下來）。

@@ -1823,6 +1823,42 @@ async function start(): Promise<void> {
         break;
     }
   };
+  /** 早上報告卡的按鈕（今天的小事、選擇卡、魚的長相）：過夜和離線回來的報告共用。 */
+  const reportHooks = (chooseOption: DeferredUi['chooseOption']) => {
+    const today = sim.dailyTasks(game.tanks);
+    const daily = today
+      ? { tasks: today.tasks.map((t) => ({ id: t.id, art: dailyArt(t.id), text: DAILY_SHORT[t.id], done: t.done })), go: (id: string) => goDaily(id as sim.DailyTaskId) }
+      : undefined;
+    const choose = (item: ReportItem, key: string, picks: number[]) => {
+      const card = item.choice ?? item.broodSetting;
+      return card ? game.actAll((tanks) => chooseOption(tanks, card.id, key, picks)) : null;
+    };
+    const fishLook = (id: number) => {
+      // 母魚可能在產卵盒（quarantine）裡
+      const f = game.tanks.flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])]).find((x) => x.id === id && x.genome);
+      if (!f?.genome) return null;
+      const p = sim.phenotype(f.genome);
+      return { sex: f.sex, name: sim.strainName(p), look: sim.lookIndex(p), fins: sim.finWords(p) };
+    };
+    return { picture: reportPicture, go: goReport, daily, choose, fishLook };
+  };
+  /** 離線回來：離開期間有缸太擠，先出一張報告卡（第一行「你不在的時候…太擠了」，接著擠缸卡，midgame.md §7.7）。 */
+  const showAway = (awayHours: number) => {
+    const since = game.state.hours - awayHours;
+    withPanels(({ awayReport, morningCard, chooseOption }) => {
+      if (sleepingNow) return;
+      const report = awayReport(game.tanks, since, awayHours);
+      if (!report) return;
+      save();
+      const shade = h('div.night.dawn');
+      shade.append(morningCard(report, reportHooks(chooseOption), () => {
+        shade.classList.remove('in');
+        window.setTimeout(() => shade.remove(), 450);
+      }));
+      document.body.append(shade);
+      requestAnimationFrame(() => shade.classList.add('in'));
+    });
+  };
   // 早上報告在拆出去的檔案裡（通常開機後早就載好了，照舊同步）
   const goNight = () => withPanels(goNightWith);
   const goNightWith = ({ snapshot, morningReport, morningCard, chooseOption }: DeferredUi) => {
@@ -1862,22 +1898,7 @@ async function start(): Promise<void> {
       analytics.track('sleep', { hours: r.hours, stopped: r.crisis !== null, items: report.items.length });
       shade.classList.add('dawn');
       checkDaily(); // 換天出題（早上報告卡要列出今天的小事）
-      const today = sim.dailyTasks(game.tanks);
-      const daily = today
-        ? { tasks: today.tasks.map((t) => ({ id: t.id, art: dailyArt(t.id), text: DAILY_SHORT[t.id], done: t.done })), go: (id: string) => goDaily(id as sim.DailyTaskId) }
-        : undefined;
-      const choose = (item: ReportItem, key: string, picks: number[]) => {
-        const card = item.choice ?? item.broodSetting;
-        return card ? game.actAll((tanks) => chooseOption(tanks, card.id, key, picks)) : null;
-      };
-      const fishLook = (id: number) => {
-        // 母魚可能在產卵盒（quarantine）裡
-        const f = game.tanks.flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])]).find((x) => x.id === id && x.genome);
-        if (!f?.genome) return null;
-        const p = sim.phenotype(f.genome);
-        return { sex: f.sex, name: sim.strainName(p), look: sim.lookIndex(p), fins: sim.finWords(p) };
-      };
-      const card = morningCard(report, { picture: reportPicture, go: goReport, daily, choose, fishLook }, () => {
+      const card = morningCard(report, reportHooks(chooseOption), () => {
         shade.classList.remove('in');
         window.setTimeout(() => shade.remove(), 450);
         sleepingNow = false;
@@ -1933,6 +1954,7 @@ async function start(): Promise<void> {
       }
     });
     flushEventToasts();
+    showAway(offline.hours);
   }
   if (window.matchMedia('(orientation: portrait)').matches) toasts.showNow('把手機轉成橫向，水缸會更大');
   setInterval(save, 10_000);
@@ -1983,6 +2005,7 @@ async function start(): Promise<void> {
         }),
       );
       flushEventToasts();
+      if (away.hours >= 1) showAway(away.hours);
     }
   });
   window.addEventListener('pagehide', save);

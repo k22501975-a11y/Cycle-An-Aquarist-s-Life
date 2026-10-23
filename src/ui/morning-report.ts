@@ -1,6 +1,6 @@
 import { crisisText, type Crisis } from '../game/crisis';
 import { BLOOM_NOTE, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
-import { takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, type ChoiceCard } from '../sim/choices';
+import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 import { quietObservation } from './morning-observe';
 
@@ -401,6 +401,18 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   items.sort((a, b) => (a.kind === 'crisis' ? -1 : b.kind === 'crisis' ? 1 : TONE_ORDER[a.tone] - TONE_ORDER[b.tone]));
   const day = Math.floor(tanks[0].hours / 24) + 1;
   return { title: crisis ? '半夜出狀況了' : `早安，第 ${day} 天`, hours: sleptHours, stopped: !!crisis, items };
+}
+
+/**
+ * 離線回來的報告（midgame.md §7.7）：離開期間有缸超過建議量，第一行寫「你不在的時候{缸名}太擠了」，接著出 C14。
+ * 沒擠過回 null（回來只照舊跳通知）。
+ */
+export function awayReport(tanks: TankState[], sinceHours: number, awayHours: number): MorningReport | null {
+  const { notes, choice } = takeAwayCrowd(tanks, sinceHours);
+  if (notes.length === 0) return null;
+  const items: ReportItem[] = notes.map((n) => ({ kind: 'crowd', tank: n.tank, tone: 'bad', text: n.text }));
+  if (choice) items.push({ kind: 'choice', tank: choice.tank, tone: 'good', text: choice.title, choice, action: CHOICE_FOLLOW[choice.id] });
+  return { title: '你回來了', hours: awayHours, stopped: false, items };
 }
 
 /** 選了以後要帶玩家去哪裡（C1 放育幼盒、C3 買缸；其他選了就好）。 */
