@@ -1349,7 +1349,14 @@ async function start(): Promise<void> {
         const at = game.tanks.findIndex(ill);
         if (!ill(game.state) && at >= 0) game.switchTo(at);
         const fish = sick();
-        return panelSheet('用藥', (p) => p.treatPanel(ctx, fish ? causeAdvice(fishName(fish), [], fish) : '缸裡現在看不到生病的魚。'));
+        // 白點藥效中：先說不用再下，叫玩家調水溫等（#324）
+        const ich = sim.ichTreatment(game.tanks);
+        const advice = ich
+          ? `水裡還有白點藥，藥效約剩 ${ich.medDays} 天，不用再下。水溫調到 28～30°C，約 ${ich.days} 天白點會掉。`
+          : fish
+            ? causeAdvice(fishName(fish), [], fish)
+            : '缸裡現在看不到生病的魚。';
+        return panelSheet('用藥', (p) => p.treatPanel(ctx, advice));
       }
       case 'select':
         return select(showy()?.id ?? null);
