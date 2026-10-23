@@ -356,6 +356,7 @@ export function updateFauna(state: TankState, dt: number): void {
     }
     fish.health = Math.min(1, fish.health);
 
+    if (fish.health <= 0 && census.crowding > 1 && !crowdDeathAllowed(state)) fish.health = CROWD_HOLD_HEALTH;
     if (fish.health <= 0) {
       fish.health = 0;
       fish.alive = false;
@@ -385,6 +386,27 @@ export function updateFauna(state: TankState, dt: number): void {
     water.antibiotic *= Math.exp(-0.01 * dt);
   }
   if (water.dewormer) water.dewormer *= Math.exp(-0.01 * dt);
+}
+
+/** 擠缸死魚之前至少要提醒過幾次、超過建議量時一天最多擠死幾尾（midgame.md §7.1）。 */
+export const CROWD_NOTICES_BEFORE_DEATH = 2;
+export const CROWD_DEATHS_PER_DAY = 2;
+/** 還不能死的魚撐在這個體力（奄奄一息，看得出很糟）。 */
+const CROWD_HOLD_HEALTH = 0.02;
+
+/**
+ * 超過建議量的缸：提醒過兩次以上、全家今天還沒擠死兩尾，才讓這尾死（記下來）。
+ * 擠缸死魚是逐步的，玩家一定先看過提醒、來得及處理。
+ */
+function crowdDeathAllowed(state: TankState): boolean {
+  if ((state.crowdNotices ?? 0) < CROWD_NOTICES_BEFORE_DEATH) return false;
+  // 全家算一份（錢包是全家共用的）：好幾缸一起擠，一天也最多死 CROWD_DEATHS_PER_DAY 尾
+  const book: { crowdDeaths?: { day: number; n: number } } = state.economy ?? state;
+  const day = Math.floor(state.hours / 24);
+  const d = book.crowdDeaths?.day === day ? book.crowdDeaths : { day, n: 0 };
+  if (d.n >= CROWD_DEATHS_PER_DAY) return false;
+  book.crowdDeaths = { day, n: d.n + 1 };
+  return true;
 }
 
 /** 近期傷害記錄以約 24 小時的時間常數衰減。 */

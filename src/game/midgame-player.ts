@@ -1,5 +1,5 @@
 import { newGameState } from './game';
-import { addFish, takeStoreFemales, addHardscape, buyPlant, buyTank, checkGoals, claimDaily, doseIchMedication, DREAM_FISH, economy, FISH_SPECIES, feed, fulfillOrder, HARDSCAPE, ICH_MED_WORKING, linkTanks, moveDueToNursery, orderBoard, orderSupply, PINCH_MEALS, setTankPurpose, splitTank, transferMedia, step, TICK_HOURS, updateDaily, useTestKit, waterChange, type TankState } from '../sim';
+import { addFish, crowdingRatio, takeStoreFemales, addHardscape, buyPlant, buyTank, checkGoals, claimDaily, doseIchMedication, DREAM_FISH, economy, FISH_SPECIES, feed, fulfillOrder, HARDSCAPE, ICH_MED_WORKING, linkTanks, moveDueToNursery, orderBoard, orderSupply, PINCH_MEALS, setTankPurpose, splitTank, transferMedia, step, TICK_HOURS, updateDaily, useTestKit, waterChange, type TankState } from '../sim';
 import { chooseOption, choiceState, tradeCheck, type ChoiceCard, type ChoiceId } from '../sim/choices';
 import { advanceQuest, currentQuest, newProgress } from '../ui/tutorial';
 import { morningLine } from '../ui/morning-card';
@@ -35,6 +35,12 @@ export interface MidgameNight {
   sickDays: number;
   /** 早上各缸的水質警報（「第幾缸:警報」，例如 1:too_hot）。 */
   alarms: string[];
+  /** 早上各缸的擁擠度（crowdingRatio，1 是建議量）。 */
+  crowd: number[];
+  /** 這一晚死的魚的死因（各缸合起來）。 */
+  deaths: string[];
+  /** 這一晚在超過建議量的缸（前一晚或早上 ≥ 100%）死的魚（midgame.md §7.4 的擠缸死魚）。 */
+  crowdDeaths: number;
 }
 
 /** 所有缸一起跑（跟遊戲一樣每個 tick 輪流推每一缸）。 */
@@ -80,8 +86,9 @@ function pickRecommended(tanks: TankState[], card: ChoiceCard): string | null {
   return why;
 }
 
-export function midgamePlayer(seed: number, days = 36): MidgameNight[] {
-  return run(seed, days).nights;
+/** neglectCrowd：擠缸都不處理（C14 每次都選先多換水，midgame.md §7.4 的「都不處理」）。 */
+export function midgamePlayer(seed: number, days = 36, opts: { neglectCrowd?: boolean } = {}): MidgameNight[] {
+  return run(seed, days, opts).nights;
 }
 
 /** 中期劇本玩完之後的所有缸（上傳檢查的劇本用）。 */
@@ -89,7 +96,7 @@ export function midgamePlayerTanks(seed: number, days = 36): TankState[] {
   return run(seed, days).tanks;
 }
 
-function run(seed: number, days: number): { nights: MidgameNight[]; tanks: TankState[] } {
+function run(seed: number, days: number, opts: { neglectCrowd?: boolean } = {}): { nights: MidgameNight[]; tanks: TankState[] } {
   const s = newGameState(seed);
   const tanks = [s];
   linkTanks(tanks);
@@ -116,6 +123,11 @@ function run(seed: number, days: number): { nights: MidgameNight[]; tanks: TankS
     act();
     if (currentQuest(p)?.id === 'plant') buyPlant(s, 'anubias');
     act();
+    // 加熱棒壞了（早上報告會說）就換一支，跟認真玩家一樣
+    for (const t of tanks) {
+      const heater = t.equipment.heater;
+      if (heater && (heater.stuckOn || heater.broken)) t.equipment.heater = { spec: heater.spec, targetC: heater.targetC, broken: false, heating: false };
+    }
     // 長白點就照任務卡下一份藥（#324：藥效中不再下）
     for (const t of tanks) if (t.fish.some((f) => f.alive && f.ich.stage === 'visible') && t.water.medication < ICH_MED_WORKING) doseIchMedication(t);
     for (const t of tanks) {
@@ -143,14 +155,19 @@ function run(seed: number, days: number): { nights: MidgameNight[]; tanks: TankS
     for (const t of tanks) moveDueToNursery(t);
     checkGoals(tanks, !currentQuest(p));
     const before = snapshot(tanks);
+    const evening = tanks.map(crowdingRatio);
     simulateAll(tanks, 23.5);
     const report = morningReport(before, tanks, 24, null);
     const card = report.items.find((i) => i.choice)?.choice;
-    const why = card ? pickRecommended(tanks, card) : null;
+    const why = !card ? null : card.id === 'C14' && opts.neglectCrowd ? chooseOption(tanks, 'C14', 'water') : pickRecommended(tanks, card);
     const line = morningLine(report);
     const cs = choiceState(tanks);
     const bellyMilestone = report.items.some((i) => i.kind === 'belly' && i.subjectId !== undefined && i.subjectId === cs.reveal?.momId);
-    out.push({ bellyMilestone, sickDays: cs.sickDays ?? 0, day: Math.floor(s.hours / 24) + 1, choice: card?.id, orderChoice, quiet: line === '安靜的一晚。', coins: economy(s).coins, tanks: tanks.length, inBreeding: tanks.find((t) => t.purpose === 'breeding')?.fish.filter((f) => f.alive).length ?? 0, alarms: tanks.flatMap((t, i) => [...waterAlarms(t)].map((x) => `${i}:${x}`)), line: `${why ? `（選不了：${why}）` : ''}${line} ${report.items.map((i) => i.kind).join(',')}` });
+    const night0 = s.hours - 24;
+    const died = tanks.map((t) => t.events.filter((e) => e.type === 'fish_died' && e.hours > night0));
+    const deaths = died.flat().map((e) => String(e.cause));
+    const crowdDeaths = died.reduce((a, d, i) => a + (Math.max(evening[i] ?? 0, crowdingRatio(tanks[i])) >= 1 ? d.length : 0), 0);
+    out.push({ crowdDeaths, crowd: tanks.map((t) => Math.round(crowdingRatio(t) * 100) / 100), deaths, bellyMilestone, sickDays: cs.sickDays ?? 0, day: Math.floor(s.hours / 24) + 1, choice: card?.id, orderChoice, quiet: line === '安靜的一晚。', coins: economy(s).coins, tanks: tanks.length, inBreeding: tanks.find((t) => t.purpose === 'breeding')?.fish.filter((f) => f.alive).length ?? 0, alarms: tanks.flatMap((t, i) => [...waterAlarms(t)].map((x) => `${i}:${x}`)), line: `${card ? `<${(card.options.find((o) => o.recommended) ?? card.options[0]).key}>` : ''}${why ? `（選不了：${why}）` : ''}${line} ${report.items.map((i) => i.kind).join(',')}` });
   }
   return { nights: out, tanks };
 }

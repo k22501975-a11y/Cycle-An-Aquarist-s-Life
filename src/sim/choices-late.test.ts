@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
 import { addFish, ADULT_SIZE, bacteriaCapacity, broodFactor, buyTank, CROWD_WARN, crowdingRatio, cross, DREAM_FISH, economy, FISH_SPECIES, linkTanks, orderBoard, setTankPurpose, type Fish, type GuppyGenome, type TankState } from './index';
-import { chooseOption, choiceState, CHOICE_RESHOW_DAYS, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, WARM_PREG_C, takeChoice, takeReveal, takeSecondBrood } from './choices';
+import { chooseOption, choiceState, CHOICE_RESHOW_DAYS, CROWD_FULL, CROWD_PREVIEW, REVEAL_CULL_DAYS, takeCrowdNotes, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, WARM_PREG_C, takeChoice, takeReveal, takeSecondBrood } from './choices';
 
 const calm = { carriesIch: false, carries: [] };
 const ADULT_CM = FISH_SPECIES.guppy.adultLengthCm * ADULT_SIZE;
@@ -221,8 +221,11 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     const c14 = takeChoice(tanks);
     expect(c14?.id).toBe('C14');
     expect(c14!.title).toMatch(/快住不下了$/);
-    expect(c14!.options.map((o) => o.key).slice(0, 2)).toEqual(['sell', 'tank']);
-    expect(c14!.options[0].outcome).toMatch(/^\d+ 尾賣給阿德，約 \d+ 元$/);
+    // 沒有快生的、也不是小小魚擠的：推薦賣一批；公母分開、換水也列著
+    expect(c14!.options.map((o) => o.key)).toEqual(expect.arrayContaining(['split', 'sell', 'tank', 'water']));
+    const sell = c14!.options.find((o) => o.key === 'sell')!;
+    expect(sell.recommended).toBe(true);
+    expect(sell.outcome).toMatch(/^\d+ 尾賣給阿德，約 \d+ 元$/);
     const coins = economy(s).coins;
     expect(chooseOption(tanks, 'C14', 'sell')).toBeNull();
     expect(crowdingRatio(s)).toBeLessThan(CROWD_WARN);
@@ -475,5 +478,112 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     expect(t2.fish).toContain(mom);
     expect(takeBellyNotes(tanks).map((n) => n.text)).toEqual(['因為白點，配對晚了約 3 天']);
     expect(takeBellyNotes(tanks)).toEqual([]);
+  });
+
+  it('C14 擠的多半是小小魚：推薦公母分開；選了把公魚搬去別缸，之後長大的公魚每天自動搬（midgame.md §7.2）', () => {
+    const { tanks, s, t2, st } = latePair();
+    Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard' });
+    orderBoard(s).orders = [];
+    const male = addFish(s, 'guppy', { ...calm, sex: 'male', pregnant: false });
+    while (crowdingRatio(s) < CROWD_WARN + 0.05) {
+      const f = addFish(s, 'guppy', { ...calm, pregnant: false });
+      f.lengthCm = 1.4;
+      f.ageDays = 3;
+    }
+    const c14 = takeChoice(tanks)!;
+    expect(c14.id).toBe('C14');
+    expect(c14.options.find((o) => o.recommended)?.key).toBe('split');
+    expect(chooseOption(tanks, 'C14', 'split')).toBeNull();
+    expect(t2.fish.some((f) => f.id === male.id)).toBe(true);
+    expect(st.crowdSplit).toEqual([0]);
+    // 之後長大的公魚：早上自動搬，報告寫一行
+    const later = addFish(s, 'guppy', { ...calm, sex: 'male', pregnant: false });
+    nextDay(tanks);
+    expect(t2.fish.some((f) => f.id === later.id)).toBe(true);
+    expect(takeCrowdNotes(tanks).some((n) => /公魚長大了，照你的設定搬到/.test(n.text))).toBe(true);
+  });
+
+  it('C14 加強版（≥ 100%）：標題寫太擠了、寫氨；先多換水撐 2 天，2 天後再問', () => {
+    const { tanks, s, st } = latePair();
+    Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard' });
+    orderBoard(s).orders = [];
+    while (crowdingRatio(s) < CROWD_FULL + 0.1) addFish(s, 'guppy', { ...calm, sex: 'female', pregnant: false });
+    const c14 = takeChoice(tanks)!;
+    expect(c14.title).toMatch(/太擠了$/);
+    expect(c14.owner).toMatch(/^氨 [\d.]+.*再不處理會開始死魚。$/);
+    expect(c14.options.find((o) => o.key === 'water')!.outcome).toBe('換三成水，撐 2 天');
+    expect(chooseOption(tanks, 'C14', 'water')).toBeNull();
+    expect(nextDay(tanks)?.id).not.toBe('C14');
+    expect(nextDay(tanks)?.id).toBe('C14');
+  });
+
+  it('C14 連賣兩次之後推薦「以後太擠就自動賣」；選了之後擠了早上自動賣，不再跳卡', () => {
+    const { tanks, s, st } = latePair();
+    Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard' });
+    orderBoard(s).orders = [];
+    const crowd = () => {
+      while (crowdingRatio(s) < CROWD_WARN + 0.1) addFish(s, 'guppy', { ...calm, sex: 'female', pregnant: false });
+    };
+    st.crowdSells = 2;
+    crowd();
+    const c14 = takeChoice(tanks)!;
+    const auto = c14.options.find((o) => o.key === 'auto')!;
+    expect(auto).toMatchObject({ label: '以後太擠就自動賣給阿德', recommended: true });
+    expect(chooseOption(tanks, 'C14', 'auto')).toBeNull();
+    expect(st.crowdAuto).toBe(true);
+    crowd();
+    s.hours += 24 * 8;
+    expect(takeChoice(tanks)?.id).not.toBe('C14');
+    expect(crowdingRatio(s)).toBeLessThan(CROWD_WARN);
+    expect(takeCrowdNotes(tanks).some((n) => /又擠了，照你的設定賣了 \d+ 尾給阿德，收入 \d+ 元。/.test(n.text))).toBe(true);
+  });
+
+  it('擠缸預告：≥ 60% 而且算上快生的那窩會超過建議量，早上報告說一次；超過建議量每天第一行；都記成提醒過', () => {
+    const { tanks, s } = latePair();
+    const mom = addFish(s, 'guppy', { ...calm, sex: 'female', pregnant: false });
+    // 擠到 85%：算上快生那窩（兩週後的大小）才會超過建議量
+    while (crowdingRatio(s) < CROWD_PREVIEW + 0.25) addFish(s, 'guppy', { ...calm, sex: 'male', pregnant: false });
+    expect(crowdingRatio(s)).toBeLessThan(CROWD_FULL);
+    mom.pregnancy = 0.8;
+    const first = takeCrowdNotes(tanks).filter((n) => n.tank === 0);
+    expect(first).toHaveLength(1);
+    expect(first[0].text).toMatch(/現在 \d+ 尾，.+快生了，生完大約 \d+ 尾，會住不太下。$/);
+    expect(takeCrowdNotes(tanks).filter((n) => n.tank === 0)).toHaveLength(0);
+    while (crowdingRatio(s) < CROWD_FULL + 0.05) addFish(s, 'guppy', { ...calm, sex: 'male', pregnant: false });
+    const full = takeCrowdNotes(tanks).find((n) => n.tank === 0)!;
+    expect(full).toMatchObject({ full: true });
+    expect(full.text).toMatch(/太擠了，魚擠到水面喘氣。$/);
+    expect(s.crowdNotices).toBe(2);
+  });
+
+  it(`開獎版 C10（C16）：開獎後 ${REVEAL_CULL_DAYS} 天，留 4～6 尾候選（公母都有），其他賣給阿德（midgame.md §7.3）`, () => {
+    const { tanks, s, t2, st, mom, dad } = latePair();
+    Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard', C15: 'plants' });
+    st.reveal = { momId: mom.id, hours: s.hours - (REVEAL_CULL_DAYS + 1) * 24, done: true, born: 14 };
+    const rng = { seed: 9 };
+    const fry = Array.from({ length: 14 }, (_, i) => {
+      const f = addFish(t2, 'guppy', { ...calm, sex: i % 2 ? 'male' : 'female', pregnant: false });
+      f.genome = cross(rng, mom.genome!, dad.genome!, f.sex);
+      f.generation = 2;
+      f.motherId = mom.id;
+      f.bornHours = st.reveal!.hours + 1;
+      f.lengthCm = 1.3;
+      f.ageDays = REVEAL_CULL_DAYS + 1;
+      return f;
+    });
+    const c = takeChoice(tanks)!;
+    expect(c.id).toBe('C16');
+    expect(c.title).toBe('開獎那窩長大一點了');
+    const cull = c.options.find((o) => o.key === 'cull')!;
+    expect(cull.recommended).toBe(true);
+    expect(cull.label).toMatch(/^留 [4-6] 尾候選，其他賣掉$/);
+    const coins = economy(s).coins;
+    expect(chooseOption(tanks, 'C16', 'cull')).toBeNull();
+    const left = fry.filter((f) => t2.fish.includes(f));
+    expect(left.length).toBeGreaterThanOrEqual(4);
+    expect(left.length).toBeLessThanOrEqual(6);
+    expect(new Set(left.map((f) => f.sex)).size).toBe(2);
+    expect(economy(s).coins).toBeGreaterThan(coins);
+    expect(takeChoice(tanks)?.id).not.toBe('C16');
   });
 });

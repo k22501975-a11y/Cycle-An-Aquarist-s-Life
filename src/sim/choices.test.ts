@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, CROWD_WARN, crowdingRatio, bacteriaCapacity, MAX_KEEPERS, maxLengthCm, buyTank, setTankPurpose, cross, DREAM_FISH, economy, linkTanks, matchingFish, orderBoard, orderSupply, reservedForPick, suggestPurpose, type ShopOrder, type TankState } from './index';
+import { addFish, CROWD_WARN, crowdingRatio, FISH_SPECIES, bacteriaCapacity, MAX_KEEPERS, maxLengthCm, buyTank, setTankPurpose, cross, DREAM_FISH, economy, linkTanks, matchingFish, orderBoard, orderSupply, reservedForPick, suggestPurpose, type ShopOrder, type TankState } from './index';
 import { BACKUP_MAX, MAIN_KEEP_FISH, hasDreamGenes, orderDreamNote, tradeCheck, SECOND_BROOD_KEEP, SECOND_BROOD_SHOWS, takeSecondBrood, breedingProgress, chooseOption, CHOICE_RESHOW_DAYS, choiceState, dreamChance, FAST_TEMP_C, grandDreamChance, PICK_AFTER_BROOD_DAYS, takeChoice, takeMilestones, nextMilestone, TANK_AFTER_BROOD_DAYS } from './choices';
 
 const calm = { carriesIch: false, carries: [] };
@@ -430,6 +430,8 @@ describe('中期的選擇點（design/midgame.md）', () => {
     expect(takeChoice(tanks)).toBeNull();
     const t2 = buyTank(tanks, 'nano20')!;
     setTankPurpose(t2, 'breeding');
+    // 40L 的繁殖缸：快生母魚那窩小魚（算兩週後的大小）也放得下，搬到主缸剩 MAIN_KEEP_FISH 尾為止
+    t2.equipment.tank = { ...t2.equipment.tank, volumeL: 40 };
     kids[0].keeper = true;
     // 小魚夠大，母魚吞不下
     for (const k of kids) k.lengthCm = 2.2;
@@ -445,6 +447,20 @@ describe('中期的選擇點（design/midgame.md）', () => {
     expect(t2.fish.length).toBe(14 - MAIN_KEEP_FISH);
     expect(s.fish.filter((f) => f.alive).length).toBe(MAIN_KEEP_FISH);
     expect(takeChoice(tanks)).toBeNull();
+  });
+
+  it('C6 搬快生的母魚會算上那窩小魚：20L 繁殖缸不會一生就超過建議量（midgame.md §7）', () => {
+    const { s, tanks, kids, mom } = withBrood(12, PICK_AFTER_BROOD_DAYS * 24);
+    Object.assign(choiceState(tanks).picked, { C1: 'box', C2: 'later', C3: 'breeding', C8: 'media' });
+    economy(s).coins = 5000;
+    s.bacteria.aob = s.bacteria.nob = bacteriaCapacity(s);
+    const t2 = buyTank(tanks, 'nano20')!;
+    setTankPurpose(t2, 'breeding');
+    for (const k of kids) k.lengthCm = 2.2;
+    mom.pregnancy = 0.8;
+    expect(chooseOption(tanks, 'C6', 'move')).toBeNull();
+    const brood = (FISH_SPECIES.guppy.breeding!.broodMean * mom.health * 0.36) / t2.equipment.tank.volumeL;
+    expect(crowdingRatio(t2) + brood).toBeLessThanOrEqual(CROWD_WARN + 0.01);
   });
 
   it('C6 小魚還小：吃得下牠們的快生母魚不跟著搬（#322）', () => {

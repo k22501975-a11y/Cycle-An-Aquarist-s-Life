@@ -10,11 +10,12 @@ import { midgamePlayer } from './midgame-player';
  * - 開局挑快生的母魚：第一窩 ≤ 第 10 天；照推薦孕期調高水溫，C13 到開獎不死魚、不出紅色水質警告（§6.6）
  * - C9 重複版別太吵（§6.5）：第 36～90 天每個種子 ≤ 3 張
  * - 開獎（自家配的那窩出生）：沒生病 ≤ 第 85 天；種魚長大後生病晚配的 ≤ 第 90 天
+ * 第 80～120 天魚越生越多（midgame.md §7.4，#338）：照推薦選，擠缸死魚 ≤ 2 尾、沒有一缸連續超過 3 天 ≥ 100%、C14 ≤ 5 張
  */
-describe('第 36～80 天的選擇點（design/midgame.md §6）', () => {
+describe('第 36～120 天的選擇點（design/midgame.md §6、§7）', () => {
   for (const seed of [1, 2, 3]) {
     it(`seed ${seed}：C11～C15 照順序出、節奏不空太久、一天一張；開獎準時；第 60 天錢夠`, () => {
-      const nights = midgamePlayer(seed, 90);
+      const nights = midgamePlayer(seed, 120);
       const log = nights.filter((n) => n.day >= 30).map((n) => `${n.day}${n.choice ? `[${n.choice}]` : ''}${n.orderChoice ? `{${n.orderChoice}}` : ''}${n.bellyMilestone ? 'b' : ''}${n.line.includes('reveal') ? '★' : ''}`).join(' ');
       const order = nights.filter((n) => n.choice).map((n) => n.choice!);
       const first = (id: string) => nights.find((n) => n.choice === id)?.day ?? Infinity;
@@ -49,7 +50,20 @@ describe('第 36～80 天的選擇點（design/midgame.md §6）', () => {
       expect(preg.filter((n) => n.line.includes('death')).map((n) => n.day), log).toEqual([]);
       expect(preg.flatMap((n) => n.alarms.filter((a) => !a.endsWith(':starving'))), log).toEqual([]);
       // C9 別太吵（§6.5）：第 36～90 天每個種子 ≤ 3 張
-      expect(nights.filter((n) => n.day >= 36 && n.choice === 'C9').length, log).toBeLessThanOrEqual(3);
+      expect(nights.filter((n) => n.day >= 36 && n.day <= 90 && n.choice === 'C9').length, log).toBeLessThanOrEqual(3);
+      // 第 80～120 天擠缸（§7.4）
+      const late = nights.filter((n) => n.day >= 80);
+      const crowdLog = late.map((n) => `${n.day}${n.choice === 'C14' ? '[C14]' : ''}:${n.crowd.join('/')}${n.crowdDeaths ? `†${n.crowdDeaths}` : ''}`).join(' ');
+      expect(late.reduce((a, n) => a + n.crowdDeaths, 0), crowdLog).toBeLessThanOrEqual(2);
+      const tankCount = Math.max(...late.map((n) => n.crowd.length));
+      for (let i = 0; i < tankCount; i++) {
+        let run = 0;
+        for (const n of late) {
+          run = (n.crowd[i] ?? 0) >= 1 ? run + 1 : 0;
+          expect(run, `第 ${i} 缸 第 ${n.day} 天 ${crowdLog}`).toBeLessThanOrEqual(3);
+        }
+      }
+      expect(late.filter((n) => n.choice === 'C14').length, crowdLog).toBeLessThanOrEqual(5);
     }, 600_000);
   }
 });
