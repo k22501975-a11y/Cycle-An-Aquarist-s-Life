@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LENS_AT, LENS_ZOOM, lensPos, pickDone, revealOrder, revealTag, toggleKeeper, traitIcon, type PickFish } from './breeding-cards';
+import { cleanStrainName, LENS_AT, LENS_ZOOM, lensPos, NAMING_MAX, nameLength, namingLineup, pickDone, revealOrder, revealTag, toggleKeeper, traitIcon, type PickFish } from './breeding-cards';
 
 const kid = (fishId: number, sex: 'male' | 'female', keeper = false): PickFish => ({ fishId, tank: 0, sex, name: '全紅', look: 4, fins: [], traits: [], missing: [], keeper });
 const limit = { male: 1, female: 2 };
@@ -65,5 +65,30 @@ describe('開獎卡（midgame.md §6.1）', () => {
     expect(revealTag(f(false, true, 1))).toBe('帶蛇紋');
     expect(revealTag(f(true, true, 1))).toBe('兩樣都有！');
     expect(revealTag(f(false, false, 1))).toBe('');
+  });
+});
+
+describe('C18 為你的品系取名（strain-fixing.md §2.2）', () => {
+  const n = { suggested: '阿德系', maxLen: 8 };
+
+  it('名字去掉前後空白、連續空白縮成一個，截到 8 個字（中文、表情符號都算一個字）', () => {
+    expect(cleanStrainName('  小  魚 系 ', n)).toBe('小 魚 系');
+    expect(cleanStrainName('一二三四五六七八九十', n)).toBe('一二三四五六七八');
+    expect(cleanStrainName('🐟🐟🐟🐟🐟🐟🐟🐟🐟', n)).toBe('🐟🐟🐟🐟🐟🐟🐟🐟');
+    expect(nameLength(' 🐟紅 ')).toBe(2);
+  });
+
+  it('空的名字用預設的「{玩家名}系」', () => {
+    expect(cleanStrainName('   ', n)).toBe('阿德系');
+    expect(cleanStrainName('', n)).toBe('阿德系');
+  });
+
+  it('太多尾時先砍不是夢想魚的，順序不變', () => {
+    const fish = Array.from({ length: 30 }, (_, i) => ({ ...kid(i, i % 2 ? 'male' : 'female'), missing: i % 3 === 0 ? [] : ['蛇紋'] }));
+    const shown = namingLineup(fish);
+    expect(shown).toHaveLength(NAMING_MAX);
+    expect(shown.filter((f) => f.missing.length === 0)).toHaveLength(10);
+    expect(shown.map((f) => f.fishId)).toEqual([...shown.map((f) => f.fishId)].sort((a, b) => a - b));
+    expect(namingLineup(fish.slice(0, 5))).toHaveLength(5);
   });
 });

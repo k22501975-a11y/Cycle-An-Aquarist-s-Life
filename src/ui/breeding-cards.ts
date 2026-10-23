@@ -564,3 +564,132 @@ export function revealVisual(fry: RevealFry[]): HTMLElement {
   legend.style.animationDelay = `${(shown.length * step + 0.3).toFixed(2)}s`;
   return h('div.rv', {}, h('div.rv-grid', {}, ...cells), legend);
 }
+
+// ── C18 為你的品系取名（design/strain-fixing.md §2.2） ─────────────
+
+/** C18 卡上的取名資料（ChoiceCard.naming）。 */
+export interface StrainNaming {
+  /** 預設名字（「{玩家名}系」）。 */
+  suggested: string;
+  /** 這窩的穩定度（夢想魚的比例，0～100）。 */
+  stability: number;
+  /** 這窩有幾尾夢想魚、一共幾尾。 */
+  dream: number;
+  total: number;
+  /** 名字最多幾個字。 */
+  maxLen: number;
+}
+
+/** 達標的門檻（%）：穩定度條上畫一條線。 */
+export const STABLE_AT = 75;
+/** 卡上最多排幾尾。 */
+export const NAMING_MAX = 24;
+
+/** 玩家打的名字：去掉前後空白、連續空白縮成一個、截到 maxLen 個字（中文和表情符號都算一個字）；空的用預設。 */
+export function cleanStrainName(raw: string, n: Pick<StrainNaming, 'suggested' | 'maxLen'>): string {
+  const cut = (s: string) => Array.from(s).slice(0, n.maxLen).join('').trim();
+  return cut(raw.trim().replace(/\s+/g, ' ')) || cut(n.suggested);
+}
+
+/** 字數（同 cleanStrainName 的算法）。 */
+export function nameLength(raw: string): number {
+  return Array.from(raw.trim().replace(/\s+/g, ' ')).length;
+}
+
+/** 排在卡上的魚：照原本的順序；太多尾時先砍不是夢想魚的，夢想魚盡量都留著。 */
+export function namingLineup(fish: PickFish[]): PickFish[] {
+  if (fish.length <= NAMING_MAX) return fish;
+  const dream = fish.filter((f) => f.missing.length === 0).slice(0, NAMING_MAX);
+  let room = NAMING_MAX - dream.length;
+  const keep = new Set<PickFish>(dream);
+  for (const f of fish) {
+    if (room <= 0) break;
+    if (keep.has(f)) continue;
+    keep.add(f);
+    room--;
+  }
+  return fish.filter((f) => keep.has(f));
+}
+
+/** 取名完成的名牌：緞帶＋金色的品系名＋夢想魚的名字。 */
+export function strainPlaque(name: string): HTMLElement {
+  const medal = keeperRibbon('keeper-ribbon.nm-medal');
+  medal.removeAttribute('title');
+  medal.setAttribute('aria-hidden', 'true');
+  return h('div.nm-plaque', { role: 'status' }, medal, h('small.nm-plaque-kicker', {}, '你的第一個品系'), h('b.nm-plaque-name', {}, name), h('span.nm-plaque-sub', {}, `${name} ${DREAM_FISH.name}`), h('i.nm-shine', { 'aria-hidden': 'true' }));
+}
+
+/**
+ * C18 取名的演出：一窩魚排開（暗的），夢想魚一尾一尾亮起來，穩定度條跑到這窩的比例、越過 75% 的線，
+ * 最後出現名字輸入框。onName 回傳錯誤訊息（例如字詞檢查不過）就顯示在框下面讓玩家重打，回 null 就換成名牌。
+ */
+export function namingScene(fish: PickFish[], n: StrainNaming, onName: (name: string) => string | null, onLater?: { label: string; go: () => void }): HTMLElement {
+  const shown = namingLineup(fish);
+  const lit = shown.filter((f) => f.missing.length === 0).length;
+  // 一尾一尾亮：總長控制在 3 秒內
+  const step = Math.min(0.32, 3 / Math.max(1, lit));
+  let k = 0;
+  const cells = shown.map((f) => {
+    const dream = f.missing.length === 0;
+    const cell = h(`span.nm-fish${dream ? '.dream' : ''}`, {}, dream ? h('i.nm-glow', { 'aria-hidden': 'true' }) : null, fishArt(f));
+    if (dream) cell.style.animationDelay = `${(0.4 + k++ * step).toFixed(2)}s`;
+    return cell;
+  });
+  const end = 0.4 + lit * step;
+  const pct = Math.max(0, Math.min(100, Math.round(n.stability)));
+  const fill = h('i.nm-fill');
+  fill.style.setProperty('--pct', `${pct}%`);
+  fill.style.animationDelay = '0.4s';
+  fill.style.animationDuration = `${Math.max(0.6, end - 0.4).toFixed(2)}s`;
+  const mark = h('i.nm-mark', { title: `${STABLE_AT}% 就算穩定` }, h('small', {}, '穩定'));
+  mark.style.left = `${STABLE_AT}%`;
+  const meter = h('div.nm-meter', {}, h('div.nm-bar', {}, fill, mark), h('div.nm-meter-text', {}, h('span', {}, `${n.total} 尾裡有 ${n.dream} 尾是${DREAM_FISH.name}`), h('b', {}, `穩定度 ${pct}%`)));
+
+  const input = h('input.nm-input', { type: 'text', value: n.suggested, maxlength: String(n.maxLen * 2), 'aria-label': '品系名', enterkeyhint: 'done', autocomplete: 'off' }) as HTMLInputElement;
+  const count = h('small.nm-count');
+  const msg = h('p.nm-msg', { hidden: true });
+  const recount = () => {
+    const len = nameLength(input.value);
+    count.textContent = `${len}/${n.maxLen}`;
+    count.classList.toggle('over', len > n.maxLen);
+  };
+  input.addEventListener('input', recount);
+  recount();
+  const preview = h('span.nm-preview', {}, DREAM_FISH.name);
+  const submit = () => {
+    const name = cleanStrainName(input.value, n);
+    const why = onName(name);
+    if (why) {
+      msg.textContent = why;
+      msg.hidden = false;
+      input.focus();
+      return;
+    }
+    form.replaceWith(strainPlaque(name));
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') submit();
+  });
+  const form = h(
+    'div.nm-form',
+    {},
+    h('b.nm-ask', {}, '幫你的品系取個名字'),
+    h('div.nm-field', {}, input, count, preview),
+    msg,
+    h(
+      'div.bc-foot',
+      {},
+      onLater ? h('button.btn.small.ghost', { type: 'button', onclick: onLater.go }, onLater.label) : null,
+      h('button.btn.primary.nm-go', { type: 'button', onclick: submit }, '就叫這個名字'),
+    ),
+  );
+  form.style.animationDelay = `${(end + 0.5).toFixed(2)}s`;
+  return h(
+    'div.bc.nm.glass',
+    {},
+    h('div.nm-grid', {}, ...cells),
+    shown.length < fish.length ? h('small.nm-more', {}, `還有 ${fish.length - shown.length} 尾`) : null,
+    meter,
+    form,
+  );
+}

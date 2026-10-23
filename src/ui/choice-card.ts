@@ -1,5 +1,5 @@
 import type { ChoiceCard } from '../sim/choices';
-import type { FishLook } from './breeding-cards';
+import type { FishLook, StrainNaming } from './breeding-cards';
 import { h } from './dom';
 
 /**
@@ -9,8 +9,13 @@ import { h } from './dom';
  * 早上報告出卡時才載入（開機必載的預算留給開局）。
  */
 
-/** 選了一個選項：picks 是 C2 要留種的魚。回傳錯誤訊息（顯示在卡上），成功回傳 null。 */
-export type ChoosePick = (key: string, picks: number[]) => string | null;
+/** 選了一個選項：picks 是 C2 要留種的魚，text 是 C18 玩家打的品系名。回傳錯誤訊息（顯示在卡上），成功回傳 null。 */
+export type ChoosePick = (key: string, picks: number[], text?: string) => string | null;
+
+/** C18 取名卡（strain-fixing.md §2.2）：有 naming 就畫取名演出。 */
+export function namingOf(card: ChoiceCard): StrainNaming | undefined {
+  return (card as ChoiceCard & { naming?: StrainNaming }).naming;
+}
 
 /** 照魚的編號找牠的樣子（C4 的母魚、C5 那尾魚；卡上只有編號）。 */
 export type FishLookup = (fishId: number) => FishLook | null;
@@ -24,17 +29,22 @@ export function choiceVisual(card: ChoiceCard, choose: ChoosePick, lookup: FishL
   };
   const box = h('div.choice', {}, h('p.choice-owner', {}, card.owner));
   void import('./breeding-cards')
-    .then((bc) => fill(bc, card, box, pick, lookup))
+    .then((bc) => fill(bc, card, box, pick, lookup, (name) => choose('name', [], name)))
     // 載不到卡片（離線更新到一半之類）：退回一排文字按鈕，照樣選得了
     .catch(() => box.append(h('div.bc-opts', {}, ...card.options.map((o) => h(`button.btn.small${o.recommended ? '.primary' : ''}`, { type: 'button', onclick: () => pick(o.key) }, o.label)))))
     .then(() => box.append(...(card.note ? [h('p.choice-note', {}, card.note)] : []), msg));
   return box;
 }
 
-function fill(bc: typeof import('./breeding-cards'), card: ChoiceCard, box: HTMLElement, pick: (key: string, picks?: number[]) => void, lookup: FishLookup): void {
+function fill(bc: typeof import('./breeding-cards'), card: ChoiceCard, box: HTMLElement, pick: (key: string, picks?: number[]) => void, lookup: FishLookup, named: (name: string) => string | null): void {
   const { CHOICE_ART, choiceCard, keepOrSellCard, keeperPickCard, sireCompareCard } = bc;
+  const naming = namingOf(card);
 
-  if (card.fish && card.id === 'C2') {
+  if (naming && card.fish) {
+    // C18：錯誤訊息（字詞檢查不過）顯示在名字框下面，不用卡底下那行
+    const later = card.options.find((o) => o.key === 'later');
+    box.append(bc.namingScene(card.fish, naming, named, later ? { label: later.label, go: () => pick('later') } : undefined));
+  } else if (card.fish && card.id === 'C2') {
     const limit = card.pickLimit ?? { male: 1, female: 2 };
     const chosen = new Set<number>(card.fish.filter((f) => f.keeper).map((f) => f.fishId));
     const slot = h('div', {});
