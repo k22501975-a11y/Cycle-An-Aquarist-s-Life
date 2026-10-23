@@ -1,4 +1,4 @@
-import { DREAM_FISH, LINE_FIXED_PCT, stabilityPct } from './dream';
+import { DREAM_FISH, LINE_FIXED_PCT, LINE_NAME_MAX, LINE_NAME_PCT, stabilityPct } from './dream';
 import { addFish, setHeaterTarget, waterChange } from './actions';
 import { temperatureFactor } from './chemistry';
 import { buybackRefusal, economy, FISH_PRICES, FRY_BAG, fishBuybackPrice, isFrySale, keeperRefusal, MAX_KEEPERS, PRICES, sellFish, sellsLeftToday, setKeeper, spend } from './economy';
@@ -43,12 +43,12 @@ import { ADULT_SIZE, isJuvenile, type Fish, type TankState } from './state';
  * 不管選哪個都能玩下去。只出資料和套用選擇；卡片的樣子由畫面負責（選種卡、配對比較卡交美術）。
  */
 
-export type ChoiceId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | 'C7' | 'C8' | 'C9' | 'C10' | 'C11' | 'C12' | 'C13' | 'C14' | 'C15' | 'C16' | 'C17' | 'C19';
+export type ChoiceId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | 'C7' | 'C8' | 'C9' | 'C10' | 'C11' | 'C12' | 'C13' | 'C14' | 'C15' | 'C16' | 'C17' | 'C18' | 'C19';
 /**
  * 同一天有好幾張可以出時，照這個順序挑一張（C8 新缸養水排在搬魚 C6 前面）。
  * 有時效的排前面：C12 錯過就配上了、C13 孕期一開始就要決定、C15 生了就來不及。
  */
-export const CHOICE_IDS: ChoiceId[] = ['C1', 'C2', 'C3', 'C8', 'C4', 'C5', 'C6', 'C7', 'C11', 'C12', 'C13', 'C15', 'C9', 'C10', 'C16', 'C17', 'C19', 'C14'];
+export const CHOICE_IDS: ChoiceId[] = ['C1', 'C2', 'C3', 'C8', 'C4', 'C5', 'C6', 'C7', 'C11', 'C12', 'C13', 'C15', 'C9', 'C10', 'C16', 'C18', 'C17', 'C19', 'C14'];
 
 export interface ChoiceOption {
   key: string;
@@ -123,6 +123,8 @@ export interface ChoiceCard {
   options: ChoiceOption[];
   /** C2：這窩看得出公母的魚，排成一排挑。 */
   fish?: PickFish[];
+  /** C18 取名卡（strain-fixing.md §2.2）：預設名字、這窩的穩定度和幾尾、名字最多幾個字。 */
+  naming?: { suggested: string; stability: number; dream: number; total: number; maxLen: number };
   /** C2：最多留幾公幾母。 */
   pickLimit?: { male: number; female: number };
   /** C4：候選公魚。 */
@@ -217,6 +219,11 @@ export interface ChoiceState {
   c17Gen?: number;
   /** C17、C19 換了一對之後，到那對的母魚生下一窩之前：C11 選了分開養的話照樣把別尾公魚搬走。 */
   nextGen?: number;
+  /**
+   * 品系的名字（C18，穩定度第一次 ≥ LINE_NAME_PCT 取的）：名字、取名那天（遊戲小時）、那一窩的穩定度和幾尾。
+   * done：穩定度第一次 ≥ LINE_FIXED_PCT（品系完成）的時間和那窩的穩定度。
+   */
+  lineNamed?: { name: string; hours: number; stability: number; n: number; k: number; done?: { hours: number; stability: number } };
   /** 品系最新一代要留著配下一代的候選（lineCandidates，每天早上更新）：不賣、不交單。 */
   lineKeep?: number[];
   /** C19 上次問的時候，品系最近一代的近交係數；再多 INBREEDING_STEP 再問。 */
@@ -1504,6 +1511,25 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
         ...(extra.length > 0 ? { note: `這窩${[...new Set(extra.map(({ fish }) => (fish.sex === 'male' ? '公' : '母')))].join('、')}魚不夠，${extra.map(({ fish }) => callName(fish)).join('、')}一起當候選` } : {}),
       };
     }
+    case 'C18': {
+      if (s.lineNamed) return null;
+      const b = nameBrood(s);
+      if (!b) return null;
+      const pct = stabilityPct(b);
+      const kids = broodKids(tanks, b);
+      return {
+        id,
+        tank: kids[0]?.tank ?? 0,
+        title: '你的品系穩定了！',
+        owner: `${b.k}／${b.n} 尾都是${DREAM_FISH.name}，品系初步固定了。幫它取個名字吧。`,
+        options: [
+          { key: 'name', label: '就叫這個名字', outcome: '指定這個品系的客人出價會高兩成', recommended: true },
+          { key: 'later', label: '晚點再取', outcome: '過幾天再問' },
+        ],
+        fish: kids.filter(({ fish }) => fish.genome).map(({ fish, tank }) => pickFish(fish, tank)),
+        naming: { suggested: LINE_NAME_SUGGESTED, stability: pct, dream: b.k, total: b.n, maxLen: LINE_NAME_MAX },
+      };
+    }
     case 'C17': {
       const opts = linePairs(tanks, s);
       if (!opts) return null;
@@ -1856,6 +1882,8 @@ function again(id: ChoiceId, tanks: TankState[], s: ChoiceState): boolean {
   if (id === 'C9' || id === 'C10' || id === 'C13') return true;
   // 每一代的候選看得出公母都問一次；C19 近交係數每再多 INBREEDING_STEP 再問
   if (id === 'C17') return lineGen(s) !== s.c17Gen;
+  // 晚點再取：隔幾天再問，取了名就不再問
+  if (id === 'C18') return !s.lineNamed;
   if (id === 'C19') return true;
   if (id === 'C14') {
     if (s.crowdNext !== undefined && tanks[0].hours < s.crowdNext) return false;
@@ -1999,7 +2027,7 @@ function noteLineBroods(tanks: TankState[], s: ChoiceState): void {
  * - 每窩出生 SNAKE_DAYS 天：「{魚名}身上的蛇紋出來了。」（那窩有看得出蛇紋的公魚才說）
  * - 開獎之後的每窩出生 STABILITY_DAYS 天：穩定度卡「這窩 n 尾裡，k 尾是白子紅蛇王，穩定度 X%」
  */
-export function takeLineNotes(tanks: TankState[]): Array<{ fishId: number; text: string; stability?: number }> {
+export function takeLineNotes(tanks: TankState[]): Array<{ fishId: number; text: string; stability?: number; done?: boolean }> {
   const s = choiceState(tanks);
   noteLineBroods(tanks, s);
   const now = tanks[0].hours;
@@ -2021,10 +2049,60 @@ export function takeLineNotes(tanks: TankState[]): Array<{ fishId: number; text:
       const d = pct - stabilityPct(prev);
       const more = d > 0 ? `（比上一代多 ${d}%）` : '';
       const tail = pct < LINE_FIXED_PCT ? '再配一代，穩定度會更高。' : '';
-      return [{ fishId: kids[0]?.fish.id ?? b.momId, stability: pct, text: `這窩 ${b.n} 尾裡，${b.k} 尾是${DREAM_FISH.name}，穩定度 ${pct}%${more}。${tail}` }];
+      const fishId = kids[0]?.fish.id ?? b.momId;
+      // 品系完成（第一次 ≥ LINE_FIXED_PCT）：取過名才算，取名卡（C18）還沒選的話等選了再說
+      if (pct >= LINE_FIXED_PCT && s.lineNamed && !s.lineNamed.done) {
+        s.lineNamed.done = { hours: now, stability: pct };
+        return [{ fishId, stability: pct, done: true, text: `${s.lineNamed.name}這窩有 ${pct}% 是${DREAM_FISH.name}，品系完成了！指定的客人出價會高一半。` }];
+      }
+      return [{ fishId, stability: pct, text: `這窩 ${b.n} 尾裡，${b.k} 尾是${DREAM_FISH.name}，穩定度 ${pct}%${more}。${tail}` }];
     }
   }
+  // 取名之前那窩就已經 ≥ LINE_FIXED_PCT：取了名之後的早上說品系完成
+  const fixed = s.lineNamed && !s.lineNamed.done ? broods.find((b, i) => i > 0 && b.told && stabilityPct(b) >= LINE_FIXED_PCT) : undefined;
+  if (fixed && s.lineNamed) {
+    const pct = stabilityPct(fixed);
+    s.lineNamed.done = { hours: now, stability: pct };
+    const kid = located(tanks).find(({ fish }) => fish.motherId === fixed.momId && fish.bornHours !== undefined && Math.abs(fish.bornHours - fixed.born) < 24);
+    return [{ fishId: kid?.fish.id ?? fixed.momId, stability: pct, done: true, text: `${s.lineNamed.name}這窩有 ${pct}% 是${DREAM_FISH.name}，品系完成了！指定的客人出價會高一半。` }];
+  }
   return [];
+}
+
+/** C18 名字框的預設（還沒有玩家名，用「自家系」）。 */
+export const LINE_NAME_SUGGESTED = '自家系';
+
+/** 品系名不能用的字（日後上市場前再接伺服器的字詞檢查）。 */
+const LINE_NAME_BANNED = ['幹', '靠北', '操你', '屌', '機掰', '雞掰', '婊', '妓', '屎', '白癡', '智障', '去死', '尼瑪', '你媽', 'fuck', 'shit', 'bitch', 'porn', 'sex'];
+
+/** 品系名能不能用：1～LINE_NAME_MAX 個字、不能是網址或電話、不能有不雅的字；能用回 null。 */
+export function lineNameRefusal(name: string): string | null {
+  const len = Array.from(name).length;
+  if (len === 0) return '先幫品系取個名字';
+  if (len > LINE_NAME_MAX) return `名字最多 ${LINE_NAME_MAX} 個字`;
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(name) || /https?:|www\.|\.com|@/i.test(name) || /\d{5,}/.test(name)) return '名字不能放網址、帳號或電話';
+  const low = name.toLowerCase();
+  if (LINE_NAME_BANNED.some((w) => low.includes(w))) return '這個名字不能用，換一個吧';
+  return null;
+}
+
+/** 這窩還活著的小魚。 */
+function broodKids(tanks: TankState[], b: LineBrood): Array<{ fish: Fish; tank: number }> {
+  return located(tanks).filter(({ fish }) => fish.motherId === b.momId && fish.bornHours !== undefined && Math.abs(fish.bornHours - b.born) < 24);
+}
+
+/** C18 那窩：開獎之後說過穩定度、第一次 ≥ LINE_NAME_PCT 的那窩。 */
+function nameBrood(s: Readonly<ChoiceState>): LineBrood | null {
+  return (s.line?.broods ?? []).find((b, i) => i > 0 && b.told && stabilityPct(b) >= LINE_NAME_PCT) ?? null;
+}
+
+/** 魚卡、選種卡上的品系名（取過名、這尾是品系某一窩生的白子紅蛇王）；不是回 null。 */
+export function lineName(tanks: TankState[], fish: Fish): string | null {
+  const s = economy(tanks[0]).choices;
+  if (!s?.lineNamed || !fish.genome || !isDreamLook(fish.genome)) return null;
+  const mine = (s.line?.broods ?? []).some((b) => fish.motherId === b.momId && fish.bornHours !== undefined && Math.abs(fish.bornHours - b.born) < 24);
+  return mine ? s.lineNamed.name : null;
 }
 
 /**
@@ -2227,7 +2305,7 @@ export function takeChoice(tanks: TankState[]): ChoiceCard | null {
  * 玩家選了一個選項。picks 是 C2 要留種的魚。回傳不能套用的原因；成功回傳 null。
  * C1 選育幼盒、C3 選用途後，畫面再帶玩家去放育幼盒、買缸（這裡只記下來）。
  */
-export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, picks: readonly number[] = []): string | null {
+export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, picks: readonly number[] = [], text?: string): string | null {
   const s = choiceState(tanks);
   const find = (fid: number) => located(tanks).find(({ fish }) => fish.id === fid);
   switch (id) {
@@ -2456,6 +2534,17 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
         const full = i >= 0 && crowdingRatio(tanks[i]) >= CROWD_FULL;
         s.crowdNext = tanks[0].hours + (full ? CROWD_FULL_REASK_DAYS : CROWD_WATER_DAYS) * 24;
       } else if (key !== 'tank' && key !== 'big') return '沒有這個選項';
+      break;
+    }
+    case 'C18': {
+      if (key === 'later') break;
+      if (key !== 'name') return '沒有這個選項';
+      const b = nameBrood(s);
+      if (!b || s.lineNamed) return '品系已經有名字了';
+      const name = (text ?? LINE_NAME_SUGGESTED).trim().replace(/\s+/g, ' ');
+      const why = lineNameRefusal(name);
+      if (why) return why;
+      s.lineNamed = { name, hours: tanks[0].hours, stability: stabilityPct(b), n: b.n, k: b.k };
       break;
     }
     case 'C17':

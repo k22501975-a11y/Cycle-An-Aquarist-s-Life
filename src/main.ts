@@ -1829,9 +1829,9 @@ async function start(): Promise<void> {
     const daily = today
       ? { tasks: today.tasks.map((t) => ({ id: t.id, art: dailyArt(t.id), text: DAILY_SHORT[t.id], done: t.done })), go: (id: string) => goDaily(id as sim.DailyTaskId) }
       : undefined;
-    const choose = (item: ReportItem, key: string, picks: number[]) => {
+    const choose = (item: ReportItem, key: string, picks: number[], text?: string) => {
       const card = item.choice ?? item.broodSetting;
-      return card ? game.actAll((tanks) => chooseOption(tanks, card.id, key, picks)) : null;
+      return card ? game.actAll((tanks) => chooseOption(tanks, card.id, key, picks, text)) : null;
     };
     const fishLook = (id: number) => {
       // 母魚可能在產卵盒（quarantine）裡

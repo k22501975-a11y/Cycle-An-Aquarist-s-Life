@@ -82,6 +82,8 @@ export interface ReportItem {
   choice?: ChoiceCard;
   /** C9 自動照上次的那一行（midgame.md §6.5）：點了展開這張卡改設定。 */
   broodSetting?: ChoiceCard;
+  /** 品系完成（strain-fixing.md §5，穩定度第一次 ≥ 75%）：品系名和那窩的穩定度，畫面放演出。 */
+  lineDone?: { name: string; stability: number };
   /** kind 'milestone' 的圖卡資料：哪一步、哪尾魚、配對的另一半、C7 養快提前了幾天。 */
   milestone?: Milestone;
   /** kind 'reveal' 的開獎卡：夢想魚叫什麼、每尾小魚帶不帶白子、蛇紋（含隱性）。 */
@@ -393,7 +395,8 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   // 固定品系（strain-fixing.md）：蛇紋出來、這窩的穩定度
   for (const n of takeLineNotes(tanks)) {
     const at = tanks.findIndex((t) => t.fish.some((f) => f.id === n.fishId));
-    items.push({ kind: 'line', tank: Math.max(0, at), tone: 'good', text: n.text, action: 'fish', subjectId: n.fishId });
+    const named = n.done ? choiceState(tanks).lineNamed : undefined;
+    items.push({ kind: 'line', tank: Math.max(0, at), tone: 'good', text: n.text, action: 'fish', subjectId: n.fishId, ...(named ? { lineDone: { name: named.name, stability: n.stability ?? 0 } } : {}) });
   }
   // 選育進度（midgame.md §2）：有第一窩或留種的魚就每天一行，取代一般的小觀察
   const progress = crisis ? null : breedingProgress(tanks);
