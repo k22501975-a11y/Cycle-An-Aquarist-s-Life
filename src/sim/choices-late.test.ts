@@ -3,6 +3,7 @@ import { newGameState } from '../game/game';
 import { addFish, ADULT_SIZE, bacteriaCapacity, broodFactor, buyTank, CROWD_WARN, crowdingRatio, cross, DREAM_FISH, economy, FISH_SPECIES, linkTanks, orderBoard, setTankPurpose, type Fish, type GuppyGenome, type TankState } from './index';
 import { chooseOption, choiceState, CHOICE_RESHOW_DAYS, CROWD_FULL, CROWD_PREVIEW, REVEAL_CULL_DAYS, takeCrowdNotes, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, WARM_PREG_C, takeChoice, takeLineNotes, takeReveal, takeSecondBrood, SNAKE_DAYS, STABILITY_DAYS } from './choices';
 import { dreamRoute } from './dream';
+import { reservedForPick } from './orders';
 
 const calm = { carriesIch: false, carries: [] };
 const ADULT_CM = FISH_SPECIES.guppy.adultLengthCm * ADULT_SIZE;
@@ -710,50 +711,97 @@ describe('固定品系：蛇紋和穩定度里程碑（strain-fixing.md §2，#3
   });
 });
 
-describe('固定品系：蛇紋和穩定度里程碑（strain-fixing.md §2，#344）', () => {
-  /** 開獎過了：mom 生的開獎那窩 n 尾（k 尾夢想魚公魚），出生在 bornHours。 */
-  function brood(t: TankState, motherId: number, bornHours: number, n: number, k: number, dad: Fish): Fish[] {
-    return Array.from({ length: n }, (_, i) => {
-      const f = addFish(t, 'guppy', { ...calm, sex: 'male', pregnant: false });
-      f.genome = structuredClone(dad.genome!);
-      if (i < k) f.genome.albino = [1, 1];
+describe('固定品系：C17 誰配誰、C19 引進新血（strain-fixing.md §2.2、§5，#344）', () => {
+  /** 開獎過了、C16 挑過：開獎那窩的候選（公母各 2，看得出公母），近交係數照給的。 */
+  function lineSetup(inbreeding: number) {
+    const ctx = latePair();
+    const { s, t2, st, mom, dad } = ctx;
+    Object.assign(st.picked, { C11: 'split', C12: 'one', C13: 'standard', C15: 'plants', C16: 'cull' });
+    mom.lengthCm = ADULT_CM + 0.2;
+    st.reveal = { momId: mom.id, hours: s.hours - 45 * 24, done: true, born: 4 };
+    st.revealCullAsked = true;
+    const rng = { seed: 11 };
+    const kids = (['male', 'male', 'female', 'female'] as const).map((sex) => {
+      const f = addFish(t2, 'guppy', { ...calm, sex, pregnant: false });
+      f.genome = cross(rng, mom.genome!, dad.genome!, sex);
+      f.genome.albino = [1, 1];
+      f.genome.red = [1, 1];
+      f.genome.snakeX = sex === 'male' ? [1] : [1, 0];
       f.generation = 2;
-      f.motherId = motherId;
-      f.bornHours = bornHours;
+      f.motherId = mom.id;
+      f.lineage = mom.lineage ?? mom.id;
+      f.inbreeding = inbreeding;
+      f.bornHours = st.reveal!.hours + 1;
+      f.lengthCm = ADULT_CM;
       return f;
     });
+    // 都跟留種那對比過了（C10 不再出）
+    st.compared = kids.map((k) => k.id);
+    return { ...ctx, kids };
   }
 
-  it('開獎那窩：滿 20 天說蛇紋出來，不出穩定度卡；下一代那窩滿 25 天出穩定度卡，寫比上一代多幾 %', () => {
-    const { s, t2, tanks, st, mom, dad } = latePair();
-    st.reveal = { momId: mom.id, hours: s.hours, done: true, born: 10 };
-    const first = brood(t2, mom.id, s.hours + 1, 10, 1, dad);
-    expect(takeLineNotes(tanks)).toEqual([]);
-    expect(st.line!.broods).toMatchObject([{ momId: mom.id, n: 10, k: 1, gen: 1 }]);
-    s.hours += SNAKE_DAYS * 24 + 2;
-    const snake = takeLineNotes(tanks);
-    expect(snake).toHaveLength(1);
-    expect(snake[0].text).toMatch(/身上的蛇紋出來了。$/);
-    // 開獎那窩是起點：滿 25 天也不說
-    s.hours += (STABILITY_DAYS - SNAKE_DAYS) * 24;
-    expect(takeLineNotes(tanks)).toEqual([]);
-    expect(dreamRoute(tanks).stability).toBe(10);
+  it('品系最新一代的候選（公母各至少 2 尾、最多 6 尾）不賣、不交單，等 C17 挑誰配誰', () => {
+    const { tanks, st, kids } = lineSetup(0.25);
+    takeChoice(tanks);
+    expect(new Set(st.lineKeep)).toEqual(new Set(kids.map((k) => k.id)));
+    const held = reservedForPick(tanks[0]);
+    for (const k of kids) expect(held.has(k.id)).toBe(true);
+  });
 
-    // 開獎那窩的女兒當新媽媽，生下一代：8 尾裡 5 尾
-    const daughter = first[1];
-    daughter.sex = 'female';
-    st.pair = [daughter.id, dad.id];
-    const born2 = s.hours + 1;
-    brood(t2, daughter.id, born2, 8, 5, dad);
-    takeLineNotes(tanks);
-    expect(st.line!.broods[1]).toMatchObject({ momId: daughter.id, n: 8, k: 5, gen: 2 });
-    s.hours = born2 + SNAKE_DAYS * 24;
-    expect(takeLineNotes(tanks)[0].text).toMatch(/蛇紋/);
-    s.hours = born2 + STABILITY_DAYS * 24;
-    const card = takeLineNotes(tanks);
-    expect(card[0].text).toBe(`這窩 8 尾裡，5 尾是${DREAM_FISH.name}，穩定度 63%（比上一代多 53%）。再配一代，穩定度會更高。`);
-    expect(card[0].stability).toBe(63);
-    expect(takeLineNotes(tanks)).toEqual([]);
-    expect(dreamRoute(tanks).steps[3].done).toBe(false);
+  it('C17：第二代兄妹配還推薦（近交 0.44 < 0.45），選了換成新的一對，C11～C13 這一代重新問', () => {
+    const { tanks, st, kids, mom, dad } = lineSetup(0.25);
+    const c = takeChoice(tanks)!;
+    expect(c.id).toBe('C17');
+    expect(c.title).toBe('下一代要誰配誰？');
+    expect(c.options.map((o) => o.key)).toEqual(['sib', 'back', 'new']);
+    expect(c.options[0].recommended).toBe(true);
+    expect(c.options[0].outcome).toMatch(/^下一代夢想魚約 \d+%，尾鰭約 −11$/);
+    expect(c.options[1].label).toMatch(/^(女兒配爸爸|兒子配媽媽)$/);
+    expect(c.options[2].label).toMatch(/^配店裡的新魚（\d+ 元）$/);
+    expect(c.options[2].outcome).toMatch(/^這一代約 \d+%，血統新、尾鰭不變差$/);
+    expect(chooseOption(tanks, 'C17', 'sib')).toBeNull();
+    const [m, d] = st.pair!;
+    expect(kids.map((k) => k.id)).toEqual(expect.arrayContaining([m, d]));
+    expect(mom.keeper).toBeFalsy();
+    expect(dad.keeper).toBeFalsy();
+    expect(kids.find((k) => k.id === m)!.keeper).toBe(true);
+    expect(st.picked.C11).toBeUndefined();
+    expect(st.nextGen).toBeDefined();
+    // 同一代不再問
+    tanks[0].hours += 5 * 24;
+    expect(takeChoice(tanks)?.id).not.toBe('C17');
+  });
+
+  it('C17：第三代（候選近交 0.44）改推配新魚，選了花錢買紅蛇王或全紅白子當另一半', () => {
+    const { tanks, s, st, kids } = lineSetup(0.4375);
+    const c = takeChoice(tanks)!;
+    expect(c.id).toBe('C17');
+    expect(c.options.find((o) => o.recommended)!.key).toBe('new');
+    const coins = economy(s).coins;
+    const before = new Set(tanks.flatMap((t) => t.fish.map((f) => f.id)));
+    expect(chooseOption(tanks, 'C17', 'new')).toBeNull();
+    expect(economy(s).coins).toBeLessThan(coins);
+    const bought = st.pair!.filter((id) => !before.has(id));
+    expect(bought).toHaveLength(1);
+    expect(kids.map((k) => k.id)).toContain(st.pair!.find((id) => before.has(id)));
+  });
+
+  it('C19：最新一代近交 ≥ 0.45 問要不要引進新血；選繼續自己家配，之後每多 0.1 再問', () => {
+    const { tanks, st, kids } = lineSetup(0.58);
+    st.c17Gen = 1;
+    st.picked.C17 = 'sib';
+    const c = takeChoice(tanks)!;
+    expect(c.id).toBe('C19');
+    expect(c.title).toBe('血統有點太近了');
+    expect(c.owner).toMatch(/^你的白子紅蛇王已經配了好幾代自己家的魚，尾鰭開始變差（平均 \d+）。$/);
+    expect(c.options.map((o) => o.key)).toEqual(['new', 'keep']);
+    expect(c.options[0].recommended).toBe(true);
+    expect(chooseOption(tanks, 'C19', 'keep')).toBeNull();
+    expect(st.c19At).toBeCloseTo(0.58);
+    tanks[0].hours += 5 * 24;
+    expect(takeChoice(tanks)?.id).not.toBe('C19');
+    for (const k of kids) k.inbreeding = 0.69;
+    tanks[0].hours += 24;
+    expect(takeChoice(tanks)?.id).toBe('C19');
   });
 });

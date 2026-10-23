@@ -223,12 +223,14 @@ export const PICK_RESERVE_DAYS = 18;
  */
 export function reservedForPick(state: TankState): Set<number> {
   const c = economy(state).choices;
-  if (!c || c.picked.C2 || c.firstBrood === undefined || state.hours - c.firstBrood > PICK_RESERVE_DAYS * 24) return new Set();
+  // 固定品系的候選（choices.ts 每天早上算好）不交單
+  const line = c?.lineKeep ?? [];
+  if (!c || c.picked.C2 || c.firstBrood === undefined || state.hours - c.firstBrood > PICK_RESERVE_DAYS * 24) return new Set(line);
   const bred = householdTanks(state)
     .flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])])
     .filter((f) => f.alive && f.species === 'guppy' && (f.generation ?? 0) >= 1)
     .sort((a, b) => b.lengthCm - a.lengthCm);
-  return new Set([...bred.filter((f) => f.sex === 'male').slice(0, 1), ...bred.filter((f) => f.sex === 'female').slice(0, 2)].map((f) => f.id));
+  return new Set([...line, ...[...bred.filter((f) => f.sex === 'male').slice(0, 1), ...bred.filter((f) => f.sex === 'female').slice(0, 2)].map((f) => f.id)]);
 }
 
 /** 這缸（連產卵盒裡的）可以拿去交這張單的魚，差的排前面（不會先把最好的魚交出去）；keep 是玩家要留下來的魚。 */
