@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from './game';
-import { addFish, addPlant, dailyTasks, doseIchMedication, feed, FISH_SPECIES, ichHeatC, ichTreatment, nextStep, PINCH_MEALS, setHeaterTarget, simulate, updateDaily, useTestKit, waterChange, type TankState } from '../sim';
+import { addFish, addPlant, dailyTasks, doseIchMedication, feed, FISH_SPECIES, ichHeatC, ichMedDays, ichTreatment, needsMedicine, nextStep, PINCH_MEALS, setHeaterTarget, simulate, updateDaily, useTestKit, waterChange, type TankState } from '../sim';
 
 /**
  * 照下一步治白點（#324，評測 g20）：開局魚第 4 天出現白點，照任務卡做——叫下藥就下一份、說藥效中就把加熱棒調到說的溫度（孔雀魚缸 28°C，不超過適溫上限）等——
@@ -62,5 +62,24 @@ describe('照下一步治白點（#324）', () => {
     if (s.equipment.heater) setHeaterTarget(s, 24);
     expect(ichTreatment([s])?.heatC).toBeNull();
     expect(nextStep([s])?.text).toMatch(/^藥效中，約 \d+ 天會好$/);
+  });
+
+  it('兩缸：這缸下過藥了、另一缸的病魚還沒藥，要下藥的是另一缸（#356）', () => {
+    const viewing = newGameState(1);
+    const other = newGameState(2);
+    for (const t of [viewing, other]) {
+      addFish(t, 'guppy', { sex: 'female', carriesIch: false });
+      t.fish[0].ich = { stage: 'visible', progress: 0, cause: 'new_fish' };
+    }
+    doseIchMedication(viewing);
+    expect(needsMedicine(viewing)).toBe(false);
+    expect(needsMedicine(other)).toBe(true);
+    expect([viewing, other].findIndex(needsMedicine)).toBe(1);
+    expect(ichMedDays(viewing)).toBeGreaterThan(0);
+    expect(ichMedDays(other)).toBe(0);
+    // 兩缸都下過藥了才說藥效中
+    expect(nextStep([viewing, other])?.text).toBe('有魚生病了，去下藥');
+    doseIchMedication(other);
+    expect(nextStep([viewing, other])?.text).toMatch(/^藥效中/);
   });
 });
