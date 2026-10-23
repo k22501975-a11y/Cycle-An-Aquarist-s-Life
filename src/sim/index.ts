@@ -32,7 +32,7 @@ export * from './arrivals';
 export * from './forecast';
 export { hardscapeBacteriaCapacity, substrateNutrientBoost } from './processes/hardscape';
 export { canCatch, DISEASE_SPECS, hasVisible, infect, STORE_DISEASE_CHANCE } from './processes/disease';
-export { computeStressors, crowdingRatio, deathReading, ELDERLY_FRACTION, ICH_CAUSE_LABELS, ICH_SWING_C, ichTrigger, tempSwing24, freeAmmonia, hoursUntilStarving, isStarving, starvingCrisis, CRISIS_STARVING_HOURS, lifeFraction, likelyCauses, starvation, STRESS_CAUSE_LABELS, youngGettingHungry, type StressKey } from './processes/fauna';
+export { computeStressors, CROWD_DEATHS_PER_DAY, CROWD_NOTICES_BEFORE_DEATH, crowdingRatio, deathReading, ELDERLY_FRACTION, ICH_CAUSE_LABELS, ICH_SWING_C, ichTrigger, tempSwing24, freeAmmonia, hoursUntilStarving, isStarving, starvingCrisis, CRISIS_STARVING_HOURS, lifeFraction, likelyCauses, starvation, STRESS_CAUSE_LABELS, youngGettingHungry, type StressKey } from './processes/fauna';
 export { newTankAmmoniaRate, newTankSyndrome, SYNDROME_MG_PER_FISH, type NewTankSyndromeStatus } from './processes/new-tank';
 export { bacteriaCapacity, CYCLE_DELAY_PER_BATCH_H, cycleMaturity, CYCLED_BACTERIA, delayCycleForNewFish, isCycled } from './processes/nitrogen';
 export { currentPar } from './processes/plants';

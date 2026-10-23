@@ -1,6 +1,6 @@
 import { crisisText, type Crisis } from '../game/crisis';
 import { BLOOM_NOTE, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
-import { takeChoice, takeMilestones, takeGrowMilestone, takeBellyNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, type ChoiceCard } from '../sim/choices';
+import { takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 import { quietObservation } from './morning-observe';
 
@@ -58,6 +58,7 @@ export type ReportKind =
   | 'reveal' // 自家配的夢想魚那窩出生：開獎卡（midgame.md §6.1 C15，第 81 天）
   | 'milestone' // 種魚長到一個里程碑：肛鰭／胎斑、顯色、可以配（midgame.md §5.3）
   | 'second_brood' // C9 那尾母魚的第二窩生了：跟第一窩比、照選的處理（midgame.md §5.2）
+  | 'crowd' // 擠缸（midgame.md §7.1）：快生的那窩會住不下的預告、超過建議量、自動賣／自動搬公魚
   | 'observe' // 平淡早上的小觀察（morning-observe.ts）
   | 'quiet';
 
@@ -372,6 +373,10 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   // 中期的選擇點（design/midgame.md）：一個早上最多一張
   const choice = takeChoice(tanks);
   if (choice) items.push({ kind: 'choice', tank: choice.tank, tone: 'good', text: choice.title, choice, action: CHOICE_FOLLOW[choice.id] });
+  // 擠缸（midgame.md §7.1）：超過建議量排第一行；出 C14 的那缸不再重複預告
+  for (const n of takeCrowdNotes(tanks, choice?.id === 'C14' ? choice.tank : undefined)) {
+    items.push({ kind: 'crowd', tank: n.tank, tone: n.full ? 'bad' : 'warn', text: n.text });
+  }
   // 顯色到可以配之間的成長卡（midgame.md §6.7）：當天已經有別的卡就往後挪
   const grow = takeGrowMilestone(tanks, items.some((i) => i.kind === 'choice' || i.kind === 'milestone' || i.kind === 'reveal'));
   if (grow) {

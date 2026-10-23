@@ -3,6 +3,11 @@ import {
   addCuttings,
   applyLedger,
   addFish,
+  buybackRefusal,
+  FRY_BAG,
+  FRY_BUY_DAYS,
+  FRY_PRICE,
+  isFrySale,
   BILL_DAYS,
   createTank,
   DAILY_SELL_LIMIT,
@@ -68,11 +73,30 @@ describe('魚幣與電費', () => {
 });
 
 describe('賣給水族店', () => {
+  it(`滿 ${FRY_BUY_DAYS} 天的小小魚論尾收（每尾 2～3 元），一袋 ${FRY_BAG} 尾算賣一次（midgame.md §7.2）`, () => {
+    const s = createTank({ ...STARTER, seed: 4 });
+    const fry = Array.from({ length: FRY_BAG + 1 }, () => {
+      const f = addFish(s, 'guppy', { carriesIch: false });
+      f.lengthCm = 1;
+      f.ageDays = FRY_BUY_DAYS;
+      return f;
+    });
+    expect(isFrySale(fry[0])).toBe(true);
+    expect(buybackRefusal(fry[0])).toBe('還太小，店家不收');
+    expect(buybackRefusal(fry[0], true)).toBeNull();
+    const left = sellsLeftToday(s);
+    for (const f of fry.slice(0, FRY_BAG)) expect(sellFish(s, f.id)).toBeGreaterThanOrEqual(FRY_PRICE);
+    expect(sellsLeftToday(s)).toBe(left - 1);
+    expect(sellFish(s, fry[FRY_BAG].id)).toBeLessThanOrEqual(FRY_PRICE + 1);
+    expect(sellsLeftToday(s)).toBe(left - 2);
+  });
+
   it('健康的成魚賣得掉；仔魚和病魚不收', () => {
     const s = createTank({ ...STARTER, seed: 4 });
     const adult = addFish(s, 'guppy', { carriesIch: false });
     const fry = addFish(s, 'guppy', { carriesIch: false });
     fry.lengthCm = 1;
+    fry.ageDays = FRY_BUY_DAYS - 1;
     const sick = addFish(s, 'guppy', { carriesIch: false });
     sick.ich = { stage: 'visible', progress: 0 };
     const before = economy(s).coins;

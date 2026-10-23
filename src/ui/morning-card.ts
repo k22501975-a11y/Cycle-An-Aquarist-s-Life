@@ -15,6 +15,7 @@ import type { ChoiceCard } from '../sim/choices';
 /** 每種事情的圖示（有魚的照片時用照片）。 */
 const KIND_ICON: Record<ReportKind, ArtIcon> = {
   crisis: 'gear',
+  crowd: 'net',
   death: 'net',
   birth: 'owner',
   eaten: 'net',

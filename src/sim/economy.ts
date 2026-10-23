@@ -78,12 +78,15 @@ export const PRICES: Record<string, number> = {
 
 export interface Economy {
   coins: number;
+  /** 全家今天擠死了幾尾（超過建議量的缸合起來一天最多 2 尾，midgame.md §7.1）。 */
+  crowdDeaths?: { day: number; n: number };
   /** 這一期累積的用電（度）。 */
   kwh: number;
   /** 上次結算電費的時間（遊戲小時）。 */
   lastBillHours: number;
   /** 今天賣了幾次（以遊戲日計）。 */
-  sold: { day: number; count: number };
+  /** 今天賣給店家幾次；fry：今天賣掉的小小魚（一袋 FRY_BAG 尾算一次）。 */
+  sold: { day: number; count: number; fry?: number };
   /** 剪下來還沒處理的插枝。 */
   cuttings: Partial<Record<PlantSpeciesId, number>>;
   /** 這一期餵了幾餐（飼料錢跟電費一起每週結算）。 */
@@ -292,13 +295,23 @@ export function sellsLeftToday(state: TankState): number {
 /** 水族店收這條魚嗎？只收活的成魚，看起來有病的不收。 */
 /** 店家收購（和中魚單）最小要長到成魚體長的這個比例。 */
 export const BUYBACK_MIN_SIZE = 0.5;
+/** 還沒長到收購大小的小小魚：滿這麼多天店家收（midgame.md §7.2），每尾 FRY_PRICE～FRY_PRICE+1 元，FRY_BAG 尾一袋算賣一次。 */
+export const FRY_BUY_DAYS = 7;
+export const FRY_PRICE = 2;
+export const FRY_BAG = 10;
 
-export function buybackRefusal(fish: Fish): string | null {
+/** 這尾是店家照小小魚收的（滿 FRY_BUY_DAYS 天、還沒長到收購大小的魚，蝦子不算）。 */
+export function isFrySale(fish: Fish): boolean {
+  return !isShrimpSpecies(fish.species) && fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * BUYBACK_MIN_SIZE && (fish.ageDays ?? 0) >= FRY_BUY_DAYS;
+}
+
+/** fry：店家收購的時候（滿 FRY_BUY_DAYS 天的小小魚也收）；訂單看的是長到收購大小的。 */
+export function buybackRefusal(fish: Fish, fry = false): string | null {
   if (!fish.alive) return '死魚不收';
   if (fish.gift) return '老闆送的魚不能賣回去';
   if (fish.listing) return '已經在市場上架了';
   if (fish.keeper) return '留種的魚不賣（先取消留種）';
-  if (fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * BUYBACK_MIN_SIZE) return '還太小，店家不收';
+  if (fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * BUYBACK_MIN_SIZE && !(fry && isFrySale(fish))) return fry ? `還太小，店家不收（小魚滿 ${FRY_BUY_DAYS} 天才收）` : '還太小，店家不收';
   if (fish.ich.stage === 'visible' || (fish.infections ?? []).some((i) => i.stage === 'visible') || fish.health < 0.6) return '看起來生病了，店家不收';
   return null;
 }
@@ -354,6 +367,8 @@ export function guppyRarity(p: GuppyPhenotype): GuppyRarity {
 
 /** 收購價：孔雀魚看稀有度和尾鰭分數，其他魚店價五成；還沒長大的中魚只收三成。 */
 export function fishBuybackPrice(fish: Fish): number {
+  // 小小魚論尾收：尾鰭好的（70 分以上）多 1 元
+  if (isFrySale(fish)) return FRY_PRICE + ((fish.genome?.tail ?? 0) >= 70 ? 1 : 0);
   // 尾鰭 50 分是一般價，80 分多三成
   const base = fish.genome
     ? FISH_PRICES.guppy * guppyBuybackTier(phenotype(fish.genome)) * (0.5 + fish.genome.tail / 100)
@@ -368,11 +383,17 @@ export function plantBuybackPrice(species: PlantSpeciesId): number {
   return Math.max(1, Math.round((PLANT_PRICES[species] / 3) * BUYBACK_SHARE));
 }
 
-function countSale(state: TankState): boolean {
+function countSale(state: TankState, fry = false): boolean {
   const e = economy(state);
-  if (sellsLeftToday(state) <= 0) return false;
   if (e.sold.day !== today(state)) e.sold = { day: today(state), count: 0 };
+  // 小小魚一袋 FRY_BAG 尾算一次：袋子還沒裝滿就不用再算
+  if (fry && (e.sold.fry ?? 0) % FRY_BAG !== 0) {
+    e.sold.fry = (e.sold.fry ?? 0) + 1;
+    return true;
+  }
+  if (sellsLeftToday(state) <= 0) return false;
   e.sold.count++;
+  if (fry) e.sold.fry = (e.sold.fry ?? 0) + 1;
   return true;
 }
 
@@ -389,7 +410,7 @@ export function claimQuestReward(state: TankState, questId: string, coins: numbe
 
 export function sellFish(state: TankState, fishId: number): number {
   const fish = state.fish.find((f) => f.id === fishId);
-  if (!fish || buybackRefusal(fish) || !countSale(state)) return 0;
+  if (!fish || buybackRefusal(fish, true) || !countSale(state, isFrySale(fish))) return 0;
   const coins = fishBuybackPrice(fish);
   state.fish = state.fish.filter((f) => f !== fish);
   const e = economy(state);
