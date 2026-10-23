@@ -1344,19 +1344,23 @@ async function start(): Promise<void> {
         else panelSheet('育幼盒', (p) => p.nurseryPanel(ctx));
         return;
       case 'treat': {
-        // 生病的魚可能在別缸：這缸沒有才切過去，直接打開用藥（#291），老闆先說是什麼病、下什麼藥
+        // 生病的魚可能在別缸：直接打開用藥（#291），老闆先說是什麼病、下什麼藥。
+        // 先找還等著下藥的那缸（#356：這缸下過藥了，病魚在另一缸沒藥），都下過了才找有病魚的
         const ill = (t: sim.TankState) => t.fish.some((f) => f.alive && illnessOf(f));
-        const at = game.tanks.findIndex(ill);
-        if (!ill(game.state) && at >= 0) game.switchTo(at);
+        const fits = game.tanks.some(sim.needsMedicine) ? sim.needsMedicine : ill;
+        const at = game.tanks.findIndex(fits);
+        if (!fits(game.state) && at >= 0) game.switchTo(at);
         const fish = sick();
         // 白點藥效中：先說不用再下，叫玩家調水溫等（#324）
         const ich = sim.ichTreatment(game.tanks);
+        const medDays = sim.ichMedDays(game.state);
         const advice = ich
           ? `水裡還有白點藥，藥效約剩 ${ich.medDays} 天，不用再下。${ich.heatC ? `水溫調到 ${ich.heatC}°C，` : ''}約 ${ich.days} 天白點會掉。`
           : fish
-            ? causeAdvice(fishName(fish), [], fish)
+            ? `${medDays > 0 ? `這缸白點藥效還剩 ${medDays} 天。` : ''}${causeAdvice(fishName(fish), [], fish)}`
             : '缸裡現在看不到生病的魚。';
-        return panelSheet('用藥', (p) => p.treatPanel(ctx, advice));
+        const title = game.tanks.length > 1 ? `用藥：${sim.tankLabel(game.tanks, game.active)}` : '用藥';
+        return panelSheet(title, (p) => p.treatPanel(ctx, advice));
       }
       case 'select':
         return select(showy()?.id ?? null);

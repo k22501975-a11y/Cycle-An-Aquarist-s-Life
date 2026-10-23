@@ -175,6 +175,8 @@ export function snapshot(tanks: TankState[]): Snapshot {
 export const isBadNews = (i: ReportItem) => i.tone === 'bad' || i.kind === 'eaten' || i.kind === 'disease';
 
 const TONE_ORDER: Record<ReportItem['tone'], number> = { bad: 0, warn: 1, good: 2, info: 3 };
+/** 半夜的危機最前面，再來是開獎（整局最大的回報，#357：本來排在白點後面要往下捲才看得到）；其他照 tone 排，「魚放鬆了」這種小事排同 tone 的最後。 */
+const kindRank = (i: ReportItem): number => (i.kind === 'crisis' ? 0 : i.kind === 'reveal' ? 1 : 2);
 
 /** 醒來後跟快照比，寫出早上報告。 */
 export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: number, crisis: Crisis | null): MorningReport {
@@ -365,6 +367,8 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   if (reveal) {
     const at = tanks.findIndex((t) => t.fish.some((f) => f.id === reveal.momId));
     items.push({ kind: 'reveal', tank: Math.max(0, at), tone: 'good', text: reveal.text, action: 'fish', subjectId: reveal.momId, count: reveal.fry.length, reveal: { dream: reveal.dream, fry: reveal.fry } });
+    // 同一窩不要再說一次「昨晚生了 N 尾」（#357）
+    for (let i = items.length - 1; i >= 0; i--) if (items[i].kind === 'birth' && items[i].subjectId === reveal.momId) items.splice(i, 1);
   }
   // C9 第二窩生了（midgame.md §5.2）：照玩家選的處理，和第一窩一起比
   const brood2 = takeSecondBrood(tanks);
@@ -407,7 +411,7 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     if (text) items.push({ kind: 'observe', tank: 0, tone: 'info', text });
   }
   if (items.length === 0) items.push({ kind: 'quiet', tank: 0, tone: 'info', text: '昨晚很平靜，魚都在水草裡睡覺' });
-  items.sort((a, b) => (a.kind === 'crisis' ? -1 : b.kind === 'crisis' ? 1 : TONE_ORDER[a.tone] - TONE_ORDER[b.tone]));
+  items.sort((a, b) => kindRank(a) - kindRank(b) || TONE_ORDER[a.tone] - TONE_ORDER[b.tone] || (a.kind === 'fish_relaxed' ? 1 : 0) - (b.kind === 'fish_relaxed' ? 1 : 0));
   const day = Math.floor(tanks[0].hours / 24) + 1;
   return { title: crisis ? '半夜出狀況了' : `早安，第 ${day} 天`, hours: sleptHours, stopped: !!crisis, items };
 }

@@ -66,6 +66,17 @@ export function ichHeatC(t: TankState): number {
   return Math.min(ICH_HEAT_C, ...t.fish.filter((f) => f.alive).map((f) => FISH_SPECIES[f.species].temp.max));
 }
 
+/** 這缸水裡的白點藥還有效幾天（至少 1；藥效已經退了回 0）。 */
+export function ichMedDays(t: TankState): number {
+  if (t.water.medication < ICH_MED_WORKING) return 0;
+  return Math.max(1, Math.floor(Math.log(t.water.medication / ICH_MED_WORKING) / 0.01 / 24));
+}
+
+/** 這缸還有魚等著下藥：看得出別的病，或有白點但水裡的白點藥退了。兩缸時「去下藥」切到這缸（#356）。 */
+export function needsMedicine(t: TankState): boolean {
+  return t.fish.some((f) => f.alive && (hasVisible(f) || (f.ich.stage === 'visible' && t.water.medication < ICH_MED_WORKING)));
+}
+
 /**
  * 看得到的病只有白點、而且那幾缸水裡都還有藥：不用再下（#324）。回傳白點大約幾天會掉（照現在的水溫或加熱棒設的溫度，取高的）、
  * 藥效還剩幾天，和該調到幾度（每缸 ichHeatC 取低的；不比現在高就是 null，不用調）。有別的病、或有一缸沒藥了回 null。
@@ -83,7 +94,7 @@ export function ichTreatment(tanks: TankState[]): { days: number; medDays: numbe
     warm &&= Math.max(t.water.tempC, t.equipment.heater?.targetC ?? 0) >= ichHeatC(t) - 0.5;
     const tf = temperatureFactor(Math.max(t.water.tempC, t.equipment.heater?.targetC ?? 0));
     for (const f of fish) days = Math.max(days, Math.ceil(((1 - f.ich.progress) * 96) / tf / 24));
-    medDays = Math.min(medDays, Math.max(1, Math.floor(Math.log(t.water.medication / ICH_MED_WORKING) / 0.01 / 24)));
+    medDays = Math.min(medDays, ichMedDays(t));
   }
   return { days, medDays, heatC: warm ? null : heatC };
 }

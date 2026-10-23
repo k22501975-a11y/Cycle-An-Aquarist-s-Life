@@ -30,6 +30,10 @@ describe('第 36～120 天的選擇點（design/midgame.md §6、§7）', () => 
       expect(reveal, log).toBeGreaterThan(first('C15'));
       reveals.push(reveal);
       expect(reveal, log).toBeLessThanOrEqual(90);
+      // 開獎那天早上報告第一項就是開獎（半夜出事才排第二），同一窩不再另外說「昨晚生了 N 尾」（#357）
+      const kinds = nights.find((n) => n.day === reveal)!.line.split(' ').pop()!.split(',');
+      expect(kinds[0] === 'reveal' || kinds[1] === 'reveal', kinds.join(',')).toBe(true);
+      expect(kinds, kinds.join(',')).not.toContain('birth');
       // 同一天最多一張（早上的卡和交貨時的卡加起來）
       const cards = nights.filter((n) => n.choice || n.orderChoice);
       expect(cards.filter((n) => n.choice && n.orderChoice), log).toEqual([]);
