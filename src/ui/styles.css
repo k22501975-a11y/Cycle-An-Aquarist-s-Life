@@ -1537,13 +1537,16 @@ span.bc-ks-icon { width: 32px; height: 42px; }
 .nm-mark small { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font-size: 10px; line-height: 12px; color: rgba(255, 247, 220, 0.6); white-space: nowrap; }
 .nm-mark.on small { color: #fff7dc; }
 .nm-meter { padding-top: 10px; container-type: inline-size; }
+.nm-meter-text { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.nm-meter-text b { color: var(--gold-bright); }
 /* 條太窄：兩條線上的字改成只寫百分比 */
 @container (max-width: 240px) {
   .nm-mark small span { display: none; }
   .nm-mark small::after { content: attr(data-short); }
+  /* 說明字放不下：只留「穩定度 X%」，靠右 */
+  .nm-meter-text > span { display: none; }
+  .nm-meter-text { justify-content: flex-end; }
 }
-.nm-meter-text { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
-.nm-meter-text b { color: var(--gold-bright); }
 .nm-form { display: flex; flex-direction: column; gap: 6px; opacity: 0; animation: rv-pop 0.45s ease-out forwards; }
 .nm-ask { font-size: 14px; }
 .nm-field { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
