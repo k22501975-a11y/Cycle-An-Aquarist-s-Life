@@ -2,7 +2,7 @@ import { artUrl, ownerImg, type ArtIcon } from './art-icons';
 import { ownerMood } from './owner-mood';
 import { h } from './dom';
 import { keeperRibbon } from './keeper-ribbon';
-import { choiceVisual, type FishLookup } from './choice-card';
+import { choiceVisual, namingOf, type FishLookup } from './choice-card';
 import { lookalikeVisual } from './lookalike-card';
 import { choiceFollowUp, isBadNews, type Milestone, type MorningReport, type Reveal, type ReportItem, type ReportKind } from './morning-report';
 import type { ChoiceCard } from '../sim/choices';
@@ -93,7 +93,7 @@ export interface MorningCardDeps {
    * 選擇卡（C1～C5）選了一個選項：套用選擇，回傳錯誤訊息（顯示在卡上），成功回傳 null。
    * 選了要去做的（放育幼盒、買缸），報告卡關掉再帶過去；其他留在報告卡上。
    */
-  choose?: (item: ReportItem, key: string, picks: number[]) => string | null;
+  choose?: (item: ReportItem, key: string, picks: number[], text?: string) => string | null;
   /** 選擇卡上只有魚的編號（C4 的母魚、C5 那尾），照編號找牠的樣子來畫。 */
   fishLook?: FishLookup;
   /** 今天的小事（F3，#185）：早上一起列出來，點一件就關掉報告卡帶去做。 */
@@ -163,10 +163,12 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
     const box = h(`div.morning-item.${item.tone}.choice-item`, {});
     const done = (text: string) => box.replaceChildren(h('span.morning-text', {}, `${item.text} ✓ ${text}`));
     box.append(
-      h('span.morning-body', {}, h('span.morning-text', {}, h('b', {}, item.text)), choiceVisual(item.choice!, (key, picks) => {
+      h('span.morning-body', {}, h('span.morning-text', {}, h('b', {}, item.text)), choiceVisual(item.choice!, (key, picks, text) => {
         if (!deps.choose) return null;
-        const why = deps.choose(item, key, picks);
+        const why = deps.choose(item, key, picks, text);
         if (why) return why;
+        // C18 取名：卡上自己換成金色名牌，不收成一行
+        if (key === 'name' && namingOf(item.choice!)) return null;
         done(item.choice!.options.find((o) => o.key === key)?.label ?? '');
         const go = choiceFollowUp(item.choice!, key);
         if (go) {
