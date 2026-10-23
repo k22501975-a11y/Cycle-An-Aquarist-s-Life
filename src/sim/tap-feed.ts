@@ -75,3 +75,27 @@ export function waterLook(state: TankState): WaterLook {
   const ppm = state.water.tan + state.water.no2;
   return { bloom: Math.min(0.25, ppm * BLOOM_PER_PPM), organic: cloudiness(state), uneasy: Math.min(1, ppm) };
 }
+
+/** 別缸的魚餓到多少，餵這缸時順便餵一餐（#325）。 */
+export const FEED_OTHERS_HUNGER = 0.35;
+
+/**
+ * 兩缸以後按「餵食」：畫面不跳缸，餵完這缸順便把別缸也餵一餐（#325）。只餵有魚、餓了、缸裡沒剩飼料的缸；
+ * 飼料照那缸 C7 選的養法，沒有就用這次撒的。回傳餵了哪幾缸。
+ */
+export function feedOtherTanks(tanks: TankState[], active: number, food: { kind: FoodKind; grade: FoodGrade } = DEFAULT_FOOD): number[] {
+  const fed: number[] = [];
+  tanks.forEach((t, i) => {
+    if (i === active) return;
+    const meal = mealMg(t);
+    if (meal <= 0) return;
+    if (Math.max(...t.fish.filter((f) => f.alive).map((f) => f.hunger)) < FEED_OTHERS_HUNGER) return;
+    // 上一餐還沒吃完就不加，不會越餵越多
+    if (t.water.foodMg >= meal * 0.5) return;
+    const f = t.feedPlan ?? food;
+    chargeMeal(t, mealPrice(f.kind, f.grade));
+    feed(t, meal, f.kind, f.grade);
+    fed.push(i);
+  });
+  return fed;
+}

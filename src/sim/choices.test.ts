@@ -6,6 +6,7 @@ import {
   crowdingRatio,
   bacteriaCapacity,
   BACKUP_MAX,
+  MAIN_KEEP_FISH,
   MAX_KEEPERS,
   hasDreamGenes,
   orderDreamNote,
@@ -460,8 +461,8 @@ describe('中期的選擇點（design/midgame.md）', () => {
     expect(orderDreamNote(tanks, o)).toBeNull();
   });
 
-  it('C6 繁殖缸擺好了：分主缸濾材過去，留種的魚、快生的母魚先搬，小魚跟著搬', () => {
-    const { s, tanks, kids, mom } = withBrood(6, PICK_AFTER_BROOD_DAYS * 24);
+  it('C6 繁殖缸擺好了：分主缸濾材過去，留種的魚、快生的母魚先搬，小魚跟著搬；主缸至少留 MAIN_KEEP_FISH 尾（#325）', () => {
+    const { s, tanks, kids, mom } = withBrood(12, PICK_AFTER_BROOD_DAYS * 24);
     Object.assign(choiceState(tanks).picked, { C1: 'box', C2: 'later', C3: 'breeding', C8: 'media' });
     economy(s).coins = 5000;
     s.bacteria.aob = s.bacteria.nob = bacteriaCapacity(s);
@@ -476,9 +477,12 @@ describe('中期的選擇點（design/midgame.md）', () => {
     expect(c6?.id).toBe('C6');
     expect(c6!.move!.slice(0, 2)).toEqual([kids[0].id, mom.id]);
     expect(c6!.owner).toMatch(/濾材/);
+    expect(c6!.options[0].outcome).toContain(`主缸還有 ${MAIN_KEEP_FISH} 尾`);
     expect(chooseOption(tanks, 'C6', 'move')).toBeNull();
     expect(t2.bacteria.aob).toBeGreaterThan(0);
-    expect(t2.fish.map((f) => f.id)).toEqual(expect.arrayContaining([kids[0].id, mom.id, ...kids.slice(1).map((k) => k.id)]));
+    expect(t2.fish.map((f) => f.id)).toEqual(expect.arrayContaining([kids[0].id, mom.id]));
+    expect(t2.fish.length).toBe(14 - MAIN_KEEP_FISH);
+    expect(s.fish.filter((f) => f.alive).length).toBe(MAIN_KEEP_FISH);
     expect(takeChoice(tanks)).toBeNull();
   });
 
