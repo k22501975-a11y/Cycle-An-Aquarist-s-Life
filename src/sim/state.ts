@@ -28,6 +28,8 @@ export interface TankState {
   hours: number;
   /** 擠缸提醒過幾次（早上報告的擠缸行、C14；擁擠度掉回 60% 以下歸零）：提醒過兩次才會擠死魚（midgame.md §7.1）。 */
   crowdNotices?: number;
+  /** 最後一次超過建議量（擁擠度 > 1）的遊戲小時：離線回來看有沒有擠過。 */
+  crowdOverHours?: number;
   /** 超過建議量時今天擠死了幾尾（沒接上全家錢包的單缸用；有錢包記在 economy，全家一天最多 2 尾）。 */
   crowdDeaths?: { day: number; n: number };
   rng: RngState;

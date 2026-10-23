@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, CROWD_DEATHS_PER_DAY, CROWD_NOTICES_BEFORE_DEATH, crowdingRatio, linkTanks, step } from './index';
+import { addFish, CROWD_DEATHS_PER_DAY, CROWD_NOTICES_BEFORE_DEATH, crowdingRatio, FISH_SPECIES, linkTanks, step, type Fish } from './index';
 
 /** 超過建議量的缸擠死魚是逐步的（midgame.md §7.1）：提醒過兩次才會死，一天最多 2 尾。 */
 describe('擠缸死魚', () => {
@@ -37,5 +37,18 @@ describe('擠缸死魚', () => {
     b.s.hours = a.s.hours;
     for (let i = 0; i < 2; i++) for (const t of [a.s, b.s]) step(t);
     expect([...a.weak, ...b.weak].filter((f) => !f.alive)).toHaveLength(CROWD_DEATHS_PER_DAY);
+  });
+
+  it('不是擠出來的死因（老死）照常死，沒提醒過也一樣', () => {
+    const { s } = crowded();
+    s.water.tan = 0;
+    s.crowdNotices = 0;
+    const old: Fish = s.fish[10];
+    old.health = 1e-4;
+    old.ageDays = FISH_SPECIES.guppy.lifespanDays * old.constitution * 2;
+    old.recentDamage = {};
+    step(s);
+    expect(old.alive).toBe(false);
+    expect(s.events.find((e) => e.type === 'fish_died' && e.subjectId === old.id)?.cause).toBe('old_age');
   });
 });

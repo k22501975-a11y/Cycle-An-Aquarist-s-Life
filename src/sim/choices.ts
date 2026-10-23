@@ -194,6 +194,8 @@ export interface ChoiceState {
   warmPlan?: { momIds: number[]; tank: number; prevC: number };
   /** C14（midgame.md §7）：下次可以再問的時間（先多換水、隔幾天再問）。 */
   crowdNext?: number;
+  /** 離線回來的擠缸行：每缸上次說的是第幾個遊戲天（同一缸一天最多說一次）。 */
+  awayNoted?: Record<number, number>;
   /** C14 連續選「賣一批」幾次（兩次之後多一個「以後太擠就自動賣」）。 */
   crowdSells?: number;
   /** C14 選了以後太擠就自動賣給阿德。 */
@@ -1700,6 +1702,33 @@ export function takeCrowdNotes(tanks: TankState[], cardTank?: number): Array<{ t
     t.crowdNotices = (t.crowdNotices ?? 0) + 1;
   });
   return out;
+}
+
+/**
+ * 離線回來（midgame.md §7.7）：離開期間（sinceHours 之後）超過建議量的缸，報告第一行寫「你不在的時候{缸名}太擠了」，
+ * 接著出 C14。每一行和那張 C14 都算一次提醒（crowdNotices）。
+ * 一直切出去又切回來不會一直跳：同一缸的擠缸行一天最多一次；C14 前 24 小時內出過、或選了先多換水還沒到時間就不出。
+ */
+export function takeAwayCrowd(tanks: TankState[], sinceHours: number): { notes: Array<{ tank: number; text: string }>; choice: ChoiceCard | null } {
+  const s = choiceState(tanks);
+  const now = tanks[0].hours;
+  const today = Math.floor(now / 24);
+  const noted = (s.awayNoted ??= {});
+  const notes: Array<{ tank: number; text: string }> = [];
+  tanks.forEach((t, i) => {
+    if ((t.crowdOverHours ?? -Infinity) < sinceHours || noted[i] === today) return;
+    noted[i] = today;
+    notes.push({ tank: i, text: `你不在的時候${tankLabel(tanks, i)}太擠了` });
+    t.crowdNotices = (t.crowdNotices ?? 0) + 1;
+  });
+  if (notes.length === 0) return { notes, choice: null };
+  const recent = now - (s.shown.C14 ?? -Infinity) < 24 || (s.crowdNext !== undefined && now < s.crowdNext);
+  const choice = recent ? null : cardFor('C14', tanks, s);
+  if (choice) {
+    s.shown.C14 = s.lastCard = now;
+    tanks[choice.tank].crowdNotices = (tanks[choice.tank].crowdNotices ?? 0) + 1;
+  }
+  return { notes, choice };
 }
 
 /** 選過了還會再問的卡：C6 又有魚可以搬、C9 每一窩、C10 每次有更好的、C14 隔幾天還是很擠。 */

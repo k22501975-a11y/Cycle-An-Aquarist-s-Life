@@ -24,8 +24,8 @@ export const ORDERS_PER_DAY = 1;
 /** 孔雀魚的單每尾最多 400（指定鰭型，orders.ts）；普通成魚單 80。 */
 export const GUPPY_ORDER_UNIT_MAX = 400;
 const GUPPY_PLAIN_ORDER_MAX = 80;
-/** 上一份存檔之後才出生、又在這段時間內長到店家收（成魚一半大）的魚，至少要這麼多天。 */
-export const NEWBORN_SELL_DAYS = 14;
+/** 上一份存檔之後才出生、又在這段時間內賣得掉的魚，至少要這麼多天（滿 FRY_BUY_DAYS 天的小小魚店家就收，midgame.md §7.7）。 */
+export const NEWBORN_SELL_DAYS = 7;
 /** 誤差：存檔時間點的小落差（一筆電費、四捨五入）。 */
 export const EARN_SLACK = 100;
 
