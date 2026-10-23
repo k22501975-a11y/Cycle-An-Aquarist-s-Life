@@ -74,6 +74,8 @@ export interface ChoiceOption {
   /** 一行後果。 */
   outcome: string;
   recommended?: boolean;
+  /** 現在不能選的原因（錢不夠之類）：按鈕灰掉、小字改寫這個。 */
+  disabled?: string;
 }
 
 // ── 小零件 ──────────────────────────────────────────────
@@ -321,11 +323,12 @@ export function choiceCard(title: string, options: ChoiceOption[], onChoose: (ke
       ...options.map((o) =>
         h(
           `button.bc-opt${o.recommended ? '.rec' : ''}`,
-          { type: 'button', onclick: () => onChoose(o.key) },
+          // 不能選的（例如錢不夠）：灰掉，小字寫原因
+          { type: 'button', disabled: !!o.disabled, onclick: () => onChoose(o.key) },
           o.recommended ? h('span.bc-best', {}, '推薦') : null,
           art[o.key] ? h('img.bc-opt-art', { src: ART + art[o.key], alt: '', draggable: 'false' }) : null,
           h('b', {}, o.label),
-          h('small', {}, o.outcome),
+          h('small', {}, o.disabled ?? o.outcome),
         ),
       ),
     ),

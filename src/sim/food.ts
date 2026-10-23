@@ -135,3 +135,8 @@ export function nutritionFactor(nutrition: number | undefined): number {
 export function breedingFactor(condition: number | undefined): number {
   return 0.6 + 0.8 * (condition ?? DEFAULT_BREEDING_CONDITION);
 }
+
+/** 繁殖意願對一窩胎數的倍數（標準 = 1；孕期吃活餌、好飼料最多多一成半，midgame.md C13）。 */
+export function broodFactor(condition: number | undefined): number {
+  return 0.85 + 0.3 * (condition ?? DEFAULT_BREEDING_CONDITION);
+}

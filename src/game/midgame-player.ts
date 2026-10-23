@@ -6,19 +6,24 @@ import {
   buyTank,
   checkGoals,
   chooseOption,
+  choiceState,
   claimDaily,
+  doseIchMedication,
   DREAM_FISH,
   economy,
   FISH_SPECIES,
   feed,
   fulfillOrder,
   HARDSCAPE,
+  ICH_MED_WORKING,
   linkTanks,
   moveDueToNursery,
   orderBoard,
   orderSupply,
   PINCH_MEALS,
   setTankPurpose,
+  splitTank,
+  transferMedia,
   step,
   TICK_HOURS,
   tradeCheck,
@@ -39,6 +44,7 @@ import { doAllDaily } from './daily-player';
  * 中期劇本（design/midgame.md §5）：基準玩法玩 36 天。開局照教學、買夢想魚配對（紅蛇王公魚、兩尾全紅白子母魚），
  * 之後每天一小撮、測水、測到氨或亞硝換三成、做完小事、交得出的單就交、快生的母魚放育幼盒，晚上過一晚看早上報告。
  * 早上出選擇卡就照推薦選：選種挑卡上排最前面的 1 公 2 母，第二缸買來當繁殖缸，養好了照 C6 卡把魚搬過去。
+ * 長白點就照任務卡下一份藥。第 36～80 天（#326）：C14 選再買一缸、換大缸就照買。
  * 每晚記下：出了哪張選擇卡、早上是不是「安靜的一晚」、手上的錢。
  */
 
@@ -56,6 +62,10 @@ export interface MidgameNight {
   inBreeding: number;
   /** 這天早上報告的開場白和每條（除錯看）。 */
   line: string;
+  /** 早上報告有夢想魚那窩的懷孕里程碑（胎斑變黑、看得到眼睛，midgame.md §6.4）。 */
+  bellyMilestone: boolean;
+  /** 種魚長大了卻因為生病晚配的天數（到這天為止）。 */
+  sickDays: number;
   /** 早上各缸的水質警報（「第幾缸:警報」，例如 1:too_hot）。 */
   alarms: string[];
 }
@@ -83,6 +93,16 @@ export function chooseRecommended(tanks: TankState[], card: ChoiceCard): { key: 
 /** 照推薦選；C3 就照選的用途買 20L 第二缸。 */
 function pickRecommended(tanks: TankState[], card: ChoiceCard): string | null {
   const { key, why } = chooseRecommended(tanks, card);
+  if (card.id === 'C14' && (key === 'tank' || key === 'big')) {
+    const t = buyTank(tanks, key === 'big' ? 'std90' : 'nano20');
+    if (t) {
+      linkTanks(tanks);
+      // 新缸先分舊缸濾材，再把擠的那缸分一半過去
+      const from = tanks[card.tank];
+      transferMedia(from, t);
+      splitTank(from, t, 'half');
+    }
+  }
   if (card.id === 'C3') {
     const t = buyTank(tanks, 'nano20');
     if (t) {
@@ -127,6 +147,8 @@ function run(seed: number, days: number): { nights: MidgameNight[]; tanks: TankS
     act();
     if (currentQuest(p)?.id === 'plant') buyPlant(s, 'anubias');
     act();
+    // 長白點就照任務卡下一份藥（#324：藥效中不再下）
+    for (const t of tanks) if (t.fish.some((f) => f.alive && f.ich.stage === 'visible') && t.water.medication < ICH_MED_WORKING) doseIchMedication(t);
     for (const t of tanks) {
       const r = useTestKit(t);
       if ((t === s && currentQuest(p)?.id === 'water') || r.ammonia > 0 || r.nitrite > 0) waterChange(t, 0.3);
@@ -157,7 +179,9 @@ function run(seed: number, days: number): { nights: MidgameNight[]; tanks: TankS
     const card = report.items.find((i) => i.choice)?.choice;
     const why = card ? pickRecommended(tanks, card) : null;
     const line = morningLine(report);
-    out.push({ day: Math.floor(s.hours / 24) + 1, choice: card?.id, orderChoice, quiet: line === '安靜的一晚。', coins: economy(s).coins, tanks: tanks.length, inBreeding: tanks.find((t) => t.purpose === 'breeding')?.fish.filter((f) => f.alive).length ?? 0, alarms: tanks.flatMap((t, i) => [...waterAlarms(t)].map((x) => `${i}:${x}`)), line: `${why ? `（選不了：${why}）` : ''}${line} ${report.items.map((i) => i.kind).join(',')}` });
+    const cs = choiceState(tanks);
+    const bellyMilestone = report.items.some((i) => i.kind === 'belly' && i.subjectId !== undefined && i.subjectId === cs.reveal?.momId);
+    out.push({ bellyMilestone, sickDays: cs.sickDays ?? 0, day: Math.floor(s.hours / 24) + 1, choice: card?.id, orderChoice, quiet: line === '安靜的一晚。', coins: economy(s).coins, tanks: tanks.length, inBreeding: tanks.find((t) => t.purpose === 'breeding')?.fish.filter((f) => f.alive).length ?? 0, alarms: tanks.flatMap((t, i) => [...waterAlarms(t)].map((x) => `${i}:${x}`)), line: `${why ? `（選不了：${why}）` : ''}${line} ${report.items.map((i) => i.kind).join(',')}` });
   }
   return { nights: out, tanks };
 }
