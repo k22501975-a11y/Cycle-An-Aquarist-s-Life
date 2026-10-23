@@ -12,6 +12,8 @@ import {
   economy,
   feed,
   feedTarget,
+  feedOtherTanks,
+  tapFeed,
   FREE_SLOTS,
   mealMg,
   simulate,
@@ -81,21 +83,40 @@ describe('多缸與缸位', () => {
       return home.events.filter((e) => e.type === 'fish_died' && e.cause === 'starvation').length;
     };
     expect(feedTarget(rich(), 0)).toBe(0);
-    // 這缸不餓、別缸的魚餓了：換過去（#322）；兩缸都不餓就照這缸
+    // 這缸有魚就不跳缸，別缸餓了也一樣（#325）
     const two = rich();
     const t2 = buyTank(two, 'nano20')!;
-    const kid = addFish(t2, 'guppy', { sex: 'female', pregnant: false });
-    addFish(two[0], 'guppy', { sex: 'male' });
-    for (const f of two[0].fish) f.hunger = 0.2;
-    kid.hunger = 0.3;
-    expect(feedTarget(two, 0)).toBe(0);
-    kid.hunger = 0.8;
-    expect(feedTarget(two, 0)).toBe(1);
-    for (const f of two[0].fish) f.hunger = 0.7;
+    addFish(t2, 'guppy', { sex: 'female', pregnant: false }).hunger = 0.9;
+    addFish(two[0], 'guppy', { sex: 'male' }).hunger = 0.1;
     expect(feedTarget(two, 0)).toBe(0);
     expect(run((tanks) => feedTarget(tanks, 1))).toBe(0);
     // 對照：餵食落在空缸就會餓死（評測 g18 看到的）
     expect(run(() => 1)).toBeGreaterThan(0);
+  });
+
+  it('兩缸、一天只按一次餵食（餵畫面上的主缸）：別缸一起餵，20 天沒有魚餓到消瘦（#325）', () => {
+    const home = createTank({ tank: TANKS.std40, filter: FILTERS.hangOn, heater: { spec: HEATERS.h50, targetC: 25 }, light: { spec: LIGHTS.basic }, roomTempC: 24, seed: 22, matureMedia: true });
+    economy(home).coins = 100_000;
+    const tanks = [home];
+    for (let i = 0; i < 6; i++) addFish(home, 'guppy', { carriesIch: false, sex: i % 2 ? 'male' : 'female', pregnant: false });
+    const t2 = buyTank(tanks, 'nano20')!;
+    t2.bacteria.aob = t2.bacteria.nob = 1e6;
+    for (let i = 0; i < 4; i++) {
+      const fry = addFish(t2, 'guppy', { carriesIch: false, pregnant: false });
+      fry.lengthCm = 1.2;
+      fry.ageDays = 15;
+    }
+    let others = 0;
+    for (let day = 0; day < 20; day++) {
+      for (let k = 0; k < 3; k++) tapFeed(home);
+      others += feedOtherTanks(tanks, 0).length;
+      for (const t of tanks) simulate(t, 24);
+      for (const t of tanks) expect(t.fish.filter((f) => f.alive && f.starvingHours > 0).length, `day ${day}`).toBe(0);
+    }
+    expect(others).toBeGreaterThan(10);
+    // 別缸不餓、或上一餐還沒吃完就不餵
+    for (const f of t2.fish) f.hunger = 0.1;
+    expect(feedOtherTanks(tanks, 0)).toEqual([]);
   });
 
   it('錢包共用：在哪一缸花錢都扣同一個錢包', () => {

@@ -3,7 +3,6 @@ import { PESTS_VISIBLE } from './snails';
 import { tankLock, unlockHint } from './goals';
 import { FILTERS, HEATERS, LIGHTS, TANKS, type FilterSpec, type HeaterSpec, type TankSpec } from './equipment';
 import { nextRandom } from './random';
-import { HUNGRY } from './readings';
 import { createTank, type TankState } from './state';
 
 /**
@@ -53,19 +52,16 @@ export function newTankCost(tanks: TankState[], id: TankSizeId): number {
 /**
  * 按「餵食」要餵哪一缸：這缸有活魚就這缸；這缸是空的（剛買的新缸還在養水）就換成別缸裡最餓的那缸，
  * 主缸的魚才不會因為畫面停在空缸、每天的餵食都落空而整批餓死（#315）。
- * 這缸的魚不餓、別缸卻有魚餓了（例如搬去繁殖缸的小魚），也換過去（#322）。
+ * 這缸有魚就不跳缸：別缸餓了由 feedOtherTanks 一起餵（#325）。
  */
 export function feedTarget(tanks: TankState[], active: number): number {
   const living = (t: TankState) => t.fish.filter((f) => f.alive);
-  const most = (t: TankState) => Math.max(-1, ...living(t).map((f) => f.hunger));
-  if (!tanks[active]) return active;
+  if (!tanks[active] || living(tanks[active]).length > 0) return active;
   let best = active;
-  let hunger = most(tanks[active]);
-  if (hunger >= HUNGRY) return active;
+  let hunger = -1;
   tanks.forEach((t, i) => {
-    const h = most(t);
-    // 這缸有魚的話，別缸要真的餓了才換過去
-    if (h > hunger && (hunger < 0 || h >= HUNGRY)) [best, hunger] = [i, h];
+    const most = Math.max(-1, ...living(t).map((f) => f.hunger));
+    if (most > hunger) [best, hunger] = [i, most];
   });
   return best;
 }

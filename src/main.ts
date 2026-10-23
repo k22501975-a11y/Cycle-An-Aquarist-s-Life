@@ -681,6 +681,11 @@ async function start(): Promise<void> {
     window.clearTimeout(feedDoneTimer);
     if (!feedingMode) return;
     feedingMode = false;
+    // 有撒到：別缸餓了就一起餵一餐，畫面不跳缸（#325）
+    if (fedThisRound > 0 && game.tanks.length > 1) {
+      const fed = game.actAll((tanks) => sim.feedOtherTanks(tanks, game.active, game.state.feedPlan));
+      if (fed.length > 0) toasts.show(`${fed.map((i) => sim.tankLabel(game.tanks, i)).join('、')}也一起餵了`);
+    }
     view.setFeedMode(false);
     document.body.classList.remove('feeding');
     feedBar.remove();
@@ -703,13 +708,12 @@ async function start(): Promise<void> {
   );
   const startFeeding = () => {
     if (feedingMode) return leaveFeeding();
-    // 停在還沒放魚的新缸、或這缸不餓別缸餓了：切到最餓的那缸去餵（#315、#322）
+    // 停在還沒放魚的新缸：切到有魚、最餓的那缸去餵（#315）
     const target = sim.feedTarget(game.tanks, game.active);
     if (target !== game.active) {
-      const empty = !game.state.fish.some((f) => f.alive);
       if (scaping) leaveScape();
       game.switchTo(target);
-      toasts.show(empty ? `這缸還沒有魚，切到${sim.tankLabel(game.tanks, target)}餵` : `${sim.tankLabel(game.tanks, target)}的魚餓了，切過去餵`);
+      toasts.show(`這缸還沒有魚，切到${sim.tankLabel(game.tanks, target)}餵`);
     }
     // 沒有魚：面板會說要先去買魚
     if (!game.state.fish.some((f) => f.alive)) return panelSheet('餵食', (p) => p.feedPanel(ctx));

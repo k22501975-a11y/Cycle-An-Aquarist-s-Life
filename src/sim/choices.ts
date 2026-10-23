@@ -548,7 +548,7 @@ function bestDreamPct(tanks: TankState[], without?: number, asKeeper?: number): 
  * 搬到繁殖缸快養滿為止（擁擠度 CROWD_WARN，跟分缸提示一樣）。沒有繁殖缸、沒魚要搬就回 null。
  * 新買的繁殖缸是空的，沒有氨就養不出菌：搬之前先分主缸一半的濾材過去（transferMedia），跟現實一樣。
  */
-function breedingMove(tanks: TankState[]): { to: number; fish: { fish: Fish; tank: number }[] } | null {
+function breedingMove(tanks: TankState[]): { to: number; fish: { fish: Fish; tank: number }[]; left: number } | null {
   const to = tanks.findIndex((t) => t.purpose === 'breeding');
   if (to < 0) return null;
   // 搬到「快養滿了」為止（跟分缸提示同一把尺：每公升幾公分魚，小魚算得少）
@@ -573,8 +573,19 @@ function breedingMove(tanks: TankState[]): { to: number; fish: { fish: Fish; tan
   // 盒裡的小魚：繁殖缸裡（或一起搬過去的）大魚吃得下就先留在盒裡
   const mouth = Math.max(0, ...[...dest, ...fish.map(({ fish }) => fish)].filter((f) => !isJuvenile(f)).map(mouthCm));
   fish = fish.filter(({ fish }) => !fish.nursery || fish.lengthCm > mouth);
-  return fish.length > 0 ? { to, fish } : null;
+  // 主缸是每天看的展示缸：留種的照搬，其他的搬到主缸剩 MAIN_KEEP_FISH 尾為止（#325）
+  const left = tanks.map((t) => t.fish.filter((f) => f.alive).length - fish.filter(({ fish, tank }) => fish.keeper && tanks[tank] === t).length);
+  fish = fish.filter(({ fish, tank }) => {
+    if (fish.keeper) return true;
+    if (left[tank] <= MAIN_KEEP_FISH) return false;
+    left[tank]--;
+    return true;
+  });
+  return fish.length > 0 ? { to, fish, left: Math.min(...fish.map(({ tank }) => left[tank])) } : null;
 }
+
+/** C6 搬魚後主缸至少留幾尾（留種的不算在限制內，照搬）。 */
+export const MAIN_KEEP_FISH = 6;
 
 /** 這尾魚嘴巴吞得下多長的魚。 */
 const mouthCm = (f: Fish) => f.lengthCm * FISH_SPECIES[f.species].mouthRatio;
@@ -690,7 +701,7 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
         title: s.picked.C6 ? '還有魚可以搬去繁殖缸，要搬嗎？' : '繁殖缸可以用了！把魚搬過去嗎？',
         owner: `${s.picked.C6 ? '' : cycled ? '繁殖缸的水養好了。' : '繁殖缸擺好了。先分主缸一半的濾材過去，菌就跟著過去，不用從頭養水。'}${what}搬過去，小魚不會被大魚吃，留種的也不會跟主缸的魚亂配。`,
         options: [
-          { key: 'move', label: '搬過去', outcome: `${cycled ? '' : '分一半濾材、'}${what}搬到繁殖缸`, recommended: true },
+          { key: 'move', label: '搬過去', outcome: `${cycled ? '' : '分一半濾材、'}${what}搬到繁殖缸，主缸還有 ${m.left} 尾`, recommended: true },
           { key: 'stay', label: '先不要', outcome: '之後在魚卡上也能一尾一尾搬' },
         ],
         move: m.fish.map(({ fish }) => fish.id),
