@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
 import { addFish, ADULT_SIZE, bacteriaCapacity, broodFactor, buyTank, CROWD_WARN, crowdingRatio, cross, DREAM_FISH, economy, FISH_SPECIES, linkTanks, orderBoard, setTankPurpose, type Fish, type GuppyGenome, type TankState } from './index';
-import { chooseOption, choiceState, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, takeChoice, takeReveal, takeSecondBrood } from './choices';
+import { chooseOption, choiceState, CHOICE_RESHOW_DAYS, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, WARM_PREG_C, takeChoice, takeReveal, takeSecondBrood } from './choices';
 
 const calm = { carriesIch: false, carries: [] };
 const ADULT_CM = FISH_SPECIES.guppy.adultLengthCm * ADULT_SIZE;
@@ -90,6 +90,10 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     expect(c12!.options.map((o) => o.key)).toEqual(['two', 'one', 'rotate']);
     expect(c12!.options.find((o) => o.recommended)!.key).toBe('two');
     expect(c12!.owner).toMatch(/^配上之後大約 \d+ 天生（約第 \d+ 天）。$/);
+    // 照推薦（C13 調高水溫）的開獎日不會比照現在水溫晚（#335）
+    const [, bornDay] = c12!.owner.match(/約第 (\d+) 天/)!;
+    const [, revealDay] = c12!.note!.match(/^照推薦，大約第 (\d+) 天開獎$/)!;
+    expect(Number(revealDay)).toBeLessThanOrEqual(Number(bornDay));
     expect(chooseOption(tanks, 'C12', 'two')).toBeNull();
     expect(t2.fish.some((f) => f.id === mom2.id)).toBe(true);
     expect(st.mates).toEqual([mom2.id]);
@@ -129,6 +133,65 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     st.picked.C11 = 'together';
     mom.lengthCm = 1.8;
     expect(takeChoice(tanks)).toBeNull();
+  });
+
+  it('C13 調高水溫（#335）：推薦、卡上寫早幾天生；可以和活餌一起；生完加熱棒調回原本的溫度', () => {
+    const { tanks, t2, st, mom } = latePair();
+    Object.assign(st.picked, { C11: 'together', C12: 'one' });
+    mom.lengthCm = ADULT_CM + 0.2;
+    mom.pregnancy = 0.1;
+    const before = t2.equipment.heater!.targetC;
+    const c13 = takeChoice(tanks);
+    expect(c13?.id).toBe('C13');
+    expect(c13!.checks).toEqual(['live', 'warm']);
+    const warm = c13!.options.find((o) => o.key === 'warm')!;
+    expect(warm).toMatchObject({ label: `水溫調到 ${WARM_PREG_C}°C`, recommended: true });
+    expect(warm.outcome).toMatch(/^約早 \d+ 天生（第 \d+ → \d+ 天），水裡的氧少一點，/);
+    expect(chooseOption(tanks, 'C13', 'both')).toBeNull();
+    expect(t2.equipment.heater!.targetC).toBe(WARM_PREG_C);
+    expect(t2.feedPlan).toEqual({ kind: 'meat', grade: 4 });
+    mom.pregnancy = 0;
+    nextDay(tanks);
+    expect(t2.equipment.heater!.targetC).toBe(before);
+    expect(st.warmPlan).toBeUndefined();
+  });
+
+  it('C13 兩尾母魚都選調高水溫（1 公配 2 母）：兩尾都生完才調回第一次調之前的溫度', () => {
+    const { tanks, t2, st, mom, dad, kid } = latePair();
+    Object.assign(st.picked, { C11: 'together', C12: 'two' });
+    mom.lengthCm = ADULT_CM + 0.2;
+    mom.pregnancy = 0.1;
+    const before = t2.equipment.heater!.targetC;
+    expect(takeChoice(tanks)?.id).toBe('C13');
+    expect(chooseOption(tanks, 'C13', 'warm')).toBeNull();
+    const mom2 = kid(t2, 'female', ADULT_CM + 0.2);
+    mom2.pregnancy = 0.1;
+    mom2.sire = { genome: dad.genome!, lineage: 0, inbreeding: 0, id: dad.id };
+    st.mates = [mom2.id];
+    // 第二尾過幾天才懷上、才問
+    st.shown.C13 = st.lastCard = tanks[0].hours - CHOICE_RESHOW_DAYS * 24;
+    expect(takeChoice(tanks)?.id).toBe('C13');
+    expect(chooseOption(tanks, 'C13', 'warm')).toBeNull();
+    expect(st.warmPlan).toMatchObject({ momIds: [mom.id, mom2.id], prevC: before });
+    mom.pregnancy = 0;
+    nextDay(tanks);
+    expect(t2.equipment.heater!.targetC).toBe(WARM_PREG_C);
+    mom2.pregnancy = 0;
+    nextDay(tanks);
+    expect(t2.equipment.heater!.targetC).toBe(before);
+    expect(st.warmPlan).toBeUndefined();
+  });
+
+  it('C13 那缸沒有加熱棒：調水溫的選項變灰並寫原因', () => {
+    const { tanks, t2, st, mom } = latePair();
+    Object.assign(st.picked, { C11: 'together', C12: 'one' });
+    mom.lengthCm = ADULT_CM + 0.2;
+    mom.pregnancy = 0.1;
+    t2.equipment.heater = null;
+    const c13 = takeChoice(tanks)!;
+    expect(c13.options.find((o) => o.key === 'warm')).toMatchObject({ disabled: '這缸沒有加熱棒，調不了水溫' });
+    expect(c13.options.some((o) => o.recommended)).toBe(false);
+    expect(chooseOption(tanks, 'C13', 'warm')).toBe('這缸沒有加熱棒，調不了水溫');
   });
 
   it('C13 選加活餌：那缸改餵冷凍紅蟲，生完就收掉；吃得好一窩多幾尾', () => {

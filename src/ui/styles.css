@@ -1151,6 +1151,16 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 .choice { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
 .choice-owner { margin: 0; font-size: 13px; color: var(--muted); }
 .choice-msg { margin: 0; font-size: 13px; color: var(--gold-bright); }
+.choice-note { margin: 0; font-size: 12px; color: var(--gold); }
+/* C13 可以一起勾的選項（#335）：勾了亮金邊 */
+.choice-checks { display: flex; flex-direction: column; gap: 6px; }
+.choice-check { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.05); color: inherit; text-align: left; font: inherit; }
+.choice-check.on { border-color: var(--gold); background: rgba(240, 200, 120, 0.12); }
+.choice-check:disabled { opacity: 0.5; }
+.choice-check-box { flex: none; width: 18px; height: 18px; border-radius: 5px; border: 2px solid rgba(255, 255, 255, 0.5); }
+.choice-check.on .choice-check-box { border-color: var(--gold); background: var(--gold); box-shadow: inset 0 0 0 3px rgba(0, 0, 0, 0.35); }
+.choice-check-text { display: flex; flex-direction: column; gap: 2px; }
+.choice-check-text small { font-size: 12px; color: var(--muted); }
 /*
  * 左上角收成一排小膠囊（YenWel 2026-10-21：「太亂了很躁」「都看不到魚了」）：
  * 夢想魚只剩剪影和三個點，任務只剩老闆小頭像和一行短標題（點了聽完整說明），今天的小事點了才展開。

@@ -1,3 +1,5 @@
+import { PREGNANCY_DUE } from '../sim/actions';
+import { BELLY_SHOWS } from '../sim/nursery';
 import { h } from './dom';
 
 /**
@@ -7,8 +9,8 @@ import { h } from './dom';
 
 export type PregnancyStage = 'early' | 'round' | 'due';
 
-/** 從懷孕進度（0～1）分三級：肚子圓起來（同早上報告的 BELLY_SHOWS 0.5）、快生了（剩約四分之一孕期）。 */
-export const PREGNANCY_STAGE_AT = { round: 0.5, due: 0.75 } as const;
+/** 從懷孕進度（0～1）分三級：肚子圓起來（同早上報告的 BELLY_SHOWS）、快生了（同商店挑母魚的 PREGNANCY_DUE，剩約 8 天）。 */
+export const PREGNANCY_STAGE_AT = { round: BELLY_SHOWS, due: PREGNANCY_DUE } as const;
 
 export const PREGNANCY_LABEL: Record<PregnancyStage, string> = { early: '剛懷上', round: '肚子圓了', due: '快生了' };
 
