@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, buyTank, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, noteBellySeen, setTankPurpose, showingMother, simulate } from '.';
+import { addFish, buyTank, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, noteBellySeen, setTankPurpose, showingMother, setBreedingStep, simulate } from '.';
+import { breedingStep } from './choices';
 
 describe('主畫面的下一步（U1）', () => {
   it('每個目標都說得出下一步，句子短', () => {
@@ -149,6 +150,18 @@ describe('「養大 5 條」卡超過 3 天（#258）', () => {
     expect(step).toMatchObject({ goal: 'raise5', target: 'fastest' });
     expect(step!.text).toMatch(/^養到轉色 \d\/5，最快的那尾還差約 \d+ 天$/);
     expect(fastestColoring([s])?.fish).toBe(fry);
+  });
+
+  describe('選育那一行還沒載好（choices.ts 跟早上報告一起延後載入，#333）', () => {
+    afterEach(() => setBreedingStep(breedingStep));
+
+    it('先照舊說餵小魚，載好後就說選育走到哪', () => {
+      const { s } = stuck();
+      setBreedingStep(() => null);
+      expect(nextStep([s])).toMatchObject({ goal: 'raise5', target: 'feed', text: '小魚一天餵兩次，養到轉色（0/5）' });
+      setBreedingStep(breedingStep);
+      expect(nextStep([s])).toMatchObject({ text: '第一窩再 12 天看得出公母', target: 'fastest' });
+    });
   });
 
   it('主缸小魚最近有被吃：叫玩家撈進育幼盒', () => {
