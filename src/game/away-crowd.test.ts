@@ -45,6 +45,17 @@ describe('離線時擠缸', () => {
     expect(Math.max(...perDay.values())).toBeLessThanOrEqual(2);
   });
 
+  it('連續兩次短離開：第二次不再出報告和 C14，提醒次數也不再加', () => {
+    const s = crowdedHome();
+    s.crowdNotices = 0;
+    const first = away(s, 1 / 12);
+    expect(awayReport([s], first.since, first.r.hours)?.items.some((i) => i.choice?.id === 'C14')).toBe(true);
+    const notices = s.crowdNotices;
+    const second = away(s, 1 / 12);
+    expect(awayReport([s], second.since, second.r.hours)).toBeNull();
+    expect(s.crowdNotices).toBe(notices);
+  });
+
   it('離開期間沒擠過：沒有離線報告', () => {
     const s = newGameState(7);
     linkTanks([s]);

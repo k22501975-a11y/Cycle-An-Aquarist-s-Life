@@ -404,8 +404,8 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
 }
 
 /**
- * 離線回來的報告（midgame.md §7.7）：離開期間有缸超過建議量，第一行寫「你不在的時候{缸名}太擠了」，接著出 C14。
- * 沒擠過回 null（回來只照舊跳通知）。
+ * 離線回來的報告（midgame.md §7.7）：離開期間有缸超過建議量，第一行寫「你不在的時候{缸名}太擠了」，接著出 C14（節流見 takeAwayCrowd）。
+ * 沒擠過、或今天說過了回 null（回來只照舊跳通知）。
  */
 export function awayReport(tanks: TankState[], sinceHours: number, awayHours: number): MorningReport | null {
   const { notes, choice } = takeAwayCrowd(tanks, sinceHours);
