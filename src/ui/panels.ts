@@ -2,7 +2,7 @@ import type { SoundId } from '../audio/sounds';
 import { FEATURES } from '../features';
 import { substrateName, tankSubstrateLook } from '../render/substrate';
 import { kitColor, type KitParam } from '../render/ops-fx';
-import { isShrimpSpecies, isFrySale, storeFemales, addBottledBacteria, addFish, CARE_EAT_THRESHOLD, careTarget, guardianOf, hasSpawnSite, isBroodParent, PARENTAL, addSnail, APPLE_COLOR_LABELS, catchPests, collectTrap, doseMolluscicide, buyPlant as plantFromShop, isLightOn, PESTS, pestCount, removeClutches, removeDeadSnails, scrapeNeriteEggs, setTrap, snailBloom, SNAILS, type AppleColor, type PestKind, type SnailKind, addFishToQuarantine, addCuttings, addHardscape, addPlant, transferMedia, mediaAvailable, buybackRefusal, setKeeper, cureRefusal, mallBag, useCure, GUPPY_STRAIN_PRICES, GUPPY_FIN_STRAINS, GUPPY_STRAINS, finWords, matingSuccess, predictOffspring, canClaimStarterPack, claimStarterPack, buyTank, addHolidayTablet, buyTankRefusal, HOLIDAY_TABLET_DAYS, installFeeder, LOCKED_SPECIES, speciesUnlocked, tankLock, unlockHint, moveFish, newTankCost, purposeCost, setTankPurpose, suggestPurpose, TANK_PURPOSES, type TankPurpose, removeTank, removeTankRefusal, slotPrice, TANK_SETS, tankLabel, type TankSizeId, chargeMeal, economy, FISH_PRICES, BETTA_FEMALE_PRICE, fishBuybackPrice, PLANT_PRICES, plantBuybackPrice, price, sellCuttings, sellableCuttings, chestCuttingsOf, sellFish, sellsLeftToday, spend, takeCutting, buyQuarantine, HARDSCAPE, removeHardscape, placeFromBag, replaceSubstrate, SUBSTRATES, doseAntibiotic, doseDewormer, doseQuarantine, hasVisible, isJuvenile, crowdingRatio, COMFORT_BAND, dripMinutes, dripGrade, dripTutorialLeft, recordDrip, farmHabit, habitGap, habitOf, phBeyondSurvival, SPLIT_PLAN_LABELS, splitAdvice, splitGroup, splitTank, rescueFryToBox, BOX_CAPACITY, buyNurseryBox, dueMothers, moveDueToNursery, moveToNursery, NURSERY_FRY_CAPACITY, NURSERY_RELEASE_CM, nurseryFish, nurseryRefusal, releaseNursery, rescueFryToNursery, type SplitPlan, daysUntilSexVisible, growthFactors, growthStage, maxLengthCm, sexVisible, stageLabel, phenotype, strainName, QUARANTINE_DAYS, quarantineDays, readyForTank, releaseQuarantine, swallowCm, tooSmallForTank, PINCH_MEALS, orderBoard, matchingFish, orderSupply, moveToQuarantine, AIR_PUMPS, CHILLERS, CO2_KITS, doseIchMedication, DEFAULT_FOOD, feed, FANS, FOOD_GRADES, FOOD_KINDS, mealMg, mealPrice, tapFeed, type TapFeedResult, FILTERS, FISH_SPECIES, freeAmmonia, HEATERS, hidingFactor, LIGHTS, monthOf, observeSymptoms, PLANT_SPECIES, REGION_LABELS, removeDeadFish, replaceFilter, rinseFilterMedia, seasonName, setHeaterTarget, ichHeatC, ICH_MED_WORKING, topUp, unplugHeater, trimPlant, waterChange, suggestedWaterChange, type DripOutcome, type Fish, type FishSpeciesId, type FoodGrade, type FoodKind, type Symptom, type PlantSpeciesId, type Region, type TankState, type TestKitReading, markDaily, needsSetup, type MallItemId } from '../sim';
+import { isShrimpSpecies, isFrySale, storeOffer, takeStoreFemales, addBottledBacteria, addFish, CARE_EAT_THRESHOLD, careTarget, guardianOf, hasSpawnSite, isBroodParent, PARENTAL, addSnail, APPLE_COLOR_LABELS, catchPests, collectTrap, doseMolluscicide, buyPlant as plantFromShop, isLightOn, PESTS, pestCount, removeClutches, removeDeadSnails, scrapeNeriteEggs, setTrap, snailBloom, SNAILS, type AppleColor, type PestKind, type SnailKind, addFishToQuarantine, addCuttings, addHardscape, addPlant, transferMedia, mediaAvailable, buybackRefusal, setKeeper, cureRefusal, mallBag, useCure, GUPPY_STRAIN_PRICES, GUPPY_FIN_STRAINS, GUPPY_STRAINS, finWords, matingSuccess, predictOffspring, canClaimStarterPack, claimStarterPack, buyTank, addHolidayTablet, buyTankRefusal, HOLIDAY_TABLET_DAYS, installFeeder, LOCKED_SPECIES, speciesUnlocked, tankLock, unlockHint, moveFish, newTankCost, purposeCost, setTankPurpose, suggestPurpose, TANK_PURPOSES, type TankPurpose, removeTank, removeTankRefusal, slotPrice, TANK_SETS, tankLabel, type TankSizeId, chargeMeal, economy, FISH_PRICES, BETTA_FEMALE_PRICE, fishBuybackPrice, PLANT_PRICES, plantBuybackPrice, price, sellCuttings, sellableCuttings, chestCuttingsOf, sellFish, sellsLeftToday, spend, takeCutting, buyQuarantine, HARDSCAPE, removeHardscape, placeFromBag, replaceSubstrate, SUBSTRATES, doseAntibiotic, doseDewormer, doseQuarantine, hasVisible, isJuvenile, crowdingRatio, COMFORT_BAND, dripMinutes, dripGrade, dripTutorialLeft, recordDrip, farmHabit, habitGap, habitOf, phBeyondSurvival, SPLIT_PLAN_LABELS, splitAdvice, splitGroup, splitTank, rescueFryToBox, BOX_CAPACITY, buyNurseryBox, dueMothers, moveDueToNursery, moveToNursery, NURSERY_FRY_CAPACITY, NURSERY_RELEASE_CM, nurseryFish, nurseryRefusal, releaseNursery, rescueFryToNursery, type SplitPlan, daysUntilSexVisible, growthFactors, growthStage, maxLengthCm, sexVisible, stageLabel, phenotype, strainName, QUARANTINE_DAYS, quarantineDays, readyForTank, releaseQuarantine, swallowCm, tooSmallForTank, PINCH_MEALS, orderBoard, matchingFish, orderSupply, moveToQuarantine, AIR_PUMPS, CHILLERS, CO2_KITS, doseIchMedication, DEFAULT_FOOD, feed, FANS, FOOD_GRADES, FOOD_KINDS, mealMg, mealPrice, tapFeed, type TapFeedResult, FILTERS, FISH_SPECIES, freeAmmonia, HEATERS, hidingFactor, LIGHTS, monthOf, observeSymptoms, PLANT_SPECIES, REGION_LABELS, removeDeadFish, replaceFilter, rinseFilterMedia, seasonName, setHeaterTarget, ichHeatC, ICH_MED_WORKING, topUp, unplugHeater, trimPlant, waterChange, suggestedWaterChange, type DripOutcome, type Fish, type FishSpeciesId, type FoodGrade, type FoodKind, type Symptom, type PlantSpeciesId, type Region, type TankState, type TestKitReading, markDaily, needsSetup, type MallItemId } from '../sim';
 import { choiceState } from '../sim/choices';
 import { applySeason, type Game } from '../game/game';
 import { h } from './dom';
@@ -715,9 +715,11 @@ export async function quickBuy(ctx: PanelContext, pick: QuickPick): Promise<void
     const cost = GUPPY_STRAIN_PRICES[male] + GUPPY_STRAIN_PRICES[female] * 2;
     const name = male === female ? `${GUPPY_STRAINS[male]}孔雀` : `${GUPPY_STRAINS[male]}公魚和${GUPPY_STRAINS[female]}母魚`;
     const add = quarantined ? addFishToQuarantine : addFish;
-    // 推薦組合、夢想魚一鍵買：店裡最快生的那兩尾母魚（#335）
-    const [due1, due2] = storeFemales(game.state.hours, female);
-    const sexes = [[male, 'male', undefined], [female, 'female', due1], [female, 'female', due2]] as const;
+    // 推薦組合、夢想魚一鍵買：店裡還沒賣掉的裡面最快生的那兩尾母魚（#335、midgame.md §6.6）
+    const buy = () => {
+      const [due1, due2] = takeStoreFemales(game.state, female, 2);
+      return [[male, 'male', undefined], [female, 'female', due1], [female, 'female', due2]] as const;
+    };
     await releaseFishFor(
       ctx,
       () => undefined,
@@ -726,7 +728,7 @@ export async function quickBuy(ctx: PanelContext, pick: QuickPick): Promise<void
       guppyArt(male),
       name,
       cost,
-      (st, drip) => sexes.map(([strain, sex, pregnancy]) => add(st, 'guppy', { strain, sex, drip, pregnancy })),
+      (st, drip) => buy().map(([strain, sex, pregnancy]) => add(st, 'guppy', { strain, sex, drip, pregnancy })),
       quarantined ? `買了 3 隻${name}，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天` : `買了 3 隻${name}（1 公 2 母），慢慢滴水對水後放進缸裡`,
     );
     return;
@@ -770,9 +772,10 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     const males = sexes?.filter((x) => x === 'male').length ?? 0;
     const sexNote = !sexes ? '' : males === count ? '（公）' : males === 0 ? '（母）' : `（${males} 公 ${count - males} 母）`;
     const options = finStrain ? { strain: finStrain.strain, fin: finStrain.fin } : { strain };
-    // 孔雀魚母魚從店裡最快生的開始挑（商店卡上標的那尾，#335）
-    const offer = species === 'guppy' && options.strain !== undefined ? storeFemales(game.state.hours, options.strain) : [];
-    const pregnancyOf = (i: number) => offer[sexes?.slice(0, i).filter((x) => x === 'female').length ?? 0];
+    // 孔雀魚母魚從店裡還沒賣掉的最快生的開始挑（商店卡上標的那尾，#335、midgame.md §6.6）
+    const females = sexes?.filter((x) => x === 'female').length ?? 0;
+    const offer = () => (species === 'guppy' && options.strain !== undefined && females > 0 ? takeStoreFemales(game.state, options.strain, females) : []);
+    const pregnancyOf = (list: Array<number | undefined>, i: number) => list[sexes?.slice(0, i).filter((x) => x === 'female').length ?? 0];
     const art = finStrain ? guppyArt(finStrain.strain, finStrain.fin) : strain !== undefined ? guppyArt(strain) : speciesArt(species);
     await releaseFish(
       species,
@@ -780,7 +783,10 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
       art,
       name,
       each * count,
-      (st, drip) => Array.from({ length: count }, (_, i) => (quarantined ? addFishToQuarantine : addFish)(st, species, { ...options, drip, sex: sexes?.[i], pregnancy: sexes?.[i] === 'female' ? pregnancyOf(i) : undefined })),
+      (st, drip) => {
+        const list = offer();
+        return Array.from({ length: count }, (_, i) => (quarantined ? addFishToQuarantine : addFish)(st, species, { ...options, drip, sex: sexes?.[i], pregnancy: sexes?.[i] === 'female' ? pregnancyOf(list, i) : undefined }));
+      },
       quarantined
         ? `買了 ${count} 隻${name}${sexNote}，先放進檢疫盒觀察 ${QUARANTINE_DAYS} 天`
         : shopDrip
@@ -859,7 +865,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     ];
     const guppyChips = [`${FISH_SPECIES.guppy.temp.min}–${FISH_SPECIES.guppy.temp.max}°C`, '會繁殖'];
     // 母魚懷孕到哪（#335）：店裡最快生的那尾，買「母」「一公兩母」先拿到牠
-    const momPregnancy = (strain: number) => storeFemales(game.state.hours, strain)[0];
+    const momPregnancy = (strain: number) => storeOffer(game.state, strain);
     content = h(
       'div.stack',
       {},

@@ -175,6 +175,28 @@ export function storeFemales(hours: number, strain: number): number[] {
   return out.sort((a, b) => b - a);
 }
 
+/** 今天這個品系的母魚賣掉幾尾（換日就歸零）。 */
+function storeSold(s: TankState): Record<number, number> {
+  const e = economy(s);
+  const day = Math.floor(s.hours / 24);
+  if (e.storeSold?.day !== day) e.storeSold = { day, counts: {} };
+  return e.storeSold.counts;
+}
+
+/** 商店卡上標的那尾（今天還沒賣掉的裡面最快生的）；今天賣完了回 undefined（midgame.md §6.6）。 */
+export function storeOffer(s: TankState, strain: number): number | undefined {
+  return storeFemales(s.hours, strain)[storeSold(s)[strain] ?? 0];
+}
+
+/** 買 n 尾母魚：照懷孕程度從還沒賣掉的往下挑並記下來；店裡今天的賣完了，後面的是 undefined（照一般機率）。 */
+export function takeStoreFemales(s: TankState, strain: number, n: number): Array<number | undefined> {
+  const sold = storeSold(s);
+  const from = sold[strain] ?? 0;
+  sold[strain] = from + n;
+  const list = storeFemales(s.hours, strain);
+  return Array.from({ length: n }, (_, i) => list[from + i]);
+}
+
 
 /** 店家魚帶白點蟲的機率：教學一次買一公兩母，沒檢疫時約 27% 會帶進來（polish-to-9.md §4：前 30 天 ≤ 1/3）。 */
 const STORE_ICH_CHANCE = 0.1;

@@ -1,5 +1,5 @@
 import { BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Texture, TilingSprite } from 'pixi.js';
-import { waterLook, isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, personalitySpec, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
+import { crowdingRatio, waterLook, isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, personalitySpec, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { newToneFrame, PaintedRig, paintedArtVersion, femaleKey, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { SetupShow, type SetupStep } from './setup-show';
@@ -18,6 +18,7 @@ import { clawPose, clawRate, pleopods, type Pt } from './shrimp-limbs';
 import { phenotypeRecipe, recipeKey } from './phenotype-art';
 import { drawFinOverlay, finTraitsOf } from './fin-render';
 import { quantizeTone } from './tone';
+import { crowdLook, gaspsAtSurface, type CrowdLook } from './crowd-look';
 import { clampPan, fitCamera, maxSpan, zoomAt, type Camera } from './camera';
 import { type QualitySpec, qualitySpec } from './quality';
 import { causticsTexture, MOCKUP_PX_PER_CM, paintBackdrop, paintDriftwood, paintFront, paintPlant, paintVignette, rayTexture } from './scenery';
@@ -260,6 +261,10 @@ export class TankView {
   private night = 0;
   /** 畫面上的水況（waterLook）：慢慢跟上真的值，換水後白濁、黃濁約 2～3 秒散開，不是一格就變清。 */
   private water = { bloom: 0, organic: 0, uneasy: 0 };
+  /** 缸太擠（midgame.md §7.1）：混濁慢慢變、這一格在水面喘氣的魚的 x。 */
+  private crowd: CrowdLook = { level: 0, murk: 0, gasp: 0 };
+  private crowdMurk = 0;
+  private gaspX: number[] = [];
   private waterSeen = false;
   /** 燈的時間表（亮度、色溫），每格慢慢追上 dayLight()，避免跳一下。 */
   private day = { level: 1, warm: 0 };
@@ -1831,10 +1836,14 @@ export class TankView {
     const box = nurseryRect(this.waterBounds);
     if (this.poke && (this.poke.age += dt) > POKE_SECONDS) this.poke = null;
     const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food, frenzy: this.food.length ? frenzyLevel(this.dropT) : 0, poke: this.poke ?? undefined, plants: state.plants.map((pl) => plantPlacement(pl).x * this.waterBounds.width), perches: this.perches };
+    this.gaspX = [];
     for (const fish of state.fish) {
       const view = this.fish.get(fish.id)!;
       const { swimmer, rig } = view;
-      const symptoms = observeSymptoms(state, fish);
+      const seen = observeSymptoms(state, fish);
+      // 缸太擠（§7.1）：照擠的程度挑幾尾到水面張嘴喘氣（只是畫面，不算症狀）
+      const gasp = this.crowd.gasp > 0 && fish.alive && !boxed.has(fish.id) && !isShrimpSpecies(fish.species) && !seen.includes('gasping') && gaspsAtSurface(fish.id, this.crowd.gasp);
+      const symptoms = gasp ? [...seen, 'gasping' as const] : seen;
       const follow = fish.guardian !== undefined && alive.has(fish.guardian) ? fish.guardian : undefined;
       const nestX = this.nestFor(fish, swimmer.x, dt);
       // 身體大小（上一格的景深）：讓整條魚留在缸裡
@@ -1847,6 +1856,8 @@ export class TankView {
       const mood = spec && uneasy > 0.02 ? { ...spec, activity: spec.activity * (1 - 0.3 * uneasy) } : spec;
       if (view.born) this.stepBirth(view, dt);
       updateSwimmer(swimmer, caged ? inBox : living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX, body, begging: hungerLook(fish.hunger).begging, mood }, ctx, dt, () => this.rand());
+      const gulping = gasp && swimmer.y < ctx.bounds.surface + body.halfH + 36 * this.motionScale;
+      if (gulping) this.gaspX.push(swimmer.x);
 
       if (caged) {
         if (keepInRect(swimmer, box, this.waterBounds.surface, Math.min(box.w * 0.3, halfLen + 4 * this.motionScale))) swimmer.wander += Math.PI;
@@ -1895,7 +1906,8 @@ export class TankView {
         const graze = isShrimpSpecies(fish.species) && (swimmer.eating || Math.abs(swimmer.vx) < 3 * this.hs) ? -(0.16 + 0.08 * Math.max(0, Math.sin(this.time * 4.5 + fish.id))) : 0;
         // 爬在草上（#273）：身體立起來抱著草莖，頭朝上
         const climbing = (swimmer.climb?.lift ?? 0) > 2 * this.hs;
-        const want = climbing ? CLIMB_TILT : swimTilt(swimmer) + graze;
+        // 擠到水面喘氣（§7.1）：頭朝上頂著水面，一下一下張嘴
+        const want = climbing ? CLIMB_TILT : gulping ? GASP_TILT + 0.08 * Math.sin(this.time * 5 + fish.id) : swimTilt(swimmer) + graze;
         view.tilt += (want - view.tilt) * Math.min(1, dt * 6);
         const tilt = symptoms.includes('loss_of_balance') ? 1.2 : view.tilt + 0.5 * sick.flash;
         rig.rotation = (facingLeft ? tilt : -tilt) + pose.bank;
@@ -2161,6 +2173,8 @@ export class TankView {
     const k = this.waterSeen ? 1 - Math.exp(-dt * 1.2) : 1;
     this.waterSeen = true;
     for (const key of ['bloom', 'organic', 'uneasy'] as const) this.water[key] += (target[key] - this.water[key]) * k;
+    this.crowd = crowdLook(crowdingRatio(state));
+    this.crowdMurk += (this.crowd.murk - this.crowdMurk) * k;
   }
 
   private drawOverlay(state: TankState): void {
@@ -2186,8 +2200,23 @@ export class TankView {
         m.circle(x, y, (0.8 + (i % 3) * 0.5) * this.hs).fill({ color: 0xffffff, alpha: 0.35 * a });
       }
     }
+    // 缸太擠（§7.1）：整缸蒙一層灰綠的悶，越往下越濃；水面上喘氣的魚嘴邊一圈圈小漣漪和小氣泡
+    const crowd = this.crowdMurk;
+    if (crowd > 0.005) {
+      const depth = bottom - surface;
+      m.rect(0, surface, width, depth).fill({ color: 0x6f7d5c, alpha: crowd });
+      m.rect(0, surface + depth * 0.5, width, depth * 0.5).fill({ color: 0x55603f, alpha: crowd * 0.6 });
+      if (this.crowd.level === 2) m.rect(0, surface - 2 * this.hs, width, 5 * this.hs).fill({ color: 0xd8dcc0, alpha: 0.35 });
+    }
+    for (const [i, x] of this.gaspX.entries()) {
+      const t = (this.time * 0.9 + i * 0.37) % 1;
+      const r = (8 + 26 * t) * this.hs;
+      m.ellipse(x, surface + 2, r, r * 0.25).stroke({ color: 0xffffff, alpha: 0.75 * (1 - t), width: Math.max(1.2, 2 * this.hs) });
+      m.circle(x + Math.sin(this.time * 3 + i) * 3 * this.hs, surface + (4 + 10 * ((t * 1.7) % 1)) * this.hs, 1.6 * this.hs).fill({ color: 0xffffff, alpha: 0.5 * (1 - t) });
+    }
     // 前排的魚只蓋一層很薄的霧，還是看得出在濁水裡
     const g = this.overlay.clear();
+    if (crowd > 0.005) g.rect(0, surface, width, bottom - surface).fill({ color: 0x6f7d5c, alpha: crowd * 0.3 });
     const veil = Math.min(1, bloom * 3.5) * 0.08 + (turbidity > 0.02 ? turbidity * 0.25 : 0);
     if (veil > 0.005) g.rect(0, surface, width, bottom - surface).fill({ color: turbidity > bloom ? 0x8a8a3a : 0xe9f0ec, alpha: veil });
     // 剛動過造景：攪起來的細沙讓水白濁，底下最濃，慢慢沉澱
@@ -2218,6 +2247,9 @@ export class TankView {
     }
   }
 }
+
+/** 在水面喘氣的魚頭往上抬多少（弧度，正的是抬頭，同 CLIMB_TILT）。 */
+const GASP_TILT = 0.42;
 
 /** 早上報告說的魚、草亮多久（秒）。 */
 const SPOT_SECONDS = 3.5;
