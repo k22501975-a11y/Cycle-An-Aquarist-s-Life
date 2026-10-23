@@ -823,6 +823,19 @@ function splitMove(tanks: TankState[], s: ChoiceState): number {
   return n;
 }
 
+/**
+ * C10 留種名額滿了要換掉誰：跟新的這尾同性別的留種裡，離夢想魚最遠的（缺的最多；一樣多先換不是那對的）。
+ * 那對的另一半（異性）不會被換到。沒有同性別的留種、或最遠的也沒比新的這尾遠，回 null。
+ */
+function worstKeeper(tanks: TankState[], s: Readonly<ChoiceState>, nu: Fish): { fish: Fish; tank: number } | null {
+  const pair: readonly number[] = s.pair ?? [];
+  const cands = located(tanks).filter(({ fish }) => fish.keeper && fish.id !== nu.id && fish.sex === nu.sex && fish.genome);
+  const score = (f: Fish) => dreamMissing(f).length * 10 + (pair.includes(f.id) ? 0 : 1);
+  const worst = cands.sort((a, b) => score(b.fish) - score(a.fish))[0];
+  // 換了也不會比較好（缺的一樣多）就不換
+  return worst && dreamMissing(worst.fish).length > dreamMissing(nu).length ? worst : null;
+}
+
 /** C12 的第二尾母魚：別的留種母魚裡，配指定公魚機率最高的。 */
 function secondMom(tanks: TankState[], mom: Fish, dad: Fish): { fish: Fish; tank: number } | null {
   const cands = located(tanks).filter(({ fish }) => fish.keeper && fish.id !== mom.id && fish.sex === 'female' && fish.species === 'guppy' && fish.genome && !fish.listing);
@@ -992,24 +1005,43 @@ function revealBrood(tanks: TankState[], s: Readonly<ChoiceState>): Array<{ fish
   return located(tanks).filter(({ fish }) => fish.motherId === r.momId && (fish.bornHours ?? -Infinity) >= r.hours && !fish.keeper);
 }
 
+/** 帶著夢想魚的兩種基因：白子（隱性也算）和蛇紋（公魚的蛇紋在 X 或 Y，母魚看 X）。 */
+function carriesDreamGenes(f: Fish): boolean {
+  const g = f.genome!;
+  return g.albino.includes(1) && (g.snakeX.includes(1) || (f.sex === 'male' && g.y?.snake === 1));
+}
+
+/** C16 每個性別至少留幾尾（strain-fixing.md §5：公母各至少 2 尾）。 */
+const REVEAL_KEEP_SEX = 2;
+
 /**
- * C16 要留的候選（midgame.md §7.3）：看得出是夢想魚的、再來是缺得最少的，留 4～6 尾，公母都要。
- * 看得出的有幾尾就留幾尾（至少 4、最多 6）。
+ * C16 要留的候選（midgame.md §7.3、strain-fixing.md §5）：照「夢想魚樣子 → 帶兩種基因 → 離夢想魚最近」排，
+ * 公母各至少 REVEAL_KEEP_SEX 尾，一共 4～6 尾（夢想魚樣子的有幾尾就盡量留幾尾）。
+ * 開獎那窩某個性別不夠，用開局的種魚和備用種魚補（extra，本來就留著，不會被賣）。
  */
-function revealKeep(brood: Array<{ fish: Fish; tank: number }>): { keep: Set<number>; looks: number } {
+function revealKeep(tanks: TankState[], s: Readonly<ChoiceState>, brood: Array<{ fish: Fish; tank: number }>): { keep: Set<number>; looks: number; extra: Array<{ fish: Fish; tank: number }> } {
   const withGenome = brood.filter(({ fish }) => fish.genome);
   const looks = withGenome.filter(({ fish }) => isDreamLook(fish.genome!)).length;
   const n = Math.min(withGenome.length, Math.max(REVEAL_KEEP[0], Math.min(REVEAL_KEEP[1], looks)));
-  const rank = (f: Fish) => (isDreamLook(f.genome!) ? 0 : 100) + dreamMissing(f).length * 10;
+  const rank = (f: Fish) => (isDreamLook(f.genome!) ? 0 : carriesDreamGenes(f) ? 100 : 200) + dreamMissing(f).length * 10;
   const sorted = withGenome.map(({ fish }) => fish).sort((a, b) => rank(a) - rank(b));
-  const keep = sorted.slice(0, n);
-  // 公母都要：少了哪一邊，就把排最後的換成那一邊最好的
+  // 先保住每個性別最好的 REVEAL_KEEP_SEX 尾，剩下的名額照排名補滿
+  const keep = new Set<number>();
+  for (const sex of ['male', 'female'] as const) for (const f of sorted.filter((x) => x.sex === sex).slice(0, REVEAL_KEEP_SEX)) keep.add(f.id);
+  for (const f of sorted) if (keep.size < n) keep.add(f.id);
+  // 某個性別不夠：開局的種魚、留種的那對和備用種魚裡，同性別、帶得最多的補上
+  const extra: Array<{ fish: Fish; tank: number }> = [];
+  const broodIds = new Set(brood.map(({ fish }) => fish.id));
+  const parents = new Set([s.reveal?.momId, ...(s.pair ?? []), ...(s.mates ?? [])]);
   for (const sex of ['male', 'female'] as const) {
-    if (keep.some((f) => f.sex === sex)) continue;
-    const best = sorted.find((f) => f.sex === sex);
-    if (best && keep.length > 1) keep[keep.length - 1] = best;
+    const short = REVEAL_KEEP_SEX - sorted.filter((f) => f.sex === sex && keep.has(f.id)).length;
+    if (short <= 0) continue;
+    const cands = located(tanks)
+      .filter(({ fish }) => fish.sex === sex && fish.species === 'guppy' && fish.genome && !broodIds.has(fish.id) && !isJuvenile(fish) && (fish.keeper || parents.has(fish.id)))
+      .sort((x, y) => rank(x.fish) - rank(y.fish));
+    extra.push(...cands.slice(0, short));
   }
-  return { keep: new Set(keep.map((f) => f.id)), looks };
+  return { keep, looks, extra };
 }
 
 /** C9 的三個選項（第一次問的完整版）。 */
@@ -1268,18 +1300,30 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       const old = all.find(({ fish }) => fish.id === b.oldId);
       if (!nu || !old) return null;
       const room = all.filter(({ fish }) => fish.keeper).length < MAX_KEEPERS;
+      // 留種名額滿了（strain-fixing.md §1）：換掉同性別、離夢想魚最遠的那尾留種；換掉的是那對的，新的這尾接手當爸爸或媽媽
+      const worst = room ? null : worstKeeper(tanks, s, nu.fish);
+      if (!room && !worst) return null;
       return {
         id,
         tank: nu.tank,
         title: '這尾比你留的種魚更好！',
         owner: `${callName(nu.fish)}的孫代機率約 ${b.newPct}%，原本的${callName(old.fish)}約 ${b.oldPct}%。`,
-        options: [
-          { key: 'swap', label: '換成這尾', outcome: `${nu.fish.sex === 'male' ? '牠當爸爸' : '牠當媽媽'}，原本的不再留種` },
-          ...(room ? [{ key: 'both', label: '兩尾都留', outcome: '多一尾種魚，原本的計畫照走，萬一出事還有備用', recommended: true }] : []),
-          // 留種名額滿了：照原本的計畫走最穩（換掉那對的其中一尾，要從頭等牠長大）
-          { key: 'keep', label: '維持原本的', outcome: room ? '照原本的計畫' : `留種名額滿了（最多 ${MAX_KEEPERS} 尾），照原本的計畫`, recommended: !room },
-        ],
-        fish: [pickFish(nu.fish, nu.tank), pickFish(old.fish, old.tank)],
+        options: room
+          ? [
+              { key: 'swap', label: '換成這尾', outcome: `${nu.fish.sex === 'male' ? '牠當爸爸' : '牠當媽媽'}，原本的不再留種` },
+              { key: 'both', label: '兩尾都留', outcome: '多一尾種魚，原本的計畫照走，萬一出事還有備用', recommended: true },
+              { key: 'keep', label: '維持原本的', outcome: '照原本的計畫' },
+            ]
+          : [
+              {
+                key: 'replace',
+                label: `換掉${callName(worst!.fish)}`,
+                outcome: s.pair?.includes(worst!.fish.id) ? `孫代 ${b.oldPct}% → ${b.newPct}%` : `${callName(worst!.fish)}不再留種，這尾當備用，原本的計畫照走`,
+                recommended: true,
+              },
+              { key: 'keep', label: '維持原本的', outcome: `留種名額滿了（最多 ${MAX_KEEPERS} 尾），照原本的計畫` },
+            ],
+        fish: [pickFish(nu.fish, nu.tank), pickFish((worst ?? old).fish, (worst ?? old).tank)],
       };
     }
     case 'C11': {
@@ -1433,7 +1477,7 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       if (brood.length <= REVEAL_KEEP[1]) return null;
       const born = Math.min(...brood.map(({ fish }) => fish.bornHours ?? home.hours));
       if (home.hours - born < REVEAL_CULL_DAYS * 24) return null;
-      const { keep, looks } = revealKeep(brood);
+      const { keep, looks, extra } = revealKeep(tanks, s, brood);
       const rest = brood.filter(({ fish }) => !keep.has(fish.id));
       const coins = rest.reduce((a, { fish }) => a + (buybackRefusal(fish, true) ? 0 : fishBuybackPrice(fish)), 0);
       const at = brood.find(({ fish }) => keep.has(fish.id)) ?? brood[0];
@@ -1447,7 +1491,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
           { key: 'all', label: '全部留著', outcome: '缸會很擠，要再開缸' },
           { key: 'pick', label: '自己挑', outcome: '打開魚群一尾一尾選' },
         ],
-        fish: brood.filter(({ fish }) => keep.has(fish.id) && fish.genome).map(({ fish, tank }) => pickFish(fish, tank)),
+        fish: [...brood.filter(({ fish }) => keep.has(fish.id) && fish.genome), ...extra].map(({ fish, tank }) => pickFish(fish, tank)),
+        ...(extra.length > 0 ? { note: `這窩${[...new Set(extra.map(({ fish }) => (fish.sex === 'male' ? '公' : '母')))].join('、')}魚不夠，${extra.map(({ fish }) => callName(fish)).join('、')}一起當候選` } : {}),
       };
     }
     case 'C15': {
@@ -2100,20 +2145,23 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
     }
     case 'C10': {
       const b = s.better;
-      if (!b || !['swap', 'both', 'keep'].includes(key)) return '這尾已經不在了';
+      if (!b || !['swap', 'both', 'keep', 'replace'].includes(key)) return '這尾已經不在了';
       const nu = find(b.fishId);
       const old = find(b.oldId);
       if (!nu || !old) return '這尾已經不在了';
-      // 換掉的話先取消原本那尾，名額才空得出來
-      if (key === 'swap') setKeeper(tanks[old.tank], old.fish.id, false);
+      // 換掉的話先取消原本那尾（名額滿了是離夢想魚最遠的那尾），名額才空得出來
+      const out = key === 'swap' ? old : key === 'replace' ? worstKeeper(tanks, s, nu.fish) : null;
+      if (key === 'replace' && !out) return '沒有可以換掉的種魚';
+      if (out) setKeeper(tanks[out.tank], out.fish.id, false);
       if (key !== 'keep') {
         const why = setKeeper(tanks[nu.tank], nu.fish.id, true);
         if (why) {
-          if (key === 'swap') setKeeper(tanks[old.tank], old.fish.id, true);
+          if (out) setKeeper(tanks[out.tank], out.fish.id, true);
           return why;
         }
       }
-      if (key === 'swap') {
+      // 名額滿了換掉的不是那對的：新的這尾當備用，原本的計畫照走
+      if (key === 'swap' || (key === 'replace' && s.pair?.includes(out!.fish.id))) {
         // 換掉留種那對的其中一尾：新的這尾搬去那對的缸
         const p = pairFish(tanks, s);
         if (s.pair && p) {
@@ -2206,7 +2254,7 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
       if (!['cull', 'all', 'pick'].includes(key)) return '沒有這個選項';
       if (key === 'cull') {
         const brood = revealBrood(tanks, s);
-        const { keep } = revealKeep(brood);
+        const { keep } = revealKeep(tanks, s, brood);
         for (const { fish, tank } of brood) if (!keep.has(fish.id)) sellFish(tanks[tank], fish.id);
       }
       s.revealCullAsked = true;

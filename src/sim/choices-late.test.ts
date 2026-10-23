@@ -393,6 +393,44 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     expect(mom.keeper).toBeFalsy();
   });
 
+  it('C10 留種名額滿了：換掉同性別離夢想魚最遠的那尾；不是那對的就當備用，計畫照走（strain-fixing.md §1）', () => {
+    const { tanks, s, t2, st, mom, kid } = latePair();
+    Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard' });
+    // 名額塞滿（都在繁殖缸）：再標 4 尾留種，其中一尾母魚什麼都不帶（最遠）
+    const plain = kid(t2, 'female', ADULT_CM);
+    plain.genome = { ...mom.genome!, albino: [0, 0], red: [0, 0], snakeX: [0, 0] };
+    for (const f of [plain, kid(t2, 'male', ADULT_CM), kid(t2, 'male', ADULT_CM), kid(t2, 'male', ADULT_CM)]) f.keeper = true;
+    const brood = [0, 1, 2].map(() => kid(s, 'female', 1.8));
+    for (const f of brood) f.bornHours = s.hours - 14 * 24;
+    brood[0].genome = { ...mom.genome!, albino: [1, 1], red: [1, 1], snakeX: [1, 1], gold: [0, 0], tuxedo: [0, 0] };
+    const c10 = takeChoice(tanks)!;
+    expect(c10.id).toBe('C10');
+    expect(c10.options.map((o) => o.key)).toEqual(['replace', 'keep']);
+    expect(c10.options[0].recommended).toBe(true);
+    expect(c10.options[0].outcome).toMatch(/不再留種，這尾當備用，原本的計畫照走$/);
+    expect(chooseOption(tanks, 'C10', 'replace')).toBeNull();
+    expect(plain.keeper).toBeFalsy();
+    expect(brood[0].keeper).toBe(true);
+    expect(st.pair![0]).toBe(mom.id);
+  });
+
+  it('C10 留種名額滿了、最遠的是那對的媽媽：換掉後新的這尾接手當媽媽', () => {
+    const { tanks, s, t2, st, mom, kid } = latePair();
+    Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard' });
+    for (const f of [kid(t2, 'male', ADULT_CM), kid(t2, 'male', ADULT_CM), kid(t2, 'male', ADULT_CM), kid(t2, 'male', ADULT_CM)]) f.keeper = true;
+    const best = { ...mom.genome!, albino: [1, 1], red: [1, 1], snakeX: [1, 1], gold: [0, 0], tuxedo: [0, 0] } as GuppyGenome;
+    mom.genome = { ...mom.genome!, albino: [0, 0], red: [0, 0], snakeX: [0, 0] };
+    const brood = [0, 1, 2].map(() => kid(s, 'female', 1.8));
+    for (const f of brood) f.bornHours = s.hours - 14 * 24;
+    brood[0].genome = best;
+    const c10 = takeChoice(tanks)!;
+    expect(c10.id).toBe('C10');
+    expect(c10.options[0].outcome).toMatch(/^孫代 [\d.]+% → [\d.]+%$/);
+    expect(chooseOption(tanks, 'C10', 'replace')).toBeNull();
+    expect(mom.keeper).toBeFalsy();
+    expect(st.pair![0]).toBe(brood[0].id);
+  });
+
   it('C15 夢想魚那窩過一半：等快生再放育幼盒（沒有就先買），快生了自己放進去；懷孕後段有里程碑，生下來那天開獎', () => {
     const { tanks, t2, s, st, mom, dad } = latePair();
     Object.assign(st.picked, { C11: 'split', C12: 'one', C13: 'standard' });
@@ -586,6 +624,41 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     expect(new Set(left.map((f) => f.sex)).size).toBe(2);
     expect(economy(s).coins).toBeGreaterThan(coins);
     expect(takeChoice(tanks)?.id).not.toBe('C16');
+  });
+
+  it('C16 挑法（strain-fixing.md §5）：夢想魚樣子 → 帶兩種基因 → 最近，公母各至少 2 尾；母魚不夠用原本的種魚補', () => {
+    const { tanks, s, t2, st, mom } = latePair();
+    Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard', C15: 'plants' });
+    st.reveal = { momId: mom.id, hours: s.hours - (REVEAL_CULL_DAYS + 1) * 24, done: true, born: 14 };
+    mom.lengthCm = ADULT_CM + 0.2;
+    const base = { ...mom.genome!, red: [1, 1], gold: [0, 0], tuxedo: [0, 0], grass: [0, 0] } as GuppyGenome;
+    const mk = (sex: 'male' | 'female', g: Partial<GuppyGenome>) => {
+      const f = addFish(t2, 'guppy', { ...calm, sex, pregnant: false });
+      f.genome = { ...base, y: sex === 'male' ? { snake: 0, grass: 0 } : null, ...g };
+      f.generation = 2;
+      f.motherId = mom.id;
+      f.bornHours = st.reveal!.hours + 1;
+      f.lengthCm = 1.3;
+      f.ageDays = REVEAL_CULL_DAYS + 1;
+      return f;
+    };
+    const dream = [0, 1, 2].map(() => mk('male', { albino: [1, 1], snakeX: [1] }));
+    const carrier = mk('male', { albino: [1, 0], snakeX: [1] });
+    const plainMales = [0, 1, 2].map(() => mk('male', { albino: [0, 0], snakeX: [0] }));
+    // 母魚只有 1 尾，帶兩種基因
+    const girl = mk('female', { albino: [1, 0], snakeX: [1, 0] });
+    const c = takeChoice(tanks)!;
+    expect(c.id).toBe('C16');
+    expect(c.note).toMatch(/^這窩母魚不夠，.+一起當候選$/);
+    // 這窩留 4 尾：3 尾夢想魚樣子 + 唯一的母魚（公母各 2 尾優先於帶兩種基因的公魚），再加補上的原本種魚（母）
+    const ids = c.fish!.map((f) => f.fishId);
+    for (const f of [...dream, girl, mom]) expect(ids).toContain(f.id);
+    for (const f of [carrier, ...plainMales]) expect(ids).not.toContain(f.id);
+    expect(c.fish!.filter((f) => f.sex === 'female').length).toBeGreaterThanOrEqual(2);
+    expect(chooseOption(tanks, 'C16', 'cull')).toBeNull();
+    for (const f of plainMales) expect(t2.fish).not.toContain(f);
+    expect(t2.fish).toContain(girl);
+    expect(t2.fish).toContain(mom);
   });
 });
 

@@ -9,10 +9,11 @@ import { midgamePlayer } from './midgame-player';
  * - 經濟（mvp.md §4.3）：第 60 天 ≥ 800 元
  * - 開局挑快生的母魚：第一窩 ≤ 第 10 天；照推薦孕期調高水溫，C13 到開獎不死魚、不出紅色水質警告（§6.6）
  * - C9 重複版別太吵（§6.5）：第 36～90 天每個種子 ≤ 3 張
- * - 開獎（自家配的那窩出生）：沒生病 ≤ 第 85 天；種魚長大後生病晚配的 ≤ 第 90 天
- * 第 80～120 天魚越生越多（midgame.md §7.4，#338）：照推薦選，擠缸死魚 ≤ 2 尾、沒有一缸連續超過 3 天 ≥ 100%、C14 ≤ 5 張
+ * - 開獎（自家配的那窩出生，midgame.md §7.8）：每個種子 ≤ 第 90 天，種子 1～3 的中位數 ≤ 第 85 天
+ * 第 80～120 天魚越生越多（midgame.md §7.4、§7.8，#338）：照推薦選，擠缸死魚 ≤ 2 尾、沒有一缸連續超過 3 天 ≥ 100%、C14 ≤ 6 張
  */
 describe('第 36～120 天的選擇點（design/midgame.md §6、§7）', () => {
+  const reveals: number[] = [];
   for (const seed of [1, 2, 3]) {
     it(`seed ${seed}：C11～C15 照順序出、節奏不空太久、一天一張；開獎準時；第 60 天錢夠`, () => {
       const nights = midgamePlayer(seed, 120);
@@ -25,8 +26,8 @@ describe('第 36～120 天的選擇點（design/midgame.md §6、§7）', () => 
       expect(first('C13'), log).toBeLessThan(first('C15'));
       const reveal = nights.find((n) => n.line.includes('reveal'))?.day ?? Infinity;
       expect(reveal, log).toBeGreaterThan(first('C15'));
-      const sick = nights[nights.length - 1].sickDays > 0;
-      expect(reveal, `生病晚配：${sick} ${log}`).toBeLessThanOrEqual(sick ? 90 : 85);
+      reveals.push(reveal);
+      expect(reveal, log).toBeLessThanOrEqual(90);
       // 同一天最多一張（早上的卡和交貨時的卡加起來）
       const cards = nights.filter((n) => n.choice || n.orderChoice);
       expect(cards.filter((n) => n.choice && n.orderChoice), log).toEqual([]);
@@ -63,7 +64,12 @@ describe('第 36～120 天的選擇點（design/midgame.md §6、§7）', () => 
           expect(run, `第 ${i} 缸 第 ${n.day} 天 ${crowdLog}`).toBeLessThanOrEqual(3);
         }
       }
-      expect(late.filter((n) => n.choice === 'C14').length, crowdLog).toBeLessThanOrEqual(5);
+      expect(late.filter((n) => n.choice === 'C14').length, crowdLog).toBeLessThanOrEqual(6);
     }, 600_000);
   }
+
+  it('開獎：種子 1～3 的中位數 ≤ 第 85 天（midgame.md §7.8）', () => {
+    expect(reveals).toHaveLength(3);
+    expect([...reveals].sort((a, b) => a - b)[1], reveals.join(',')).toBeLessThanOrEqual(85);
+  });
 });
