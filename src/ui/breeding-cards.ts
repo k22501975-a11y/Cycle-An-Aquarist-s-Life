@@ -623,12 +623,38 @@ export function namingLineup(fish: PickFish[]): PickFish[] {
   return fish.filter((f) => keep.has(f));
 }
 
-/** 取名完成的名牌：緞帶＋金色的品系名＋夢想魚的名字。 */
-export function strainPlaque(name: string): HTMLElement {
+/**
+ * 穩定度條：從 0 跑到 pct（from～to 秒），條上畫「初步固定」「品系完成」兩條線，越過的會亮。
+ * 條太窄時（容器查詢），線上的字改成只寫百分比，免得兩個標籤疊在一起。
+ */
+function stabilityMeter(stability: number, caption: string, from: number, to: number): HTMLElement {
+  const pct = Math.max(0, Math.min(100, Math.round(stability)));
+  const fill = h('i.nm-fill');
+  fill.style.setProperty('--pct', `${pct}%`);
+  fill.style.animationDelay = `${from.toFixed(2)}s`;
+  fill.style.animationDuration = `${Math.max(0.6, to - from).toFixed(2)}s`;
+  const marks = STABLE_MARKS.map((m) => {
+    const el = h(`i.nm-mark${pct >= m.at ? '.on' : ''}`, { title: `${m.at}% ${m.label}` }, h('small', { 'data-short': `${m.at}%` }, h('span', {}, m.label)));
+    el.style.left = `${m.at}%`;
+    return el;
+  });
+  return h('div.nm-meter', {}, h('div.nm-bar', {}, fill, ...marks), h('div.nm-meter-text', {}, h('span', {}, caption), h('b', {}, `穩定度 ${pct}%`)));
+}
+
+/** 品系完成（strain-fixing.md §5，早上報告 kind 'line' 的 lineDone）：夢想魚在光芒裡，穩定度條越過「品系完成」，蓋上名牌。 */
+export function lineDoneVisual(name: string, stability: number): HTMLElement {
+  const hero = h('div.ld-hero', {}, h('i.ld-rays', { 'aria-hidden': 'true' }), h('img.ld-fish.albino', { src: ART + guppyArt(DREAM_FISH.look), alt: '', draggable: 'false' }));
+  const plaque = strainPlaque(name, '品系完成');
+  plaque.style.animationDelay = '1.6s';
+  return h('div.ld', {}, hero, stabilityMeter(stability, `這窩${DREAM_FISH.name}的比例`, 0.3, 1.4), plaque);
+}
+
+/** 取名完成的名牌：緞帶＋金色的品系名＋夢想魚的名字。kicker 是名字上面那行小字。 */
+export function strainPlaque(name: string, kicker = '你的品系有名字了'): HTMLElement {
   const medal = keeperRibbon('keeper-ribbon.nm-medal');
   medal.removeAttribute('title');
   medal.setAttribute('aria-hidden', 'true');
-  return h('div.nm-plaque', { role: 'status' }, medal, h('small.nm-plaque-kicker', {}, '你的品系有名字了'), h('b.nm-plaque-name', {}, name), h('span.nm-plaque-sub', {}, `${name} ${DREAM_FISH.name}`), h('i.nm-shine', { 'aria-hidden': 'true' }));
+  return h('div.nm-plaque', { role: 'status' }, medal, h('small.nm-plaque-kicker', {}, kicker), h('b.nm-plaque-name', {}, name), h('span.nm-plaque-sub', {}, `${name} ${DREAM_FISH.name}`), h('i.nm-shine', { 'aria-hidden': 'true' }));
 }
 
 /**
@@ -648,17 +674,7 @@ export function namingScene(fish: PickFish[], n: StrainNaming, onName: (name: st
     return cell;
   });
   const end = 0.4 + lit * step;
-  const pct = Math.max(0, Math.min(100, Math.round(n.stability)));
-  const fill = h('i.nm-fill');
-  fill.style.setProperty('--pct', `${pct}%`);
-  fill.style.animationDelay = '0.4s';
-  fill.style.animationDuration = `${Math.max(0.6, end - 0.4).toFixed(2)}s`;
-  const marks = STABLE_MARKS.map((m) => {
-    const el = h(`i.nm-mark${pct >= m.at ? '.on' : ''}`, { title: `${m.at}% ${m.label}` }, h('small', {}, m.label));
-    el.style.left = `${m.at}%`;
-    return el;
-  });
-  const meter = h('div.nm-meter', {}, h('div.nm-bar', {}, fill, ...marks), h('div.nm-meter-text', {}, h('span', {}, `${n.total} 尾裡有 ${n.dream} 尾是${DREAM_FISH.name}`), h('b', {}, `穩定度 ${pct}%`)));
+  const meter = stabilityMeter(n.stability, `${n.total} 尾裡有 ${n.dream} 尾是${DREAM_FISH.name}`, 0.4, end);
 
   const input = h('input.nm-input', { type: 'text', value: n.suggested, maxlength: String(n.maxLen * 2), 'aria-label': '品系名', enterkeyhint: 'done', autocomplete: 'off' }) as HTMLInputElement;
   const count = h('small.nm-count');

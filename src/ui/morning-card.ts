@@ -2,7 +2,7 @@ import { artUrl, ownerImg, type ArtIcon } from './art-icons';
 import { ownerMood } from './owner-mood';
 import { h } from './dom';
 import { keeperRibbon } from './keeper-ribbon';
-import { choiceVisual, namingOf, type FishLookup } from './choice-card';
+import { choiceVisual, type FishLookup } from './choice-card';
 import { lookalikeVisual } from './lookalike-card';
 import { choiceFollowUp, isBadNews, type Milestone, type MorningReport, type Reveal, type ReportItem, type ReportKind } from './morning-report';
 import type { ChoiceCard } from '../sim/choices';
@@ -46,7 +46,7 @@ const KIND_ICON: Record<ReportKind, ArtIcon> = {
   milestone: 'owner',
   reveal: 'owner',
   second_brood: 'owner',
-  line: 'owner',
+  line: 'codex',
   observe: 'owner',
   quiet: 'owner',
 };
@@ -169,7 +169,7 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
         const why = deps.choose(item, key, picks, text);
         if (why) return why;
         // C18 取名：卡上自己換成金色名牌，不收成一行
-        if (key === 'name' && namingOf(item.choice!)) return null;
+        if (key === 'name' && item.choice!.naming) return null;
         done(item.choice!.options.find((o) => o.key === key)?.label ?? '');
         const go = choiceFollowUp(item.choice!, key);
         if (go) {
@@ -197,6 +197,12 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
     void import('./breeding-cards').then((bc) => pic.append(bc.revealVisual(r.fry))).catch(() => pic.remove());
     return h(`div.morning-item.${item.tone}.reveal-item`, {}, h('span.morning-body', {}, h('b.rv-title', {}, `開獎！${r.fry.length} 尾小魚出生了`), pic, reportText(item.text)));
   };
+  // 品系完成（strain-fixing.md §5）：金色名牌＋穩定度條越過「品系完成」的線，圖跟選育卡一起延後載入
+  const lineDoneRow = (item: ReportItem, done: NonNullable<ReportItem['lineDone']>) => {
+    const pic = h('div.ld-slot');
+    void import('./breeding-cards').then((bc) => pic.append(bc.lineDoneVisual(done.name, done.stability))).catch(() => pic.remove());
+    return h(`div.morning-item.${item.tone}.line-done-item`, {}, h('span.morning-body', {}, pic, reportText(item.text)));
+  };
   // C9 自動照上次的那一行（midgame.md §6.5）：點了展開 C9 的選項改設定（多「每次都問我」）
   const settingRow = (item: ReportItem, card: ChoiceCard) => {
     const box = h(`div.morning-item.${item.tone}.choice-item`, {});
@@ -222,6 +228,7 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
     // 選育進度（midgame.md §2）：緞帶開頭的一行，不是可以點的事
     if (item.reveal) return revealRow(item, item.reveal);
     if (item.milestone) return milestoneRow(item, item.milestone);
+    if (item.lineDone) return lineDoneRow(item, item.lineDone);
     if (item.kind === 'breeding') return h(`div.morning-item.${item.tone}.breeding-item`, {}, h('div.bc-line', {}, keeperRibbon('bc-line-ribbon'), h('span.bc-line-text', {}, item.text)));
     const pic = deps.picture?.(item) ?? artUrl(item.kind === 'crisis' && item.action ? ACTION_ICON[item.action] : KIND_ICON[item.kind]);
     const img = h('img', { src: pic, alt: '', draggable: 'false' });

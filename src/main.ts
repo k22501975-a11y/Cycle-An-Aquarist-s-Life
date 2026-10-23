@@ -1824,7 +1824,7 @@ async function start(): Promise<void> {
     }
   };
   /** 早上報告卡的按鈕（今天的小事、選擇卡、魚的長相）：過夜和離線回來的報告共用。 */
-  const reportHooks = (chooseOption: DeferredUi['chooseOption']) => {
+  const reportHooks = ({ chooseOption, lineName }: Pick<DeferredUi, 'chooseOption' | 'lineName'>) => {
     const today = sim.dailyTasks(game.tanks);
     const daily = today
       ? { tasks: today.tasks.map((t) => ({ id: t.id, art: dailyArt(t.id), text: DAILY_SHORT[t.id], done: t.done })), go: (id: string) => goDaily(id as sim.DailyTaskId) }
@@ -1838,20 +1838,20 @@ async function start(): Promise<void> {
       const f = game.tanks.flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])]).find((x) => x.id === id && x.genome);
       if (!f?.genome) return null;
       const p = sim.phenotype(f.genome);
-      return { sex: f.sex, name: sim.strainName(p), look: sim.lookIndex(p), fins: sim.finWords(p) };
+      return { sex: f.sex, name: sim.strainName(p), look: sim.lookIndex(p), fins: sim.finWords(p), line: lineName(game.tanks, f) };
     };
     return { picture: reportPicture, go: goReport, daily, choose, fishLook };
   };
   /** 離線回來：離開期間有缸太擠，先出一張報告卡（第一行「你不在的時候…太擠了」，接著擠缸卡，midgame.md §7.7）。 */
   const showAway = (awayHours: number) => {
     const since = game.state.hours - awayHours;
-    withPanels(({ awayReport, morningCard, chooseOption }) => {
+    withPanels(({ awayReport, morningCard, chooseOption, lineName }) => {
       if (sleepingNow) return;
       const report = awayReport(game.tanks, since, awayHours);
       if (!report) return;
       save();
       const shade = h('div.night.dawn');
-      shade.append(morningCard(report, reportHooks(chooseOption), () => {
+      shade.append(morningCard(report, reportHooks({ chooseOption, lineName }), () => {
         shade.classList.remove('in');
         window.setTimeout(() => shade.remove(), 450);
       }));
@@ -1861,7 +1861,7 @@ async function start(): Promise<void> {
   };
   // 早上報告在拆出去的檔案裡（通常開機後早就載好了，照舊同步）
   const goNight = () => withPanels(goNightWith);
-  const goNightWith = ({ snapshot, morningReport, morningCard, chooseOption }: DeferredUi) => {
+  const goNightWith = ({ snapshot, morningReport, morningCard, chooseOption, lineName }: DeferredUi) => {
     if (sleepingNow) return;
     // 開缸演出還在演：演完會跳「你的第一個缸」，夜幕會把它蓋掉
     if (view.settingUp) {
@@ -1898,7 +1898,7 @@ async function start(): Promise<void> {
       analytics.track('sleep', { hours: r.hours, stopped: r.crisis !== null, items: report.items.length });
       shade.classList.add('dawn');
       checkDaily(); // 換天出題（早上報告卡要列出今天的小事）
-      const card = morningCard(report, reportHooks(chooseOption), () => {
+      const card = morningCard(report, reportHooks({ chooseOption, lineName }), () => {
         shade.classList.remove('in');
         window.setTimeout(() => shade.remove(), 450);
         sleepingNow = false;
