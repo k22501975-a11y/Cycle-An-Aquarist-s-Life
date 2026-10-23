@@ -309,11 +309,12 @@ export function keepOrSellCard(fish: FishLook, c: TradeEstimate, onSell: () => v
 
 // ── 其他選擇點（C1 等）：圖卡二選一 ─────────────────────────
 
-export function choiceCard(title: string, options: ChoiceOption[], onChoose: (key: string) => void, art: Record<string, string> = {}): HTMLElement {
+export function choiceCard(title: string, options: ChoiceOption[], onChoose: (key: string) => void, art: Record<string, string> = {}, scene?: HTMLElement): HTMLElement {
   return h(
     'div.bc.bc-choice.glass',
     {},
     h('div.bc-head', {}, h('b', {}, title)),
+    scene ?? null,
     h(
       'div.bc-opts',
       {},
@@ -331,12 +332,14 @@ export function choiceCard(title: string, options: ChoiceOption[], onChoose: (ke
   );
 }
 
-/** 選項的圖（public/art/ 底下）：C1 育幼盒／躲水草，C3 繁殖缸／展示缸。 */
+/** 選項的圖（public/art/ 底下）：C1 育幼盒／躲水草，C3 繁殖缸／展示缸，C11 分開／一起養。 */
 export const CHOICE_ART: Record<string, string> = {
   box: 'gear/nursery-box.webp',
   hide: 'scape/plant-moss.webp',
   breeding: 'gear/nursery-box.webp',
   display: 'gear/led-planted.webp',
+  split: 'gear/nursery-box.webp',
+  together: 'gear/tank-empty.webp',
 };
 
 // ── 早上報告的「選育進度」行 ──────────────────────────────
@@ -455,4 +458,100 @@ export function milestoneVisual(step: MilestoneStep, fish: FishLook, partner?: F
     scene = h('div.ms-scene.ms-ready', {}, pic(female, 'left'), h('span.ms-heart', { 'aria-hidden': 'true' }, '❤', keeperRibbon('ms-ribbon')), pic(male, 'right'));
   }
   return h(`div.ms.ms-${step}`, {}, scene, h('div.ms-foot', {}, track, early));
+}
+
+// ── C11 公母分開養（midgame.md §6.1）──────────────────────
+
+const GENERIC_MALE: FishLook = { sex: 'male', name: '', look: 0, fins: [] };
+
+/**
+ * C11 的動畫：公母在缸裡一起游，母魚游進育幼盒、公魚留在外面（重複播）。
+ * 育幼盒拆前後兩層，母魚夾在中間，看起來是真的游進盒子裡。
+ */
+export function splitScene(mother: FishLook | null, father: FishLook | null): HTMLElement {
+  const mom = mother ?? { ...GENERIC_MALE, sex: 'female' as const };
+  const dad = father ?? GENERIC_MALE;
+  const img = (f: FishLook, cls: string) => h(`img.sp-fish.${cls}${f.name.includes('白子') ? '.albino' : ''}`, { src: artSrc(f), alt: '', draggable: 'false' });
+  return h(
+    'div.sp-scene',
+    { 'aria-hidden': 'true' },
+    h('img.sp-box.back', { src: `${ART}gear/nursery-box-back.webp`, alt: '', draggable: 'false' }),
+    h('span.sp-swim.dad', {}, img(dad, 'dad')),
+    h('span.sp-swim.mom', {}, img(mom, 'mom'), h(`i.bc-sex.female.sp-badge`, {}, '♀')),
+    h('img.sp-box.front', { src: `${ART}gear/nursery-box-front.webp`, alt: '', draggable: 'false' }),
+    h('i.sp-heart', {}, '♥'),
+  );
+}
+
+// ── 開獎卡（midgame.md §6.1 C15 之後，第 81 天）────────────
+
+export interface RevealFry {
+  fishId?: number;
+  /** 帶白子基因（含隱性）。 */
+  albino: boolean;
+  /** 帶蛇紋基因。 */
+  snake: boolean;
+}
+
+/** 一排寶石圖示（後面可接一段字）。 */
+function gemSpan(tag: 'span' | `span.${string}`, keys: string[], text?: string): HTMLElement {
+  const el = h(tag);
+  el.innerHTML = keys.map(traitIcon).join('');
+  if (text) el.append(text);
+  return el;
+}
+
+/** 卡上最多排幾尾（8 尾一排、3 排）；多的寫「還有 N 尾」。 */
+export const REVEAL_MAX = 24;
+
+/** 亮出來的順序：什麼都沒帶的先、帶一樣的、兩樣都有的最後（留到最後揭曉）。同一類照原本順序。 */
+export function revealOrder(fry: RevealFry[]): RevealFry[] {
+  const rank = (f: RevealFry) => Number(f.albino) + Number(f.snake);
+  return fry
+    .map((f, i) => ({ f, i }))
+    .sort((a, b) => rank(a.f) - rank(b.f) || a.i - b.i)
+    .map((x) => x.f);
+}
+
+/** 每尾的小標（tutorial-lines.md §10）。 */
+export function revealTag(f: RevealFry): string {
+  return f.albino && f.snake ? '兩樣都有！' : f.albino ? '帶白子' : f.snake ? '帶蛇紋' : '';
+}
+
+/**
+ * 開獎卡：小魚一尾一尾從暗處亮出來，帶白子的泛粉白光、帶蛇紋的泛金光，兩樣都有的最後出來、整圈光芒。
+ * 只排 REVEAL_MAX 尾，兩樣都有的一定排得進去。
+ */
+export function revealVisual(fry: RevealFry[]): HTMLElement {
+  const ordered = revealOrder(fry);
+  // 太多尾時從最前面（什麼都沒帶的）砍，兩樣都有的留在卡上
+  const shown = ordered.slice(Math.max(0, ordered.length - REVEAL_MAX));
+  const more = ordered.length - shown.length;
+  const both = fry.filter((f) => f.albino && f.snake).length;
+  const step = Math.min(0.35, 6 / Math.max(1, shown.length));
+  const cells = shown.map((f, i) => {
+    const kind = f.albino && f.snake ? 'both' : f.albino ? 'albino' : f.snake ? 'snake' : 'plain';
+    const gems = [f.albino ? 'albino' : '', f.snake ? 'snake' : ''].filter(Boolean);
+    const cell = h(
+      `span.rv-fry.${kind}`,
+      { title: revealTag(f) || undefined },
+      kind !== 'plain' ? h('i.rv-glow') : null,
+      h(`img${f.albino ? '.albino' : ''}`, { src: `${ART}fish/guppy-juvenile.webp`, alt: '', draggable: 'false' }),
+      gems.length ? gemSpan('span.rv-gems', gems) : null,
+      kind === 'both' ? h('b.rv-tag', {}, '兩樣都有！') : null,
+    );
+    cell.style.animationDelay = `${(i * step).toFixed(2)}s`;
+    return cell;
+  });
+  const count = (k: 'albino' | 'snake') => fry.filter((f) => f[k]).length;
+  const legend = h(
+    'div.rv-legend',
+    {},
+    gemSpan('span', ['albino'], `帶白子 ${count('albino')}`),
+    gemSpan('span', ['snake'], `帶蛇紋 ${count('snake')}`),
+    both ? h('b.rv-both', {}, `兩樣都有 ×${both}`) : null,
+    more ? h('small', {}, `還有 ${more} 尾`) : null,
+  );
+  legend.style.animationDelay = `${(shown.length * step + 0.3).toFixed(2)}s`;
+  return h('div.rv', {}, h('div.rv-grid', {}, ...cells), legend);
 }

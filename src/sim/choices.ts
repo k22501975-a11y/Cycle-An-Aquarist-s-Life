@@ -113,6 +113,8 @@ export interface ChoiceCard {
   candidates?: PairCandidate[];
   /** C4：配哪尾母魚。 */
   motherId?: number;
+  /** C11：指定的那尾公魚（畫面上畫牠留在原缸）。 */
+  fatherId?: number;
   trade?: TradeEstimate;
   /** C6：要搬去繁殖缸的魚（照搬的順序）。 */
   move?: number[];

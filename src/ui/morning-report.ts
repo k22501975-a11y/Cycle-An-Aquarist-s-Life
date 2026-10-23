@@ -89,6 +89,7 @@ export type ReportKind =
   | 'lookalike' // 第一窩小魚轉色，長得像誰（G2）
   | 'choice' // 中期的選擇點 C1～C5（design/midgame.md）
   | 'breeding' // 選育進度（midgame.md §2）：有第一窩或留種的魚就每天一行
+  | 'reveal' // 自家配的夢想魚那窩出生：開獎卡（midgame.md §6.1 C15，第 81 天）
   | 'milestone' // 種魚長到一個里程碑：肛鰭／胎斑、顯色、可以配（midgame.md §5.3）
   | 'second_brood' // C9 那尾母魚的第二窩生了：跟第一窩比、照選的處理（midgame.md §5.2）
   | 'observe' // 平淡早上的小觀察（morning-observe.ts）
@@ -113,8 +114,16 @@ export interface ReportItem {
   choice?: ChoiceCard;
   /** kind 'milestone' 的圖卡資料：哪一步、哪尾魚、配對的另一半、C7 養快提前了幾天。 */
   milestone?: Milestone;
+  /** kind 'reveal' 的開獎卡：夢想魚叫什麼、每尾小魚帶不帶白子、蛇紋（含隱性）。 */
+  reveal?: Reveal;
   /** kind 'second_brood' 的比較卡資料：這窩幾尾、第一窩還有幾尾、挑了幾尾備用、C9 選了什麼。 */
   secondBrood?: { momId: number; count: number; prevKids: number; kept: number; choice: string };
+}
+
+/** 開獎卡的資料（midgame.md §6.1）：每尾小魚的基因預告。 */
+export interface Reveal {
+  dream: string;
+  fry: Array<{ fishId?: number; albino: boolean; snake: boolean }>;
 }
 
 /** 成長里程碑（midgame.md §5.3）：sex 肛鰭變尖或出現胎斑、color 公魚顯色、ready 可以配。 */

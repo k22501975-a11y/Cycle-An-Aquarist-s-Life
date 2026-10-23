@@ -4,7 +4,7 @@ import { h } from './dom';
 
 /**
  * 早上報告裡的選擇卡（design/midgame.md C1～C5，資料在 sim/choices.ts）：
- * C2 是選種卡（一窩寶貝卡，點了掛留種緞帶），C4 是配對比較卡（候選公魚並排、機率星星），
+ * C11 是公母分開養（母魚游進育幼盒的動畫）；C2 是選種卡（一窩寶貝卡，點了掛留種緞帶），C4 是配對比較卡（候選公魚並排、機率星星），
  * C5 是交單還是留著，C1、C3 是二選一的圖卡。卡片的樣子在 breeding-cards.ts，
  * 早上報告出卡時才載入（開機必載的預算留給開局）。
  */
@@ -63,6 +63,11 @@ function fill(bc: typeof import('./breeding-cards'), card: ChoiceCard, box: HTML
   } else if (card.trade && card.id === 'C5') {
     const fish = lookup(card.trade.fishId);
     box.append(fish ? keepOrSellCard(fish, card.trade, () => pick('sell'), () => pick('keep')) : choiceCard(card.title, card.options, (key) => pick(key), CHOICE_ART));
+  } else if (card.options.some((o) => o.key === 'split')) {
+    // C11 公母分開養：母魚游進育幼盒的動畫在選項上面
+    const mom = card.motherId !== undefined ? lookup(card.motherId) : null;
+    const dad = card.fatherId !== undefined ? lookup(card.fatherId) : null;
+    box.append(choiceCard(card.title, card.options, (key) => pick(key), CHOICE_ART, bc.splitScene(mom, dad)));
   } else {
     box.append(choiceCard(card.title, card.options, (key) => pick(key), CHOICE_ART));
   }

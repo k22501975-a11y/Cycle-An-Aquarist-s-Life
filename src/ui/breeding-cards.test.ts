@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LENS_AT, LENS_ZOOM, lensPos, pickDone, toggleKeeper, traitIcon, type PickFish } from './breeding-cards';
+import { LENS_AT, LENS_ZOOM, lensPos, pickDone, revealOrder, revealTag, toggleKeeper, traitIcon, type PickFish } from './breeding-cards';
 
 const kid = (fishId: number, sex: 'male' | 'female', keeper = false): PickFish => ({ fishId, tank: 0, sex, name: '全紅', look: 4, fins: [], traits: [], missing: [], keeper });
 const limit = { male: 1, female: 2 };
@@ -49,5 +49,21 @@ describe('成長里程碑卡的放大鏡（midgame.md §5.3）', () => {
       expect(at.x).toBeLessThan(0.8);
       expect(at.y).toBeGreaterThan(0.5);
     }
+  });
+});
+
+describe('開獎卡（midgame.md §6.1）', () => {
+  const f = (albino: boolean, snake: boolean, fishId: number) => ({ fishId, albino, snake });
+
+  it('什麼都沒帶的先亮、帶一樣的接著、兩樣都有的留到最後；同一類照出生順序', () => {
+    const fry = [f(true, true, 1), f(false, false, 2), f(false, true, 3), f(true, false, 4), f(false, false, 5)];
+    expect(revealOrder(fry).map((x) => x.fishId)).toEqual([2, 5, 3, 4, 1]);
+  });
+
+  it('每尾的小標照 tutorial-lines.md §10', () => {
+    expect(revealTag(f(true, false, 1))).toBe('帶白子');
+    expect(revealTag(f(false, true, 1))).toBe('帶蛇紋');
+    expect(revealTag(f(true, true, 1))).toBe('兩樣都有！');
+    expect(revealTag(f(false, false, 1))).toBe('');
   });
 });
