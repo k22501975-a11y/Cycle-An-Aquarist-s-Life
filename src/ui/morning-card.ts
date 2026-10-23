@@ -46,6 +46,7 @@ const KIND_ICON: Record<ReportKind, ArtIcon> = {
   milestone: 'owner',
   reveal: 'owner',
   second_brood: 'owner',
+  line: 'owner',
   observe: 'owner',
   quiet: 'owner',
 };

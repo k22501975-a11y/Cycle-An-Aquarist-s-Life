@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
 import { addFish, ADULT_SIZE, bacteriaCapacity, broodFactor, buyTank, CROWD_WARN, crowdingRatio, cross, DREAM_FISH, economy, FISH_SPECIES, linkTanks, orderBoard, setTankPurpose, type Fish, type GuppyGenome, type TankState } from './index';
-import { chooseOption, choiceState, CHOICE_RESHOW_DAYS, CROWD_FULL, CROWD_PREVIEW, REVEAL_CULL_DAYS, takeCrowdNotes, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, WARM_PREG_C, takeChoice, takeReveal, takeSecondBrood } from './choices';
+import { chooseOption, choiceState, CHOICE_RESHOW_DAYS, CROWD_FULL, CROWD_PREVIEW, REVEAL_CULL_DAYS, takeCrowdNotes, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, WARM_PREG_C, takeChoice, takeLineNotes, takeReveal, takeSecondBrood, SNAKE_DAYS, STABILITY_DAYS } from './choices';
+import { dreamRoute } from './dream';
 
 const calm = { carriesIch: false, carries: [] };
 const ADULT_CM = FISH_SPECIES.guppy.adultLengthCm * ADULT_SIZE;
@@ -585,5 +586,53 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     expect(new Set(left.map((f) => f.sex)).size).toBe(2);
     expect(economy(s).coins).toBeGreaterThan(coins);
     expect(takeChoice(tanks)?.id).not.toBe('C16');
+  });
+});
+
+describe('固定品系：蛇紋和穩定度里程碑（strain-fixing.md §2，#344）', () => {
+  /** 開獎過了：mom 生的開獎那窩 n 尾（k 尾夢想魚公魚），出生在 bornHours。 */
+  function brood(t: TankState, motherId: number, bornHours: number, n: number, k: number, dad: Fish): Fish[] {
+    return Array.from({ length: n }, (_, i) => {
+      const f = addFish(t, 'guppy', { ...calm, sex: 'male', pregnant: false });
+      f.genome = structuredClone(dad.genome!);
+      if (i < k) f.genome.albino = [1, 1];
+      f.generation = 2;
+      f.motherId = motherId;
+      f.bornHours = bornHours;
+      return f;
+    });
+  }
+
+  it('開獎那窩：滿 20 天說蛇紋出來，不出穩定度卡；下一代那窩滿 25 天出穩定度卡，寫比上一代多幾 %', () => {
+    const { s, t2, tanks, st, mom, dad } = latePair();
+    st.reveal = { momId: mom.id, hours: s.hours, done: true, born: 10 };
+    const first = brood(t2, mom.id, s.hours + 1, 10, 1, dad);
+    expect(takeLineNotes(tanks)).toEqual([]);
+    expect(st.line!.broods).toMatchObject([{ momId: mom.id, n: 10, k: 1, gen: 1 }]);
+    s.hours += SNAKE_DAYS * 24 + 2;
+    const snake = takeLineNotes(tanks);
+    expect(snake).toHaveLength(1);
+    expect(snake[0].text).toMatch(/身上的蛇紋出來了。$/);
+    // 開獎那窩是起點：滿 25 天也不說
+    s.hours += (STABILITY_DAYS - SNAKE_DAYS) * 24;
+    expect(takeLineNotes(tanks)).toEqual([]);
+    expect(dreamRoute(tanks).stability).toBe(10);
+
+    // 開獎那窩的女兒當新媽媽，生下一代：8 尾裡 5 尾
+    const daughter = first[1];
+    daughter.sex = 'female';
+    st.pair = [daughter.id, dad.id];
+    const born2 = s.hours + 1;
+    brood(t2, daughter.id, born2, 8, 5, dad);
+    takeLineNotes(tanks);
+    expect(st.line!.broods[1]).toMatchObject({ momId: daughter.id, n: 8, k: 5, gen: 2 });
+    s.hours = born2 + SNAKE_DAYS * 24;
+    expect(takeLineNotes(tanks)[0].text).toMatch(/蛇紋/);
+    s.hours = born2 + STABILITY_DAYS * 24;
+    const card = takeLineNotes(tanks);
+    expect(card[0].text).toBe(`這窩 8 尾裡，5 尾是${DREAM_FISH.name}，穩定度 63%（比上一代多 53%）。再配一代，穩定度會更高。`);
+    expect(card[0].stability).toBe(63);
+    expect(takeLineNotes(tanks)).toEqual([]);
+    expect(dreamRoute(tanks).steps[3].done).toBe(false);
   });
 });
