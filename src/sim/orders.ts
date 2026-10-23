@@ -388,7 +388,8 @@ export interface OrderContext {
   /** 水草的躲藏係數 0–0.7（hidingFactor）。 */
   hiding?: number;
   /** 取過名的品系（C18）：名字和出價倍率（取名 ×1.2、品系完成 ×1.5）。 */
-  line?: { name: string; mult: number };
+  /** spare：現在交得出幾尾（自家的成年白子紅蛇王公魚，品系候選不算）。 */
+  line?: { name: string; mult: number; spare: number };
 }
 
 /** 這株水草現在修剪得下幾株插枝（跟 trimPlant 一樣：留一半，多的剪下來）。 */
@@ -419,7 +420,11 @@ export function orderContext(state: TankState): OrderContext {
   const boxed = new Set(state.quarantine?.fish ?? []);
   const safeFry = young.filter((f) => f.nursery || boxed.has(f)).length;
   const named = economy(state).choices?.lineNamed;
-  const line = named ? { name: named.name, mult: named.done ? LINE_DONE_MULT : LINE_NAMED_MULT } : undefined;
+  // 指定品系單出幾尾看現在交得出幾尾（#359：一次要兩尾常常湊不齊，單子放到過期）
+  const held = named ? reservedForPick(state) : new Set<number>();
+  const probe = { kind: 'fish', species: 'guppy', size: 'adult', sex: 'male', line: named?.name } as ShopOrder;
+  const spare = named ? home.filter((f) => !held.has(f.id) && fishMatchesOrder(f, probe)).length : 0;
+  const line = named ? { name: named.name, mult: named.done ? LINE_DONE_MULT : LINE_NAMED_MULT, spare } : undefined;
   return { stage, cuttings, snails, fry: young.length, safeFry, hiding: hidingFactor(state), ...(line ? { line } : {}) };
 }
 
@@ -488,7 +493,7 @@ export function makeOrder(board: OrderBoard, hours: number, ctx?: OrderContext):
       o.size = 'adult';
       o.sex = 'male';
       o.line = ctx!.line!.name;
-      o.count = 1 + Math.floor(r() * 2);
+      o.count = r() < 0.5 || ctx!.line!.spare < 2 ? 1 : 2;
       o.unitPrice = round5(FISH_PRICES.guppy * orderTier(o) * (2.2 + r() * 0.3) * ctx!.line!.mult);
     }],
     [stage === 'start' ? 1 : 3, () => {

@@ -139,7 +139,7 @@ describe('店家訂單板（M21）', () => {
     const e = economy(s);
     e.choices = { shown: {}, picked: {}, lineNamed: { name: '小德系', hours: s.hours, stability: 60, n: 10, k: 6 } };
     const ctx = orderContext(s);
-    expect(ctx.line).toEqual({ name: '小德系', mult: LINE_NAMED_MULT });
+    expect(ctx.line).toEqual({ name: '小德系', mult: LINE_NAMED_MULT, spare: 0 });
     const named = Array.from({ length: 40 }, () => makeOrder(board, s.hours, ctx)).filter((o) => o.line);
     expect(named.length).toBeGreaterThan(3);
     expect(orderTitle(named[0])).toMatch(/^[12] 尾指定「小德系」白子紅蛇王公魚$/);
@@ -153,6 +153,13 @@ describe('店家訂單板（M21）', () => {
     dream.genome!.gold = [0, 0];
     dream.genome!.tuxedo = [0, 0];
     expect(fishMatchesOrder(dream, named[0])).toBe(true);
+    // 一次要幾尾看交得出幾尾（#359）：沒有多的只要 1 尾，有 2 尾以上才會要 2 尾
+    expect(named.every((o) => o.count === 1)).toBe(true);
+    const twin = addFish(s, 'guppy', { sex: 'male', strain: 1 });
+    Object.assign(twin, { generation: 2, ageDays: 120, lengthCm: dream.lengthCm, genome: structuredClone(dream.genome) });
+    expect(orderContext(s).line?.spare).toBe(2);
+    expect(Array.from({ length: 40 }, () => makeOrder(board, s.hours, orderContext(s))).some((o) => o.line && o.count === 2)).toBe(true);
+    twin.alive = false;
     dream.genome!.albino = [1, 0];
     expect(fishMatchesOrder(dream, named[0])).toBe(false);
     e.choices.lineNamed!.done = { hours: s.hours, stability: 80 };

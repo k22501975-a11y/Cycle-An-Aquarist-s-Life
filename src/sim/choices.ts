@@ -1047,7 +1047,9 @@ function revealKeep(tanks: TankState[], s: Readonly<ChoiceState>, brood: Array<{
   const withGenome = brood.filter(({ fish }) => fish.genome);
   const looks = withGenome.filter(({ fish }) => isDreamLook(fish.genome!)).length;
   const n = Math.min(withGenome.length, size ?? Math.max(REVEAL_KEEP[0], Math.min(REVEAL_KEEP[1], looks)));
-  const rank = (f: Fish) => (isDreamLook(f.genome!) ? 0 : carriesDreamGenes(f) ? 100 : 200) + dreamMissing(f).length * 10;
+  // 公魚的蛇紋看得到的多半在 Y 上；X 也帶的兒子才傳得給女兒，下一代才到得了七成五（#359），一樣好的先留
+  const xSon = (f: Fish) => (f.sex === 'male' && f.genome!.snakeX.includes(1) ? -5 : 0);
+  const rank = (f: Fish) => (isDreamLook(f.genome!) ? 0 : carriesDreamGenes(f) ? 100 : 200) + dreamMissing(f).length * 10 + xSon(f);
   // 一樣好的先留大的（早一點看得出公母、能配）
   const sorted = withGenome.map(({ fish }) => fish).sort((a, b) => rank(a) - rank(b) || (a.bornHours ?? 0) - (b.bornHours ?? 0));
   // 先保住每個性別最好的 REVEAL_KEEP_SEX 尾，剩下的名額照排名補滿
@@ -1476,6 +1478,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       // 第四缸起一樣要留（後期一缸兩千多，賣魚很久賺不回來，strain-fixing.md §9）
       const tankOk = !noTank && ((full && tanks.length < 3) || economy(home).coins - tankCost >= CROWD_TANK_RESERVE);
       const rec = recSplit ? 'split' : moveEnough ? 'move' : sellEnough ? 'sell' : tankOk ? 'tank' : full && big && !noBig ? 'big' : sell ? 'sell' : move ? 'move' : 'water';
+      // 還沒超過建議量、又只能先多換水（擠的是賣不了也搬不走的小小魚，錢也不夠買缸）：不出卡，早上報告那行擠缸提醒就夠了（#359）
+      if (!full && rec === 'water') return null;
       const recSell = rec === 'sell';
       const recMove = rec === 'move';
       const recTank = rec === 'tank';
@@ -1944,13 +1948,19 @@ function lateHousekeeping(tanks: TankState[], s: ChoiceState): void {
   autoBrood(tanks, s);
 }
 
-/** C15 選了等快生再放：快生了就把母魚放進那缸的育幼盒（盒裡放得出去的小魚先放出去）。 */
+/**
+ * C15 選了等快生再放：快生了就把母魚放進那缸的育幼盒（盒裡放得出去的小魚先放出去）。
+ * 開獎之後品系的每一窩也一樣（#359）：留種那對的母魚懷著這對的小孩、快生了就放進去；那缸沒有盒子就照 C15 的選擇買一個。
+ */
 function boxDue(tanks: TankState[], s: ChoiceState): void {
   const r = s.reveal;
-  if (!r?.box || r.done) return;
-  const m = located(tanks).find(({ fish }) => fish.id === r.momId);
+  if (!r?.box) return;
+  const momId = !r.done ? r.momId : s.pair?.[0];
+  const m = located(tanks).find(({ fish }) => fish.id === momId && fish.alive);
   if (!m || m.fish.nursery || m.fish.pregnancy < BOX_DUE) return;
+  if (r.done && m.fish.sire?.id !== s.pair![1]) return;
   const t = tanks[m.tank];
+  if (!t.nurseryBox && r.done && spend(tanks[0], PRICES['nursery:box'] ?? 150)) buyNurseryBox(t);
   if (!t.nurseryBox) return;
   if (nurseryRefusal(t, m.fish)) releaseNursery(t, t.fish.filter((f) => f.nursery && isJuvenile(f) && f.lengthCm > mouthCm(m.fish)).map((f) => f.id));
   moveToNursery(t, m.fish.id);

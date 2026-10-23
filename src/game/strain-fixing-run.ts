@@ -1,4 +1,4 @@
-import { stabilityPct, type TankState } from '../sim';
+import { slotPrice, stabilityPct, tankSetPrice, TANKS, type TankSizeId, type TankState } from '../sim';
 import { choiceState, isDreamLook } from '../sim/choices';
 import { midgamePlayer, type MidgameNight } from './midgame-player';
 
@@ -14,20 +14,27 @@ export interface StrainRun {
   tails: Map<number, number>;
   /** 留種那對母魚懷著這對的小孩的那幾天。 */
   pregnantDays: Set<number>;
+  /** 每天買缸花的錢（缸數變多的那天）。 */
+  tankSpend: Map<number, number>;
 }
-
-/** 不在懷孕期間，相鄰的卡或里程碑最多隔幾天（§7 是 6，#359 查節奏前暫時 8，strain-fixing.md §9）。 */
-const QUIET_GAP_DAYS = 8;
 
 const dayOf = (hours: number) => Math.floor(hours / 24) + 1;
 
 export function strainRun(seed: number, days = 360): StrainRun {
   const tails = new Map<number, Map<number, number>>();
   const pregnantDays = new Set<number>();
+  const tankSpend = new Map<number, number>();
   let last: TankState[] = [];
+  let tankCount = 1;
   const nights = midgamePlayer(seed, days, {
     onDay: (tanks, day) => {
       last = tanks;
+      // 買了缸：照買的時候的價錢記（套缸 + 第幾缸的位子）
+      for (let n = tankCount; n < tanks.length; n++) {
+        const size = (Object.keys(TANKS) as TankSizeId[]).find((k) => TANKS[k].id === tanks[n].equipment.tank.id);
+        if (size) tankSpend.set(day, (tankSpend.get(day) ?? 0) + tankSetPrice(size) + slotPrice(n));
+      }
+      tankCount = tanks.length;
       const s = choiceState(tanks);
       const fish = tanks.flatMap((t) => t.fish);
       const mom = s.pair && fish.find((f) => f.id === s.pair![0] && f.alive);
@@ -48,6 +55,7 @@ export function strainRun(seed: number, days = 360): StrainRun {
     doneDay: s.lineNamed?.done ? dayOf(s.lineNamed.done.hours) : Infinity,
     tails: new Map([...tails].filter(([, m]) => m.size > 0).map(([g, m]) => [g, avg(m)])),
     pregnantDays,
+    tankSpend,
   };
 }
 
@@ -67,10 +75,12 @@ export interface StrainFacts {
   crowdDeaths: number;
   /** 同一天出了早上的卡又出交貨卡的那幾天。 */
   doubleCards: number[];
-  /** 第 80～200 天節奏空太久的段落（懷孕期間 > 7 天、其他 > QUIET_GAP_DAYS 天）。 */
+  /** 第 80～200 天節奏空太久的段落（懷孕期間 > 7 天、其他 > 6 天）。 */
   gaps: string[];
   coins120: number;
   coins260: number;
+  /** 第 121～260 天買缸花的錢（strain-fixing.md §9：缸算半價的資產）。 */
+  tankSpend: number;
   /** 第 120～260 天最少的金幣。 */
   minCoins: number;
   /** 第一代夢想魚尾鰭平均減最新一代的。 */
@@ -86,7 +96,7 @@ export function strainFacts(run: StrainRun): StrainFacts {
   for (let i = 1; i < points.length; i++) {
     const [a, b] = [points[i - 1], points[i]];
     if (b < 80 || a > 200) continue;
-    if (b - a > (run.pregnantDays.has(a) && run.pregnantDays.has(b) ? 7 : QUIET_GAP_DAYS)) gaps.push(`${a}→${b}`);
+    if (b - a > (run.pregnantDays.has(a) && run.pregnantDays.has(b) ? 7 : 6)) gaps.push(`${a}→${b}`);
   }
   const gens = [...run.tails.keys()].sort((a, b) => a - b);
   const late = nights.filter((n) => n.day >= 120 && n.day <= 260);
@@ -99,6 +109,7 @@ export function strainFacts(run: StrainRun): StrainFacts {
     gaps,
     coins120: coins(120),
     coins260: coins(260),
+    tankSpend: [...run.tankSpend].filter(([d]) => d > 120 && d <= 260).reduce((a, [, c]) => a + c, 0),
     minCoins: Math.min(...late.map((n) => n.coins)),
     tailDrop: gens.length > 1 ? Math.round(run.tails.get(gens[0])! - run.tails.get(gens[gens.length - 1])!) : 0,
     log: `broods ${run.broods.map((b) => `${b.gen}:${b.day}:${b.k}/${b.n}`).join(' ')} named=${run.namedDay} done=${run.doneDay} tails ${gens.map((g) => `${g}:${Math.round(run.tails.get(g)!)}`).join(' ')} | ${nights.filter((n) => n.day >= 80 && (n.choice || n.orderChoice)).map((n) => `${n.day}${n.choice ?? ''}${n.orderChoice ? `{${n.orderChoice}}` : ''}`).join(' ')}`,
