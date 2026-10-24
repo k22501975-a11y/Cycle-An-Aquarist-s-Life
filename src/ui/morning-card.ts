@@ -261,7 +261,7 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
     );
     return btn;
   };
-  const urgent = slim.lines.filter((i) => i.kind === 'crisis' || i.kind === 'reveal');
+  const urgent = slim.lines.filter((i) => i.starving || i.kind === 'crisis' || i.kind === 'reveal');
   const lines = slim.decision
     ? slim.decisionFirst
       ? [...urgent.map(row), decisionRow(slim.decision), ...slim.lines.filter((i) => !urgent.includes(i)).map(row)]

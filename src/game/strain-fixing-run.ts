@@ -73,6 +73,8 @@ export interface StrainFacts {
   gen2: number;
   /** 第 80～300 天擠缸死魚。 */
   crowdDeaths: number;
+  /** 整段餓死的種魚（midgame.md §7.9 要是 0）。 */
+  breederStarved: number;
   /** 同一天出了早上的卡又出交貨卡的那幾天。 */
   doubleCards: number[];
   /** 第 80～200 天節奏空太久的段落（懷孕期間 > 7 天、其他 > 6 天）。 */
@@ -105,6 +107,7 @@ export function strainFacts(run: StrainRun): StrainFacts {
     gen1: genStability(run, 1),
     gen2: genStability(run, 2),
     crowdDeaths: nights.filter((n) => n.day >= 80).reduce((a, n) => a + n.crowdDeaths, 0),
+    breederStarved: nights.reduce((a, n) => a + n.breederStarved, 0),
     doubleCards: nights.filter((n) => n.choice && n.orderChoice).map((n) => n.day),
     gaps,
     coins120: coins(120),

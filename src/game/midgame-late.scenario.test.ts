@@ -13,6 +13,7 @@ import { REVEAL_CULL_DAYS } from '../sim/choices';
  * - 開獎（自家配的那窩出生，midgame.md §7.8）：每個種子 ≤ 第 90 天，種子 1～3 的中位數 ≤ 第 85 天
  * 第 80～120 天魚越生越多（midgame.md §7.4、§7.8，#338）：照推薦選，擠缸死魚 ≤ 2 尾、沒有一缸連續超過 3 天 ≥ 100%、
  *   C14 每個種子 ≤ 7 張、種子 1～3 的中位數 ≤ 6 張（strain-fixing.md §8，#351、#359）
+ * 餓死（midgame.md §7.9）：照推薦玩（報告推薦裝自動餵食器就買），種魚 120 天內不餓死，其他魚每個種子最多餓死 1 尾
  */
 describe('第 36～120 天的選擇點（design/midgame.md §6、§7）', () => {
   const reveals: number[] = [];
@@ -63,6 +64,10 @@ describe('第 36～120 天的選擇點（design/midgame.md §6、§7）', () => 
       // 餓死不算：早上報告連兩天說「今天不餵會餓死」還不理才會餓死（#362 企劃定案），跟下面不算 starving 警告一樣
       expect(preg.filter((n) => n.deaths.some((c) => c !== 'starvation')).map((n) => n.day), log).toEqual([]);
       expect(preg.flatMap((n) => n.alarms.filter((a) => !a.endsWith(':starving'))), log).toEqual([]);
+      // 餓死（§7.9）
+      const starveLog = nights.filter((n) => n.deaths.includes('starvation') || n.boughtFeeder).map((n) => `${n.day}${n.boughtFeeder ? '[餵食器]' : ''}${n.deaths.includes('starvation') ? `†${n.deaths.filter((c) => c === 'starvation').length}${n.breederStarved ? `(種魚${n.breederStarved})` : ''}` : ''}`).join(' ');
+      expect(nights.reduce((a, n) => a + n.breederStarved, 0), starveLog).toBe(0);
+      expect(nights.reduce((a, n) => a + n.deaths.filter((c) => c === 'starvation').length, 0), starveLog).toBeLessThanOrEqual(1);
       // C9 別太吵（§6.5）：第 36～90 天每個種子 ≤ 3 張
       expect(nights.filter((n) => n.day >= 36 && n.day <= 90 && n.choice === 'C9').length, log).toBeLessThanOrEqual(3);
       // 第 80～120 天擠缸（§7.4）

@@ -1,6 +1,6 @@
 import { crisisText, type Crisis } from '../game/crisis';
 import { BLOOM_NOTE, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
-import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, type ChoiceCard } from '../sim/choices';
+import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, breederIds, breederName, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 import { quietObservation } from './morning-observe';
 
@@ -73,6 +73,8 @@ export interface ReportItem {
   action?: ReportAction;
   /** 按鈕上的小字，不用那個動作預設的字時才給（例如消瘦那行的「裝自動餵食器」）。 */
   goLabel?: string;
+  /** 有魚開始消瘦：永遠排第一行，不受 3 行上限、不收進鈴鐺（midgame.md §7.9）。 */
+  starving?: boolean;
   /** 跟哪條魚有關（action 'fish'、'remove_dead' 用）。 */
   subjectId?: number;
   /** 數量（生了幾尾、死了幾條）。 */
@@ -299,7 +301,8 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     // 餓
     const living = t.fish.filter((f) => f.alive);
     // 已經餓到在消耗體力的：小魚撐不到一天，平均值還看不出來時就要講清楚（#315）
-    const starving = living.filter((f) => !isShrimpSpecies(f.species) && isStarving(f)).length;
+    const starvingFish = living.filter((f) => !isShrimpSpecies(f.species) && isStarving(f));
+    const starving = starvingFish.length;
     // 裝了自動餵食器的缸不再提醒要多餵（daily-loop.md §4），真的餓到消瘦還是要說
     const feeder = !!t.equipment.feeder;
     const twice = !feeder && starving === 0 && living.some((f) => !isShrimpSpecies(f.species) && youngGettingHungry(f));
@@ -309,8 +312,13 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     const feederHint = !feeder && (t.feedWarn?.day === day ? t.feedWarn.days : 0) >= FEEDER_HINT_DAYS && economy(tanks[0]).coins >= price('feeder:auto');
     const hint = { kind: 'hungry', tone: 'info', text: `${tanks.length > 1 ? tankLabel(tanks, index) : '這缸'}小魚多，可以裝自動餵食器，一天自動餵兩次（${price('feeder:auto')} 元）`, action: 'buy_feeder' } as const;
     if (starving > 0) {
-      if (feederHint) push({ kind: 'hungry', tone: 'warn', text: `${starving} 尾魚開始消瘦，今天不餵會餓死`, action: 'buy_feeder', goLabel: '裝自動餵食器' });
-      else push({ kind: 'hungry', tone: 'warn', text: `${starving} 尾魚餓到開始消瘦，今天不餵會餓死`, action: 'feed' });
+      // 消瘦永遠排第一行、不收進鈴鐺；種魚在消瘦要寫出名字（midgame.md §7.9）
+      const breeders = breederIds(tanks);
+      const named = starvingFish.filter((f) => breeders.has(f.id));
+      const text = named.length > 0 ? `${[...new Set(named.map((f) => breederName(tanks, f)))].join('、')}開始消瘦了` : `${starving} 尾魚${feederHint ? '' : '餓到'}開始消瘦，今天不餵會餓死`;
+      const subject = named.length > 0 ? { subjectId: named[0].id } : {};
+      if (feederHint) push({ kind: 'hungry', tone: 'warn', text, action: 'buy_feeder', goLabel: '裝自動餵食器', starving: true, ...subject });
+      else push({ kind: 'hungry', tone: 'warn', text, action: 'feed', starving: true, ...subject });
     } else if (!feeder && living.length > 0 && living.reduce((a, f) => a + f.hunger, 0) / living.length > HUNGRY) push({ kind: 'hungry', tone: 'warn', text: '魚在水面游來游去討食，該餵了', action: 'feed' });
     // 小魚兩倍快變餓：一天只餵一次的話，下一餐前就會餓到消耗體力，還沒到要叫醒的程度就在這裡提醒（#193）
     else if (twice) {
@@ -479,10 +487,10 @@ const GOAL_KINDS: ReadonlySet<ReportKind> = new Set(['cycle', 'cycled', 'belly',
 
 /** 報告上的順序：半夜的危機、開獎 → 要處理的壞消息 → 目標的進度 → 好消息 → 其他。 */
 function lineRank(i: ReportItem): number {
+  // 消瘦永遠排第一行（midgame.md §7.9）
+  if (i.starving) return -1;
   if (i.kind === 'crisis') return 0;
   if (i.kind === 'reveal') return 1;
-  // 消瘦又提示裝餵食器的那行排在壞消息最前面（daily-loop.md §7）
-  if (i.kind === 'hungry' && i.action === 'buy_feeder' && i.tone === 'warn') return 1.5;
   if (isBadNews(i) || i.tone === 'warn') return 2;
   if (GOAL_KINDS.has(i.kind)) return 3;
   if (i.tone === 'good') return 4;
@@ -492,7 +500,7 @@ function lineRank(i: ReportItem): number {
 /** 報告每一行的圖示分三類（daily-loop.md §2）：要處理的壞消息、目標的進度、好消息。 */
 export function lineGroup(i: ReportItem): 'bad' | 'goal' | 'good' {
   const rank = lineRank(i);
-  return rank <= 0 || rank === 1.5 || rank === 2 ? 'bad' : rank === 1 || rank === 3 ? 'goal' : 'good';
+  return rank <= 0 || rank === 2 ? 'bad' : rank === 1 || rank === 3 ? 'goal' : 'good';
 }
 
 function markOf(i: ReportItem): TankMark | null {
@@ -515,7 +523,9 @@ export function slimReport(report: MorningReport): SlimReport {
   const marks = rest.map(markOf).filter((m): m is TankMark => !!m);
   const main = rest.filter((i) => !isMinor(i));
   const ranked = main.map((item, at) => ({ item, at })).sort((a, b) => lineRank(a.item) - lineRank(b.item) || a.at - b.at).map((x) => x.item);
-  let lines = ranked.slice(0, REPORT_LINES);
+  // 消瘦那幾行不佔 3 行的名額（midgame.md §7.9）
+  const starving = ranked.filter((i) => i.starving);
+  let lines = [...starving, ...ranked.filter((i) => !i.starving).slice(0, REPORT_LINES)];
   // 安靜的早上：一行就好，有小觀察就放小觀察
   if (lines.length === 0 && !decision) lines = [rest.find((i) => i.kind === 'observe' || i.kind === 'quiet') ?? rest.find((i) => i.kind === 'fish_relaxed') ?? { kind: 'quiet', tank: 0, tone: 'info', text: '昨晚很平靜，魚都在水草裡睡覺' }];
   const shown = new Set(lines);
