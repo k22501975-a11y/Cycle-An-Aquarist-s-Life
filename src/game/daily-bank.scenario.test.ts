@@ -23,7 +23,8 @@ describe('每日小事題庫劇本（U6）', () => {
         claimDaily(tanks);
       }
       for (const [id, days] of seen) for (let i = 1; i < days.length; i++) expect(days[i] - days[i - 1], `seed ${seed} ${id} ${days.join(',')}`).toBeGreaterThanOrEqual(DAILY_GAP_DAYS);
-      expect(new Set([...seen.keys()].map((id) => DAILY_CATEGORY[id])).size).toBe(4);
+      // 原本四類都要出過，加上目標類（daily-loop.md §3）
+      expect(new Set([...seen.keys()].map((id) => DAILY_CATEGORY[id])).size).toBeGreaterThanOrEqual(4);
       expect(seen.size, [...seen.keys()].join(',')).toBeGreaterThanOrEqual(12);
       expect(DAILY_IDS.length).toBeGreaterThanOrEqual(20);
     }

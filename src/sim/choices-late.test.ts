@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
 import { addFish, ADULT_SIZE, bacteriaCapacity, broodFactor, buyTank, CROWD_WARN, crowdingRatio, cross, DREAM_FISH, economy, FISH_SPECIES, linkTanks, orderBoard, setTankPurpose, type Fish, type GuppyGenome, type TankState } from './index';
-import { chooseOption, choiceState, CHOICE_RESHOW_DAYS, CROWD_FULL, CROWD_PREVIEW, REVEAL_CULL_DAYS, takeCrowdNotes, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, WARM_PREG_C, takeChoice, takeLineNotes, lineName, lineNameRefusal, LINE_NAME_SUGGESTED, takeReveal, takeSecondBrood, SNAKE_DAYS, STABILITY_DAYS } from './choices';
+import { chooseOption, choiceState, CHOICE_RESHOW_DAYS, CROWD_FULL, CROWD_PREVIEW, REVEAL_CULL_DAYS, takeCrowdNotes, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, WARM_PREG_C, takeChoice, takeLineNotes, lineName, lineNameRefusal, LINE_NAME_SUGGESTED, takeReveal, takeSecondBrood, FINS_DAYS, COLOR_DAYS, SNAKE_DAYS, STABILITY_DAYS } from './choices';
 import { dreamRoute } from './dream';
 import { reservedForPick } from './orders';
 
@@ -436,6 +436,18 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     expect(st.pair![0]).toBe(brood[0].id);
   });
 
+  it('C13 說懷上了到 C15 之間：肚子圓起來了說一次（懷孕期間節奏 ≤ 7 天，midgame.md §6.4）', () => {
+    const { tanks, st, mom } = latePair();
+    mom.lengthCm = ADULT_CM + 0.3;
+    mom.pregnancy = 0.2;
+    expect(takeBellyNotes(tanks)).toEqual([]);
+    Object.assign(st.picked, { C11: 'split', C12: 'one', C13: 'standard' });
+    expect(takeBellyNotes(tanks)).toEqual([]);
+    mom.pregnancy = 0.35;
+    expect(takeBellyNotes(tanks).map((n) => n.text)).toEqual([expect.stringMatching(/的肚子圓起來了$/)]);
+    expect(takeBellyNotes(tanks)).toEqual([]);
+  });
+
   it('C15 夢想魚那窩過一半：等快生再放育幼盒（沒有就先買），快生了自己放進去；懷孕後段有里程碑，生下來那天開獎', () => {
     const { tanks, t2, s, st, mom, dad } = latePair();
     Object.assign(st.picked, { C11: 'split', C12: 'one', C13: 'standard' });
@@ -722,6 +734,13 @@ describe('固定品系：蛇紋和穩定度里程碑（strain-fixing.md §2，#3
     brood(t2, daughter.id, born2, 8, 5, dad);
     takeLineNotes(tanks);
     expect(st.line!.broods[1]).toMatchObject({ momId: daughter.id, n: 8, k: 5, gen: 2 });
+    // 紅眼睛和蛇紋中間：滿 11 天說一次尾鰭、滿 16 天說一次上色
+    s.hours = born2 + FINS_DAYS * 24;
+    expect(takeLineNotes(tanks).map((n) => n.text)).toEqual(['新的這窩小魚尾鰭開始散開了，看得出誰的尾巴比較大']);
+    expect(takeLineNotes(tanks)).toEqual([]);
+    s.hours = born2 + COLOR_DAYS * 24;
+    expect(takeLineNotes(tanks)[0].text).toMatch(/顏色/);
+    expect(takeLineNotes(tanks)).toEqual([]);
     s.hours = born2 + SNAKE_DAYS * 24;
     expect(takeLineNotes(tanks)[0].text).toMatch(/蛇紋/);
     s.hours = born2 + STABILITY_DAYS * 24;

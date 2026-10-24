@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Game, newGameState } from '../game/game';
 import { addFish, addPlant, BIG_WATER_CHANGE, createTank, feed, FILTERS, HEATERS, LIGHTS, measuredProblem, NORMAL_WATER_CHANGE, pinchMg, suggestedWaterChange, TANKS, type TankState } from '../sim';
-import { lineGroup, morningReport, slimReport, snapshot } from './morning-report';
+import { lineGroup, morningReport, REPORT_LINES, slimReport, snapshot } from './morning-report';
+import { breederName } from '../sim/choices';
 
 /** 養好水、種一株草、一公兩母孔雀魚的缸。 */
 function tank(): TankState {
@@ -29,6 +30,24 @@ describe('早上報告寫玩家自己做的事的結果（polish-to-9 §6 P6）'
       fry.hunger = 0.65;
     });
     expect(r.items.find((i) => i.kind === 'hungry')).toMatchObject({ tone: 'warn', text: '1 尾魚餓到開始消瘦，今天不餵會餓死', action: 'feed' });
+  });
+
+  it('留種的魚在消瘦：寫出是哪尾，排第一行、不算在 3 行裡（midgame.md §7.9）', () => {
+    const s = tank();
+    const keeper = s.fish.find((f) => f.sex === 'female')!;
+    keeper.keeper = true;
+    const r = reportAfter((t) => {
+      keeper.hunger = 1;
+      t.algae += 0.1;
+    }, s);
+    const hungry = r.items.find((i) => i.kind === 'hungry')!;
+    expect(hungry.text).toMatch(/^留種的.+母魚開始消瘦了$/);
+    expect(hungry).toMatchObject({ tone: 'warn', text: `${breederName([s], keeper)}開始消瘦了`, subjectId: keeper.id, starving: true });
+    // 塞滿 3 行別的壞消息，消瘦那行還是在、而且在最前面
+    const filler = Array.from({ length: REPORT_LINES + 1 }, () => ({ ...r.items.find((i) => i.kind === 'algae')! }));
+    const slim = slimReport({ ...r, items: [...filler, hungry] });
+    expect(slim.lines[0]).toBe(hungry);
+    expect(slim.lines.filter((i) => !i.starving).length).toBeLessThanOrEqual(REPORT_LINES);
   });
 
   it('連 3 天要多餵、這天又有魚消瘦、錢夠：餵食器提示併進消瘦那行，排在壞消息最前面（daily-loop.md §7）', () => {

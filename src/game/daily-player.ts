@@ -13,6 +13,12 @@ import {
   hardscapePlacements,
   makeOrder,
   markDaily,
+  isShrimpSpecies,
+  isStarving,
+  pinchMg,
+  markDailyFish,
+  waterTaskTank,
+  phenotype,
   moveDueToNursery,
   orderBoard,
   PLANT_SPECIES,
@@ -80,8 +86,17 @@ export function everythingTank(seed = 5): TankState {
   return s;
 }
 
+/** 「小魚多要多餵」餵哪一缸：有魚消瘦的、再來最餓的那缸（遊戲裡餵一缸會連別缸一起餵，#325）。 */
+function hungriest(tanks: TankState[]): TankState {
+  const score = (t: TankState) => {
+    const fish = t.fish.filter((f) => f.alive && !isShrimpSpecies(f.species));
+    return fish.filter(isStarving).length * 10 + Math.max(0, ...fish.map((f) => f.hunger));
+  };
+  return tanks.filter((t) => t.fish.some((f) => f.alive)).sort((a, b) => score(b) - score(a))[0] ?? tanks[0];
+}
+
 /** 在找得到的第一缸做完一題。 */
-export function doDailyTask(tanks: TankState[], id: DailyTaskId): void {
+export function doDailyTask(tanks: TankState[], id: DailyTaskId, subjectId = dailyTasks(tanks)?.tasks.find((t) => t.id === id)?.subjectId): void {
   const home = tanks[0];
   const find = (f: (t: TankState) => boolean) => tanks.find(f) ?? home;
   const withScape = find((t) => (t.equipment.hardscape ?? []).length > 0);
@@ -91,11 +106,14 @@ export function doDailyTask(tanks: TankState[], id: DailyTaskId): void {
     case 'test':
       useTestKit(home);
       break;
-    case 'feed':
-      feed(find((t) => t.fish.some((f) => f.alive)), 1);
+    case 'feed': {
+      // 跟遊戲裡按一次餵食一樣：一小撮
+      const t = hungriest(tanks);
+      feed(t, pinchMg(t));
       break;
+    }
     case 'water':
-      waterChange(home, 0.3);
+      waterChange(tanks[waterTaskTank(tanks)], 0.3);
       break;
     case 'topup':
       for (const t of tanks) topUp(t);
@@ -147,6 +165,18 @@ export function doDailyTask(tanks: TankState[], id: DailyTaskId): void {
     case 'rinse':
       rinseFilterMedia(find((t) => !!t.equipment.filter), 'tank');
       break;
+    case 'goalBelly':
+    case 'goalColor':
+    case 'goalKeeper':
+      // 點那尾魚（畫面回報）
+      if (subjectId !== undefined) markDailyFish(tanks, subjectId);
+      break;
+    case 'goalAlbino': {
+      // 在新的一窩裡點一尾紅眼睛的小魚
+      const young = tanks.flatMap((t) => t.fish).filter((f) => f.alive && (f.generation ?? 0) >= 1 && f.genome && phenotype(f.genome).albino);
+      for (const f of young) markDailyFish(tanks, f.id);
+      break;
+    }
     default:
       // 看魚、看蝦、找螺、點水草、翻圖鑑、看趨勢、看訂單、看設備：畫面回報
       markDaily(tanks, id);
@@ -156,6 +186,6 @@ export function doDailyTask(tanks: TankState[], id: DailyTaskId): void {
 /** 今天還沒做的小事全部做完（不開寶箱）。 */
 export function doAllDaily(tanks: TankState[]): void {
   updateDaily(tanks);
-  for (const t of dailyTasks(tanks)?.tasks ?? []) if (!t.done) doDailyTask(tanks, t.id);
+  for (const t of dailyTasks(tanks)?.tasks ?? []) if (!t.done) doDailyTask(tanks, t.id, t.subjectId);
   updateDaily(tanks);
 }

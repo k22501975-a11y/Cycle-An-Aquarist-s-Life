@@ -150,6 +150,9 @@ export function placeHardscape(state: TankState, index: number, change: Partial<
   if (!!after.flip !== !!before.flip) noteAct(state, 'scapeFlip');
   if ((after.scale ?? 1) !== (before.scale ?? 1)) noteAct(state, 'scapeScale');
   const moved = movedCm > 1 || after.layer !== before.layer;
+  // 寶箱開到、剛從手上放進缸的那塊（這個小時內）：還拿在手上慢慢放下去，不會攪起底沙嚇到魚（daily-loop.md §3）
+  const placed = state.dailyActs?.scapePlace;
+  if (moved && index === list.length - 1 && placed !== undefined && state.hours - placed < 1) return disturb(state, 0.05, 0);
   if (!moved) {
     // 翻面、換角度：拿起來轉一下，攪起一點點沙
     return after.flip !== before.flip || after.scale !== before.scale ? disturb(state, 0.05, 0.25) : NONE;
@@ -171,9 +174,9 @@ export function placePlant(state: TankState, plantId: number, change: Partial<Om
   state.lastScapeHours = state.hours;
   noteAct(state, 'scapePlant');
   if (after.layer !== before.layer) noteAct(state, 'scapeLayer');
-  // 拔起來重種：掉一些葉子
+  // 拔起來重種：掉一些葉子，攪起一點點沙；動作小，不會嚇到魚（daily-loop.md §3：做小事不能讓魚受驚）
   plant.biomassG *= 0.95;
-  return disturb(state, 0.06, 0.2);
+  return disturb(state, 0.06, 0);
 }
 
 /** 混濁慢慢沉澱：開著過濾器幾個小時就清了，沒過濾要大半天。 */

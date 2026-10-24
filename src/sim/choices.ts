@@ -259,6 +259,8 @@ export interface LineBrood {
   k: number;
   gen: number;
   albino?: boolean;
+  fins?: boolean;
+  color?: boolean;
   snake?: boolean;
   told?: boolean;
   sexing?: boolean;
@@ -370,6 +372,13 @@ function pairFish(tanks: TankState[], s: Readonly<ChoiceState>): { mom: Fish; da
   const all = located(tanks);
   const [m, d] = s.pair.map((id) => all.find(({ fish }) => fish.id === id));
   return m && d ? { mom: m.fish, dad: d.fish, tank: m.tank } : null;
+}
+
+/** 留種那對的公魚不在了、母魚還懷著牠的：只有母魚（dad 只帶 id）。 */
+function widowedMom(tanks: TankState[], s: Readonly<ChoiceState>): { mom: Fish; dad: { id: number } } | null {
+  if (!s.pair) return null;
+  const mom = located(tanks).find(({ fish }) => fish.id === s.pair![0])?.fish;
+  return mom && mom.pregnancy > 0 && mom.sire?.id === s.pair[1] ? { mom, dad: { id: s.pair[1] } } : null;
 }
 
 /** 下一個里程碑和還要幾天；都到了回 null。 */
@@ -1992,7 +2001,8 @@ function noteSickDelay(tanks: TankState[], s: ChoiceState): void {
  */
 export function takeBellyNotes(tanks: TankState[]): Array<{ fishId: number; text: string; setting?: ChoiceCard }> {
   const s = choiceState(tanks);
-  const p = pairFish(tanks, s);
+  // 留種的公魚懷孕期間死了，母魚肚子裡的還是這對的：里程碑照說
+  const p = pairFish(tanks, s) ?? widowedMom(tanks, s);
   const out: Array<{ fishId: number; text: string; setting?: ChoiceCard }> = [];
   // C9 自動照上次（midgame.md §6.5）：點這一行再跳一次 C9 的選項改設定（多「每次都問我」）
   for (const n of s.broodAutoNotes?.splice(0) ?? []) {
@@ -2009,6 +2019,15 @@ export function takeBellyNotes(tanks: TankState[]): Array<{ fishId: number; text
     out.push({ fishId: p.mom.id, text: `因為${s.sickCause === 'ich' ? '白點' : '生病'}，配對晚了約 ${s.sickDays} 天` });
   }
   const r = s.reveal;
+  // 開獎那窩懷孕前段：C13 說懷上了，過一半才有 C15 開獎準備，中間十來天說一次肚子圓起來了（懷孕期間節奏 ≤ 7 天，midgame.md §6.4）
+  if (!r && (s.picked.C13 !== undefined || s.shown.C13 !== undefined) && p.mom.pregnancy >= LINE_BELLY.at && p.mom.pregnancy < REVEAL_SHOWS) {
+    const key = `${p.mom.id}@pre:round`;
+    const seen = (s.milestoneSeen ??= []);
+    if (!seen.includes(key)) {
+      seen.push(key);
+      out.push({ fishId: p.mom.id, text: `${callName(p.mom)}的肚子圓起來了` });
+    }
+  }
   // 開獎那窩；之後 C17、C19 換了一對、等這對的下一代那段也一樣（strain-fixing.md §2.1「懷孕期間同 midgame §6.4」）
   const line = !!r?.done && s.nextGen !== undefined && p.mom.sire?.id === p.dad.id;
   if (!r || (!line && (r.done || r.momId !== p.mom.id))) return out;
@@ -2027,6 +2046,10 @@ export function takeBellyNotes(tanks: TankState[]): Array<{ fishId: number; text
 
 /** 小魚出生幾天後看得出紅眼睛（白子里程碑）。 */
 export const ALBINO_DAYS = 5;
+/** 小魚出生幾天後尾鰭散開（尾鰭里程碑：紅眼睛和蛇紋中間的空檔）。 */
+export const FINS_DAYS = 11;
+/** 小魚出生幾天後身上開始有顏色（尾鰭和蛇紋中間，出生後的里程碑隔 ≤ 6 天，strain-fixing.md §2.1）。 */
+export const COLOR_DAYS = 16;
 /** 小魚出生幾天後蛇紋看得出來（蛇紋里程碑）。 */
 export const SNAKE_DAYS = 20;
 /** 出生幾天後算得出穩定度（公母、蛇紋都看得出來，出穩定度卡）。 */
@@ -2087,6 +2110,7 @@ function noteLineBroods(tanks: TankState[], s: ChoiceState): void {
 
 /**
  * 早上報告的品系里程碑（strain-fixing.md §2.2）：一個早上最多一行。
+ * - 每窩出生 FINS_DAYS 天：「新的這窩小魚尾鰭開始散開了，看得出誰的尾巴比較大」
  * - 每窩出生 SNAKE_DAYS 天：「{魚名}身上的蛇紋出來了。」（那窩有看得出蛇紋的公魚才說）
  * - 開獎之後的每窩出生 STABILITY_DAYS 天：穩定度卡「這窩 n 尾裡，k 尾是白子紅蛇王，穩定度 X%」
  */
@@ -2104,6 +2128,15 @@ export function takeLineNotes(tanks: TankState[]): Array<{ fishId: number; text:
       const red = kids.filter(({ fish }) => phenotype(fish.genome!).albino);
       // 舊存檔早就過了一週的那幾窩不補說
       if (i > 0 && red.length > 0 && age < ALBINO_DAYS + 3) return [{ fishId: red[0].fish.id, text: `新的這窩小魚眼睛看得清楚了：${kids.length} 尾裡有 ${red.length} 尾是紅眼睛的白子。` }];
+    }
+    // 紅眼睛到蛇紋中間十來天：說一次尾鰭（呼應 C17 挑尾鰭好的那組，tutorial-lines.md），再說一次上色
+    if (!b.fins && age >= FINS_DAYS) {
+      b.fins = true;
+      if (kids.length > 0 && age < FINS_DAYS + 3) return [{ fishId: kids[0].fish.id, text: '新的這窩小魚尾鰭開始散開了，看得出誰的尾巴比較大' }];
+    }
+    if (!b.color && age >= COLOR_DAYS) {
+      b.color = true;
+      if (kids.length > 0 && age < COLOR_DAYS + 3) return [{ fishId: kids[0].fish.id, text: '新的這窩小魚身上開始有一點顏色了，再過幾天看得出蛇紋' }];
     }
     if (!b.snake && age >= SNAKE_DAYS) {
       b.snake = true;
@@ -2171,6 +2204,25 @@ function broodKids(tanks: TankState[], b: LineBrood): Array<{ fish: Fish; tank: 
 /** C18 那窩：開獎之後說過穩定度、第一次 ≥ LINE_NAME_PCT 的那窩。 */
 function nameBrood(s: Readonly<ChoiceState>): LineBrood | null {
   return (s.line?.broods ?? []).find((b, i) => i > 0 && b.told && stabilityPct(b) >= LINE_NAME_PCT) ?? null;
+}
+
+/**
+ * 種魚（midgame.md §7.9）：留種的、配對中的公母、輪流配的母魚、C5 留著的備用、品系候選。
+ * 這些魚開始消瘦時早上報告要寫出名字，劇本裡一尾都不能餓死。
+ */
+export function breederIds(tanks: TankState[]): Set<number> {
+  const s = economy(tanks[0]).choices;
+  const ids = new Set<number>([...(s?.pair ?? []), ...(s?.mates ?? []), ...(s?.backups ?? []), ...(s?.lineKeep ?? [])]);
+  for (const { fish } of located(tanks)) if (fish.keeper) ids.add(fish.id);
+  return ids;
+}
+
+/** 早上報告叫種魚的名字（midgame.md §7.9）：品系取了名就用品系名，不然用看得出的品系，例如「留種的全紅白子母魚」。 */
+export function breederName(tanks: TankState[], fish: Fish): string {
+  const s = economy(tanks[0]).choices;
+  const sex = fish.sex === 'male' ? '公魚' : '母魚';
+  if (s?.lineNamed && s.lineKeep?.includes(fish.id)) return `留種的${s.lineNamed.name}${sex}`;
+  return `留種的${fish.genome ? strainName(phenotype(fish.genome)) : FISH_SPECIES[fish.species].name}${sex}`;
 }
 
 /** 魚卡、選種卡上的品系名（取過名、這尾是品系某一窩生的白子紅蛇王）；不是回 null。 */

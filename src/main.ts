@@ -471,10 +471,10 @@ async function start(): Promise<void> {
   };
   const select = (id: number | null) => {
     selected = id;
-    if (id !== null) sim.markDaily(game.tanks, 'observe');
+    // 點魚看看、點蝦看看，點到目標題的那尾（最快轉色的、種魚、懷孕的母魚、紅眼睛的小魚）也算
+    if (id !== null) sim.markDailyFish(game.tanks, id);
     const picked = id === null ? undefined : game.state.fish.find((f) => f.id === id);
     if (picked) sim.noteBellySeen(picked);
-    if (id !== null && game.state.fish.some((f) => f.id === id && sim.isShrimpSpecies(f.species))) sim.markDaily(game.tanks, 'shrimp');
     view.selectFish(id);
     selCard.classList.toggle('open', id !== null);
     renderSelCard();
@@ -1519,10 +1519,28 @@ async function start(): Promise<void> {
   const goDaily = (id: sim.DailyTaskId) => {
     const maintenance = () => panelSheet('設備與維護', (p) => p.maintenancePanel(ctx));
     const snails = () => panelSheet('螺', (p) => p.snailPanel(ctx));
+    // 目標題：切到那尾魚在的缸、打開牠的卡片（點開就算看過了）
+    const fish = (fishId: number | undefined) => () => {
+      const at = fishId === undefined ? -1 : game.tanks.findIndex((t) => t.fish.some((f) => f.id === fishId && f.alive));
+      if (at < 0) return toasts.show('在缸裡點一尾魚，看看牠今天怎麼樣');
+      if (at !== game.active) game.switchTo(at);
+      select(fishId!);
+    };
+    const task = sim.dailyTasks(game.tanks)?.tasks.find((t) => t.id === id);
     const go: Record<sim.DailyTaskId, () => void> = {
+      goalBelly: fish(task?.subjectId),
+      goalColor: fish(task?.subjectId),
+      goalKeeper: fish(task?.subjectId),
+      goalAlbino: () => toasts.show('在新的一窩裡點一尾紅眼睛的小魚'),
+      goalOrders: () => panelSheet('客人的訂單', (p) => p.ordersPanel(ctx)),
       test: () => testBtn.click(),
       feed: startFeeding,
-      water: () => panelSheet('換水', (p) => p.waterChangePanel(ctx)),
+      // 該換水的缸裡最擠的那缸：先切過去
+      water: () => {
+        const at = sim.waterTaskTank(game.tanks);
+        if (at !== game.active) game.switchTo(at);
+        panelSheet('換水', (p) => p.waterChangePanel(ctx));
+      },
       topup: maintenance,
       nursery: () => panelSheet('育幼盒', (p) => p.nurseryPanel(ctx)),
       gear: maintenance,
@@ -1538,7 +1556,12 @@ async function start(): Promise<void> {
       scapeFlip: () => enterScapeOn('stone'),
       scapeLayer: () => enterScapeOn('stone'),
       scapeScale: () => enterScapeOn('stone'),
-      scapePlace: () => openShop('gear'),
+      // 擺上新石頭：直接拿起手上那塊，拖到想擺的位置放開（不用先去商店找）
+      scapePlace: () => {
+        const bag = sim.economy(game.state).hardscapeBag ?? [];
+        if (bag.length > 0 && game.act((st) => sim.placeFromBag(st, bag[0]))) ctx.placeNew?.({ kind: 'hardscape', index: (game.state.equipment.hardscape ?? []).length - 1 });
+        else openShop('gear');
+      },
       trim: () => panelSheet('修剪水草', (p) => p.trimListPanel(ctx)),
       cuttings: () => openShop('plants'),
       clutch: snails,
@@ -1556,7 +1579,11 @@ async function start(): Promise<void> {
     view.setTargetHint(todo('observe') ? 'fish' : todo('snail') ? 'snail' : null);
     if (!dailyChanged(JSON.stringify([d?.day, d?.tasks, d?.claimed, claimable]))) return;
     // 平常收成一顆小膠囊（「今天的小事 ○●○」），點一下才展開三件事；做了一件就收起來（YenWel：左邊太亂、看不到魚）
-    const card = dailyCard(d, claimable, { go: (id) => (dailyHolder.classList.remove('open'), goDaily(id)), claim: claimDailyChest });
+    const name = (fishId: number) => {
+      const f = game.tanks.flatMap((t) => t.fish).find((x) => x.id === fishId);
+      return f ? fishName(f) : null;
+    };
+    const card = dailyCard(d, claimable, { go: (id) => (dailyHolder.classList.remove('open'), goDaily(id)), claim: claimDailyChest, name });
     card?.querySelector('.daily-head')?.addEventListener('click', () => (dailyHolder.classList.toggle('open'), measure()));
     dailyHolder.replaceChildren(...(card ? [card] : []));
     requestAnimationFrame(() => measure());

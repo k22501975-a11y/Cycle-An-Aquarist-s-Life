@@ -1,4 +1,4 @@
-import { DAILY_TEXT, type DailyState, type DailyTaskId } from '../sim';
+import { DAILY_TEXT, dailyText, type DailyState, type DailyTask, type DailyTaskId } from '../sim';
 import { artUrl, type ArtIcon } from './art-icons';
 import { h } from './dom';
 
@@ -11,6 +11,11 @@ import { h } from './dom';
 /** 每件事的圖示（找螺用螺的插畫，造景、蝦、水草用各自的插畫）。 */
 const ART = `${import.meta.env.BASE_URL}art/`;
 const DAILY_ART: Record<DailyTaskId, string> = {
+  goalBelly: artUrl('owner'),
+  goalColor: artUrl('codex'),
+  goalKeeper: artUrl('owner'),
+  goalAlbino: artUrl('codex'),
+  goalOrders: artUrl('orders'),
   test: artUrl('testkit'),
   feed: artUrl('feed'),
   water: artUrl('waterchange'),
@@ -40,6 +45,11 @@ const DAILY_ART: Record<DailyTaskId, string> = {
 
 /** 小卡上的短字（完整說明放 title 和早上報告卡）。 */
 export const DAILY_SHORT: Record<DailyTaskId, string> = {
+  goalBelly: '看母魚的胎斑',
+  goalColor: '看最快轉色那尾',
+  goalKeeper: '看種魚長多大',
+  goalAlbino: '找紅眼睛小魚',
+  goalOrders: '看能交的訂單',
   test: '測一次水',
   feed: '餵一次飼料',
   water: '換一次水',
@@ -84,6 +94,8 @@ export interface DailyCardDeps {
   go: (id: DailyTaskId) => void;
   /** 三件都做完：開寶箱。 */
   claim: () => void;
+  /** 目標題的魚叫什麼（說明寫「點{魚名}看看，牠最快轉色」）。 */
+  name?: (fishId: number) => string | null;
 }
 
 /** 左上角的小卡；d 是 null（還沒開缸、沒有題目）就不顯示。 */
@@ -92,10 +104,10 @@ export function dailyCard(d: DailyState | null, claimable: boolean, deps: DailyC
   const done = d.tasks.filter((t) => t.done).length;
   const all = done === d.tasks.length;
   if (all && d.claimed) return null;
-  const row = (id: DailyTaskId, ok: boolean) =>
+  const row = ({ id, done: ok, subjectId }: DailyTask) =>
     h(
       `button.daily-task${ok ? '.done' : ''}`,
-      { type: 'button', title: DAILY_TEXT[id], disabled: ok, onclick: () => deps.go(id) },
+      { type: 'button', title: dailyText({ id, subjectId }, deps.name), disabled: ok, onclick: () => deps.go(id) },
       h('img', { src: DAILY_ART[id], alt: '', draggable: 'false' }),
       h('span', {}, DAILY_SHORT[id]),
       h('i.daily-check', { 'aria-hidden': 'true' }),
@@ -104,7 +116,7 @@ export function dailyCard(d: DailyState | null, claimable: boolean, deps: DailyC
     `div.daily.glass${all ? '.ready' : ''}`,
     {},
     h('div.daily-head', {}, h('b', {}, '今天的小事'), h('span.daily-dots', { 'aria-label': `${done}/${d.tasks.length}` }, ...d.tasks.map((t) => h(`i${t.done ? '.on' : ''}`)))),
-    ...d.tasks.map((t) => row(t.id, t.done)),
+    ...d.tasks.map(row),
     all && claimable ? h('button.btn.primary.daily-chest', { type: 'button', onclick: () => deps.claim() }, h('span.daily-chest-icon', { 'aria-hidden': 'true' }), '開寶箱') : null,
   );
 }

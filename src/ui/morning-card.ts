@@ -274,7 +274,7 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
   };
   // 最多 3 行加一行「有一件事要你決定 ›」（daily-loop.md §2）：點了才換成選擇卡；取名那天排第一行
   const slim = slimReport(report);
-  const urgent = slim.lines.filter((i) => i.kind === 'crisis' || i.kind === 'reveal');
+  const urgent = slim.lines.filter((i) => i.starving || i.kind === 'crisis' || i.kind === 'reveal');
   const lines = slim.decision
     ? slim.decisionFirst
       ? [...urgent.map(row), choiceRow(slim.decision), ...slim.lines.filter((i) => !urgent.includes(i)).map(row)]

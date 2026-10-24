@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { blankGameState, newGameState } from '../game/game';
 import { doDailyTask, everythingTank, richTank } from '../game/daily-player';
 import {
+  waterTaskTank,
   addHardscape,
   BIG_CHEST_DAYS,
   BIG_CHEST_PLANTS,
@@ -38,6 +39,15 @@ import {
   feed,
   HARDSCAPE,
   markDaily,
+  markDailyFish,
+  goalDaily,
+  addFish,
+  crowdingRatio,
+  CROWD_WARN,
+  SCAPE_IDLE_DAYS,
+  DAILY_GOAL_COUNT,
+  dailyText,
+  type TankState,
   rollChest,
   simulate,
   updateDaily,
@@ -78,11 +88,31 @@ describe('每日 3 件小事（F3）', () => {
     expect(eligibleDaily([rich])).not.toContain('water');
   });
 
-  it('出題前做的不算，出題後做完三件可以開寶箱，只能領一次', () => {
+  it('前一天做的不算，同一天出題前做的也算（daily-loop.md §3：早上已經換過水了）', () => {
     const s = richTank();
     const tanks = [s];
-    useTestKit(s);
     feed(s, 5);
+    s.hours += 24;
+    useTestKit(s);
+    updateDaily(tanks);
+    const d = dailyTasks(tanks)!;
+    d.tasks = [{ id: 'test', done: false }, { id: 'feed', done: false }];
+    expect(updateDaily(tanks)).toEqual(['test']);
+    // 換天以後、出題以前點過的魚、看過的訂單也算
+    s.hours += 24;
+    const fish = s.fish.find((f) => f.alive)!;
+    markDailyFish(tanks, fish.id);
+    markDaily(tanks, 'orders');
+    expect(dailyTasks(tanks)!.day).toBe(d.day);
+    updateDaily(tanks);
+    const next = dailyTasks(tanks)!;
+    expect(next.day).toBe(d.day + 1);
+    expect(next.marked).toEqual(expect.arrayContaining(['orders', 'observe']));
+  });
+
+  it('出題後做完三件可以開寶箱，只能領一次', () => {
+    const s = richTank();
+    const tanks = [s];
     updateDaily(tanks);
     expect(dailyTasks(tanks)!.tasks.every((t) => !t.done)).toBe(true);
     simulate(s, 1);
@@ -131,6 +161,9 @@ describe('每日 3 件小事（F3）', () => {
     simulate(b, 1);
     useTestKit(b);
     feed(b, 5);
+    // 都是前一天做的
+    a.hours += 24;
+    b.hours += 24;
     const tanks = [a, b];
     updateDaily(tanks);
     const d = dailyTasks(tanks)!;
@@ -155,18 +188,19 @@ describe('每日 3 件小事（F3）', () => {
   it('小事不要花錢（mvp.md §4.4.2，#188）：三件加起來的花費一定比寶箱最少的魚幣少，不會要買新石頭', () => {
     const costs = Object.values(DAILY_COST).sort((a, b) => b - a);
     expect(costs.slice(0, DAILY_COUNT).reduce((a, b) => a + b, 0)).toBeLessThan(CHEST_COINS_MIN);
-    // 錢花光了也照樣出「移動造景」
+    // 錢花光了也照樣出「幫水草換位置」
     const s = richTank();
     addHardscape(s, HARDSCAPE.lava);
     economy(s).coins = 0;
-    expect(eligibleDaily([s])).toContain('scape');
+    expect(eligibleDaily([s])).toContain('scapePlant');
   });
 
-  it('移動現有的石頭或沉木就算完成，出題前移的不算', () => {
+  it('舊存檔的「移動一塊造景」：移動現有的石頭或沉木就算完成，前一天移的不算', () => {
     const s = newGameState(4);
     addHardscape(s, HARDSCAPE.lava);
     s.hours = 24 * 3 + 8;
     placeHardscape(s, 0, { x: 0.2 });
+    s.hours += 24;
     economy(s).daily = undefined;
     updateDaily([s]);
     const d = dailyTasks([s])!;
@@ -191,16 +225,32 @@ describe('每日小事題庫（polish-to-9.md U6）', () => {
     }
   });
 
-  it('每一題出題後照做就算完成，沒做不算', () => {
-    for (const id of DAILY_IDS) {
+  it('每一題出題後照做就算完成，沒做不算（不再出的造景題除外）', () => {
+    for (const id of DAILY_IDS.filter((x) => !['scape', 'scapeFlip', 'scapeLayer', 'scapeScale'].includes(x))) {
       const s = everythingTank();
+      // 目標題：自家養的白子小魚（最快轉色）、還沒長大的種魚、擠到要看訂單板
+      const kid = (keeper: boolean) => {
+        const f = addFish(s, 'guppy', { carriesIch: false, carries: [], pregnant: false });
+        f.generation = 1;
+        f.bornHours = s.hours - 8 * 24;
+        f.lengthCm = 1.2;
+        f.genome = { ...f.genome!, albino: [1, 1] };
+        f.keeper = keeper;
+        return f;
+      };
+      kid(false);
+      kid(true);
+      if (id === 'goalOrders') while (crowdingRatio(s) < CROWD_WARN) addFish(s, 'guppy', { carriesIch: false, carries: [], pregnant: false });
       const tanks = [s];
       expect(eligibleDaily(tanks), id).toContain(id);
       updateDaily(tanks);
-      dailyTasks(tanks)!.tasks = [{ id, done: false }];
+      const subjectId = goalDaily(tanks).find((g) => g.id === id)?.subjectId;
+      const d = dailyTasks(tanks)!;
+      d.tasks = [{ id, done: false, subjectId }];
+      d.marked = [];
       expect(updateDaily(tanks), id).toEqual([]);
       s.hours += 1;
-      doDailyTask(tanks, id);
+      doDailyTask(tanks, id, subjectId);
       expect(updateDaily(tanks), id).toEqual([id]);
     }
   });
@@ -212,12 +262,88 @@ describe('每日小事題庫（polish-to-9.md U6）', () => {
     expect(scape(eligibleDaily([s]))).toEqual([]);
     economy(s).hardscapeBag = ['lava'];
     expect(scape(eligibleDaily([s])).sort()).toEqual(['scapePlace', 'scapePlant']);
-    // 擺進缸裡（免費）：手上沒了，換成移動、翻面、換層、縮放
+    // 擺進缸裡（免費）：手上沒了，只剩幫水草換位置（搬石頭、翻面、換層、縮放會攪沙嚇到魚，不再出）
     const coins = economy(s).coins;
     doDailyTask([s], 'scapePlace');
     expect(economy(s).coins).toBe(coins);
     expect(s.equipment.hardscape?.map((x) => x.id)).toEqual(['lava']);
-    expect(scape(eligibleDaily([s])).sort()).toEqual(['scape', 'scapeFlip', 'scapeLayer', 'scapePlant', 'scapeScale']);
+    expect(scape(eligibleDaily([s]))).toEqual(['scapePlant']);
+    // 動過造景：7 天內不出造景題
+    doDailyTask([s], 'scapePlant');
+    expect(scape(eligibleDaily([s]))).toEqual([]);
+    s.hours += SCAPE_IDLE_DAYS * 24;
+    expect(scape(eligibleDaily([s]))).toEqual(['scapePlant']);
+  });
+});
+
+describe('每日小事跟著目標走（daily-loop.md §3）', () => {
+  /** 店裡買來就懷孕的母魚、自家養的小魚（等轉色）、還沒長大的種魚。 */
+  function goalTank(): TankState {
+    const s = richTank();
+    const mom = addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'female', pregnant: false });
+    mom.pregnancy = 0.5;
+    for (let i = 0; i < 3; i++) {
+      const f = addFish(s, 'guppy', { carriesIch: false, carries: [], pregnant: false });
+      f.generation = 1;
+      f.bornHours = s.hours - (10 + i) * 24;
+      f.lengthCm = 1.1 + i * 0.1;
+      f.keeper = i === 0;
+    }
+    return s;
+  }
+
+  it('3 題裡至少 2 題跟目標有關；目標題寫得出是哪尾魚，點那尾就算做了', () => {
+    const s = goalTank();
+    const tanks = [s];
+    updateDaily(tanks);
+    const d = dailyTasks(tanks)!;
+    const goal = d.tasks.filter((t) => goalDaily(tanks).some((g) => g.id === t.id));
+    expect(goal.length).toBeGreaterThanOrEqual(DAILY_GOAL_COUNT);
+    expect(d.tasks.slice(0, 2).map((t) => t.id)).toEqual(['goalBelly', 'goalColor']);
+    const belly = d.tasks[0];
+    const mom = s.fish.find((f) => f.pregnancy > 0)!;
+    expect(belly.subjectId).toBe(mom.id);
+    expect(dailyText(belly, () => '小紅')).toBe('看看小紅的胎斑');
+    expect(dailyText(d.tasks[1], () => '小德')).toBe('點小德看看，牠最快轉色');
+    expect(dailyText(belly)).toBe('看看懷孕母魚的胎斑');
+    // 點別尾不算，點她才算
+    s.hours += 1;
+    markDailyFish(tanks, d.tasks[1].subjectId!);
+    expect(updateDaily(tanks)).toEqual(['goalColor']);
+    markDailyFish(tanks, mom.id);
+    expect(updateDaily(tanks)).toEqual(['goalBelly']);
+  });
+
+  it('連著 30 天：每天至少 2 題跟目標有關，造景、整理一天最多 1 題，造景題一週最多 2 題', () => {
+    const s = goalTank();
+    addHardscape(s, HARDSCAPE.lava);
+    economy(s).hardscapeBag = ['driftwood', 'slate', 'lava'];
+    const tanks = [s];
+    const scapeDays: number[] = [];
+    for (let day = 0; day < 30; day++) {
+      s.hours += 24;
+      // 母魚一直懷著、小魚一直在長（只看出題）
+      updateDaily(tanks);
+      const d = dailyTasks(tanks)!;
+      const goal = new Set(goalDaily(tanks).map((g) => g.id));
+      expect(d.tasks.filter((t) => goal.has(t.id)).length, `第 ${day} 天`).toBeGreaterThanOrEqual(2);
+      const chores = d.tasks.filter((t) => DAILY_CATEGORY[t.id] === 'scape' || DAILY_CATEGORY[t.id] === 'tidy');
+      expect(chores.length, `第 ${day} 天`).toBeLessThanOrEqual(1);
+      for (const t of d.tasks) expect(['scape', 'scapeFlip', 'scapeLayer', 'scapeScale']).not.toContain(t.id);
+      if (d.tasks.some((t) => DAILY_CATEGORY[t.id] === 'scape')) scapeDays.push(day);
+      for (const t of d.tasks) doDailyTask(tanks, t.id, t.subjectId);
+    }
+    for (const day of scapeDays) expect(scapeDays.filter((x) => x > day - 7 && x <= day).length).toBeLessThanOrEqual(2);
+  });
+
+  it('幫水草換位置、擺上寶箱開到的石頭：不會嚇到魚', () => {
+    const s = goalTank();
+    economy(s).hardscapeBag = ['lava'];
+    for (const f of s.fish) f.stress = 0;
+    doDailyTask([s], 'scapePlant');
+    doDailyTask([s], 'scapePlace');
+    placeHardscape(s, (s.equipment.hardscape ?? []).length - 1, { x: 0.3 });
+    expect(Math.max(...s.fish.map((f) => f.stress))).toBe(0);
   });
 });
 
@@ -403,5 +529,19 @@ describe('寶箱獎勵池（polish-to-9.md U5）', () => {
     expect(Math.round(coins60)).toBe(325);
     expect(coins60).toBeLessThanOrEqual(CHEST_COINS_CAP);
     for (let i = 0; i < 50; i++) expect(rollChest(i, 99, true).coins).toBe(0);
+  });
+});
+
+describe('換水那題換最擠的那缸（daily-loop.md §3）', () => {
+  it('兩缸都該換水：換比較擠的那缸；剛換過的不算', () => {
+    const a = newGameState(3);
+    const b = newGameState(4);
+    b.hours = a.hours = 24 * 20;
+    for (let i = 0; i < 30; i++) addFish(b, 'guppy', { carriesIch: false, carries: [] });
+    const tanks = [a, b];
+    expect(crowdingRatio(b)).toBeGreaterThan(crowdingRatio(a));
+    expect(waterTaskTank(tanks)).toBe(1);
+    b.lastWaterChangeHours = b.hours;
+    expect(waterTaskTank(tanks)).toBe(0);
   });
 });
