@@ -1,7 +1,8 @@
 import type { SoundId } from '../audio/sounds';
 import type { KeyValueStore } from '../game/save';
-import { checkGoals, nextGoals, nextStep, UNLOCK_LABELS, type Goal, type NextStep, type NextTarget, type TankState } from '../sim';
+import { checkGoals, nextGoals, nextStep, tankLabel, UNLOCK_LABELS, type Goal, type NextStep, type NextTarget, type TankState } from '../sim';
 import { h } from './dom';
+import { crisisTodos } from './status';
 import { artImg, ownerImg } from './art-icons';
 import { ownerMood, type OwnerMood } from './owner-mood';
 import { kickOwnerQueue, onOwnerAskClosed, onOwnerAskOpened, ownerAskOpen } from './owner-ask';
@@ -60,7 +61,7 @@ export class Guide {
   /** 任務卡上閃「做好了」時的獎勵特效（main 接上：金幣從任務卡飛出）。 */
   cheer: ((from: DOMRect, coins: number) => void) | null = null;
   /** 點任務卡上的「下一步」（U1，教學做完後）：帶到要做的地方（main 接上）。 */
-  goNext: ((target: NextTarget) => void) | null = null;
+  goNext: ((target: NextTarget, tank?: number) => void) | null = null;
   /** 任務卡下面一鍵買的圖卡（#235，main 接上：quest-tray.ts）。 */
   quickTray: ((kind: QuickKind) => HTMLElement) | null = null;
   /** 任務卡下面那排圖卡（教學要買魚、水草、石頭時才有）。 */
@@ -87,7 +88,7 @@ export class Guide {
     this.progress = loadProgress(store);
     // 教學做完後點任務卡直接帶去做「下一步」（U1）；教學中點了再聽一次完整說明
     this.pill.addEventListener('click', () =>
-      this.tucked ? this.untuck() : this.tutorialOver && this.step && this.goNext ? this.goNext(this.step.target) : this.showQuest(),
+      this.tucked ? this.untuck() : this.tutorialOver && this.step && this.goNext ? this.goNext(this.step.target, this.step.tank) : this.showQuest(),
     );
     // 對話框掛在 body：面板（商店等）開著時也在最上層，按鈕按得到
     host.append(this.pill, this.tray, this.tip);
@@ -407,7 +408,11 @@ export class Guide {
       // 等養水這種數不出來的目標：標題下面一行進度（硝化菌幾成、上次測水的讀數）
       const detail = goal.detail?.(this.tanks) ?? '';
       // 下一步（U1）：照現在缸裡的狀況說具體要做什麼，點任務卡就帶過去
-      this.step = nextStep(this.tanks);
+      // 危機不等人（#375）：加熱棒卡住、水溫超出、沒撈的死魚，先叫玩家處理
+      const crisis = crisisTodos(this.tanks)[0];
+      this.step = crisis
+        ? { goal: goal.id, text: `${this.tanks.length > 1 && !/^停電中/.test(crisis.text) ? `${tankLabel(this.tanks, crisis.tank)}：` : ''}${crisis.text}`, target: crisis.go === 'remove_dead' ? 'remove_dead' : 'equipment', tank: crisis.tank }
+        : nextStep(this.tanks);
       const key = goal.id + title + detail + (this.step?.text ?? '');
       if (this.shownGoal === key) return;
       this.shownGoal = key;
@@ -473,6 +478,8 @@ const NEXT_GLOW: Record<NextTarget, QuestTarget | null> = {
   shop_gear: 'shop',
   shop_plants: 'shop',
   shop_tank: null,
+  equipment: null,
+  remove_dead: null,
   nursery: null,
   select: null,
   treat: null,

@@ -56,7 +56,7 @@ import { flyCoins, rewardBurst } from './ui/coin-fly';
 import type { ReportItem } from './ui/morning-report';
 import { loadCodexSeen, saveCodexSeen } from './ui/codex-seen';
 import { Sheet, Toasts, actionLive } from './ui/sheet';
-import { clockLabel, householdTodos, waterCapsules, waterSummary, type Todo } from './ui/status';
+import { capsSummary, clockLabel, householdTodos, waterCapsules, type Todo } from './ui/status';
 import { cornerRect, pickCorner, type Corner, type Rect } from './ui/dodge';
 import './ui/styles.css';
 
@@ -892,10 +892,10 @@ async function start(): Promise<void> {
   const capsChanged = memo();
   const renderCaps = () => {
     const list = waterCapsules(game.state);
-    if (!capsChanged(JSON.stringify(list))) return;
-    const sum = waterSummary(list);
+    const sum = capsSummary(game.tanks, game.active);
+    if (!capsChanged(JSON.stringify([list, sum]))) return;
     caps.replaceChildren(
-      h(`span.cap.cap-sum.${sum.tone}`, {}, h('i.dot'), h('span.lbl', {}, '水質'), h('b', {}, sum.value)),
+      h(`span.cap.cap-sum.${sum.tone}`, sum.title ? { title: sum.title } : {}, h('i.dot'), h('span.lbl', {}, sum.label), h('b', {}, sum.value)),
       h(
         'span.cap-list',
         {},
@@ -1339,11 +1339,17 @@ async function start(): Promise<void> {
     );
   guide.note = (text) => toasts.log(text);
   // 下一步（U1）：點任務卡帶到要做的地方
-  guide.goNext = (target) => {
+  guide.goNext = (target, tank) => {
     const sick = () => game.state.fish.find((f) => f.alive && (f.ich.stage === 'visible' || sim.hasVisible(f)));
     // 選育：先看缸裡最漂亮的公魚（觀察卡上有配對、留種的按鈕）
     const showy = () => game.state.fish.filter((f) => f.alive && f.sex === 'male' && f.generation !== undefined).sort((a, b) => (b.generation ?? 0) - (a.generation ?? 0))[0];
     switch (target) {
+      case 'equipment':
+        if (tank !== undefined) game.switchTo(tank);
+        return panelSheet('設備與維護', (p) => p.maintenancePanel(ctx));
+      case 'remove_dead':
+        if (tank !== undefined) game.switchTo(tank);
+        return netBtn.click();
       case 'feed':
         return startFeeding();
       case 'test':

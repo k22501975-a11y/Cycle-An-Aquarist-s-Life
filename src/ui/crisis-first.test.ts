@@ -1,0 +1,82 @@
+import { describe, expect, it } from 'vitest';
+import { addFish, addPlant, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, TANKS, unplugHeater, type TankState } from '../sim';
+import { crisisTodos, capsSummary } from './status';
+import { morningReport, REPORT_LINES, slimReport, snapshot } from './morning-report';
+
+/** 養好水、一株草、10 尾孔雀魚的缸，加熱棒設 25°C。 */
+function tank(seed = 31): TankState {
+  const s = createTank({ tank: TANKS.std40, filter: FILTERS.hangOn, heater: { spec: HEATERS.h50, targetC: 25 }, light: { spec: LIGHTS.basic }, roomTempC: 24, seed, matureMedia: true });
+  s.hours = 20;
+  addPlant(s, 'rotala');
+  for (let i = 0; i < 10; i++) addFish(s, 'guppy', { carriesIch: false, carries: [], sex: i % 2 ? 'male' : 'female', pregnant: false });
+  return s;
+}
+
+/** 白天加熱棒卡住（事件不在昨晚），過了 n 晚。 */
+function stuckSince(s: TankState, nights: number) {
+  s.equipment.heater!.broken = true;
+  s.equipment.heater!.stuckOn = true;
+  for (let i = 0; i < nights; i++) {
+    feed(s, pinchMg(s));
+    simulate(s, 24);
+  }
+}
+
+describe('危機排第一行（#375）', () => {
+  it('白天卡住的加熱棒：之後每天早上都是第一行，3 行塞滿了也在，點了去設備', () => {
+    const s = tank();
+    stuckSince(s, 1);
+    const before = snapshot([s]);
+    simulate(s, 12);
+    const r = morningReport(before, [s], 12, null);
+    const slim = slimReport({ ...r, items: [...Array.from({ length: REPORT_LINES + 1 }, () => ({ kind: 'algae' as const, tank: 0, tone: 'warn' as const, text: '玻璃上的藻變多了' })), ...r.items] });
+    expect(slim.lines[0]).toMatchObject({ kind: 'equipment', tone: 'bad', action: 'equipment', standing: true });
+    expect(slim.lines[0].text).toContain('加熱棒卡住');
+    expect(slim.rest.some((i) => i.text.includes('加熱棒'))).toBe(false);
+  });
+
+  it('同一晚熱死好幾尾：合成一行寫幾尾、死因，排第一行', () => {
+    const s = tank();
+    s.water.tempC = 36;
+    s.equipment.heater!.broken = true;
+    s.equipment.heater!.stuckOn = true;
+    const before = snapshot([s]);
+    simulate(s, 24);
+    const r = morningReport(before, [s], 24, null);
+    const deaths = r.items.filter((i) => i.kind === 'death' && !i.standing);
+    const dead = s.fish.filter((f) => !f.alive).length;
+    expect(dead).toBeGreaterThan(1);
+    expect(deaths).toHaveLength(1);
+    expect(deaths[0].text).toMatch(new RegExp(`^${dead} 尾孔雀魚死了。死因：水溫`));
+    expect(slimReport(r).lines[0].tone).toBe('bad');
+  });
+
+  it('危機在別缸：右上角不寫「正常」，標籤換成那缸', () => {
+    const a = tank(31);
+    const b = tank(32);
+    b.label = '繁殖缸';
+    const tanks = [a, b];
+    linkTanks(tanks);
+    a.lastTest = { hours: a.hours, reading: { ammonia: 0, nitrite: 0, nitrate: 5, ph: 7.4, kh: 6 } } as never;
+    expect(capsSummary(tanks, 0).value).toBe('正常');
+    b.equipment.heater!.broken = true;
+    b.equipment.heater!.stuckOn = true;
+    expect(crisisTodos(tanks)).toMatchObject([{ tank: 1, go: 'equipment' }]);
+    expect(capsSummary(tanks, 0)).toMatchObject({ tone: 'bad', value: '危險', label: '繁殖缸' });
+  });
+
+  it('驗收：加熱棒卡住，照第一行當天拔插頭，之後兩週死魚 ≤ 2 尾', () => {
+    const s = tank();
+    stuckSince(s, 1);
+    const before = snapshot([s]);
+    simulate(s, 12);
+    const first = slimReport(morningReport(before, [s], 12, null)).lines[0];
+    expect(first.action).toBe('equipment');
+    unplugHeater(s);
+    for (let d = 0; d < 14; d++) {
+      feed(s, pinchMg(s));
+      simulate(s, 24);
+    }
+    expect(s.fish.filter((f) => !f.alive).length).toBeLessThanOrEqual(2);
+  });
+});
