@@ -53,7 +53,8 @@ const meal = (s: TankState) => alive(s).reduce((a, f) => a + FISH_SPECIES[f.spec
 
 /** 照推薦選；選種挑排最前面的 1 公 2 母。只做選擇本身（C3 買缸由劇本自己決定）。 */
 export function chooseRecommended(tanks: TankState[], card: ChoiceCard): { key: string; why: string | null } {
-  const opt = card.options.find((o) => o.recommended) ?? card.options[0];
+  // C14 沒有推薦的時候（只剩先多換水撐著，它不標推薦）就先換水
+  const opt = card.options.find((o) => o.recommended) ?? card.options.find((o) => o.key === 'water') ?? card.options[0];
   const picks: number[] = [];
   if (card.fish) {
     const male = card.fish.find((f) => f.sex === 'male');

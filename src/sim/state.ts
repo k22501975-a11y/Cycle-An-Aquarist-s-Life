@@ -67,6 +67,8 @@ export interface TankState {
   gearNotes?: string[];
   /** 早上報告上次說老住戶「放鬆了」的時間（遊戲小時）：隔 3 天才再說一次（#237）。舊存檔沒有。 */
   relaxedNoteHours?: number;
+  /** 早上報告連續幾天說過這缸該多餵（daily-loop.md §4：連 3 天就提示裝自動餵食器）：最後一天是第幾天、連了幾天。 */
+  feedWarn?: { day: number; days: number };
   /** 最近一次餵食、剪下插枝的時間（遊戲小時；每日小事用）。舊存檔沒有。 */
   lastFedHours?: number;
   lastTrimHours?: number;

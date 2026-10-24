@@ -1,3 +1,4 @@
+import { price, spend } from './economy';
 import { addFood } from './food';
 import { PINCH_MEALS } from './readings';
 import { FISH_SPECIES } from './species';
@@ -20,6 +21,17 @@ export function addHolidayTablet(state: TankState): void {
 /** 裝上自動餵食器（已經有就改次數）。 */
 export function installFeeder(state: TankState, timesPerDay: 1 | 2 = 1): void {
   state.equipment.feeder = { timesPerDay };
+}
+
+/** 早上報告的提示直接買（daily-loop.md §4）：這缸裝上一天餵兩次的自動餵食器，錢從主缸的錢包出。回傳不能買的原因，買好了回傳 null。 */
+export function buyFeeder(tanks: TankState[], index: number): string | null {
+  const t = tanks[index];
+  if (!t) return '找不到這缸';
+  if (t.equipment.feeder) return '這缸已經有自動餵食器了';
+  const cost = price('feeder:auto');
+  if (!spend(tanks[0], cost)) return `錢不夠：要 ${cost} 元`;
+  installFeeder(t, 2);
+  return null;
 }
 
 /** 缸裡有沒有持續餵食的東西（餵食器，或還沒溶完的飼料錠）。 */

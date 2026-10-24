@@ -206,16 +206,20 @@ describe('快轉遇到危機自動切回正常速度（#142）', () => {
     const game = new Game(s, DEFAULT_TIME_SCALE);
     const crises: string[] = [];
     game.onCrisis((c) => crises.push(c.reason));
-    let report: string[] = [];
+    const reports: string[][] = [];
     for (let night = 0; night < 4; night++) {
       game.act((st) => feed(st, pinchMg(st)));
       const before = snapshot(game.tanks);
       const r = game.sleep();
-      report = morningReport(before, game.tanks, r.hours, r.crisis).items.map((i) => i.text);
+      reports.push(morningReport(before, game.tanks, r.hours, r.crisis).items.map((i) => i.text));
       game.sleep(12);
     }
     expect(crises).not.toContain('starving');
-    expect(report).toContain('小魚長得快、餓得也快，一天餵兩次比較好');
+    expect(reports.flat()).toContain('小魚長得快、餓得也快，一天餵兩次比較好');
+    // 連 3 天都要多餵、錢又夠：那一行改成提示裝自動餵食器（daily-loop.md §4）
+    expect(reports[2]).toContain('小魚長得快、餓得也快，一天餵兩次比較好');
+    expect(reports[3]).toContain('這缸小魚多，可以裝自動餵食器，一天自動餵兩次（600 元）');
+    expect(reports[3]).not.toContain('小魚長得快、餓得也快，一天餵兩次比較好');
     // 一整天都不餵：小魚撐不住，要在餓死前叫醒
     for (let i = 0; i < 2; i++) game.sleep();
     expect(crises).toContain('starving');

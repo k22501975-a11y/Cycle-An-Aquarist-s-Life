@@ -725,6 +725,7 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .morning-item:not([disabled]):active { transform: scale(0.98); }
 .morning-item.bad { border-left-color: var(--bad); background: rgba(255, 107, 94, 0.1); }
 .morning-item.warn { border-left-color: var(--gold); }
+.morning-item.good.decision-item { border-left-color: var(--gold); font-weight: 600; }
 .morning-item.good { border-left-color: var(--sage); }
 .morning-item.info { border-left-color: #7fc4ff; }
 .morning-pic { position: relative; flex: 0 0 auto; width: 52px; height: 52px; display: grid; place-items: center; border-radius: 12px; background: radial-gradient(closest-side, rgba(120, 220, 230, 0.22), rgba(120, 220, 230, 0)); }
