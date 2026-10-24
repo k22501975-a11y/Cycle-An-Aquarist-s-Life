@@ -694,6 +694,23 @@ export function markDailyFish(tanks: TankState[], fishId: number): void {
   if (albinoFry(at, fish)) mark('goalAlbino');
 }
 
+/**
+ * 比一比的題目只點了其中一尾：回傳還沒點的那尾，畫面提示「再點另一尾」（g25：只點一尾沒有提示，17 次有 12 次沒算到）。
+ * 這尾不在比一比的題目裡、兩尾都點過、題目已經做完回 null。
+ */
+export function comparePartner(tanks: TankState[], fishId: number): Fish | null {
+  const d = dailyTasks(tanks);
+  const seen = d?.seen ?? [];
+  for (const t of d?.tasks ?? []) {
+    if (t.done || d?.marked.includes(t.id) || t.otherId === undefined || t.subjectId === undefined) continue;
+    const other = t.subjectId === fishId ? t.otherId : t.otherId === fishId ? t.subjectId : undefined;
+    if (other === undefined || seen.includes(other)) continue;
+    const fish = tanks.flatMap((x) => x.fish).find((f) => f.id === other && f.alive);
+    if (fish) return fish;
+  }
+  return null;
+}
+
 /** 今天的題目（還沒出題回傳 null）。 */
 export function dailyTasks(tanks: TankState[]): DailyState | null {
   return (tanks[0] && tanks[0].economy?.daily) ?? null;

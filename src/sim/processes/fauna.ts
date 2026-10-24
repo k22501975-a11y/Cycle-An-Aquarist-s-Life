@@ -260,6 +260,8 @@ export const ICH_CAUSE_LABELS: Record<IchCause, string> = {
   // 開局的魚也是店裡買的，教學沒教檢疫：寫成常見的事，不寫成玩家的錯（#324）
   new_fish: '店裡買的魚常帶白點蟲進來，下次新魚可以先放檢疫缸',
   crowding: '魚太多，超過這缸的建議量',
+  // 同一波的蟲沒殺乾淨：不再說「店裡買的魚」，玩家沒再買魚卻會以為要檢疫（#384）
+  relapse: '上次的白點沒斷根，白點掉光前藥效就退了，這次藥要撐到白點掉光後一天',
 };
 
 /** 24 小時內水溫差多少算誘因。 */
@@ -295,7 +297,9 @@ function ichCauseNow(state: TankState, living: Fish[], trigger: IchCause | null)
   if (water.ichCause && water.ichPathogen + water.ichCysts < 0.01) delete water.ichCause;
   // 舊存檔的帶原魚沒記原因，當成新魚帶進來的
   const wave = living.find((f) => f.ich.stage !== 'none');
-  return wave ? (wave.ich.cause ?? 'new_fish') : (water.ichCause ?? trigger);
+  if (wave) return wave.ich.cause ?? 'new_fish';
+  // 上一波的白點都掉光了、底砂和水裡的蟲還沒死光又上身：是沒斷根（#384）；現在有溫差、太擠就算那個
+  return water.ichCause ? (trigger ?? 'relapse') : trigger;
 }
 
 export function immunity(fish: Fish, sp: FishSpecies): number {
@@ -565,7 +569,8 @@ function updateIch(state: TankState, fish: Fish, sp: FishSpecies, cause: IchCaus
     case 'none': {
       // 沒有誘因時水裡的蟲上不了身
       if (!cause) break;
-      const risk = 0.03 * water.ichPathogen * Math.pow(1 - immunity(fish, sp), 2);
+      // 水裡有藥時游走的蟲還沒找到魚就先被殺掉，跟下面殺蟲的速度同一個倍數（#384：不然白點掉光、包囊還在破，藥效中照樣再上身）
+      const risk = (0.03 * water.ichPathogen * Math.pow(1 - immunity(fish, sp), 2)) / (1 + 30 * water.medication);
       if (chance(state.rng, risk, dt)) fish.ich = { stage: 'incubating', progress: 0, cause };
       break;
     }

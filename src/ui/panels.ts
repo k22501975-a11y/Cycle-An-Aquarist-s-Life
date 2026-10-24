@@ -2,7 +2,7 @@ import type { SoundId } from '../audio/sounds';
 import { FEATURES } from '../features';
 import { substrateName, tankSubstrateLook } from '../render/substrate';
 import { kitColor, type KitParam } from '../render/ops-fx';
-import { DREAM_MALE, isShrimpSpecies, isFrySale, storeOffer, takeStoreFemales, addBottledBacteria, addFish, CARE_EAT_THRESHOLD, careTarget, guardianOf, hasSpawnSite, isBroodParent, PARENTAL, addSnail, APPLE_COLOR_LABELS, catchPests, collectTrap, doseMolluscicide, buyPlant as plantFromShop, isLightOn, PESTS, pestCount, removeClutches, removeDeadSnails, scrapeNeriteEggs, setTrap, snailBloom, SNAILS, type AppleColor, type PestKind, type SnailKind, addFishToQuarantine, addCuttings, addHardscape, addPlant, transferMedia, mediaAvailable, buybackRefusal, setKeeper, cureRefusal, mallBag, useCure, GUPPY_STRAIN_PRICES, GUPPY_FIN_STRAINS, GUPPY_STRAINS, finWords, matingSuccess, predictOffspring, canClaimStarterPack, claimStarterPack, buyTank, addHolidayTablet, buyTankRefusal, HOLIDAY_TABLET_DAYS, installFeeder, feederInstalledText, LOCKED_SPECIES, speciesUnlocked, tankLock, unlockHint, moveFish, newTankCost, purposeCost, setTankPurpose, suggestPurpose, TANK_PURPOSES, type TankPurpose, removeTank, removeTankRefusal, slotPrice, TANK_SETS, tankLabel, type TankSizeId, chargeMeal, economy, FISH_PRICES, BETTA_FEMALE_PRICE, fishBuybackPrice, PLANT_PRICES, plantBuybackPrice, price, sellCuttings, sellableCuttings, chestCuttingsOf, sellFish, sellsLeftToday, spend, takeCutting, buyQuarantine, HARDSCAPE, removeHardscape, placeFromBag, replaceSubstrate, SUBSTRATES, doseAntibiotic, doseDewormer, doseQuarantine, hasVisible, isJuvenile, crowdingRatio, COMFORT_BAND, dripMinutes, dripGrade, dripTutorialLeft, recordDrip, farmHabit, habitGap, habitOf, phBeyondSurvival, SPLIT_PLAN_LABELS, splitAdvice, splitGroup, splitTank, rescueFryToBox, BOX_CAPACITY, buyNurseryBox, dueMothers, moveDueToNursery, moveToNursery, NURSERY_FRY_CAPACITY, NURSERY_RELEASE_CM, nurseryFish, nurseryRefusal, releaseNursery, rescueFryToNursery, type SplitPlan, daysUntilSexVisible, growthFactors, growthStage, maxLengthCm, sexVisible, stageLabel, phenotype, strainName, QUARANTINE_DAYS, quarantineDays, readyForTank, releaseQuarantine, swallowCm, tooSmallForTank, PINCH_MEALS, orderBoard, matchingFish, orderSupply, moveToQuarantine, AIR_PUMPS, CHILLERS, CO2_KITS, doseIchMedication, DEFAULT_FOOD, feed, FANS, FOOD_GRADES, FOOD_KINDS, mealMg, mealPrice, tapFeed, type TapFeedResult, FILTERS, FISH_SPECIES, freeAmmonia, HEATERS, hidingFactor, LIGHTS, monthOf, observeSymptoms, PLANT_SPECIES, REGION_LABELS, removeDeadFish, replaceFilter, rinseFilterMedia, seasonName, setHeaterTarget, installHeater, ichHeatC, ICH_MED_WORKING, topUp, unplugHeater, trimPlant, waterChange, suggestedWaterChange, type DripOutcome, type Fish, type FishSpeciesId, type FoodGrade, type FoodKind, type Symptom, type PlantSpeciesId, type Region, type TankState, type TestKitReading, markDaily, needsSetup, type MallItemId } from '../sim';
+import { DREAM_MALE, isShrimpSpecies, isFrySale, storeOffer, takeStoreFemales, addBottledBacteria, addFish, CARE_EAT_THRESHOLD, careTarget, guardianOf, hasSpawnSite, isBroodParent, PARENTAL, addSnail, APPLE_COLOR_LABELS, catchPests, collectTrap, doseMolluscicide, buyPlant as plantFromShop, isLightOn, PESTS, pestCount, removeClutches, removeDeadSnails, scrapeNeriteEggs, setTrap, snailBloom, SNAILS, type AppleColor, type PestKind, type SnailKind, addFishToQuarantine, addCuttings, addHardscape, addPlant, transferMedia, mediaAvailable, buybackRefusal, setKeeper, cureRefusal, mallBag, useCure, GUPPY_STRAIN_PRICES, GUPPY_FIN_STRAINS, GUPPY_STRAINS, finWords, matingSuccess, predictOffspring, canClaimStarterPack, claimStarterPack, buyTank, addHolidayTablet, buyTankRefusal, HOLIDAY_TABLET_DAYS, installFeeder, feederInstalledText, LOCKED_SPECIES, speciesUnlocked, tankLock, unlockHint, moveFish, newTankCost, purposeCost, setTankPurpose, suggestPurpose, TANK_PURPOSES, type TankPurpose, removeTank, removeTankRefusal, slotPrice, TANK_SETS, tankLabel, type TankSizeId, chargeMeal, economy, FISH_PRICES, BETTA_FEMALE_PRICE, fishBuybackPrice, PLANT_PRICES, plantBuybackPrice, price, sellCuttings, sellableCuttings, chestCuttingsOf, sellFish, sellsLeftToday, spend, takeCutting, buyQuarantine, HARDSCAPE, removeHardscape, placeFromBag, replaceSubstrate, SUBSTRATES, doseAntibiotic, doseDewormer, doseQuarantine, hasVisible, isJuvenile, crowdingRatio, COMFORT_BAND, dripMinutes, dripGrade, dripTutorialLeft, recordDrip, farmHabit, habitGap, habitOf, phBeyondSurvival, SPLIT_PLAN_LABELS, splitAdvice, splitGroup, splitTank, rescueFryToBox, BOX_CAPACITY, buyNurseryBox, dueMothers, moveDueToNursery, moveToNursery, NURSERY_FRY_CAPACITY, NURSERY_RELEASE_CM, nurseryFish, nurseryRefusal, releaseNursery, rescueFryToNursery, type SplitPlan, daysUntilSexVisible, growthFactors, growthStage, maxLengthCm, sexVisible, stageLabel, phenotype, strainName, QUARANTINE_DAYS, quarantineDays, readyForTank, releaseQuarantine, swallowCm, tooSmallForTank, PINCH_MEALS, orderBoard, matchingFish, orderSupply, moveToQuarantine, AIR_PUMPS, CHILLERS, CO2_KITS, doseIchMedication, DEFAULT_FOOD, feed, FANS, FOOD_GRADES, FOOD_KINDS, mealMg, mealPrice, tapFeed, type TapFeedResult, FILTERS, FISH_SPECIES, freeAmmonia, HEATERS, hidingFactor, LIGHTS, monthOf, observeSymptoms, PLANT_SPECIES, REGION_LABELS, removeDeadFish, replaceFilter, rinseFilterMedia, seasonName, setHeaterTarget, installHeater, ichHeatC, ICH_MED_WORKING, changeDilutesIch, treatingIch, topUp, unplugHeater, trimPlant, waterChange, suggestedWaterChange, type DripOutcome, type Fish, type FishSpeciesId, type FoodGrade, type FoodKind, type Symptom, type PlantSpeciesId, type Region, type TankState, type TestKitReading, markDaily, needsSetup, type MallItemId } from '../sim';
 import { choiceState, lineName } from '../sim/choices';
 import { applySeason, type Game } from '../game/game';
 import { h } from './dom';
@@ -202,13 +202,19 @@ export function waterChangePanel({ game, sheet, toasts, sound, undoable }: Panel
     h('label.field', {}, slider),
     temp,
     button('開始換水', () => {
-      doUndoable({ toasts, undoable }, () => game.act((st) => waterChange(st, fraction, matchTemp ? { tempC: st.water.tempC } : {})), `換了 ${Math.round(fraction * 100)}% 的水`);
+      const diluted = changeDilutesIch(game.state, fraction);
+      doUndoable({ toasts, undoable }, () => game.act((st) => waterChange(st, fraction, matchTemp ? { tempC: st.water.tempC } : {})), `換了 ${Math.round(fraction * 100)}% 的水${diluted ? DILUTED_NOTE : ''}`, diluted ? 'warn' : 'info');
       sound?.('water');
       sheet.close();
     }, 'primary'),
+    // 治白點中換水會把藥一起沖淡（#384）：先講，換完沖太淡也會再提醒補藥
+    treatingIch(game.state) ? h('p.warn-text', {}, '正在治白點：換水會把白點藥一起沖淡，換完要補一份藥') : null,
     advice(['換水能稀釋氨、亞硝酸鹽、硝酸鹽，並補回 KH。每週 20–30% 是好習慣。']),
   );
 }
+
+/** 治白點中換水把藥沖淡到撐不到白點掉時，換水提示後面接的話（#384）。 */
+const DILUTED_NOTE = '。白點藥被沖淡了，撐不到白點掉，再補一份';
 
 /**
  * 一鍵換水（遊戲性評測第 14 輪 #257）：點工具列「換水」直接照建議的量換、新水對好溫度，缸裡演換水；
@@ -218,7 +224,8 @@ export function quickWaterChange({ game, toasts, sound, undoable }: PanelContext
   const fraction = suggestedWaterChange(game.state);
   // 第一次換水多說一次長按的捷徑（企劃 2026-10-21），之後不再出現
   const hint = game.state.lastWaterChangeHours === undefined ? '・長按「換水」可調量' : '';
-  doUndoable({ toasts, undoable }, () => game.act((st) => waterChange(st, fraction, { tempC: st.water.tempC })), `換了 ${Math.round(fraction * 100)}% 的水${hint}`);
+  const diluted = changeDilutesIch(game.state, fraction);
+  doUndoable({ toasts, undoable }, () => game.act((st) => waterChange(st, fraction, { tempC: st.water.tempC })), `換了 ${Math.round(fraction * 100)}% 的水${diluted ? DILUTED_NOTE : hint}`, diluted ? 'warn' : 'info');
   sound?.('water');
 }
 
@@ -1473,9 +1480,40 @@ export function maintenancePanel(ctx: PanelContext): Node {
       change(st);
       applySeason(st);
     });
+  const heaterRow = eq.heater
+    ? row(
+        'gear/heater.webp',
+        h(
+          'div.item-main',
+          {},
+          h('b', {}, `加熱棒 ${eq.heater.targetC}°C`),
+          eq.heater.broken
+            ? h('div.warn-text', {}, eq.heater.stuckOn ? '卡住一直加熱！先拔掉插頭，再換一支' : '故障中，換一支新的')
+            : eq.heater.setpointC !== undefined
+              ? h('div.hint', {}, `${eq.heater.setpointC < eq.heater.targetC ? '升溫' : '降溫'}中：一天約 2°C，慢慢調到 ${eq.heater.targetC}°C，魚才不會受涼生白點`)
+              : null,
+        ),
+        eq.heater.stuckOn
+          ? button('拔掉插頭', () => {
+              game.act((st) => unplugHeater(st));
+              toasts.show('拔掉加熱棒了，記得換一支新的', 'warn');
+              sheet.refresh();
+            }, 'primary')
+          : eq.heater.broken
+            ? // 壞掉的加熱棒在這裡就能換（#382：任務卡帶到這裡卻只寫「請到商店換一支」，照任務卡玩會卡十幾天）
+              button(`換一支（${price(`heater:${eq.heater.spec.id}`)} 元）`, () => {
+                const spec = eq.heater!.spec;
+                if (purchase(ctx, price(`heater:${spec.id}`), (st) => installHeater(st, spec), `換上新的${spec.name}`)) sheet.refresh();
+              }, 'primary')
+            : h('div.row', {}, button('−', () => game.act((st) => setHeaterTarget(st, eq.heater!.targetC - 1))), button('+', () => game.act((st) => setHeaterTarget(st, eq.heater!.targetC + 1)))),
+      )
+    : null;
+  // 壞掉的加熱棒排到最上面：任務卡帶過來不用往下捲才找得到（g25）
+  const heaterBroken = !!eq.heater?.broken;
   return h(
     'div.stack',
     {},
+    ...(heaterBroken ? [h('h3', {}, '要先處理'), heaterRow] : []),
     h('h3', {}, '換水'),
     row('ui/icon-waterchange.webp', h('div.item-main', {}, h('b', {}, '自己調換水量'), h('div.hint', {}, '工具列的「換水」照建議的量一鍵換；要換多換少在這裡調')), button('調整', () => sheet.open('換水', () => waterChangePanel({ game, sheet, toasts, undoable })))),
     h('h3', {}, '螺'),
@@ -1528,34 +1566,7 @@ export function maintenancePanel(ctx: PanelContext): Node {
       openScape ? button('擺放', () => openScape()) : null,
     ),
     h('h3', {}, '設備'),
-    eq.heater
-      ? row(
-          'gear/heater.webp',
-          h(
-            'div.item-main',
-            {},
-            h('b', {}, `加熱棒 ${eq.heater.targetC}°C`),
-            eq.heater.broken
-              ? h('div.warn-text', {}, eq.heater.stuckOn ? '卡住一直加熱！先拔掉插頭，再換一支' : '故障中，換一支新的')
-              : eq.heater.setpointC !== undefined
-                ? h('div.hint', {}, `${eq.heater.setpointC < eq.heater.targetC ? '升溫' : '降溫'}中：一天約 2°C，慢慢調到 ${eq.heater.targetC}°C，魚才不會受涼生白點`)
-                : null,
-          ),
-          eq.heater.stuckOn
-            ? button('拔掉插頭', () => {
-                game.act((st) => unplugHeater(st));
-                toasts.show('拔掉加熱棒了，記得換一支新的', 'warn');
-                sheet.refresh();
-              }, 'primary')
-            : eq.heater.broken
-              ? // 壞掉的加熱棒在這裡就能換（#382：任務卡帶到這裡卻只寫「請到商店換一支」，照任務卡玩會卡十幾天）
-                button(`換一支（${price(`heater:${eq.heater.spec.id}`)} 元）`, () => {
-                  const spec = eq.heater!.spec;
-                  if (purchase(ctx, price(`heater:${spec.id}`), (st) => installHeater(st, spec), `換上新的${spec.name}`)) sheet.refresh();
-                }, 'primary')
-              : h('div.row', {}, button('−', () => game.act((st) => setHeaterTarget(st, eq.heater!.targetC - 1))), button('+', () => game.act((st) => setHeaterTarget(st, eq.heater!.targetC + 1)))),
-        )
-      : null,
+    heaterBroken ? null : heaterRow,
     eq.light
       ? row(
           `gear/led-${eq.light.spec.id}.webp`,

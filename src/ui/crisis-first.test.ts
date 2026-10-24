@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, canClaimStarterPack, catchPests, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, TANKS, unplugHeater, type TankState } from '../sim';
+import { addFish, addPlant, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, TANKS, unplugHeater, type TankState } from '../sim';
 import { crisisTodos, capsSummary, lingering, wipedOut } from './status';
 import { morningReport, REPORT_LINES, slimReport, snapshot } from './morning-report';
 
@@ -179,5 +179,22 @@ describe('壞加熱棒不佔住任務卡、死光先重新開始（#382）', () 
     economy(rich).coins = 500;
     cooked(rich);
     expect(canClaimStarterPack(rich)).toBe(false);
+  });
+});
+
+describe('比一比只點了一尾（g25）', () => {
+  it('提示還沒點的那尾；兩尾都點了才算、不再提示', () => {
+    const s = tank();
+    const tanks = [s];
+    updateDaily(tanks);
+    const [a, b, c] = s.fish;
+    dailyTasks(tanks)!.tasks = [{ id: 'goalCompare', done: false, subjectId: a.id, otherId: b.id }];
+    expect(comparePartner(tanks, c.id)).toBeNull();
+    markDailyFish(tanks, b.id);
+    expect(comparePartner(tanks, b.id)?.id).toBe(a.id);
+    markDailyFish(tanks, a.id);
+    expect(comparePartner(tanks, a.id)).toBeNull();
+    updateDaily(tanks);
+    expect(dailyTasks(tanks)!.tasks[0].done).toBe(true);
   });
 });
