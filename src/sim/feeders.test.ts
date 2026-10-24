@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, addHolidayTablet, addPlant, buyFeeder, economy, forecast, hasSteadyFood, HOLIDAY_TABLET_DAYS, hoursUntilStarving, installFeeder, maxLengthCm, simulate, type TankState } from './index';
+import { addFish, addHolidayTablet, addPlant, buyFeeder, economy, feederInstalledText, forecast, hasSteadyFood, HOLIDAY_TABLET_DAYS, hoursUntilStarving, installFeeder, maxLengthCm, pinchMg, simulate, type TankState } from './index';
 
 const calm = { carriesIch: false, carries: [] };
 
@@ -75,5 +75,19 @@ describe('出遠門用品與寫實斷食（#115）', () => {
     delete s.equipment.feeder;
     expect(buyFeeder(tanks, 0)).toBe('錢不夠：要 600 元');
     expect(economy(s).coins).toBe(100);
+  });
+
+  it('新裝的餵食器先試餵一次（daily-loop.md §7 第 3 點）；已經有的改次數不會多餵', () => {
+    const s = tank();
+    for (let i = 0; i < 3; i++) addFish(s, 'guppy', calm);
+    s.water.food = [];
+    s.water.foodMg = 0;
+    expect(pinchMg(s)).toBeGreaterThan(0);
+    installFeeder(s, 2);
+    expect(s.water.foodMg).toBeCloseTo(pinchMg(s));
+    installFeeder(s, 1);
+    expect(s.water.foodMg).toBeCloseTo(pinchMg(s));
+    expect(feederInstalledText(2)).toBe('裝好了，先試餵一次。之後每天 9 點、19 點自動餵。');
+    expect(feederInstalledText(1)).toBe('裝好了，先試餵一次。之後每天 9 點自動餵。');
   });
 });
