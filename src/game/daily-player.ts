@@ -96,7 +96,7 @@ function hungriest(tanks: TankState[]): TankState {
 }
 
 /** 在找得到的第一缸做完一題。 */
-export function doDailyTask(tanks: TankState[], id: DailyTaskId, subjectId = dailyTasks(tanks)?.tasks.find((t) => t.id === id)?.subjectId): void {
+export function doDailyTask(tanks: TankState[], id: DailyTaskId, subjectId = dailyTasks(tanks)?.tasks.find((t) => t.id === id)?.subjectId, otherId = dailyTasks(tanks)?.tasks.find((t) => t.id === id)?.otherId): void {
   const home = tanks[0];
   const find = (f: (t: TankState) => boolean) => tanks.find(f) ?? home;
   const withScape = find((t) => (t.equipment.hardscape ?? []).length > 0);
@@ -106,7 +106,8 @@ export function doDailyTask(tanks: TankState[], id: DailyTaskId, subjectId = dai
     case 'test':
       useTestKit(home);
       break;
-    case 'feed': {
+    case 'feed':
+    case 'goalFryFed': {
       // 跟遊戲裡按一次餵食一樣：一小撮
       const t = hungriest(tanks);
       feed(t, pinchMg(t));
@@ -168,8 +169,18 @@ export function doDailyTask(tanks: TankState[], id: DailyTaskId, subjectId = dai
     case 'goalBelly':
     case 'goalColor':
     case 'goalKeeper':
-      // 點那尾魚（畫面回報）
+    case 'goalFirstBrood':
+    case 'goalColorDays':
+    case 'goalFins':
+    case 'goalSplit':
+    case 'goalKeeperFed':
+    case 'goalHide':
+    case 'goalCountBrood':
+    case 'goalSnake':
+    case 'goalCompare':
+      // 點那尾魚（畫面回報）；比一比兩尾都點
       if (subjectId !== undefined) markDailyFish(tanks, subjectId);
+      if (otherId !== undefined) markDailyFish(tanks, otherId);
       break;
     case 'goalAlbino': {
       // 在新的一窩裡點一尾紅眼睛的小魚
@@ -186,6 +197,6 @@ export function doDailyTask(tanks: TankState[], id: DailyTaskId, subjectId = dai
 /** 今天還沒做的小事全部做完（不開寶箱）。 */
 export function doAllDaily(tanks: TankState[]): void {
   updateDaily(tanks);
-  for (const t of dailyTasks(tanks)?.tasks ?? []) if (!t.done) doDailyTask(tanks, t.id, t.subjectId);
+  for (const t of dailyTasks(tanks)?.tasks ?? []) if (!t.done) doDailyTask(tanks, t.id, t.subjectId, t.otherId);
   updateDaily(tanks);
 }

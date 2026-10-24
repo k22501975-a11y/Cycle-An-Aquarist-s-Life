@@ -1,5 +1,5 @@
 import { newGameState } from './game';
-import { addFish, buyFeeder, crowdingRatio, takeStoreFemales, addHardscape, buyPlant, buyTank, checkGoals, claimDaily, doseIchMedication, DREAM_FISH, economy, FISH_SPECIES, feed, fulfillOrder, HARDSCAPE, ICH_MED_WORKING, ichHeatC, linkTanks, moveDueToNursery, orderBoard, orderSupply, PINCH_MEALS, setHeaterTarget, setTankPurpose, splitTank, transferMedia, step, TICK_HOURS, updateDaily, useTestKit, waterChange, type TankState } from '../sim';
+import { addFish, buyFeeder, DAILY_CATEGORY, dailyTasks, eligibleDaily, goalDaily, goalRelated, crowdingRatio, takeStoreFemales, addHardscape, buyPlant, buyTank, checkGoals, claimDaily, doseIchMedication, DREAM_FISH, economy, FISH_SPECIES, feed, fulfillOrder, HARDSCAPE, ICH_MED_WORKING, ichHeatC, linkTanks, moveDueToNursery, orderBoard, orderSupply, PINCH_MEALS, setHeaterTarget, setTankPurpose, splitTank, transferMedia, step, TICK_HOURS, updateDaily, useTestKit, waterChange, type TankState } from '../sim';
 import { breederIds, chooseOption, choiceState, tradeCheck, type ChoiceCard, type ChoiceId } from '../sim/choices';
 import { advanceQuest, currentQuest, newProgress } from '../ui/tutorial';
 import { morningLine } from '../ui/morning-card';
@@ -47,6 +47,8 @@ export interface MidgameNight {
   breederStarved: number;
   /** 這一晚有沒有照報告的提示買自動餵食器。 */
   boughtFeeder: boolean;
+  /** 這天的每日小事（daily-loop.md §8）：出題時有沒有目標題出得了、出了幾題目標題、幾題跟目標有關（目標題加寫明關係的照顧題）。 */
+  daily: { goalDay: boolean; goal: number; related: number };
 }
 
 /** 所有缸一起跑（跟遊戲一樣每個 tick 輪流推每一缸）。 */
@@ -119,6 +121,9 @@ function run(seed: number, days: number, opts: { neglectCrowd?: boolean; onDay?:
   const ichWarm = new Map<TankState, number>();
   for (let night = 1; night < days; night++) {
     updateDaily(tanks);
+    const ok = new Set(eligibleDaily(tanks));
+    const issued = dailyTasks(tanks)?.tasks ?? [];
+    const daily = { goalDay: goalDaily(tanks).some((g) => DAILY_CATEGORY[g.id] === 'goal' && ok.has(g.id)), goal: issued.filter((t) => DAILY_CATEGORY[t.id] === 'goal').length, related: issued.filter(goalRelated).length };
     simulateAll(tanks, 0.5);
     act();
     if (currentQuest(p)?.id === 'fish') {
@@ -196,7 +201,7 @@ function run(seed: number, days: number, opts: { neglectCrowd?: boolean; onDay?:
     const deaths = died.flat().map((e) => String(e.cause));
     const breederStarved = died.flat().filter((e) => e.cause === 'starvation' && e.subjectId !== undefined && breeders.has(e.subjectId)).length;
     const crowdDeaths = died.reduce((a, d, i) => a + (Math.max(evening[i] ?? 0, crowdingRatio(tanks[i])) >= 1 ? d.length : 0), 0);
-    out.push({ breederStarved, boughtFeeder, crowdDeaths, crowd: tanks.map((t) => Math.round(crowdingRatio(t) * 100) / 100), deaths, bellyMilestone, dreamMomBirth, sickDays: cs.sickDays ?? 0, day: Math.floor(s.hours / 24) + 1, choice: card?.id, orderChoice, quiet: line === '安靜的一晚。', coins: economy(s).coins, tanks: tanks.length, inBreeding: tanks.find((t) => t.purpose === 'breeding')?.fish.filter((f) => f.alive).length ?? 0, alarms: tanks.flatMap((t, i) => [...waterAlarms(t)].map((x) => `${i}:${x}`)), line: `${card ? `<${(card.options.find((o) => o.recommended) ?? card.options[0]).key}>` : ''}${why ? `（選不了：${why}）` : ''}${line} ${report.items.map((i) => i.kind).join(',')}` });
+    out.push({ daily, breederStarved, boughtFeeder, crowdDeaths, crowd: tanks.map((t) => Math.round(crowdingRatio(t) * 100) / 100), deaths, bellyMilestone, dreamMomBirth, sickDays: cs.sickDays ?? 0, day: Math.floor(s.hours / 24) + 1, choice: card?.id, orderChoice, quiet: line === '安靜的一晚。', coins: economy(s).coins, tanks: tanks.length, inBreeding: tanks.find((t) => t.purpose === 'breeding')?.fish.filter((f) => f.alive).length ?? 0, alarms: tanks.flatMap((t, i) => [...waterAlarms(t)].map((x) => `${i}:${x}`)), line: `${card ? `<${(card.options.find((o) => o.recommended) ?? card.options[0]).key}>` : ''}${why ? `（選不了：${why}）` : ''}${line} ${report.items.map((i) => i.kind).join(',')}` });
     opts.onDay?.(tanks, Math.floor(s.hours / 24) + 1);
   }
   return { nights: out, tanks };

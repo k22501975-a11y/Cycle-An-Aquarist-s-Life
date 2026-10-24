@@ -13,6 +13,7 @@ import { REVEAL_CULL_DAYS } from '../sim/choices';
  * - 開獎（自家配的那窩出生，midgame.md §7.8）：每個種子 ≤ 第 90 天，種子 1～3 的中位數 ≤ 第 85 天
  * 第 80～120 天魚越生越多（midgame.md §7.4、§7.8，#338）：照推薦選，擠缸死魚 ≤ 2 尾、沒有一缸連續超過 3 天 ≥ 100%、
  *   C14 每個種子 ≤ 7 張、種子 1～3 的中位數 ≤ 6 張（strain-fixing.md §8，#351、#359）
+ * 每日小事（daily-loop.md §8，#378）：有目標的日子每天至少 1 題目標題，80% 的日子至少 2 題跟目標有關
  * 餓死（midgame.md §7.9）：照推薦玩（報告推薦裝自動餵食器就買），種魚 120 天內不餓死，其他魚每個種子最多餓死 1 尾
  */
 describe('第 36～120 天的選擇點（design/midgame.md §6、§7）', () => {
@@ -24,6 +25,10 @@ describe('第 36～120 天的選擇點（design/midgame.md §6、§7）', () => 
       const log = nights.filter((n) => n.day >= 30).map((n) => `${n.day}${n.choice ? `[${n.choice}]` : ''}${n.orderChoice ? `{${n.orderChoice}}` : ''}${n.bellyMilestone ? 'b' : ''}${n.line.includes('reveal') ? '★' : ''}`).join(' ');
       const order = nights.filter((n) => n.choice).map((n) => n.choice!);
       const first = (id: string) => nights.find((n) => n.choice === id)?.day ?? Infinity;
+      // 每日小事跟著目標走（daily-loop.md §8，#378）：有目標的日子每天至少 1 題目標題；80% 的日子至少 2 題跟目標有關
+      const goalDays = nights.filter((n) => n.daily.goalDay);
+      expect(goalDays.filter((n) => n.daily.goal < 1).map((n) => n.day), log).toEqual([]);
+      expect(nights.filter((n) => n.daily.related >= 2).length / nights.length, log).toBeGreaterThanOrEqual(0.8);
       for (const id of ['C11', 'C12', 'C13', 'C15']) expect(order, log).toContain(id);
       expect(first('C11'), log).toBeLessThan(first('C12'));
       expect(first('C12'), log).toBeLessThan(first('C13'));

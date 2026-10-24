@@ -139,7 +139,7 @@ export interface Economy {
   /** 換天以後、出題以前畫面回報的動作（出題時算進去）。 */
   dailyEarly?: DailyEarly;
   /** 前兩天出過的小事（同一題 3 天內不重複出，U6）。 */
-  dailyRecent?: Array<{ day: number; ids: DailyTaskId[] }>;
+  dailyRecent?: Array<{ day: number; ids: DailyTaskId[]; keys?: string[] }>;
   /** 連續幾天開了小事寶箱、最後一次是第幾天（連續 7 天送大寶箱，U5）。 */
   dailyStreak?: { count: number; lastDay: number };
   /** 寶箱開出來、還沒擺進缸的石頭和沉木（HARDSCAPE 的 id）：到商店「設備」免費放進缸。 */
