@@ -234,7 +234,7 @@ export function describeEvent(state: TankState, e: SimEvent): { text: string; to
     case 'nursery_gift':
       return { text: `老闆送你育幼盒：${fish ? fishName(fish) : '母魚'}快生了，放進去`, tone: 'info' };
     case 'nursery_bought':
-      return { text: `${fish ? fishName(fish) : '母魚'}快生了，花 ${e.count ?? 150} 元買了育幼盒，快生就放進去`, tone: 'info' };
+      return { text: `${fish ? fishName(fish) : '母魚'}快生了，花 ${e.count ?? 150} 元買了育幼盒，已經放進去了`, tone: 'info' };
     case 'nursery_released':
       return { text: `育幼盒的 ${e.count ?? 0} 尾小魚長大，放回主缸了`, tone: 'info' };
     case 'trap_rotted':
