@@ -2,7 +2,7 @@ import { crisisText, type Crisis } from '../game/crisis';
 import { BLOOM_NOTE, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
 import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, breederIds, breederName, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
-import { crisisTodos } from './status';
+import { crisisTodos, wipedOut } from './status';
 import { quietObservation } from './morning-observe';
 
 /**
@@ -26,11 +26,13 @@ export type ReportAction =
   | 'fry_box' // 育幼盒或檢疫盒（把仔魚撈進去）
   | 'nursery' // 把快生的母魚放進育幼盒
   | 'shop_tank' // 我的水缸（買第二缸）
-  | 'buy_feeder'; // 這缸裝自動餵食器（一天兩次，daily-loop.md §4）
+  | 'buy_feeder' // 這缸裝自動餵食器（一天兩次，daily-loop.md §4）
+  | 'shop_fish'; // 商店的魚頁（魚都死光了，#377：領起步包或重新買魚）
 
 export type ReportKind =
   | 'crisis'
   | 'death'
+  | 'wiped' // 魚都死光了（#377）
   | 'birth'
   | 'eaten'
   | 'grown'
@@ -185,6 +187,11 @@ export const isBadNews = (i: ReportItem) => i.tone === 'bad' || i.kind === 'eate
 const TONE_ORDER: Record<ReportItem['tone'], number> = { bad: 0, warn: 1, good: 2, info: 3 };
 /** 半夜的危機最前面，再來是開獎（整局最大的回報，#357：本來排在白點後面要往下捲才看得到）；其他照 tone 排，「魚放鬆了」這種小事排同 tone 的最後。 */
 const kindRank = (i: ReportItem): number => (i.kind === 'crisis' ? 0 : i.kind === 'reveal' ? 1 : 2);
+
+/** 安靜的一晚那句：缸裡有魚才說魚在睡覺（#377：魚死光了還在說「魚都在水草裡睡覺」）。 */
+function quietText(tanks: TankState[]): string {
+  return tanks.some((t) => t.fish.some((f) => f.alive)) ? '昨晚很平靜，魚都在水草裡睡覺' : '昨晚很平靜，水草在燈下慢慢長';
+}
 
 /** 醒來後跟快照比，寫出早上報告。 */
 export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: number, crisis: Crisis | null): MorningReport {
@@ -455,6 +462,9 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     const where = tanks.length > 1 && !/^停電中/.test(c.text) ? `${tankLabel(tanks, c.tank)}：` : '';
     items.push({ kind: c.go === 'remove_dead' ? 'death' : 'equipment', tank: c.tank, tone: 'bad', text: where + c.text, action: c.go ?? 'equipment', standing: true });
   }
+  // 魚都死光了（#377）：每天早上第一行說怎麼了、從哪裡重新開始，直到缸裡又有魚
+  const wiped = wipedOut(tanks);
+  if (wiped) items.push({ kind: 'wiped', tank: 0, tone: 'bad', text: wiped.text, action: 'shop_fish', goLabel: wiped.claim ? '去領' : '去買魚', standing: true });
   // 選育進度（midgame.md §2）：有第一窩或留種的魚就每天一行，取代一般的小觀察
   const progress = crisis ? null : breedingProgress(tanks);
   if (progress) items.push({ kind: 'breeding', tank: 0, tone: 'good', text: progress });
@@ -463,7 +473,7 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     const text = quietObservation(tanks[0], tanks[0], before.tanks[0]);
     if (text) items.push({ kind: 'observe', tank: 0, tone: 'info', text });
   }
-  if (items.length === 0) items.push({ kind: 'quiet', tank: 0, tone: 'info', text: '昨晚很平靜，魚都在水草裡睡覺' });
+  if (items.length === 0) items.push({ kind: 'quiet', tank: 0, tone: 'info', text: quietText(tanks) });
   items.sort((a, b) => kindRank(a) - kindRank(b) || TONE_ORDER[a.tone] - TONE_ORDER[b.tone] || (a.kind === 'fish_relaxed' ? 1 : 0) - (b.kind === 'fish_relaxed' ? 1 : 0));
   const day = Math.floor(tanks[0].hours / 24) + 1;
   return { title: crisis ? '半夜出狀況了' : `早安，第 ${day} 天`, hours: sleptHours, stopped: !!crisis, items };
@@ -552,7 +562,7 @@ export function slimReport(report: MorningReport): SlimReport {
   const pinned = ranked.filter(isPinned);
   let lines = [...pinned, ...ranked.filter((i) => !isPinned(i)).slice(0, REPORT_LINES)];
   // 安靜的早上：一行就好，有小觀察就放小觀察
-  if (lines.length === 0 && !decision) lines = [rest.find((i) => i.kind === 'observe' || i.kind === 'quiet') ?? rest.find((i) => i.kind === 'fish_relaxed') ?? { kind: 'quiet', tank: 0, tone: 'info', text: '昨晚很平靜，魚都在水草裡睡覺' }];
+  if (lines.length === 0 && !decision) lines = [rest.find((i) => i.kind === 'observe' || i.kind === 'quiet') ?? rest.find((i) => i.kind === 'fish_relaxed') ?? { kind: 'quiet', tank: 0, tone: 'info', text: '昨晚很平靜' }];
   const shown = new Set(lines);
   return {
     lines,

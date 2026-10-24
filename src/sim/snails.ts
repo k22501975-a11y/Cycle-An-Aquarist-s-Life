@@ -312,6 +312,8 @@ export function removeClutches(state: TankState): number {
 
 /** 手撈：只抓得到看得見的（馬來螺白天躲在沙裡）。回傳抓了幾隻。 */
 export function catchPests(state: TankState, lightsOn: boolean): number {
+  // 撈到 0 隻也算撈過一次（今天的小事「撈一次小螺」，g23）
+  noteAct(state, 'pests');
   const s = state.snails;
   if (!s) return 0;
   let caught = 0;
@@ -321,7 +323,6 @@ export function catchPests(state: TankState, lightsOn: boolean): number {
     s.pests[k] -= n;
     caught += n;
   }
-  noteAct(state, 'pests');
   return caught;
 }
 

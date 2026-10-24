@@ -1,4 +1,5 @@
 import type { ReportAction } from './morning-report';
+import { DEATH_CAUSE_LABELS } from './labels';
 import { dueMothers, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading, waterLook } from '../sim';
 
 /**
@@ -241,6 +242,27 @@ export function crisisTodos(tanks: TankState[]): Array<Todo & { tank: number }> 
     }
   });
   return out;
+}
+
+/**
+ * 所有缸都沒有活魚了（#377：兩缸死光後 43 天沒有任何引導）：說最後是怎麼死的、從哪裡重新開始。
+ * 領得到起步包就叫玩家去領，不然叫玩家拿手上的錢重新買魚。還沒放過魚的新缸不算。
+ */
+export function wipedOut(tanks: TankState[]): { text: string; step: string; claim: boolean } | null {
+  if (!tanks[0] || !tankStarted(tanks[0])) return null;
+  if (tanks.some((t) => t.fish.some((f) => f.alive) || (t.quarantine?.fish ?? []).some((f) => f.alive))) return null;
+  const died = tanks.flatMap((t) => t.events.filter((e) => e.type === 'fish_died'));
+  // 事件只留最近 200 筆：太久以前死的就看缸裡還沒撈的屍體
+  if (died.length === 0 && !tanks.some((t) => t.fish.length > 0)) return null;
+  const last = died.length > 0 ? died.reduce((a, b) => (b.hours >= a.hours ? b : a)) : null;
+  const cause = DEATH_CAUSE_LABELS[last?.cause ?? ''] ?? '';
+  const claim = canClaimStarterPack(tanks[0], tanks.slice(1));
+  const coins = tanks[0].economy?.coins ?? 0;
+  return {
+    text: `缸裡的魚都沒了${cause ? `，最後一尾是${cause}` : ''}。${claim ? '阿德老闆送你一包起步魚（1 公 2 母），到商店領' : `手上還有 ${coins} 元，到商店重新買魚`}`,
+    step: claim ? '魚都沒了，去商店領起步包' : '魚都沒了，去商店重新買魚',
+    claim,
+  };
 }
 
 /** 這些待辦是整個房間共用的，不用在每一缸重複提醒。 */
