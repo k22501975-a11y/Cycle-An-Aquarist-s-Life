@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, buyQuarantine, createTank, rescueFryToBox, simulate, FILTERS, FISH_SPECIES, HEATERS, LIGHTS, splitAdvice, splitGroup, splitTank, TANKS, type CreateTankOptions, type TankState } from './index';
+import { addFish, buyQuarantine, createTank, economy, rescueFryToBox, simulate, FILTERS, FISH_SPECIES, HEATERS, LIGHTS, splitAdvice, splitGroup, splitTank, TANKS, type CreateTankOptions, type TankState } from './index';
 import { createFish } from './processes/population';
 
 const MATURE: CreateTankOptions = { tank: TANKS.std40, filter: FILTERS.hangOn, heater: { spec: HEATERS.h100, targetC: 25 }, light: { spec: LIGHTS.basic }, matureMedia: true };
@@ -30,6 +30,20 @@ describe('分缸提示（design/growth.md §4.1）', () => {
     const a = splitAdvice(s).find((x) => x.reason === 'sexes_mixed')!;
     expect(a.plan).toBe('by_sex');
     expect(splitGroup(s, 'by_sex').every((f) => f.sex === 'male')).toBe(true);
+  });
+
+  it('選好的那對種魚不會被分走：公母分開、分一半都留在原缸（#384 長劇本：年輕種公被撈走，80 天配不到）', () => {
+    const s = createTank({ ...MATURE, seed: 402 });
+    brood(s, 3, 2.8, 'male');
+    brood(s, 3, 2.8, 'female');
+    const sire = s.fish.find((f) => f.sex === 'male')!;
+    const dam = s.fish.find((f) => f.sex === 'female')!;
+    economy(s).choices = { shown: {}, picked: {}, pair: [dam.id, sire.id] };
+    const bySex = splitGroup(s, 'by_sex');
+    expect(bySex).toHaveLength(2);
+    expect(bySex.map((f) => f.id)).not.toContain(sire.id);
+    expect(splitGroup(s, 'half').map((f) => f.id)).not.toContain(sire.id);
+    expect(splitGroup(s, 'half').map((f) => f.id)).not.toContain(dam.id);
   });
 
   it('擁擠度 80% 提醒、100% 警告', () => {

@@ -222,10 +222,10 @@ export interface Bacteria {
 export type IchStage = 'none' | 'incubating' | 'visible';
 
 /**
- * 白點病的誘因（polish-to-9.md §4）：只有這三種，沒有誘因就不會爆發。
- * temp_swing：24 小時內水溫差 ≥ 3°C；new_fish：新魚沒檢疫就放進來；crowding：密度超過缸的建議量。
+ * 白點病的誘因（polish-to-9.md §4）：只有這幾種，沒有誘因就不會爆發。
+ * temp_swing：24 小時內水溫差 ≥ 3°C；new_fish：新魚沒檢疫就放進來；crowding：密度超過缸的建議量；relapse：上一波沒殺乾淨又上身（#384）。
  */
-export type IchCause = 'temp_swing' | 'new_fish' | 'crowding';
+export type IchCause = 'temp_swing' | 'new_fish' | 'crowding' | 'relapse';
 
 export interface Fish {
   id: number;

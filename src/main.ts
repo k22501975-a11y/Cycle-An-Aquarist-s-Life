@@ -473,6 +473,9 @@ async function start(): Promise<void> {
     selected = id;
     // 點魚看看、點蝦看看，點到目標題的那尾（最快轉色的、種魚、懷孕的母魚、紅眼睛的小魚）也算
     if (id !== null) sim.markDailyFish(game.tanks, id);
+    // 比一比只點了一尾：提示再點另一尾才算（g25）
+    const partner = id === null ? null : sim.comparePartner(game.tanks, id);
+    if (partner) toasts.show(`再點${fishName(partner)}，比一比誰的顏色深`);
     const picked = id === null ? undefined : game.state.fish.find((f) => f.id === id);
     if (picked) sim.noteBellySeen(picked);
     view.selectFish(id);
@@ -1381,9 +1384,13 @@ async function start(): Promise<void> {
         // 白點藥效中：先說不用再下，叫玩家調水溫等（#324）
         const ich = sim.ichTreatment(game.tanks);
         const medDays = sim.ichMedDays(game.state);
-        const advice = ich
-          ? `水裡還有白點藥，藥效約剩 ${ich.medDays} 天，不用再下。${ich.heatC ? `水溫調到 ${ich.heatC}°C，` : ''}約 ${ich.days} 天白點會掉。`
-          : fish
+        // 藥撐不到白點掉光（多半是剛換水沖淡了）：叫玩家補一份，不說「不用再下」（#384）
+        const rinsed = game.state.lastWaterChangeHours !== undefined && game.state.hours - game.state.lastWaterChangeHours < 24;
+        const advice = ich?.short
+          ? `藥效只剩約 ${ich.medDays} 天，撐不到白點掉（約 ${ich.days} 天）${rinsed ? '，剛剛換水把藥沖淡了' : ''}。再補一份白點藥，${ich.heatC ? `水溫調到 ${ich.heatC}°C，` : ''}藥要撐到白點掉光後一天。`
+          : ich
+            ? `水裡還有白點藥，藥效約剩 ${ich.medDays} 天，不用再下。${ich.heatC ? `水溫調到 ${ich.heatC}°C，` : ''}約 ${ich.days} 天白點會掉。`
+            : fish
             ? `${medDays > 0 ? `這缸白點藥效還剩 ${medDays} 天。` : ''}${causeAdvice(fishName(fish), [], fish)}`
             : '缸裡現在看不到生病的魚。';
         const title = game.tanks.length > 1 ? `用藥：${sim.tankLabel(game.tanks, game.active)}` : '用藥';

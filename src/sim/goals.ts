@@ -301,8 +301,9 @@ export function nextGoals(tanks: TankState[], count = 2): Goal[] {
  */
 export function checkGoals(tanks: TankState[], tutorialDone = true): Goal[] {
   const g = goalState(tanks);
-  // 治病：上次看到在發病、現在還活著而且好了
-  const sickNow = allFish(tanks).filter((f) => f.ich.stage === 'visible' || hasVisible(f)).map((f) => f.id);
+  // 治病：上次看到在發病、現在還活著而且好了。白點要等那缸的蟲死光才算好（#384：白點掉了、藥一退又上身，不能先說治好了）
+  const lingering = (t: TankState) => !!t.water.ichCause || t.water.ichPathogen + t.water.ichCysts >= 0.01;
+  const sickNow = tanks.flatMap((t) => t.fish.filter((f) => f.alive && (f.ich.stage === 'visible' || hasVisible(f) || (g.sick.includes(f.id) && lingering(t)))).map((f) => f.id));
   const alive = new Set(allFish(tanks).map((f) => f.id));
   if (g.sick.some((id) => alive.has(id) && !sickNow.includes(id))) g.cured = true;
   g.sick = sickNow;
