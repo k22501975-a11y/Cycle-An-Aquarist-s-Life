@@ -835,6 +835,22 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 }
 @media (prefers-reduced-motion: reduce) { .bite-tag { animation-duration: 0.01s; animation-fill-mode: none; } }
 
+/* 缸上的小標記（daily-loop.md §2）：圓形小玻璃章，輕輕上下浮，點了換成一句話 */
+.tank-mark { position: absolute; z-index: 6; width: 38px; height: 38px; padding: 4px; transform: translate(-50%, -100%); border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.75); background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.12) 60%), rgba(18, 40, 52, 0.55); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35), 0 0 0 3px rgba(255, 255, 255, 0.12); cursor: pointer; transition: left 0.5s linear, top 0.5s linear; animation: mark-bob 2.6s ease-in-out infinite; }
+.tank-mark svg { display: block; width: 100%; height: 100%; }
+.tank-mark::after { content: ''; position: absolute; left: 50%; bottom: -7px; width: 2px; height: 6px; margin-left: -1px; border-radius: 1px; background: rgba(255, 255, 255, 0.6); }
+.tank-mark.plant { border-color: rgba(150, 230, 160, 0.9); }
+.tank-mark.order { border-color: rgba(245, 200, 100, 0.95); }
+.tank-mark.snail { border-color: rgba(240, 190, 140, 0.9); }
+@keyframes mark-bob { 0%, 100% { margin-top: 0; } 50% { margin-top: -5px; } }
+.tank-mark-say { position: absolute; z-index: 7; transform: translate(-50%, -100%); width: max-content; max-width: min(300px, 80vw); padding: 7px 13px; border-radius: 14px; font: inherit; font-size: 13px; color: #fff; text-align: left; background: rgba(20, 34, 40, 0.86); border: 1px solid rgba(255, 255, 255, 0.35); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4); animation: mark-say 0.25s ease-out; }
+.tank-mark-say b { color: var(--gold); font-weight: 600; }
+.tank-mark-say.plant { border-color: rgba(150, 230, 160, 0.7); }
+.tank-mark-say.order { border-color: rgba(245, 200, 100, 0.8); }
+@keyframes mark-say { from { opacity: 0; transform: translate(-50%, -80%) scale(0.85); } }
+.scaping .tank-mark, .scaping .tank-mark-say, .setting-up .tank-mark { display: none; }
+@media (prefers-reduced-motion: reduce) { .tank-mark, .tank-mark-say { animation: none; } }
+
 /* 開缸演出時只留缸（#171）：上方列、任務卡、工具列、缸名先淡出，演完再回來 */
 #hud, #dock, .quest-pill, .tank-label { transition: opacity 0.5s ease; }
 .setting-up #hud, .setting-up #dock, .setting-up .quest-pill, .setting-up .tank-label { opacity: 0; pointer-events: none; }

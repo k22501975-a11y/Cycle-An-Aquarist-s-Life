@@ -51,6 +51,7 @@ import { kickOwnerQueue, ownerGuide, ownerSay, setOwnerBlocker } from './ui/owne
 import { fryArt, guppyArt, maleFinOf, plantArt } from './ui/shop-cards';
 import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
 import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt } from './ui/order-alert';
+import { splitMarks, TankMarks } from './ui/tank-marks';
 import { flyCoins, rewardBurst } from './ui/coin-fly';
 import type { ReportItem } from './ui/morning-report';
 import { loadCodexSeen, saveCodexSeen } from './ui/codex-seen';
@@ -1232,6 +1233,14 @@ async function start(): Promise<void> {
     panelSheet('客人的訂單', (p) => p.ordersPanel(ctx));
   });
   ordersBtn.append(ordersBadge);
+  // 缸上的小標記（daily-loop.md §2）：水草長了、小螺多了、新訂單，早上報告卡關掉後放上去，點了才說一句
+  const tankMarks = new TankMarks({
+    stage,
+    pos: (m) => view.markPos(m.kind, m.plantId),
+    tank: () => game.active,
+    openOrders: () => ordersBtn.click(),
+    topInset: () => hud.getBoundingClientRect().bottom - stage.getBoundingClientRect().top,
+  });
   const renderOrders = () => {
     const { ready, fresh } = orderAlert(game.tanks, seenOrders);
     ordersBadge.textContent = ready.length > 0 ? String(ready.length) : '';
@@ -1909,7 +1918,7 @@ async function start(): Promise<void> {
       }
       // 半夜出狀況：快轉的話切回正常速度，醒來先處理
       if (r.crisis && game.clock.timeScale > sim.DEFAULT_TIME_SCALE) game.clock.timeScale = sim.DEFAULT_TIME_SCALE;
-      const report = morningReport(before, game.tanks, r.hours, r.crisis);
+      const { report, marks } = splitMarks(morningReport(before, game.tanks, r.hours, r.crisis));
       speed.render();
       save();
       analytics.track('sleep', { hours: r.hours, stopped: r.crisis !== null, items: report.items.length });
@@ -1925,6 +1934,7 @@ async function start(): Promise<void> {
         for (const i of [...slim.rest].reverse()) toasts.log(i.text, i.tone === 'bad' ? 'bad' : i.tone === 'warn' ? 'warn' : 'info', i.action === 'buy_feeder' ? { label: '裝上 ›', run: () => offerFeeder(i.tank) } : undefined);
         for (const m of [...slim.marks].reverse()) toasts.log(m.note);
         celebration.release();
+        tankMarks.set(marks);
         // 報告說的那條魚、那株草在缸裡亮一下，一眼找得到是誰
         const about = report.items.find((i) => game.tanks[i.tank] === game.state && (i.subjectId !== undefined || i.plantId !== undefined));
         if (about) view.spotlight(about.subjectId !== undefined ? 'fish' : 'plant', about.subjectId ?? about.plantId!);
@@ -1948,6 +1958,7 @@ async function start(): Promise<void> {
     }, 900);
   };
   debugHandle.sleep = goNight;
+  debugHandle.marks = tankMarks;
   debugHandle.celebration = celebration;
   debugHandle.owner = { say: ownerSay, guide: ownerGuide };
   debugHandle.reward = (tier: 'small' | 'medium', amount = 120) => ctx.reward?.(null, amount, tier);
@@ -2101,6 +2112,7 @@ async function start(): Promise<void> {
       renderCoins();
       renderOrders();
       renderTankChip();
+      if (tankMarks.count > 0 && !scaping) tankMarks.sync();
       // 開缸演出和「你的第一個缸」卡片演完才讓老闆開口（「開缸」任務在演出一開始就完成，不能蓋在演出上，#171）
       if (!guideHeld) guide.update(game.state, game.tanks);
       toasts.quietCount = !guide.tutorialOver;
