@@ -248,6 +248,9 @@ export function crisisTodos(tanks: TankState[]): Array<Todo & { tank: number }> 
  * 所有缸都沒有活魚了（#377：兩缸死光後 43 天沒有任何引導）：說最後是怎麼死的、從哪裡重新開始。
  * 領得到起步包就叫玩家去領，不然叫玩家拿手上的錢重新買魚。還沒放過魚的新缸不算。
  */
+/** 最後一尾死後多久以內，「魚都沒了」那句還說死因（遊戲小時）。 */
+const WIPED_CAUSE_HOURS = 72;
+
 export function wipedOut(tanks: TankState[]): { text: string; step: string; claim: boolean } | null {
   if (!tanks[0] || !tankStarted(tanks[0])) return null;
   if (tanks.some((t) => t.fish.some((f) => f.alive) || (t.quarantine?.fish ?? []).some((f) => f.alive))) return null;
@@ -255,7 +258,9 @@ export function wipedOut(tanks: TankState[]): { text: string; step: string; clai
   // 事件只留最近 200 筆：太久以前死的就看缸裡還沒撈的屍體
   if (died.length === 0 && !tanks.some((t) => t.fish.length > 0)) return null;
   const last = died.length > 0 ? died.reduce((a, b) => (b.hours >= a.hours ? b : a)) : null;
-  const cause = DEATH_CAUSE_LABELS[last?.cause ?? ''] ?? '';
+  // 死因只在真的是死光的時候說：還有沒撈的屍體，或最近幾天才死的。魚是賣掉的就不提很久以前死的那尾
+  const recent = !!last && (tanks.some((t) => t.fish.length > 0) || tanks[0].hours - last.hours <= WIPED_CAUSE_HOURS);
+  const cause = recent ? (DEATH_CAUSE_LABELS[last.cause ?? ''] ?? '') : '';
   const claim = canClaimStarterPack(tanks[0], tanks.slice(1));
   const coins = tanks[0].economy?.coins ?? 0;
   return {
