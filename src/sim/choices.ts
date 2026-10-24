@@ -188,6 +188,8 @@ export interface ChoiceState {
   sameStreak?: number;
   /** 自動照上次處理的母魚（早上報告寫一行，寫過就拿掉）。 */
   broodAutoNotes?: Array<{ momId: number; choice: string }>;
+  /** C9 自動照上次那行已經附過哪個設定的改設定卡（g22：同一張卡第 92～170 天出了 9 次）：同一個設定只附一次，改了設定再附。 */
+  broodAutoTold?: string;
   /** C12 選了 2 尾公魚輪流：另一尾也是指定的爸爸（C11 分開養不會把牠搬走）。 */
   sires?: number[];
   /** C13 選了加活餌：哪尾母魚（生完就收掉活餌）。 */
@@ -1484,10 +1486,9 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       const recMove = rec === 'move';
       const recTank = rec === 'tank';
       const recBig = rec === 'big';
-      const recWater = rec === 'water';
       const ammonia = Math.round(t.water.tan * 100) / 100;
       const gasp = gasping(t);
-      return {
+      const card: ChoiceCard = {
         id,
         tank: i,
         title: full ? `${tankLabel(tanks, i)}太擠了` : `${tankLabel(tanks, i)}快住不下了`,
@@ -1502,9 +1503,12 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
           ...(autoOk ? [{ key: 'auto', label: '以後太擠就自動賣給阿德', outcome: `留種的不賣；這次先${o ? `交${sell}` : `賣 ${batch.length} 尾`}`, recommended: recSell }] : []),
           { key: 'tank', label: tanks.length === 2 ? '買第三缸' : '再買一缸', outcome: `20L 套缸 ${tankCost} 元`, recommended: recTank, ...(noTank ? { disabled: noTank } : {}) },
           ...(big ? [{ key: 'big', label: '換大缸', outcome: `90L，${newTankCost(tanks, 'std90')} 元`, recommended: recBig, ...(noBig ? { disabled: noBig } : {}) }] : []),
-          { key: 'water', label: '先多換水撐幾天', outcome: full ? '換三成水，撐 2 天' : `換三成水，${CROWD_WATER_DAYS} 天後再看`, recommended: recWater },
+          // 先多換水只是撐著：永遠不標推薦（daily-loop.md §4）
+          { key: 'water', label: '先多換水撐幾天', outcome: full ? '換三成水，撐 2 天' : `換三成水，${CROWD_WATER_DAYS} 天後再看` },
         ],
       };
+      // 除了先多換水都選不了：不出卡，早上報告那行擠缸提醒就夠了
+      return card.options.some((o) => o.key !== 'water' && !o.disabled) ? card : null;
     }
     case 'C16': {
       if (s.revealCullAsked || !s.reveal?.done) return null;
@@ -1993,7 +1997,11 @@ export function takeBellyNotes(tanks: TankState[]): Array<{ fishId: number; text
   // C9 自動照上次（midgame.md §6.5）：點這一行再跳一次 C9 的選項改設定（多「每次都問我」）
   for (const n of s.broodAutoNotes?.splice(0) ?? []) {
     const mom = located(tanks).find(({ fish }) => fish.id === n.momId);
-    if (mom) out.push({ fishId: mom.fish.id, text: `${callName(mom.fish)}快生了，照你的設定${BROOD_AUTO_DO[n.choice] ?? '處理'}`, setting: broodSettingCard(mom.fish, mom.tank, n.choice) });
+    if (!mom) continue;
+    // 改設定的卡同一個設定只附一次（g22：同一張卡第 92～170 天出了 9 次）；之後只說一句照設定處理了
+    const told = s.broodAutoTold === n.choice;
+    s.broodAutoTold = n.choice;
+    out.push({ fishId: mom.fish.id, text: `${callName(mom.fish)}快生了，照你的設定${BROOD_AUTO_DO[n.choice] ?? '處理'}`, ...(told ? {} : { setting: broodSettingCard(mom.fish, mom.tank, n.choice) }) });
   }
   if (!p) return out;
   if (!s.sickNoted && (s.sickDays ?? 0) > 0 && p.mom.pregnancy > 0) {

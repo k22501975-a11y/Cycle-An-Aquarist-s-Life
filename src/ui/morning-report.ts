@@ -1,5 +1,5 @@
 import { crisisText, type Crisis } from '../game/crisis';
-import { BLOOM_NOTE, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
+import { BLOOM_NOTE, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
 import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 import { quietObservation } from './morning-observe';
@@ -24,7 +24,8 @@ export type ReportAction =
   | 'trim' // 修剪水草
   | 'fry_box' // 育幼盒或檢疫盒（把仔魚撈進去）
   | 'nursery' // 把快生的母魚放進育幼盒
-  | 'shop_tank'; // 我的水缸（買第二缸）
+  | 'shop_tank' // 我的水缸（買第二缸）
+  | 'buy_feeder'; // 這缸裝自動餵食器（一天兩次，daily-loop.md §4）
 
 export type ReportKind =
   | 'crisis'
@@ -297,11 +298,23 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     const living = t.fish.filter((f) => f.alive);
     // 已經餓到在消耗體力的：小魚撐不到一天，平均值還看不出來時就要講清楚（#315）
     const starving = living.filter((f) => !isShrimpSpecies(f.species) && isStarving(f)).length;
-    if (starving > 0) push({ kind: 'hungry', tone: 'warn', text: `${starving} 尾魚餓到開始消瘦，今天不餵會餓死`, action: 'feed' });
-    else if (living.length > 0 && living.reduce((a, f) => a + f.hunger, 0) / living.length > HUNGRY) push({ kind: 'hungry', tone: 'warn', text: '魚在水面游來游去討食，該餵了', action: 'feed' });
+    // 裝了自動餵食器的缸不再提醒要多餵（daily-loop.md §4），真的餓到消瘦還是要說
+    const feeder = !!t.equipment.feeder;
+    const twice = !feeder && starving === 0 && living.some((f) => !isShrimpSpecies(f.species) && youngGettingHungry(f));
+    // 連 3 天說要多餵、又買得起：那一行改成提示裝自動餵食器，點了直接買（消瘦那行照說，提示另外一行）
+    const day = Math.floor(t.hours / 24);
+    if (starving > 0 || twice) t.feedWarn = t.feedWarn && t.feedWarn.day === day - 1 ? { day, days: t.feedWarn.days + 1 } : t.feedWarn?.day === day ? t.feedWarn : { day, days: 1 };
+    const feederHint = !feeder && (t.feedWarn?.day === day ? t.feedWarn.days : 0) >= FEEDER_HINT_DAYS && economy(tanks[0]).coins >= price('feeder:auto');
+    const hint = { kind: 'hungry', tone: 'info', text: `${tanks.length > 1 ? tankLabel(tanks, index) : '這缸'}小魚多，可以裝自動餵食器，一天自動餵兩次（${price('feeder:auto')} 元）`, action: 'buy_feeder' } as const;
+    if (starving > 0) {
+      push({ kind: 'hungry', tone: 'warn', text: `${starving} 尾魚餓到開始消瘦，今天不餵會餓死`, action: 'feed' });
+      if (feederHint) items.push({ ...hint, tank: index });
+    } else if (!feeder && living.length > 0 && living.reduce((a, f) => a + f.hunger, 0) / living.length > HUNGRY) push({ kind: 'hungry', tone: 'warn', text: '魚在水面游來游去討食，該餵了', action: 'feed' });
     // 小魚兩倍快變餓：一天只餵一次的話，下一餐前就會餓到消耗體力，還沒到要叫醒的程度就在這裡提醒（#193）
-    else if (living.some((f) => !isShrimpSpecies(f.species) && youngGettingHungry(f)))
-      push({ kind: 'hungry', tone: 'info', text: '小魚長得快、餓得也快，一天餵兩次比較好', action: 'feed' });
+    else if (twice) {
+      if (feederHint) items.push({ ...hint, tank: index });
+      else push({ kind: 'hungry', tone: 'info', text: '小魚長得快、餓得也快，一天餵兩次比較好', action: 'feed' });
+    }
     // 新缸症候群（P6）：測試劑讀到的氨昨晚第一次到 0.25，換水就是在解決量得到的問題
     const ammonia = testWater(t).ammonia;
     const ammoniaCrisis = crisis?.reason === 'ammonia' && crisis.tank === index;
@@ -325,7 +338,10 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     });
     // 水草長葉、長大幾乎天天有：算日常（info），不拿來當「有好消息」的開頭（#258）
     if (leaf) push({ kind: 'new_leaf', tone: 'info', text: `${PLANT_SPECIES[leaf.species].name}長出新葉了`, plantId: leaf.id });
-    else if (plantsBefore > 0 && plantsNow >= plantsBefore * PLANT_GREW) push({ kind: 'plant_grew', tone: 'info', text: `水草長了一點（+${Math.round((plantsNow / plantsBefore - 1) * 100)}%）` });
+    else if (plantsBefore > 0 && plantsNow >= plantsBefore * PLANT_GREW) {
+      const grew = Math.round((plantsNow / plantsBefore - 1) * 100);
+      push({ kind: 'plant_grew', tone: 'info', text: `水草長了一點（+${grew}%）`, count: grew });
+    }
     // 魚放鬆了：睡前睡後都活著的魚，平均壓力降了一截（壓力低就不躲、鰭張開）；發色真的變好才說顏色變亮。
     // 剛放進這缸 2 天內的魚才說「適應新家」；老住戶要昨晚真的緊張過（換缸、生病、水質）才說，不然天天都有這行（#237）
     const both = living.filter((f) => snap.fish.get(f.id)?.alive);
@@ -423,6 +439,91 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   return { title: crisis ? '半夜出狀況了' : `早安，第 ${day} 天`, hours: sleptHours, stopped: !!crisis, items };
 }
 
+/** 早上報告一次最多幾行重點（daily-loop.md §2），選擇卡另外一行。 */
+export const REPORT_LINES = 3;
+/** 選擇卡在報告上只寫這一行，點了才打開（tutorial-lines.md §13）。 */
+export const DECISION_LINE = '有一件事要你決定';
+/** 第一隻小螺那行（教學會接著講），照樣上報告。 */
+const FIRST_PEST = '缸壁上出現第一隻小螺';
+
+/** 缸上的小標記（點了才出一句，tutorial-lines.md §13）：水草長了、小螺多了、新訂單。note 是收進鈴鐺的那句。 */
+export interface TankMark {
+  kind: 'plant' | 'snail' | 'orders';
+  tank: number;
+  text: string;
+  note: string;
+  /** 長新葉的那株（標記放在它上面）。 */
+  plantId?: number;
+}
+
+/** 畫面真的要列出來的早上報告（daily-loop.md §2）。 */
+export interface SlimReport {
+  /** 最多 REPORT_LINES 行：要處理的壞消息 → 目標的進度 → 好消息。 */
+  lines: ReportItem[];
+  /** 今天的選擇卡（報告上只寫「有一件事要你決定 ›」）。 */
+  decision: ReportItem | null;
+  /** 選擇卡排在最前面（品系取名那天，比照開獎）。 */
+  decisionFirst: boolean;
+  /** 沒擠進報告的：收進鈴鐺。 */
+  rest: ReportItem[];
+  /** 改放到缸上小標記的日常小事（也收進鈴鐺）。 */
+  marks: TankMark[];
+}
+
+/** 不上報告的日常小事（daily-loop.md §2）：水草、新葉、小螺、新訂單、魚放鬆了、小觀察。 */
+const isMinor = (i: ReportItem) => ['plant_grew', 'new_leaf', 'orders', 'fish_relaxed', 'observe'].includes(i.kind) || (i.kind === 'snails' && !i.text.includes(FIRST_PEST));
+/** 目標的進度：養水、懷孕、轉色、開獎、穩定度、種魚里程碑。 */
+const GOAL_KINDS: ReadonlySet<ReportKind> = new Set(['cycle', 'cycled', 'belly', 'courtship', 'lookalike', 'milestone', 'breeding', 'second_brood', 'line', 'grown']);
+
+/** 報告上的順序：半夜的危機、開獎 → 要處理的壞消息 → 目標的進度 → 好消息 → 其他。 */
+function lineRank(i: ReportItem): number {
+  if (i.kind === 'crisis') return 0;
+  if (i.kind === 'reveal') return 1;
+  if (isBadNews(i) || i.tone === 'warn') return 2;
+  if (GOAL_KINDS.has(i.kind)) return 3;
+  if (i.tone === 'good') return 4;
+  return 5;
+}
+
+/** 報告每一行的圖示分三類（daily-loop.md §2）：要處理的壞消息、目標的進度、好消息。 */
+export function lineGroup(i: ReportItem): 'bad' | 'goal' | 'good' {
+  const rank = lineRank(i);
+  return rank <= 0 || rank === 2 ? 'bad' : rank === 1 || rank === 3 ? 'goal' : 'good';
+}
+
+function markOf(i: ReportItem): TankMark | null {
+  const n = i.count ?? 1;
+  if (i.kind === 'plant_grew') return { kind: 'plant', tank: i.tank, text: `長了一點（+${n}%）`, note: i.text };
+  // 多缸時前面有「缸名：」，標記已經在那一缸上了
+  if (i.kind === 'new_leaf') return { kind: 'plant', tank: i.tank, text: i.text.replace(/^[^：]*：/, ''), note: i.text, ...(i.plantId !== undefined ? { plantId: i.plantId } : {}) };
+  if (i.kind === 'snails' && !i.text.includes(FIRST_PEST)) return { kind: 'snail', tank: i.tank, text: `多了 ${n} 隻`, note: i.text };
+  if (i.kind === 'orders') return { kind: 'orders', tank: i.tank, text: `阿德那邊有 ${n} 張新訂單`, note: i.text };
+  return null;
+}
+
+/**
+ * 早上報告瘦身（daily-loop.md §2）：最多 3 行重點，加最多一張選擇卡（只寫一行，點了才打開）；
+ * 水草、小螺、新訂單改放到缸上的小標記，其他擠不下的收進鈴鐺。安靜的早上只寫一行。
+ */
+export function slimReport(report: MorningReport): SlimReport {
+  const decision = report.items.find((i) => i.choice) ?? null;
+  const rest = report.items.filter((i) => i !== decision);
+  const marks = rest.map(markOf).filter((m): m is TankMark => !!m);
+  const main = rest.filter((i) => !isMinor(i));
+  const ranked = main.map((item, at) => ({ item, at })).sort((a, b) => lineRank(a.item) - lineRank(b.item) || a.at - b.at).map((x) => x.item);
+  let lines = ranked.slice(0, REPORT_LINES);
+  // 安靜的早上：一行就好，有小觀察就放小觀察
+  if (lines.length === 0 && !decision) lines = [rest.find((i) => i.kind === 'observe' || i.kind === 'quiet') ?? rest.find((i) => i.kind === 'fish_relaxed') ?? { kind: 'quiet', tank: 0, tone: 'info', text: '昨晚很平靜，魚都在水草裡睡覺' }];
+  const shown = new Set(lines);
+  return {
+    lines,
+    decision,
+    decisionFirst: decision?.choice?.id === 'C18',
+    rest: rest.filter((i) => !shown.has(i) && !markOf(i)),
+    marks,
+  };
+}
+
 /**
  * 離線回來的報告（midgame.md §7.7）：離開期間有缸超過建議量，第一行寫「你不在的時候{缸名}太擠了」，接著出 C14（節流見 takeAwayCrowd）。
  * 沒擠過、或今天說過了回 null（回來只照舊跳通知）。
@@ -477,6 +578,8 @@ function sickText(sick: SimEvent[], n: number): string {
 
 /** 水草合計長到睡前的幾倍才寫進報告（基本燈下莫絲一整天約長 1.5%，2% 就永遠不會出現）。 */
 const PLANT_GREW = 1.01;
+/** 同一缸連幾天說要多餵，就提示裝自動餵食器（daily-loop.md §4）。 */
+export const FEEDER_HINT_DAYS = 3;
 /** 一株插枝有幾片葉子（新葉的重量＝插枝重量 / 這個數；小榕大約一週一片，G8）。 */
 const LEAF_PER_CUTTING = 4;
 /** 小魚長到這麼長，就會游出水草到水面搶飼料（G8 早上報告的小里程碑）。 */

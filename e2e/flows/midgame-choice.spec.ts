@@ -31,6 +31,8 @@ test('第一窩出生：早上報告出 C1 選擇卡，選了撈進育幼盒', a
   await page.locator('button.sleep-btn').click(NO_WAIT);
   const card = page.locator('.morning');
   await expect(card).toBeVisible({ timeout: 15_000 });
+  // 報告上只寫一行「有一件事要你決定 ›」，點了才打開選擇卡（daily-loop.md §2）
+  await card.locator('.decision-item').click();
   const choice = card.locator('.choice-item', { hasText: '第一窩小魚出生了' });
   await expect(choice).toBeVisible();
   await expect(choice.locator('.bc-opt')).toHaveCount(2);

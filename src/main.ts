@@ -1821,6 +1821,11 @@ async function start(): Promise<void> {
       case 'shop_tank':
         panelSheet('我的水缸', (p) => p.tanksPanel(ctx));
         break;
+      case 'buy_feeder': {
+        const why = game.actAll((tanks) => sim.buyFeeder(tanks, item.tank));
+        toasts.show(why ?? `${sim.tankLabel(game.tanks, item.tank)}裝好自動餵食器了，每天 9 點、19 點自動餵。`, why ? 'warn' : 'info');
+        break;
+      }
       case 'fish':
       case 'treat':
         if (item.subjectId !== undefined) select(item.subjectId);
@@ -1865,7 +1870,7 @@ async function start(): Promise<void> {
   };
   // 早上報告在拆出去的檔案裡（通常開機後早就載好了，照舊同步）
   const goNight = () => withPanels(goNightWith);
-  const goNightWith = ({ snapshot, morningReport, morningCard, chooseOption, lineName }: DeferredUi) => {
+  const goNightWith = ({ snapshot, morningReport, slimReport, morningCard, chooseOption, lineName }: DeferredUi) => {
     if (sleepingNow) return;
     // 開缸演出還在演：演完會跳「你的第一個缸」，夜幕會把它蓋掉
     if (view.settingUp) {
@@ -1906,6 +1911,10 @@ async function start(): Promise<void> {
         shade.classList.remove('in');
         window.setTimeout(() => shade.remove(), 450);
         sleepingNow = false;
+        // 報告只列 3 行（daily-loop.md §2）：其他的和水草、小螺、新訂單收進鈴鐺，想看再點開
+        const slim = slimReport(report);
+        for (const i of [...slim.rest].reverse()) toasts.log(i.text, i.tone === 'bad' ? 'bad' : i.tone === 'warn' ? 'warn' : 'info');
+        for (const m of [...slim.marks].reverse()) toasts.log(m.note);
         celebration.release();
         // 報告說的那條魚、那株草在缸裡亮一下，一眼找得到是誰
         const about = report.items.find((i) => game.tanks[i.tank] === game.state && (i.subjectId !== undefined || i.plantId !== undefined));

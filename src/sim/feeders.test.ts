@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, addHolidayTablet, addPlant, forecast, hasSteadyFood, HOLIDAY_TABLET_DAYS, hoursUntilStarving, installFeeder, maxLengthCm, simulate, type TankState } from './index';
+import { addFish, addHolidayTablet, addPlant, buyFeeder, economy, forecast, hasSteadyFood, HOLIDAY_TABLET_DAYS, hoursUntilStarving, installFeeder, maxLengthCm, simulate, type TankState } from './index';
 
 const calm = { carriesIch: false, carries: [] };
 
@@ -62,5 +62,18 @@ describe('出遠門用品與寫實斷食（#115）', () => {
     expect(alert!.hours).toBeLessThan(24 * 4);
     addHolidayTablet(s);
     expect(forecast([s], 1).find((a) => a.key === 'starve')).toBeUndefined();
+  });
+
+  it('早上報告的提示直接買（daily-loop.md §4）：花 600 元裝上一天餵兩次的自動餵食器；已經有、錢不夠都不買', () => {
+    const s = tank();
+    const tanks = [s];
+    economy(s).coins = 700;
+    expect(buyFeeder(tanks, 0)).toBeNull();
+    expect(economy(s).coins).toBe(100);
+    expect(s.equipment.feeder).toEqual({ timesPerDay: 2 });
+    expect(buyFeeder(tanks, 0)).toBe('這缸已經有自動餵食器了');
+    delete s.equipment.feeder;
+    expect(buyFeeder(tanks, 0)).toBe('錢不夠：要 600 元');
+    expect(economy(s).coins).toBe(100);
   });
 });

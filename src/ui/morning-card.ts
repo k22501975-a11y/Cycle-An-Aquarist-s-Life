@@ -4,7 +4,7 @@ import { h } from './dom';
 import { keeperRibbon } from './keeper-ribbon';
 import { choiceVisual, type FishLookup } from './choice-card';
 import { lookalikeVisual } from './lookalike-card';
-import { choiceFollowUp, isBadNews, type Milestone, type MorningReport, type Reveal, type ReportItem, type ReportKind } from './morning-report';
+import { choiceFollowUp, DECISION_LINE, isBadNews, slimReport, type Milestone, type MorningReport, type Reveal, type ReportItem, type ReportKind } from './morning-report';
 import type { ChoiceCard } from '../sim/choices';
 
 /**
@@ -66,6 +66,7 @@ const ACTION_ICON: Record<NonNullable<ReportItem['action']>, ArtIcon> = {
   fry_box: 'net',
   nursery: 'net',
   shop_tank: 'shop',
+  buy_feeder: 'feed',
 };
 
 /** 點下去會做什麼（按鈕上的小字）。 */
@@ -83,6 +84,7 @@ const ACTION_LABEL: Record<NonNullable<ReportItem['action']>, string> = {
   fry_box: '救小魚',
   nursery: '放進盒子',
   shop_tank: '去買缸',
+  buy_feeder: '裝上',
 };
 
 export interface MorningCardDeps {
@@ -97,7 +99,7 @@ export interface MorningCardDeps {
   choose?: (item: ReportItem, key: string, picks: number[], text?: string) => string | null;
   /** 選擇卡上只有魚的編號（C4 的母魚、C5 那尾），照編號找牠的樣子來畫。 */
   fishLook?: FishLookup;
-  /** 今天的小事（F3，#185）：早上一起列出來，點一件就關掉報告卡帶去做。 */
+  /** 今天的小事（F3，#185）：報告裡不再列（daily-loop.md §2），畫面要放右上角的 0/3 可以用。 */
   daily?: { tasks: Array<{ id: string; art: string; text: string; done: boolean }>; go: (id: string) => void };
 }
 
@@ -249,40 +251,31 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
       item.action ? h('span.morning-go', {}, ACTION_LABEL[item.action], ' ›') : null,
     );
   };
-  const items = report.items.length > 0 ? report.items : [{ kind: 'quiet', tank: 0, tone: 'good', text: '沒什麼特別的事，魚都很好' } satisfies ReportItem];
+  // 最多 3 行加一行「有一件事要你決定 ›」（daily-loop.md §2）：點了才換成選擇卡；取名那天排第一行
+  const slim = slimReport(report);
+  const decisionRow = (item: ReportItem) => {
+    const btn = h(
+      `button.morning-item.good.decision-item`,
+      { type: 'button', onclick: () => btn.replaceWith(choiceRow(item)) },
+      h('span.morning-pic', {}, h('img', { src: artUrl('owner'), alt: '', draggable: 'false' })),
+      h('span.morning-text', {}, DECISION_LINE),
+      h('span.morning-go', {}, '›'),
+    );
+    return btn;
+  };
+  const urgent = slim.lines.filter((i) => i.kind === 'crisis' || i.kind === 'reveal');
+  const lines = slim.decision
+    ? slim.decisionFirst
+      ? [...urgent.map(row), decisionRow(slim.decision), ...slim.lines.filter((i) => !urgent.includes(i)).map(row)]
+      : [...slim.lines.map(row), decisionRow(slim.decision)]
+    : slim.lines.map(row);
   return h(
     `div.morning.glass${report.stopped ? '.stopped' : ''}`,
     { role: 'dialog', 'aria-label': report.title },
     h('div.morning-sky', { 'aria-hidden': 'true' }, h('span.morning-sun')),
     h('b.morning-title', {}, report.title),
     h('div.owner-say', {}, ownerImg('owner-say-avatar', ownerMood(morningLine(report))), h('span', {}, morningLine(report))),
-    h('div.morning-list', {}, ...items.map(row)),
-    deps.daily && deps.daily.tasks.length > 0
-      ? h(
-          'div.morning-daily',
-          {},
-          h('b.morning-daily-title', {}, '今天的小事'),
-          h(
-            'div.morning-daily-list',
-            {},
-            ...deps.daily.tasks.map((t) =>
-              h(
-                `button.morning-daily-task${t.done ? '.done' : ''}`,
-                {
-                  type: 'button',
-                  disabled: t.done,
-                  onclick: () => {
-                    close();
-                    deps.daily!.go(t.id);
-                  },
-                },
-                h('img', { src: t.art, alt: '', draggable: 'false' }),
-                h('span', {}, t.text),
-              ),
-            ),
-          ),
-        )
-      : null,
+    h('div.morning-list', {}, ...lines),
     h('button.btn.primary.morning-start', { type: 'button', onclick: close }, report.stopped ? '知道了' : '開始新的一天'),
   );
 }

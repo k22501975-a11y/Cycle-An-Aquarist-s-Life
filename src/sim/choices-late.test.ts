@@ -290,7 +290,8 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     third.pregnancy = BROOD_AGAIN_SHOWS;
     expect(nextDay(tanks)?.id).not.toBe('C9');
     expect(st.broodQueue!.map((b) => b.momId)).toEqual([third.id]);
-    expect(takeBellyNotes(tanks).map((n) => n.text)).toContainEqual(expect.stringMatching(/快生了，照你的設定生下來挑備用種魚$/));
+    const told = takeBellyNotes(tanks);
+    expect(told.map((n) => n.text)).toContainEqual(expect.stringMatching(/快生了，照你的設定生下來挑備用種魚$/));
     expect(takeBellyNotes(tanks).some((n) => /照你的設定/.test(n.text))).toBe(false);
     // 過了 7 天又快生：跳卡，選第二次照上次
     third.pregnancy = 0;
@@ -307,8 +308,11 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     other.pregnancy = BROOD_AGAIN_SHOWS;
     expect(nextDay(tanks)?.id).not.toBe('C9');
     expect(st.broodQueue!.map((b) => b.momId)).toEqual([other.id]);
-    // 改得回來：點那一行跳 C9 的選項加「每次都問我」
-    const setting = takeBellyNotes(tanks).find((n) => n.setting)!.setting!;
+    // 改設定的卡同一個設定只附一次（g22：同一張卡第 92～170 天出了 9 次）；改得回來：點第一次那行跳 C9 的選項加「每次都問我」
+    const again = takeBellyNotes(tanks);
+    expect(again.map((n) => n.text)).toContainEqual(expect.stringMatching(/快生了，照你的設定生下來挑備用種魚$/));
+    expect(again.some((n) => n.setting)).toBe(false);
+    const setting = told.find((n) => n.setting)!.setting!;
     expect(setting.options.map((o) => o.key)).toEqual(['auto:grow', 'auto:sell', 'auto:keep', 'ask']);
     expect(setting.options.find((o) => o.recommended)?.key).toBe('auto:keep');
     expect(chooseOption(tanks, 'C9', 'auto:grow')).toBeNull();
@@ -552,9 +556,27 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     expect(c14.title).toMatch(/太擠了$/);
     expect(c14.owner).toMatch(/^氨 [\d.]+.*再不處理會開始死魚。$/);
     expect(c14.options.find((o) => o.key === 'water')!.outcome).toBe('換三成水，撐 2 天');
+    // 先多換水只是撐著，永遠不標推薦（daily-loop.md §4）
+    expect(c14.options.find((o) => o.key === 'water')!.recommended).toBeFalsy();
     expect(chooseOption(tanks, 'C14', 'water')).toBeNull();
     expect(nextDay(tanks)?.id).not.toBe('C14');
     expect(nextDay(tanks)?.id).toBe('C14');
+  });
+
+  it('C14 超過建議量、除了先多換水什麼都選不了（擠的是小小魚、錢也不夠）：不出卡（daily-loop.md §4）', () => {
+    const { tanks, s, st, storeMom } = latePair();
+    storeMom.keeper = true;
+    Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard' });
+    orderBoard(s).orders = [];
+    economy(s).coins = 0;
+    while (crowdingRatio(s) < CROWD_FULL + 0.1) {
+      const f = addFish(s, 'guppy', { ...calm, pregnant: false });
+      f.lengthCm = 0.7;
+      f.ageDays = 2;
+      f.generation = 1;
+    }
+    st.shown.C6 = s.hours - 24;
+    expect(takeChoice(tanks)?.id).not.toBe('C14');
   });
 
   it('C14 連賣兩次之後推薦「以後太擠就自動賣」；選了之後擠了早上自動賣，不再跳卡', () => {
