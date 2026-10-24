@@ -13,7 +13,7 @@ import { updateQuarantine } from './quarantine';
 import { updateNursery } from './nursery';
 import { updateSnails } from './snails';
 import { updateParental } from './parental';
-import { trackRaised, updateEconomy } from './economy';
+import { noteStarterPack, trackRaised, updateEconomy } from './economy';
 import { trackArrivals } from './arrivals';
 import { settleTurbidity } from './aquascape';
 import { TEMP_LOG_HOURS, type TankState } from './state';
@@ -46,6 +46,7 @@ export function step(state: TankState, dtHours: number = TICK_HOURS): void {
     logTemperature(state);
     // 養到轉色的累計每個整點記一次就夠（raisedCount 也會算還沒記到的）
     trackRaised(state);
+    noteStarterPack(state);
   }
 }
 

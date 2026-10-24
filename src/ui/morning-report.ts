@@ -186,7 +186,7 @@ export const isBadNews = (i: ReportItem) => i.tone === 'bad' || i.kind === 'eate
 
 const TONE_ORDER: Record<ReportItem['tone'], number> = { bad: 0, warn: 1, good: 2, info: 3 };
 /** 半夜的危機最前面，再來是開獎（整局最大的回報，#357：本來排在白點後面要往下捲才看得到）；其他照 tone 排，「魚放鬆了」這種小事排同 tone 的最後。 */
-const kindRank = (i: ReportItem): number => (i.kind === 'crisis' ? 0 : i.kind === 'reveal' ? 1 : 2);
+const kindRank = (i: ReportItem): number => (i.kind === 'wiped' ? -1 : i.kind === 'crisis' ? 0 : i.kind === 'reveal' ? 1 : 2);
 
 /** 安靜的一晚那句：缸裡有魚才說魚在睡覺（#377：魚死光了還在說「魚都在水草裡睡覺」）。 */
 function quietText(tanks: TankState[]): string {
@@ -522,6 +522,8 @@ const GOAL_KINDS: ReadonlySet<ReportKind> = new Set(['cycle', 'cycled', 'belly',
 export const isPinned = (i: ReportItem): boolean => !!i.starving || !!i.standing || i.kind === 'crisis' || i.kind === 'death' || i.kind === 'equipment';
 /** 報告上的順序：半夜的危機、開獎 → 要處理的壞消息 → 目標的進度 → 好消息 → 其他。 */
 function lineRank(i: ReportItem): number {
+  // 魚都死光了（#382）排在所有危機前面：先說從哪裡重新開始
+  if (i.kind === 'wiped') return -2;
   // 危機（#375）和消瘦（midgame.md §7.9）永遠排第一行
   if (isPinned(i)) return -1;
   if (i.kind === 'crisis') return 0;

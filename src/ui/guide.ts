@@ -2,7 +2,7 @@ import type { SoundId } from '../audio/sounds';
 import type { KeyValueStore } from '../game/save';
 import { checkGoals, nextGoals, nextStep, tankLabel, UNLOCK_LABELS, type Goal, type NextStep, type NextTarget, type TankState } from '../sim';
 import { h } from './dom';
-import { crisisTodos, wipedOut } from './status';
+import { crisisTodos, lingering, wipedOut } from './status';
 import { artImg, ownerImg } from './art-icons';
 import { ownerMood, type OwnerMood } from './owner-mood';
 import { kickOwnerQueue, onOwnerAskClosed, onOwnerAskOpened, ownerAskOpen } from './owner-ask';
@@ -409,8 +409,11 @@ export class Guide {
       const detail = goal.detail?.(this.tanks) ?? '';
       // 下一步（U1）：照現在缸裡的狀況說具體要做什麼，點任務卡就帶過去
       // 危機不等人（#375）：加熱棒卡住、水溫超出、沒撈的死魚，先叫玩家處理；魚死光了叫玩家去商店重新開始（#377）
-      const crisis = crisisTodos(this.tanks)[0];
-      const wiped = crisis ? null : wipedOut(this.tanks);
+      // 魚都死光了：先去重新開始，壞掉拔了插頭的加熱棒之後再換（#382）
+      const crises = crisisTodos(this.tanks);
+      const urgent = crises.find((c) => !lingering(c));
+      const wiped = urgent ? null : wipedOut(this.tanks);
+      const crisis = urgent ?? (wiped ? undefined : crises[0]);
       this.step = wiped
         ? { goal: goal.id, text: wiped.step, target: 'shop_fish' }
         : crisis

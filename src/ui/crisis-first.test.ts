@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, catchPests, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, TANKS, unplugHeater, type TankState } from '../sim';
-import { crisisTodos, capsSummary, wipedOut } from './status';
+import { addFish, addPlant, canClaimStarterPack, catchPests, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, TANKS, unplugHeater, type TankState } from '../sim';
+import { crisisTodos, capsSummary, lingering, wipedOut } from './status';
 import { morningReport, REPORT_LINES, slimReport, snapshot } from './morning-report';
 
 /** 養好水、一株草、10 尾孔雀魚的缸，加熱棒設 25°C。 */
@@ -122,5 +122,62 @@ describe('危機排第一行（#375）', () => {
     expect(catchPests(b, true)).toBe(0);
     updateDaily(tanks);
     expect(dailyTasks(tanks)!.tasks[0].done).toBe(true);
+  });
+});
+
+describe('壞加熱棒不佔住任務卡、死光先重新開始（#382）', () => {
+  /** 加熱棒卡住、整缸熱死（屍體還在）。 */
+  function cooked(s: TankState): void {
+    s.water.tempC = 40;
+    s.equipment.heater!.broken = true;
+    s.equipment.heater!.stuckOn = true;
+    simulate(s, 48);
+    expect(s.fish.some((f) => f.alive)).toBe(false);
+  }
+
+  it('別缸馬上會出事的（死魚、卡住）排在這缸拔了插頭的壞加熱棒前面', () => {
+    const a = tank(31);
+    const b = tank(32);
+    linkTanks([a, b]);
+    a.equipment.heater!.broken = true;
+    unplugHeater(a);
+    b.equipment.heater!.broken = true;
+    b.equipment.heater!.stuckOn = true;
+    b.fish[0].alive = false;
+    const c = crisisTodos([a, b]);
+    expect(c.map((x) => x.tank)).toEqual([1, 1, 0]);
+    expect(c[2]).toMatchObject({ text: '加熱棒壞了，換一支', go: 'equipment' });
+    expect(lingering(c[2])).toBe(true);
+    expect(c.slice(0, 2).some(lingering)).toBe(false);
+  });
+
+  it('死光那天：「魚都沒了、去領起步包」是第一行，排在死魚和加熱棒前面', () => {
+    const s = tank();
+    economy(s).coins = 50;
+    cooked(s);
+    const before = snapshot([s]);
+    simulate(s, 12);
+    const lines = slimReport(morningReport(before, [s], 12, null)).lines;
+    expect(lines[0]).toMatchObject({ kind: 'wiped', action: 'shop_fish', goLabel: '去領' });
+    expect(lines.slice(1).some((i) => i.text.includes('死魚'))).toBe(true);
+  });
+
+  it('說好要送的起步包：之後錢變多也領得到；缸裡又有魚就作廢', () => {
+    const s = tank();
+    economy(s).coins = 50;
+    cooked(s);
+    expect(economy(s).starterPackPromised).toBeDefined();
+    economy(s).coins = 500;
+    expect(canClaimStarterPack(s)).toBe(true);
+    expect(wipedOut([s])).toMatchObject({ claim: true, step: '魚都沒了，去商店領起步包' });
+    // 自己買了魚：作廢，下次死光再重新看錢夠不夠
+    addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'male', pregnant: false });
+    simulate(s, 1);
+    expect(economy(s).starterPackPromised).toBeUndefined();
+    // 沒說好過、錢又多：照舊不送
+    const rich = tank(33);
+    economy(rich).coins = 500;
+    cooked(rich);
+    expect(canClaimStarterPack(rich)).toBe(false);
   });
 });

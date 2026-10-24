@@ -241,7 +241,13 @@ export function crisisTodos(tanks: TankState[]): Array<Todo & { tank: number }> 
       out.push({ ...x, tank: i });
     }
   });
-  return out;
+  // 馬上會出事的（停電、死魚、卡住、水溫）排在已經拔掉的壞加熱棒前面，哪一缸都一樣（#382：這缸的「換一支」佔住任務卡，別缸的死魚 40 天沒人提醒）
+  return [...out.filter((c) => !lingering(c)), ...out.filter(lingering)];
+}
+
+/** 不會馬上出事、可以晚點處理的危機：已經拔掉插頭的壞加熱棒（魚死光時排在重新開始後面）。 */
+export function lingering(c: Pick<Todo, 'text'>): boolean {
+  return /^加熱棒壞了/.test(c.text);
 }
 
 /**
