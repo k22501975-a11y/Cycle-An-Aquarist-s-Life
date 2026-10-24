@@ -110,6 +110,8 @@ export interface Economy {
   firstBredSale?: boolean;
   /** 上次領保底起步包的時間（遊戲小時）。 */
   starterPackHours?: number;
+  /** 魚死光、說了要送起步包的時間（#382）：之後錢變多也照樣送，直到領了或缸裡又有魚。 */
+  starterPackPromised?: number;
   /** 下一個新缸用的 id 區段（每缸的魚和水草 id 從不同區段開始，魚換缸也不會撞號）。 */
   nextTankBlock?: number;
   /** 新手教學之後的目標與解鎖（M19）；舊存檔沒有，第一次檢查時建立。 */
@@ -189,9 +191,24 @@ export const STARTER_PACK_MAX_COINS = 200;
 export function canClaimStarterPack(state: TankState, others: TankState[] = []): boolean {
   const e = economy(state);
   const anyAlive = [state, ...others].some((t) => t.fish.some((f) => f.alive) || (t.quarantine?.fish ?? []).some((f) => f.alive));
-  const hadFish = state.events.some((ev) => ev.type === 'fish_died') || state.fish.length > 0;
+  const promised = e.starterPackPromised !== undefined;
+  const hadFish = promised || state.events.some((ev) => ev.type === 'fish_died') || state.fish.length > 0;
   const cooled = e.starterPackHours === undefined || state.hours - e.starterPackHours >= STARTER_PACK_COOLDOWN_DAYS * 24;
-  return !anyAlive && hadFish && e.coins < STARTER_PACK_MAX_COINS && cooled;
+  return !anyAlive && hadFish && (promised || e.coins < STARTER_PACK_MAX_COINS) && cooled;
+}
+
+/**
+ * 每個整點記一次：魚死光、領得到起步包的那一刻就算說好要送了（#382：死光那天報告說老闆送一包，
+ * 後來手上的錢超過 200 元，起步包就不見了）。缸裡又有活魚（領了、自己買了）就作廢，下次死光再重新看。
+ */
+export function noteStarterPack(state: TankState): void {
+  const e = economy(state);
+  const tanks = householdTanks(state);
+  if (tanks.some((t) => t.fish.some((f) => f.alive) || (t.quarantine?.fish ?? []).some((f) => f.alive))) {
+    delete e.starterPackPromised;
+    return;
+  }
+  if (e.starterPackPromised === undefined && canClaimStarterPack(state, tanks.filter((t) => t !== state))) e.starterPackPromised = state.hours;
 }
 
 /** 領起步包：1 公 2 母、確認健康的孔雀魚。送的魚不能賣回店裡（牠們生的可以）。 */

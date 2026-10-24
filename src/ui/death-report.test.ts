@@ -76,8 +76,11 @@ describe('早上報告的死亡三件事（polish-to-9 U4）', () => {
     untilDeath(s, 24 * 3, (st) => (st.water.o2 = Math.min(st.water.o2, 0.5)));
     const died = s.events.find((e) => e.type === 'fish_died')!;
     const report = morningReport(before, [s], 12, { tank: 0, reason: 'fish_died', event: died });
-    expect(report.items[0]).toMatchObject({ kind: 'crisis', action: 'remove_dead', subjectId: died.subjectId });
-    expect(report.items[0].text).toMatch(/死因：缺氧（溶氧 \d+\.\d mg\/L.*）。下次：/);
+    // 魚都死了的話「魚都沒了」排第一行（#382），半夜的危機接在後面
+    const crisis = report.items.find((i) => i.kind === 'crisis')!;
+    expect(report.items[0].kind).toBe(s.fish.some((f) => f.alive) ? 'crisis' : 'wiped');
+    expect(crisis).toMatchObject({ kind: 'crisis', action: 'remove_dead', subjectId: died.subjectId });
+    expect(crisis.text).toMatch(/死因：缺氧（溶氧 \d+\.\d mg\/L.*）。下次：/);
     // 同一條不重複列
     expect(report.items.filter((i) => i.subjectId === died.subjectId)).toHaveLength(1);
 

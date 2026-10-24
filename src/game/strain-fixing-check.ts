@@ -1,9 +1,9 @@
 /// <reference types="node" />
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { expect, inject } from "vitest";
-import { strainFacts, strainRun } from "./strain-fixing-run";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { expect, inject } from 'vitest';
+import { strainFacts, strainRun } from './strain-fixing-run';
 
 /**
  * 固定品系 300 天劇本的驗收（strain-fixing.md §3、§5、§7、§10，#344、#351、#378），種子 1～6 各一個檔平行跑，照推薦選。
@@ -32,10 +32,7 @@ interface SeedResult {
   numbers: Record<string, unknown>;
 }
 
-const atLeast = (
-  rs: SeedResult[],
-  key: "reveal" | "named" | "done" | "paced" | "coins",
-) => rs.filter((r) => r[key]).length;
+const atLeast = (rs: SeedResult[], key: 'reveal' | 'named' | 'done' | 'paced' | 'coins') => rs.filter((r) => r[key]).length;
 
 export function strainSeed(seed: number): void {
   const run = strainRun(seed);
@@ -60,25 +57,23 @@ export function strainSeed(seed: number): void {
       minCoins: f.minCoins,
     },
   };
-  const dir = join(tmpdir(), "cycle-strain-fixing", inject("runId") ?? "local");
+  const dir = join(tmpdir(), 'cycle-strain-fixing', inject('runId') ?? 'local');
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${seed}.json`), JSON.stringify(mine));
-  const all = readdirSync(dir).map(
-    (x) => JSON.parse(readFileSync(join(dir, x), "utf8")) as SeedResult,
-  );
+  const all = readdirSync(dir).map((x) => JSON.parse(readFileSync(join(dir, x), 'utf8')) as SeedResult);
   if (STRAIN_SEEDS.every((s) => all.some((r) => r.seed === s))) {
     const sum = all
       .sort((a, b) => a.seed - b.seed)
       .map(
         (r) =>
-          `種子 ${r.seed}：開獎${r.reveal ? "有" : "沒有"}夢想魚、取名${r.named ? "≤200" : ">200"}、完成${r.done ? "≤360" : ">360"}、節奏${r.paced ? "沒" : "有"}空太久、錢${r.coins ? "夠" : "不夠"}、尾鰭少 ${r.tailDrop}`,
+          `種子 ${r.seed}：開獎${r.reveal ? '有' : '沒有'}夢想魚、取名${r.named ? '≤200' : '>200'}、完成${r.done ? '≤360' : '>360'}、節奏${r.paced ? '沒' : '有'}空太久、錢${r.coins ? '夠' : '不夠'}、尾鰭少 ${r.tailDrop}`,
       )
-      .join("\n");
-    expect(atLeast(all, "reveal"), sum).toBeGreaterThanOrEqual(5);
-    expect(atLeast(all, "named"), sum).toBeGreaterThanOrEqual(4);
-    expect(atLeast(all, "done"), sum).toBeGreaterThanOrEqual(4);
-    expect(atLeast(all, "paced"), sum).toBeGreaterThanOrEqual(5);
-    expect(atLeast(all, "coins"), sum).toBeGreaterThanOrEqual(5);
+      .join('\n');
+    expect(atLeast(all, 'reveal'), sum).toBeGreaterThanOrEqual(5);
+    expect(atLeast(all, 'named'), sum).toBeGreaterThanOrEqual(4);
+    expect(atLeast(all, 'done'), sum).toBeGreaterThanOrEqual(4);
+    expect(atLeast(all, 'paced'), sum).toBeGreaterThanOrEqual(5);
+    expect(atLeast(all, 'coins'), sum).toBeGreaterThanOrEqual(5);
     const tails = all.map((r) => r.tailDrop).sort((a, b) => a - b);
     expect((tails[2] + tails[3]) / 2, sum).toBeLessThanOrEqual(15);
   }
@@ -87,7 +82,7 @@ export function strainSeed(seed: number): void {
   // 空檔再長也不能超過 8 天（§10 保底）
   expect(
     f.gaps.filter((g) => {
-      const [a, b] = g.split("→").map(Number);
+      const [a, b] = g.split('→').map(Number);
       return b - a > 8;
     }),
     f.log,

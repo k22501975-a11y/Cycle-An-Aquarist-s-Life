@@ -1448,7 +1448,8 @@ export function treatPanel(ctx: PanelContext, advice: string): Node {
   return h('div.stack', {}, h('p.hint.treat-advice', {}, advice), heatBtn, medicineRow(ctx));
 }
 
-export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: PanelContext): Node {
+export function maintenancePanel(ctx: PanelContext): Node {
+  const { game, sheet, toasts, undoable, openScape } = ctx;
   const s = game.state;
   // 每日小事「看看過濾器和加熱棒」「確認水溫」
   markDaily(game.tanks, 'gear');
@@ -1535,7 +1536,7 @@ export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: P
             {},
             h('b', {}, `加熱棒 ${eq.heater.targetC}°C`),
             eq.heater.broken
-              ? h('div.warn-text', {}, eq.heater.stuckOn ? '卡住一直加熱！先拔掉插頭，再到商店換一支' : '故障中，請到商店換一支')
+              ? h('div.warn-text', {}, eq.heater.stuckOn ? '卡住一直加熱！先拔掉插頭，再換一支' : '故障中，換一支新的')
               : eq.heater.setpointC !== undefined
                 ? h('div.hint', {}, `${eq.heater.setpointC < eq.heater.targetC ? '升溫' : '降溫'}中：一天約 2°C，慢慢調到 ${eq.heater.targetC}°C，魚才不會受涼生白點`)
                 : null,
@@ -1544,8 +1545,15 @@ export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: P
             ? button('拔掉插頭', () => {
                 game.act((st) => unplugHeater(st));
                 toasts.show('拔掉加熱棒了，記得換一支新的', 'warn');
+                sheet.refresh();
               }, 'primary')
-            : h('div.row', {}, button('−', () => game.act((st) => setHeaterTarget(st, eq.heater!.targetC - 1))), button('+', () => game.act((st) => setHeaterTarget(st, eq.heater!.targetC + 1)))),
+            : eq.heater.broken
+              ? // 壞掉的加熱棒在這裡就能換（#382：任務卡帶到這裡卻只寫「請到商店換一支」，照任務卡玩會卡十幾天）
+                button(`換一支（${price(`heater:${eq.heater.spec.id}`)} 元）`, () => {
+                  const spec = eq.heater!.spec;
+                  if (purchase(ctx, price(`heater:${spec.id}`), (st) => installHeater(st, spec), `換上新的${spec.name}`)) sheet.refresh();
+                }, 'primary')
+              : h('div.row', {}, button('−', () => game.act((st) => setHeaterTarget(st, eq.heater!.targetC - 1))), button('+', () => game.act((st) => setHeaterTarget(st, eq.heater!.targetC + 1)))),
         )
       : null,
     eq.light
