@@ -735,7 +735,33 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .morning-text { flex: 1; }
 .morning-go { flex: 0 0 auto; color: var(--gold-bright); font-size: 13px; font-weight: 700; white-space: nowrap; }
 .morning-start { flex: none; margin-top: 4px; }
-@media (prefers-reduced-motion: reduce) { .night-z { animation: none; } .morning { animation: none; } }
+/* 早上報告改版（daily-loop.md §2）：每行前面一顆三類寶石（紅＝要處理、金＝目標進度、綠＝好消息），數字粗體，選擇卡收成一行 */
+.morning-pic { width: 40px; height: 40px; }
+.morning-pic.glyph-only { width: 30px; height: 30px; background: none; }
+.morning-glyph { display: inline-block; width: 30px; height: 30px; flex: 0 0 auto; }
+.morning-glyph svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45)); }
+.morning-glyph.corner { position: absolute; left: -6px; top: -6px; width: 20px; height: 20px; }
+.morning-item { padding: 6px 10px 6px 8px; }
+.morning-item.g-goal { border-left-color: var(--gold); }
+.morning-num { color: var(--gold-bright); font-weight: 800; }
+.morning-item.bad .morning-num { color: #ffb3a0; }
+.choice-item.closed { padding: 0; border-left-color: var(--gold); background: linear-gradient(90deg, rgba(227, 189, 109, 0.18), rgba(227, 189, 109, 0.04)); }
+.morning-decide { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px 8px 8px; border: 0; background: none; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.morning-decide:active { transform: scale(0.98); }
+.morning-decide-text { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.morning-decide-text b { color: var(--gold-bright); font-size: 15px; }
+.morning-decide-text small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.morning-decide .morning-go { font-size: 20px; }
+.morning-decide .morning-glyph { animation: decide-glow 2.2s ease-in-out infinite; border-radius: 50%; }
+@keyframes decide-glow { 0%, 100% { box-shadow: 0 0 0 rgba(246, 216, 145, 0); } 50% { box-shadow: 0 0 12px rgba(246, 216, 145, 0.8); } }
+.morning-daily-btn { position: absolute; top: 12px; right: 12px; z-index: 1; display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px 3px 6px; border-radius: 999px; border: 1px solid rgba(227, 189, 109, 0.5); background: rgba(8, 28, 36, 0.75); color: var(--gold-bright); font: inherit; font-size: 13px; cursor: pointer; }
+.morning-daily-btn .daily-chest-icon { animation: none; width: 22px; height: 18px; }
+.morning-daily-btn.open { background: rgba(227, 189, 109, 0.22); }
+.morning-daily-btn.all { border-color: var(--sage); color: #c9f2d6; }
+.morning-daily[hidden] { display: none; }
+.morning-daily-task { position: relative; }
+.morning-daily-check { position: absolute; top: 4px; right: 6px; color: var(--sage); font-style: normal; font-weight: 800; }
+@media (prefers-reduced-motion: reduce) { .night-z { animation: none; } .morning { animation: none; } .morning-decide .morning-glyph { animation: none; } }
 /* 水質測試：一項一支試管，液體顏色就是比色結果 */
 .kit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
 .kit-card { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px 10px; border-radius: 16px; background: linear-gradient(180deg, rgba(120, 220, 230, 0.12), rgba(4, 22, 30, 0.35)); border: 1px solid rgba(227, 189, 109, 0.28); text-align: center; }
@@ -808,6 +834,22 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
   100% { opacity: 0; transform: translate(-50%, 220%); }
 }
 @media (prefers-reduced-motion: reduce) { .bite-tag { animation-duration: 0.01s; animation-fill-mode: none; } }
+
+/* 缸上的小標記（daily-loop.md §2）：圓形小玻璃章，輕輕上下浮，點了換成一句話 */
+.tank-mark { position: absolute; z-index: 6; width: 38px; height: 38px; padding: 4px; transform: translate(-50%, -100%); border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.75); background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.12) 60%), rgba(18, 40, 52, 0.55); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35), 0 0 0 3px rgba(255, 255, 255, 0.12); cursor: pointer; transition: left 0.5s linear, top 0.5s linear; animation: mark-bob 2.6s ease-in-out infinite; }
+.tank-mark svg { display: block; width: 100%; height: 100%; }
+.tank-mark::after { content: ''; position: absolute; left: 50%; bottom: -7px; width: 2px; height: 6px; margin-left: -1px; border-radius: 1px; background: rgba(255, 255, 255, 0.6); }
+.tank-mark.plant { border-color: rgba(150, 230, 160, 0.9); }
+.tank-mark.orders { border-color: rgba(245, 200, 100, 0.95); }
+.tank-mark.snail { border-color: rgba(240, 190, 140, 0.9); }
+@keyframes mark-bob { 0%, 100% { margin-top: 0; } 50% { margin-top: -5px; } }
+.tank-mark-say { position: absolute; z-index: 7; transform: translate(-50%, -100%); width: max-content; max-width: min(300px, 80vw); padding: 7px 13px; border-radius: 14px; font: inherit; font-size: 13px; color: #fff; text-align: left; background: rgba(20, 34, 40, 0.86); border: 1px solid rgba(255, 255, 255, 0.35); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4); animation: mark-say 0.25s ease-out; }
+.tank-mark-say b { color: var(--gold); font-weight: 600; }
+.tank-mark-say.plant { border-color: rgba(150, 230, 160, 0.7); }
+.tank-mark-say.orders { border-color: rgba(245, 200, 100, 0.8); }
+@keyframes mark-say { from { opacity: 0; transform: translate(-50%, -80%) scale(0.85); } }
+.scaping .tank-mark, .scaping .tank-mark-say, .setting-up .tank-mark { display: none; }
+@media (prefers-reduced-motion: reduce) { .tank-mark, .tank-mark-say { animation: none; } }
 
 /* 開缸演出時只留缸（#171）：上方列、任務卡、工具列、缸名先淡出，演完再回來 */
 #hud, #dock, .quest-pill, .tank-label { transition: opacity 0.5s ease; }

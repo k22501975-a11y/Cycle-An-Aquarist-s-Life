@@ -4,52 +4,13 @@ import { h } from './dom';
 import { keeperRibbon } from './keeper-ribbon';
 import { choiceVisual, type FishLookup } from './choice-card';
 import { lookalikeVisual } from './lookalike-card';
-import { choiceFollowUp, DECISION_LINE, isBadNews, slimReport, type Milestone, type MorningReport, type Reveal, type ReportItem, type ReportKind } from './morning-report';
+import { choiceFollowUp, DECISION_LINE, isBadNews, lineGroup, slimReport, type Milestone, type MorningReport, type Reveal, type ReportItem, type ReportKind } from './morning-report';
 import type { ChoiceCard } from '../sim/choices';
 
 /**
  * 「過一晚」醒來的早上報告卡（first-10-minutes.md F2）：阿德老闆一句話、一條一條的圖卡，
  * 點一條就帶去處理（撈死魚、餵食、看那條魚…）。報告的內容在 morning-report.ts，這裡只負責畫面。
  */
-
-/** 每種事情的圖示（有魚的照片時用照片）。 */
-const KIND_ICON: Record<ReportKind, ArtIcon> = {
-  crisis: 'gear',
-  crowd: 'net',
-  death: 'net',
-  birth: 'owner',
-  eaten: 'net',
-  grown: 'owner',
-  cycle: 'bacteria',
-  cycled: 'bacteria',
-  disease: 'testkit',
-  equipment: 'gear',
-  snails: 'net',
-  algae: 'waterchange',
-  plant_died: 'trim',
-  hungry: 'feed',
-  orders: 'orders',
-  nursery: 'net',
-  plant_grew: 'trim',
-  fish_relaxed: 'owner',
-  ammonia: 'waterchange',
-  bloom: 'bacteria',
-  gear: 'gear',
-  belly: 'owner',
-  courtship: 'owner',
-  fry_grew: 'feed',
-  new_leaf: 'trim',
-  rescued: 'testkit',
-  lookalike: 'owner',
-  choice: 'owner',
-  breeding: 'owner',
-  milestone: 'owner',
-  reveal: 'owner',
-  second_brood: 'owner',
-  line: 'codex',
-  observe: 'owner',
-  quiet: 'owner',
-};
 
 /** 危機（半夜叫醒）照要去處理的事放圖示。 */
 const ACTION_ICON: Record<NonNullable<ReportItem['action']>, ArtIcon> = {
@@ -87,6 +48,45 @@ const ACTION_LABEL: Record<NonNullable<ReportItem['action']>, string> = {
   buy_feeder: '裝上',
 };
 
+/** 早上報告每行的三類（daily-loop.md §2）：要處理的壞消息、目標的進度、好消息。 */
+export type ReportGroup = 'bad' | 'goal' | 'good';
+
+/** 三類的小圖示：紅寶石驚嘆號、金色星星、綠色葉子，和選育卡的寶石同一套畫法。 */
+const GROUP_SVG: Record<ReportGroup, string> = {
+  bad: '<svg viewBox="0 0 24 24" aria-hidden="true"><defs><radialGradient id="rg-bad" cx=".38" cy=".3" r=".75"><stop offset="0" stop-color="#ffd2c4"/><stop offset=".45" stop-color="#ff6b5e"/><stop offset="1" stop-color="#9c2230"/></radialGradient></defs><circle cx="12" cy="12" r="10.5" fill="url(#rg-bad)" stroke="#e3bd6d" stroke-width="1.2"/><rect x="10.6" y="5.6" width="2.8" height="8.4" rx="1.4" fill="#fff6ea"/><circle cx="12" cy="17.4" r="1.6" fill="#fff6ea"/></svg>',
+  goal: '<svg viewBox="0 0 24 24" aria-hidden="true"><defs><radialGradient id="rg-goal" cx=".38" cy=".3" r=".75"><stop offset="0" stop-color="#fff2c4"/><stop offset=".5" stop-color="#e3bd6d"/><stop offset="1" stop-color="#8a6224"/></radialGradient></defs><circle cx="12" cy="12" r="10.5" fill="url(#rg-goal)" stroke="#fff4cf" stroke-opacity=".8" stroke-width="1.2"/><path d="M12 5.2l1.95 4.3 4.65.5-3.5 3.15 1 4.6L12 15.4l-4.1 2.35 1-4.6-3.5-3.15 4.65-.5z" fill="#fff8de" stroke="#8a6224" stroke-width=".6" stroke-linejoin="round"/></svg>',
+  good: '<svg viewBox="0 0 24 24" aria-hidden="true"><defs><radialGradient id="rg-good" cx=".38" cy=".3" r=".75"><stop offset="0" stop-color="#e2ffe9"/><stop offset=".5" stop-color="#6fcf97"/><stop offset="1" stop-color="#1f6b4a"/></radialGradient></defs><circle cx="12" cy="12" r="10.5" fill="url(#rg-good)" stroke="#e3bd6d" stroke-width="1.2"/><path d="M7 16.5c0-5.5 4-9 10-9.5-.3 6-3.8 10-9.2 10z" fill="#f2fff4"/><path d="M7.4 16.6c2.2-2.6 4.3-4.4 7.2-6.1" stroke="#2f8a5f" stroke-width="1.1" stroke-linecap="round" fill="none"/></svg>',
+};
+
+const GROUP_LABEL: Record<ReportGroup, string> = { bad: '要處理', goal: '目標進度', good: '好消息' };
+
+let glyphSeq = 0;
+
+/** 一類的小圖示（每個用自己的漸層 id，同 keeper-ribbon 的做法）。 */
+export function groupGlyph(group: ReportGroup, cls = 'morning-glyph'): HTMLElement {
+  const el = h(`span.${cls}.${group}`, { title: GROUP_LABEL[group] });
+  const n = ++glyphSeq;
+  el.innerHTML = GROUP_SVG[group].replace(/rg-(bad|goal|good)/g, `rg-$1-${n}`);
+  return el;
+}
+
+/** 把字切成一段一段：數字（含 %）標 num，畫面用粗體；魚的編號（#12）不算。 */
+export function numberParts(text: string): Array<{ text: string; num: boolean }> {
+  const out: Array<{ text: string; num: boolean }> = [];
+  let last = 0;
+  for (const m of text.matchAll(/(?<![#\d])\d+(?:[.,]\d+)*%?/g)) {
+    if (m.index > last) out.push({ text: text.slice(last, m.index), num: false });
+    out.push({ text: m[0], num: true });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last), num: false });
+  return out;
+}
+
+function boldNumbers(text: string): Array<string | HTMLElement> {
+  return numberParts(text).map((p) => (p.num ? h('b.morning-num', {}, p.text) : p.text));
+}
+
 export interface MorningCardDeps {
   /** 這一條要放的圖（魚的照片、小魚圖）；沒有就用種類的圖示。 */
   picture?: (item: ReportItem) => string | null;
@@ -99,6 +99,8 @@ export interface MorningCardDeps {
   choose?: (item: ReportItem, key: string, picks: number[], text?: string) => string | null;
   /** 選擇卡上只有魚的編號（C4 的母魚、C5 那尾），照編號找牠的樣子來畫。 */
   fishLook?: FishLookup;
+  /** 今天的小事（daily-loop.md §2）：收成右上角的圖示加 0/3，點了才展開，點一件就關掉報告卡帶去做。 */
+  daily?: { tasks: Array<{ id: string; art: string; text: string; done: boolean }>; go: (id: string) => void };
 }
 
 /** 老闆的開場白：照最要緊的那一條說。 */
@@ -137,7 +139,7 @@ export function morningLine(report: MorningReport): string {
  */
 function reportText(text: string): HTMLElement {
   const at = text.indexOf('下次：');
-  if (at < 0) return h('span.morning-text', {}, text);
+  if (at < 0) return h('span.morning-text', {}, ...boldNumbers(text));
   const avoid = h('span.morning-avoid', { hidden: true }, text.slice(at));
   const more = h(
     'span.morning-more',
@@ -155,13 +157,32 @@ function reportText(text: string): HTMLElement {
     },
     '怎麼避免 ▾',
   );
-  return h('span.morning-text', {}, text.slice(0, at).trimEnd(), ' ', more, avoid);
+  return h('span.morning-text', {}, ...boldNumbers(text.slice(0, at).trimEnd()), ' ', more, avoid);
 }
 
 export function morningCard(report: MorningReport, deps: MorningCardDeps, close: () => void): HTMLElement {
   // 選擇卡：不是整條一個按鈕，選項各自一個按鈕；選完換成「選好了」
+  // 選擇卡先收成一行「有一件事要你決定 ›」（daily-loop.md §2），點了才在原地展開
   const choiceRow = (item: ReportItem) => {
-    const box = h(`div.morning-item.${item.tone}.choice-item`, {});
+    const box = h(`div.morning-item.${item.tone}.choice-item.closed`, {});
+    const open = () => {
+      box.classList.remove('closed');
+      box.replaceChildren();
+      fillChoice(item, box);
+      box.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+    };
+    box.append(
+      h(
+        'button.morning-decide',
+        { type: 'button', onclick: open },
+        groupGlyph('goal'),
+        h('span.morning-decide-text', {}, h('b', {}, DECISION_LINE), h('small', {}, item.text)),
+        h('span.morning-go', {}, '›'),
+      ),
+    );
+    return box;
+  };
+  const fillChoice = (item: ReportItem, box: HTMLElement) => {
     const done = (text: string) => box.replaceChildren(h('span.morning-text', {}, `${item.text} ✓ ${text}`));
     box.append(
       h('span.morning-body', {}, h('span.morning-text', {}, h('b', {}, item.text)), choiceVisual(item.choice!, (key, picks, text) => {
@@ -179,7 +200,6 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
         return null;
       }, deps.fishLook)),
     );
-    return box;
   };
   // 成長里程碑（midgame.md §5.3）：一句話＋一張圖（放大鏡看肛鰭／胎斑、顯色前後、公母配對），圖跟選育卡一起延後載入
   const milestoneRow = (item: ReportItem, m: Milestone) => {
@@ -230,9 +250,12 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
     if (item.milestone) return milestoneRow(item, item.milestone);
     if (item.lineDone) return lineDoneRow(item, item.lineDone);
     if (item.kind === 'breeding') return h(`div.morning-item.${item.tone}.breeding-item`, {}, h('div.bc-line', {}, keeperRibbon('bc-line-ribbon'), h('span.bc-line-text', {}, item.text)));
-    const pic = deps.picture?.(item) ?? artUrl(item.kind === 'crisis' && item.action ? ACTION_ICON[item.action] : KIND_ICON[item.kind]);
-    const img = h('img', { src: pic, alt: '', draggable: 'false' });
-    img.addEventListener('error', () => img.remove());
+    // 每行前面一個三類的小圖示；有那條魚、那株草的照片就放照片，圖示掛在照片角落
+    const group = lineGroup(item);
+    // 半夜的危機照要去處理的事放工具圖（撈網、測試劑）
+    const photo = deps.picture?.(item) ?? (item.kind === 'crisis' && item.action ? artUrl(ACTION_ICON[item.action]) : null);
+    const img = photo ? h('img', { src: photo, alt: '', draggable: 'false' }) : null;
+    img?.addEventListener('error', () => img.remove());
     const go = item.action
       ? () => {
           close();
@@ -240,9 +263,9 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
         }
       : undefined;
     return h(
-      `button.morning-item.${item.tone}`,
+      `button.morning-item.${item.tone}.g-${group}`,
       { type: 'button', disabled: !go, onclick: go },
-      h('span.morning-pic', {}, img, item.count && item.count > 1 ? h('b.morning-count', {}, `×${item.count}`) : null),
+      h(`span.morning-pic${img ? '' : '.glyph-only'}`, {}, img, groupGlyph(group, img ? 'morning-glyph.corner' : 'morning-glyph'), item.count && item.count > 1 ? h('b.morning-count', {}, `×${item.count}`) : null),
       // 長得像誰（G2）：文字下面多爸媽和小魚並排的比較圖
       // 特徵跟誰的已經畫成小標，文字只留到冒號前（「小魚看得出像誰了！長大後比較像爸爸」）
       item.lookalike ? h('span.morning-body', {}, reportText(item.text.includes('：') ? item.text.slice(0, item.text.lastIndexOf('：')) : item.text), lookalikeVisual(item.lookalike)) : reportText(item.text),
@@ -251,28 +274,67 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
   };
   // 最多 3 行加一行「有一件事要你決定 ›」（daily-loop.md §2）：點了才換成選擇卡；取名那天排第一行
   const slim = slimReport(report);
-  const decisionRow = (item: ReportItem) => {
-    const btn = h(
-      `button.morning-item.good.decision-item`,
-      { type: 'button', onclick: () => btn.replaceWith(choiceRow(item)) },
-      h('span.morning-pic', {}, h('img', { src: artUrl('owner'), alt: '', draggable: 'false' })),
-      h('span.morning-text', {}, DECISION_LINE),
-      h('span.morning-go', {}, '›'),
-    );
-    return btn;
-  };
   const urgent = slim.lines.filter((i) => i.starving || i.kind === 'crisis' || i.kind === 'reveal');
   const lines = slim.decision
     ? slim.decisionFirst
-      ? [...urgent.map(row), decisionRow(slim.decision), ...slim.lines.filter((i) => !urgent.includes(i)).map(row)]
-      : [...slim.lines.map(row), decisionRow(slim.decision)]
+      ? [...urgent.map(row), choiceRow(slim.decision), ...slim.lines.filter((i) => !urgent.includes(i)).map(row)]
+      : [...slim.lines.map(row), choiceRow(slim.decision)]
     : slim.lines.map(row);
+  // 今天的小事（daily-loop.md §2）：不在報告裡列，收成右上角的一個圖示加 0/3，點了才展開
+  const daily = deps.daily && deps.daily.tasks.length > 0 ? deps.daily : null;
+  const dailyList = daily
+    ? h(
+        'div.morning-daily',
+        { hidden: true },
+        h('b.morning-daily-title', {}, '今天的小事'),
+        h(
+          'div.morning-daily-list',
+          {},
+          ...daily.tasks.map((t) =>
+            h(
+              `button.morning-daily-task${t.done ? '.done' : ''}`,
+              {
+                type: 'button',
+                disabled: t.done,
+                onclick: () => {
+                  close();
+                  daily.go(t.id);
+                },
+              },
+              h('img', { src: t.art, alt: '', draggable: 'false' }),
+              h('span', {}, t.text),
+              t.done ? h('i.morning-daily-check', { 'aria-hidden': 'true' }, '✓') : null,
+            ),
+          ),
+        ),
+      )
+    : null;
+  const doneCount = daily ? daily.tasks.filter((t) => t.done).length : 0;
+  const dailyBtn = daily
+    ? h(
+        `button.morning-daily-btn${doneCount === daily.tasks.length ? '.all' : ''}`,
+        {
+          type: 'button',
+          'aria-expanded': 'false',
+          'aria-label': `今天的小事，做完 ${doneCount} 件，共 ${daily.tasks.length} 件`,
+          onclick: () => {
+            dailyList!.hidden = !dailyList!.hidden;
+            dailyBtn!.setAttribute('aria-expanded', String(!dailyList!.hidden));
+            dailyBtn!.classList.toggle('open', !dailyList!.hidden);
+          },
+        },
+        h('span.daily-chest-icon', { 'aria-hidden': 'true' }),
+        h('b', {}, `${doneCount}/${daily.tasks.length}`),
+      )
+    : null;
   return h(
     `div.morning.glass${report.stopped ? '.stopped' : ''}`,
     { role: 'dialog', 'aria-label': report.title },
     h('div.morning-sky', { 'aria-hidden': 'true' }, h('span.morning-sun')),
+    dailyBtn,
     h('b.morning-title', {}, report.title),
     h('div.owner-say', {}, ownerImg('owner-say-avatar', ownerMood(morningLine(report))), h('span', {}, morningLine(report))),
+    dailyList,
     h('div.morning-list', {}, ...lines),
     h('button.btn.primary.morning-start', { type: 'button', onclick: close }, report.stopped ? '知道了' : '開始新的一天'),
   );

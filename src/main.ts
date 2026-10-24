@@ -39,7 +39,7 @@ import { DEATH_ADVICE, describeEvent, FIRST_PESTS_LINE, firstDeathOwnerLine, fis
 import { mergeEventToasts, type EventToast } from './ui/notify-gate';
 import { personaChip } from './ui/persona';
 import { dreamCard, dreamStrip, dreamTeaser } from './ui/dream-card';
-import { dailyCard, dailyDoneText } from './ui/daily-card';
+import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
 import type { PanelContext, ShopTab } from './ui/panels';
 import { Guide } from './ui/guide';
 import { questTray } from './ui/quest-tray';
@@ -51,6 +51,7 @@ import { kickOwnerQueue, ownerGuide, ownerSay, setOwnerBlocker } from './ui/owne
 import { fryArt, guppyArt, maleFinOf, plantArt } from './ui/shop-cards';
 import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
 import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt } from './ui/order-alert';
+import { TankMarks } from './ui/tank-marks';
 import { flyCoins, rewardBurst } from './ui/coin-fly';
 import type { ReportItem } from './ui/morning-report';
 import { loadCodexSeen, saveCodexSeen } from './ui/codex-seen';
@@ -1232,6 +1233,14 @@ async function start(): Promise<void> {
     panelSheet('客人的訂單', (p) => p.ordersPanel(ctx));
   });
   ordersBtn.append(ordersBadge);
+  // 缸上的小標記（daily-loop.md §2）：水草長了、小螺多了、新訂單，早上報告卡關掉後放上去，點了才說一句
+  const tankMarks = new TankMarks({
+    stage,
+    pos: (m) => view.markPos(m.kind, m.plantId),
+    tank: () => game.active,
+    openOrders: () => ordersBtn.click(),
+    topInset: () => hud.getBoundingClientRect().bottom - stage.getBoundingClientRect().top,
+  });
   const renderOrders = () => {
     const { ready, fresh } = orderAlert(game.tanks, seenOrders);
     ordersBadge.textContent = ready.length > 0 ? String(ready.length) : '';
@@ -1476,6 +1485,8 @@ async function start(): Promise<void> {
         // 挑好設備：從空缸開始演倒沙、注水、裝設備、開燈，演完「你的第一個缸」後開始教學
         playSetup();
       }),
+      // 開局必經：點背景不關（#371）
+      { pinned: true },
     );
   };
   // 每日 3 件小事（F3）：換天出新題、做完一件跳通知（寫明還差哪件）。左上角常駐小卡列出三件，做完打勾，三件都做完按寶箱（#185）
@@ -1869,8 +1880,12 @@ async function start(): Promise<void> {
         break;
     }
   };
-  /** 早上報告卡的按鈕（選擇卡、魚的長相）：過夜和離線回來的報告共用。 */
+  /** 早上報告卡的按鈕（右上角今天的小事、選擇卡、魚的長相）：過夜和離線回來的報告共用。 */
   const reportHooks = ({ chooseOption, lineName }: Pick<DeferredUi, 'chooseOption' | 'lineName'>) => {
+    const today = sim.dailyTasks(game.tanks);
+    const daily = today
+      ? { tasks: today.tasks.map((t) => ({ id: t.id, art: dailyArt(t.id), text: DAILY_SHORT[t.id], done: t.done })), go: (id: string) => goDaily(id as sim.DailyTaskId) }
+      : undefined;
     const choose = (item: ReportItem, key: string, picks: number[], text?: string) => {
       const card = item.choice ?? item.broodSetting;
       return card ? game.actAll((tanks) => chooseOption(tanks, card.id, key, picks, text)) : null;
@@ -1882,7 +1897,7 @@ async function start(): Promise<void> {
       const p = sim.phenotype(f.genome);
       return { sex: f.sex, name: sim.strainName(p), look: sim.lookIndex(p), fins: sim.finWords(p), line: lineName(game.tanks, f) };
     };
-    return { picture: reportPicture, go: goReport, choose, fishLook };
+    return { picture: reportPicture, go: goReport, daily, choose, fishLook };
   };
   /** 離線回來：離開期間有缸太擠，先出一張報告卡（第一行「你不在的時候…太擠了」，接著擠缸卡，midgame.md §7.7）。 */
   const showAway = (awayHours: number) => {
@@ -1949,6 +1964,8 @@ async function start(): Promise<void> {
         // 收進鈴鐺的餵食器提示保留「裝上 ›」按鈕（daily-loop.md §7）
         for (const i of [...slim.rest].reverse()) toasts.log(i.text, i.tone === 'bad' ? 'bad' : i.tone === 'warn' ? 'warn' : 'info', i.action === 'buy_feeder' ? { label: '裝上 ›', run: () => offerFeeder(i.tank) } : undefined);
         for (const m of [...slim.marks].reverse()) toasts.log(m.note);
+        // 水草、小螺、新訂單也放到缸上，點了才說一句
+        tankMarks.set(slim.marks);
         celebration.release();
         // 報告說的那條魚、那株草在缸裡亮一下，一眼找得到是誰
         const about = report.items.find((i) => game.tanks[i.tank] === game.state && (i.subjectId !== undefined || i.plantId !== undefined));
@@ -1973,6 +1990,7 @@ async function start(): Promise<void> {
     }, 900);
   };
   debugHandle.sleep = goNight;
+  debugHandle.marks = tankMarks;
   debugHandle.celebration = celebration;
   debugHandle.owner = { say: ownerSay, guide: ownerGuide };
   debugHandle.reward = (tier: 'small' | 'medium', amount = 120) => ctx.reward?.(null, amount, tier);
@@ -2126,6 +2144,7 @@ async function start(): Promise<void> {
       renderCoins();
       renderOrders();
       renderTankChip();
+      if (tankMarks.count > 0 && !scaping) tankMarks.sync();
       // 開缸演出和「你的第一個缸」卡片演完才讓老闆開口（「開缸」任務在演出一開始就完成，不能蓋在演出上，#171）
       if (!guideHeld) guide.update(game.state, game.tanks);
       toasts.quietCount = !guide.tutorialOver;

@@ -10,7 +10,7 @@ const FULLSCREEN = new Set(['商店', '設定', '選單']);
  * render 會在遊戲狀態變化時重新呼叫，讓數值保持最新。
  */
 export class Sheet {
-  private readonly backdrop = h('div.sheet-backdrop', { onclick: () => this.close() });
+  private readonly backdrop = h('div.sheet-backdrop', { onclick: () => !this.pinned && this.close() });
   private readonly panel = h('div.sheet');
   private readonly title = h('h2.sheet-title');
   private readonly icon = h('span.sheet-icon');
@@ -18,6 +18,8 @@ export class Sheet {
   private render: (() => Node) | null = null;
   /** 會隨遊戲時間變化的面板（測試劑、觀察魚）才定時重繪；有輸入框的面板不重繪，以免打斷操作。 */
   private live = false;
+  /** 開局必經的面板（開缸）：點背景不關，只能按關閉鈕或做完（#371）。 */
+  private pinned = false;
   private pendingClose: (() => void) | null = null;
   onClose: (() => void) | null = null;
   /** 開了一個面板（main 用來收掉餵食模式）。 */
@@ -39,7 +41,7 @@ export class Sheet {
     return this.render !== null && this.live;
   }
 
-  open(title: string, render: () => Node, options: { live?: boolean } = {}): void {
+  open(title: string, render: () => Node, options: { live?: boolean; pinned?: boolean } = {}): void {
     // 換成別的面板從最上面開始看，不沿用上一個面板捲到的位置（#172）；同一個面板重畫（例如商店換分頁後買東西）保留位置
     const fresh = !this.isOpen || this.title.textContent !== title;
     this.title.textContent = title;
@@ -48,6 +50,7 @@ export class Sheet {
     this.icon.hidden = !art;
     this.render = render;
     this.live = options.live ?? false;
+    this.pinned = options.pinned ?? false;
     const full = FULLSCREEN.has(title);
     this.panel.classList.toggle('full', full);
     this.backdrop.classList.toggle('full', full);
