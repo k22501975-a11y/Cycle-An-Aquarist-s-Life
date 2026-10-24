@@ -238,6 +238,7 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       });
     }
     // 育幼盒（#187）：老闆送的、小魚長大自己回主缸
+    // 品系那對快生了、照 C15 的選擇自動買了育幼盒（#362）：說一聲錢花到哪
     if (events.some((x) => x.type === 'nursery_gift'))
       push({ kind: 'nursery', tone: 'good', text: '阿德老闆送了一個育幼盒，掛在缸邊。快生的母魚放進去，小魚就不會被吃', action: 'nursery' });
     const released = events.filter((x) => x.type === 'nursery_released').reduce((n, e) => n + (e.count ?? 0), 0);
@@ -376,7 +377,15 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     items.push({ kind: 'second_brood', tank: Math.max(0, at), tone: 'good', text: brood2.text, action: 'fish', subjectId: momId, count, secondBrood: { momId, count, prevKids, kept, choice } });
   }
   // 中期的選擇點（design/midgame.md）：一個早上最多一張
+  const lastBefore = tanks.map((t) => t.events[t.events.length - 1]);
   const choice = takeChoice(tanks);
+  // 留種的窩快生了，takeChoice 裡自動買了育幼盒（#362）：事件是這時候才記的，所以在這裡看
+  tanks.forEach((t, index) => {
+    const bought = t.events.slice(t.events.lastIndexOf(lastBefore[index]) + 1).find((x) => x.type === 'nursery_bought');
+    if (!bought) return;
+    const where = tanks.length > 1 ? `${tankLabel(tanks, index)}：` : '';
+    items.push({ kind: 'nursery', tank: index, tone: 'info', text: `${where}留種的母魚快生了，花 ${bought.count ?? 150} 元買了一個育幼盒，已經把她放進去，小魚才不會被吃`, action: 'nursery' });
+  });
   if (choice) items.push({ kind: 'choice', tank: choice.tank, tone: 'good', text: choice.title, choice, action: CHOICE_FOLLOW[choice.id] });
   // 擠缸（midgame.md §7.1）：超過建議量排第一行；出 C14 的那缸不再重複預告
   for (const n of takeCrowdNotes(tanks, choice?.id === 'C14' ? choice.tank : undefined)) {

@@ -31,6 +31,7 @@ export function eventSound(type: SimEventType): SoundId {
     case 'power_restored':
       return 'restore';
     case 'power_bill':
+    case 'nursery_bought':
       return 'buy';
     case 'heater_exposed':
       return 'alarm';

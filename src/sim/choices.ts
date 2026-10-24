@@ -18,7 +18,7 @@ import { buyNurseryBox, daysToBirth, moveToNursery, nurseryRefusal, releaseNurse
 import { fulfillOrder, matchingFish, orderBoard, orderRefusal, orderSupply, orderTitle, type ShopOrder } from './orders';
 import { previewPair, typicalStoreGenome, type PreviewKid } from './pair-preview';
 import { FISH_SPECIES, isShrimpSpecies } from './species';
-import { ADULT_SIZE, isJuvenile, type Fish, type TankState } from './state';
+import { ADULT_SIZE, isJuvenile, recordEvent, type Fish, type TankState } from './state';
 
 /**
  * 中期的選擇點（design/midgame.md §1）：第 10～36 天照夢想魚配方，把選育拆成 5 個選擇，
@@ -1960,7 +1960,11 @@ function boxDue(tanks: TankState[], s: ChoiceState): void {
   if (!m || m.fish.nursery || m.fish.pregnancy < BOX_DUE) return;
   if (r.done && m.fish.sire?.id !== s.pair![1]) return;
   const t = tanks[m.tank];
-  if (!t.nurseryBox && r.done && spend(tanks[0], PRICES['nursery:box'] ?? 150)) buyNurseryBox(t);
+  const price = PRICES['nursery:box'] ?? 150;
+  if (!t.nurseryBox && r.done && spend(tanks[0], price)) {
+    buyNurseryBox(t);
+    recordEvent(t, { type: 'nursery_bought', subjectId: m.fish.id, count: price });
+  }
   if (!t.nurseryBox) return;
   if (nurseryRefusal(t, m.fish)) releaseNursery(t, t.fish.filter((f) => f.nursery && isJuvenile(f) && f.lengthCm > mouthCm(m.fish)).map((f) => f.id));
   moveToNursery(t, m.fish.id);
