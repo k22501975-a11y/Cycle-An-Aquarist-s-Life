@@ -99,8 +99,6 @@ export interface MorningCardDeps {
   choose?: (item: ReportItem, key: string, picks: number[], text?: string) => string | null;
   /** 選擇卡上只有魚的編號（C4 的母魚、C5 那尾），照編號找牠的樣子來畫。 */
   fishLook?: FishLookup;
-  /** 今天的小事（F3，#185）：報告裡不再列（daily-loop.md §2），畫面要放右上角的 0/3 可以用。 */
-  daily?: { tasks: Array<{ id: string; art: string; text: string; done: boolean }>; go: (id: string) => void };
 }
 
 /** 老闆的開場白：照最要緊的那一條說。 */
@@ -248,7 +246,7 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
       // 長得像誰（G2）：文字下面多爸媽和小魚並排的比較圖
       // 特徵跟誰的已經畫成小標，文字只留到冒號前（「小魚看得出像誰了！長大後比較像爸爸」）
       item.lookalike ? h('span.morning-body', {}, reportText(item.text.includes('：') ? item.text.slice(0, item.text.lastIndexOf('：')) : item.text), lookalikeVisual(item.lookalike)) : reportText(item.text),
-      item.action ? h('span.morning-go', {}, ACTION_LABEL[item.action], ' ›') : null,
+      item.action ? h('span.morning-go', {}, item.goLabel ? `· ${item.goLabel}` : ACTION_LABEL[item.action], ' ›') : null,
     );
   };
   // 最多 3 行加一行「有一件事要你決定 ›」（daily-loop.md §2）：點了才換成選擇卡；取名那天排第一行

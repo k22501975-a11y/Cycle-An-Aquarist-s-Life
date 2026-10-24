@@ -71,6 +71,8 @@ export interface ReportItem {
   tone: 'bad' | 'warn' | 'good' | 'info';
   text: string;
   action?: ReportAction;
+  /** 按鈕上的小字，不用那個動作預設的字時才給（例如消瘦那行的「裝自動餵食器」）。 */
+  goLabel?: string;
   /** 跟哪條魚有關（action 'fish'、'remove_dead' 用）。 */
   subjectId?: number;
   /** 數量（生了幾尾、死了幾條）。 */
@@ -301,14 +303,14 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     // 裝了自動餵食器的缸不再提醒要多餵（daily-loop.md §4），真的餓到消瘦還是要說
     const feeder = !!t.equipment.feeder;
     const twice = !feeder && starving === 0 && living.some((f) => !isShrimpSpecies(f.species) && youngGettingHungry(f));
-    // 連 3 天說要多餵、又買得起：那一行改成提示裝自動餵食器，點了直接買（消瘦那行照說，提示另外一行）
+    // 連 3 天說要多餵、又買得起：提示裝自動餵食器，點了先看商品卡（daily-loop.md §4、§7）。消瘦那天併進消瘦那行、排最前面
     const day = Math.floor(t.hours / 24);
     if (starving > 0 || twice) t.feedWarn = t.feedWarn && t.feedWarn.day === day - 1 ? { day, days: t.feedWarn.days + 1 } : t.feedWarn?.day === day ? t.feedWarn : { day, days: 1 };
     const feederHint = !feeder && (t.feedWarn?.day === day ? t.feedWarn.days : 0) >= FEEDER_HINT_DAYS && economy(tanks[0]).coins >= price('feeder:auto');
     const hint = { kind: 'hungry', tone: 'info', text: `${tanks.length > 1 ? tankLabel(tanks, index) : '這缸'}小魚多，可以裝自動餵食器，一天自動餵兩次（${price('feeder:auto')} 元）`, action: 'buy_feeder' } as const;
     if (starving > 0) {
-      push({ kind: 'hungry', tone: 'warn', text: `${starving} 尾魚餓到開始消瘦，今天不餵會餓死`, action: 'feed' });
-      if (feederHint) items.push({ ...hint, tank: index });
+      if (feederHint) push({ kind: 'hungry', tone: 'warn', text: `${starving} 尾魚開始消瘦，今天不餵會餓死`, action: 'buy_feeder', goLabel: '裝自動餵食器' });
+      else push({ kind: 'hungry', tone: 'warn', text: `${starving} 尾魚餓到開始消瘦，今天不餵會餓死`, action: 'feed' });
     } else if (!feeder && living.length > 0 && living.reduce((a, f) => a + f.hunger, 0) / living.length > HUNGRY) push({ kind: 'hungry', tone: 'warn', text: '魚在水面游來游去討食，該餵了', action: 'feed' });
     // 小魚兩倍快變餓：一天只餵一次的話，下一餐前就會餓到消耗體力，還沒到要叫醒的程度就在這裡提醒（#193）
     else if (twice) {
@@ -479,6 +481,8 @@ const GOAL_KINDS: ReadonlySet<ReportKind> = new Set(['cycle', 'cycled', 'belly',
 function lineRank(i: ReportItem): number {
   if (i.kind === 'crisis') return 0;
   if (i.kind === 'reveal') return 1;
+  // 消瘦又提示裝餵食器的那行排在壞消息最前面（daily-loop.md §7）
+  if (i.kind === 'hungry' && i.action === 'buy_feeder' && i.tone === 'warn') return 1.5;
   if (isBadNews(i) || i.tone === 'warn') return 2;
   if (GOAL_KINDS.has(i.kind)) return 3;
   if (i.tone === 'good') return 4;
@@ -488,7 +492,7 @@ function lineRank(i: ReportItem): number {
 /** 報告每一行的圖示分三類（daily-loop.md §2）：要處理的壞消息、目標的進度、好消息。 */
 export function lineGroup(i: ReportItem): 'bad' | 'goal' | 'good' {
   const rank = lineRank(i);
-  return rank <= 0 || rank === 2 ? 'bad' : rank === 1 || rank === 3 ? 'goal' : 'good';
+  return rank <= 0 || rank === 1.5 || rank === 2 ? 'bad' : rank === 1 || rank === 3 ? 'goal' : 'good';
 }
 
 function markOf(i: ReportItem): TankMark | null {

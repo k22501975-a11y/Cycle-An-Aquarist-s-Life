@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Game, newGameState } from '../game/game';
 import { addFish, addPlant, BIG_WATER_CHANGE, createTank, feed, FILTERS, HEATERS, LIGHTS, measuredProblem, NORMAL_WATER_CHANGE, pinchMg, suggestedWaterChange, TANKS, type TankState } from '../sim';
-import { morningReport, snapshot } from './morning-report';
+import { lineGroup, morningReport, slimReport, snapshot } from './morning-report';
 
 /** 養好水、種一株草、一公兩母孔雀魚的缸。 */
 function tank(): TankState {
@@ -29,6 +29,23 @@ describe('早上報告寫玩家自己做的事的結果（polish-to-9 §6 P6）'
       fry.hunger = 0.65;
     });
     expect(r.items.find((i) => i.kind === 'hungry')).toMatchObject({ tone: 'warn', text: '1 尾魚餓到開始消瘦，今天不餵會餓死', action: 'feed' });
+  });
+
+  it('連 3 天要多餵、這天又有魚消瘦、錢夠：餵食器提示併進消瘦那行，排在壞消息最前面（daily-loop.md §7）', () => {
+    const r = reportAfter((s) => {
+      const fry = addFish(s, 'guppy', { carriesIch: false });
+      fry.lengthCm = 0.8;
+      fry.hunger = 0.65;
+      s.feedWarn = { day: Math.floor(s.hours / 24) - 1, days: 2 };
+      // 藻變多那行（warn）先寫進報告，消瘦那行還是要排第一
+      s.algae += 0.1;
+    });
+    const hungry = r.items.filter((i) => i.kind === 'hungry');
+    expect(hungry).toHaveLength(1);
+    expect(hungry[0]).toMatchObject({ tone: 'warn', text: '1 尾魚開始消瘦，今天不餵會餓死', action: 'buy_feeder', goLabel: '裝自動餵食器' });
+    expect(kinds(r).indexOf('algae')).toBeLessThan(kinds(r).indexOf('hungry'));
+    expect(slimReport(r).lines[0]).toBe(hungry[0]);
+    expect(lineGroup(hungry[0])).toBe('bad');
   });
 
   it('水草長了 1% 以上才寫「水草長了一點」', () => {
