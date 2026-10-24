@@ -1,3 +1,4 @@
+import { economy } from './economy';
 import { growthStage, sexVisible } from './growth';
 import { moveFish } from './household';
 import { crowdingRatio } from './processes/fauna';
@@ -67,7 +68,9 @@ export function splitAdvice(state: TankState): SplitAdvice[] {
 
 /** 照這個分法要移走哪些魚。 */
 export function splitGroup(state: TankState, plan: SplitPlan): Fish[] {
-  const living = state.fish.filter((f) => f.alive && f.listing === undefined && !f.nursery);
+  // 選好的那對種魚不拆開（年輕的種公也算「年輕公魚」，照公母分開會被撈走，之後一直配不到）
+  const pair: readonly number[] = economy(state).choices?.pair ?? [];
+  const living = state.fish.filter((f) => f.alive && f.listing === undefined && !f.nursery && !pair.includes(f.id));
   if (plan === 'by_size') {
     // 先移會被吃的那些；沒有掠食者時就移所有還沒長大的
     const prey = preyAtRisk(living);
