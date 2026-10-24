@@ -238,6 +238,9 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       });
     }
     // 育幼盒（#187）：老闆送的、小魚長大自己回主缸
+    // 品系那對快生了、照 C15 的選擇自動買了育幼盒（#362）：說一聲錢花到哪
+    const bought = events.find((x) => x.type === 'nursery_bought');
+    if (bought) push({ kind: 'nursery', tone: 'info', text: `留種的母魚快生了，花 ${bought.count ?? 150} 元買了一個育幼盒，快生就放進去，小魚才不會被吃`, action: 'nursery' });
     if (events.some((x) => x.type === 'nursery_gift'))
       push({ kind: 'nursery', tone: 'good', text: '阿德老闆送了一個育幼盒，掛在缸邊。快生的母魚放進去，小魚就不會被吃', action: 'nursery' });
     const released = events.filter((x) => x.type === 'nursery_released').reduce((n, e) => n + (e.count ?? 0), 0);

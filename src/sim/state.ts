@@ -357,6 +357,8 @@ export type SimEventType =
   | 'fry_eaten'
   /** 阿德老闆送了育幼盒（subjectId 是快生的那尾母魚）。 */
   | 'nursery_gift'
+  /** 品系那對的母魚快生了，照 C15 選的育幼盒自動買了一個（subjectId 是那尾母魚，count 是花了幾元，#362）。 */
+  | 'nursery_bought'
   /** 育幼盒裡的小魚長夠大，放回主缸了（count 尾）。 */
   | 'nursery_released'
   /** 缸裡的害蟲小螺第一次多到看得見（count 是隻數）。 */
