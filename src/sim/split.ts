@@ -68,8 +68,9 @@ export function splitAdvice(state: TankState): SplitAdvice[] {
 
 /** 照這個分法要移走哪些魚。 */
 export function splitGroup(state: TankState, plan: SplitPlan): Fish[] {
-  // 選好的那對種魚不拆開（年輕的種公也算「年輕公魚」，照公母分開會被撈走，之後一直配不到）
-  const pair: readonly number[] = economy(state).choices?.pair ?? [];
+  // 選好的那對種魚不拆開（年輕的種公也算「年輕公魚」，照公母分開會被撈走，之後一直配不到）；C12 輪流的另一尾種公也留著
+  const choices = economy(state).choices;
+  const pair: readonly number[] = [...(choices?.pair ?? []), ...(choices?.sires ?? [])];
   const living = state.fish.filter((f) => f.alive && f.listing === undefined && !f.nursery && !pair.includes(f.id));
   if (plan === 'by_size') {
     // 先移會被吃的那些；沒有掠食者時就移所有還沒長大的
