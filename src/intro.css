@@ -1,6 +1,7 @@
 /* 開場動畫（intro.ts）：時間軸全用 CSS 動畫，主程式還在載入時也照樣順 */
 #intro { position: fixed; inset: 0; z-index: 1000; overflow: hidden; background: #06141c; color: #f3ead8; font-family: 'Noto Sans TC', system-ui, -apple-system, sans-serif; cursor: pointer; user-select: none; -webkit-user-select: none; transition: opacity 0.6s ease; }
-#intro.out { opacity: 0; pointer-events: none; }
+/* 淡出中照樣接住點擊（點了只是跳過），不讓點擊穿過去點到下面的介面，例如把開缸面板關掉（#371）；0.7 秒後整塊移除 */
+#intro.out { opacity: 0; }
 #intro img { -webkit-user-drag: none; }
 
 /* 1. 夜裡的店門：門往兩邊開，鏡頭推進門裡 */
