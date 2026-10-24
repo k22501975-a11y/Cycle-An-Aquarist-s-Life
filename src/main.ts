@@ -282,7 +282,7 @@ async function start(): Promise<void> {
         buy: () => {
           sheet.close();
           const why = game.actAll((tanks) => sim.buyFeeder(tanks, tank));
-          toasts.show(why ?? `${sim.tankLabel(game.tanks, tank)}裝好自動餵食器了，每天 9 點、19 點自動餵。`, why ? 'warn' : 'info');
+          toasts.show(why ?? `${sim.tankLabel(game.tanks, tank)}的自動餵食器${sim.feederInstalledText(2)}`, why ? 'warn' : 'info');
         },
         close: () => sheet.close(),
       }),

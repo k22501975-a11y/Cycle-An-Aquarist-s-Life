@@ -18,9 +18,16 @@ export function addHolidayTablet(state: TankState): void {
   (state.holidayTablets ??= []).push(HOLIDAY_TABLET_MG);
 }
 
-/** 裝上自動餵食器（已經有就改次數）。 */
+/** 裝上自動餵食器（已經有就改次數）。新裝的先按一次「手動餵一次」試餵（daily-loop.md §7 第 3 點）。 */
 export function installFeeder(state: TankState, timesPerDay: 1 | 2 = 1): void {
+  const fresh = !state.equipment.feeder;
   state.equipment.feeder = { timesPerDay };
+  if (fresh) addFood(state.water, 'floating', 2, pinchMg(state));
+}
+
+/** 裝好餵食器的提示：先試餵一次、之後幾點自動餵。 */
+export function feederInstalledText(timesPerDay: 1 | 2): string {
+  return `裝好了，先試餵一次。之後每天 ${FEEDER_HOURS.slice(0, timesPerDay).map((h) => `${h} 點`).join('、')}自動餵。`;
 }
 
 /** 早上報告的提示直接買（daily-loop.md §4）：這缸裝上一天餵兩次的自動餵食器，錢從主缸的錢包出。回傳不能買的原因，買好了回傳 null。 */
