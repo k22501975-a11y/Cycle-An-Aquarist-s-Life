@@ -866,6 +866,29 @@ export class TankView {
     return { x: ((r.x0 + r.x1) / 2 + this.root.x) / k, y: (r.y0 + (r.y1 - r.y0) * 0.6 + this.root.y) / k };
   }
 
+  /**
+   * 缸上小標記（daily-loop.md §2）的位置（CSS 像素，相對畫布左上角）：水草在那株頂端（沒給或找不到就最高的那株），
+   * 螺在第一隻看得到的螺上方（沒有就沙面左邊），訂單在水面下靠右。沒有水草可以標就回傳 null。
+   */
+  markPos(kind: 'plant' | 'snail' | 'orders', id?: number): { x: number; y: number } | null {
+    const b = this.bounds;
+    let p: { x: number; y: number } | null = null;
+    if (kind === 'plant') {
+      let view = id !== undefined ? this.plants.get(id) : undefined;
+      if (!view) for (const v of this.plants.values()) if (!view || v.holder.getBounds().height > view.holder.getBounds().height) view = v;
+      if (view) {
+        const bb = this.plantRect(view);
+        p = { x: (bb.minX + bb.maxX) / 2, y: Math.max(b.surface + 30, bb.minY + (bb.maxY - bb.minY) * 0.18) };
+      }
+    } else if (kind === 'snail') {
+      const t = this.snails.targets()[0];
+      p = t ? { x: t.x, y: t.y - t.r - 2 } : { x: b.width * 0.14, y: floorAt(b, b.width * 0.14) - 24 };
+    } else p = { x: b.width * 0.8, y: b.surface + 46 };
+    if (!p) return null;
+    const k = this.app.screen.width / Math.max(1, this.app.canvas.getBoundingClientRect().width);
+    return { x: (p.x + this.root.x) / k, y: (p.y + this.root.y) / k };
+  }
+
   /** 水草在畫面上的範圍（root 座標；getBounds 是畫布座標，要扣掉鏡頭的平移）。 */
   private plantRect(view: PlantView): { minX: number; maxX: number; minY: number; maxY: number; width: number } {
     const bb = view.holder.getBounds();
