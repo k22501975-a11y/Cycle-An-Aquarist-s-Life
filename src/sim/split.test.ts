@@ -44,6 +44,10 @@ describe('分缸提示（design/growth.md §4.1）', () => {
     expect(bySex.map((f) => f.id)).not.toContain(sire.id);
     expect(splitGroup(s, 'half').map((f) => f.id)).not.toContain(sire.id);
     expect(splitGroup(s, 'half').map((f) => f.id)).not.toContain(dam.id);
+    // C12 選了輪流：第二尾種公也不分走
+    const second = s.fish.filter((f) => f.sex === 'male')[1];
+    economy(s).choices!.sires = [second.id];
+    expect(splitGroup(s, 'by_sex').map((f) => f.id)).toEqual(s.fish.filter((f) => f.sex === 'male').slice(2).map((f) => f.id));
   });
 
   it('擁擠度 80% 提醒、100% 警告', () => {
