@@ -103,6 +103,9 @@ describe('危機排第一行（#375）', () => {
     // 錢不多：叫玩家去領起步包
     economy(s).coins = 50;
     expect(wipedOut([s])).toMatchObject({ step: '魚都沒了，去商店領起步包', claim: true });
+    // 很久以前死過魚、這次是全賣掉的：不說那尾的死因
+    s.hours += 30 * 24;
+    expect(wipedOut([s])!.text).toBe('缸裡的魚都沒了。阿德老闆送你一包起步魚（1 公 2 母），到商店領');
     // 又買了魚就不說
     addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'male', pregnant: false });
     expect(wipedOut([s])).toBeNull();
