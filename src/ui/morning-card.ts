@@ -99,8 +99,6 @@ export interface MorningCardDeps {
   choose?: (item: ReportItem, key: string, picks: number[], text?: string) => string | null;
   /** 選擇卡上只有魚的編號（C4 的母魚、C5 那尾），照編號找牠的樣子來畫。 */
   fishLook?: FishLookup;
-  /** 今天的小事（F3，#185）：報告裡不再列（daily-loop.md §2），畫面要放右上角的 0/3 可以用。 */
-  daily?: { tasks: Array<{ id: string; art: string; text: string; done: boolean }>; go: (id: string) => void };
 }
 
 /** 老闆的開場白：照最要緊的那一條說。 */
