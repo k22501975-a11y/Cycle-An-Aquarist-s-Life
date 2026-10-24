@@ -47,6 +47,7 @@ import {
   SCAPE_IDLE_DAYS,
   DAILY_GOAL_COUNT,
   dailyText,
+  goalRelated,
   type TankState,
   rollChest,
   simulate,
@@ -239,9 +240,21 @@ describe('每日小事題庫（polish-to-9.md U6）', () => {
         return f;
       };
       kid(false);
-      kid(true);
-      if (id === 'goalOrders') while (crowdingRatio(s) < CROWD_WARN) addFish(s, 'guppy', { carriesIch: false, carries: [], pregnant: false });
+      const keeper = kid(true);
+      if (id === 'goalKeeperFed') keeper.sex = 'female';
+      // 出生 18 天、看得出公母、尾鰭散開、有蛇紋的小魚（留種、品系的題目）
+      const teen = (sex: 'male' | 'female') => {
+        const f = addFish(s, 'guppy', { carriesIch: false, carries: [], sex, pregnant: false });
+        f.generation = 1;
+        f.bornHours = s.hours - 18 * 24;
+        f.lengthCm = 2.6;
+        f.genome = { ...f.genome!, snakeX: sex === 'male' ? [1] : [1, 1], y: sex === 'male' ? { grass: 0, snake: 1 } : null };
+      };
+      if (['goalFins', 'goalSplit', 'goalSnake'].includes(id)) for (const sex of ['male', 'female'] as const) teen(sex);
       const tanks = [s];
+      if (['goalOrders', 'goalCrowded', 'goalMove'].includes(id)) while (crowdingRatio(s) < CROWD_WARN) addFish(s, 'guppy', { carriesIch: false, carries: [], pregnant: false });
+      // 看哪一缸最擠、搬到別缸：要有第二缸
+      if (id === 'goalCrowded' || id === 'goalMove') tanks.push(richTank());
       expect(eligibleDaily(tanks), id).toContain(id);
       updateDaily(tanks);
       const subjectId = goalDaily(tanks).find((g) => g.id === id)?.subjectId;
@@ -285,7 +298,7 @@ describe('每日小事跟著目標走（daily-loop.md §3）', () => {
     for (let i = 0; i < 3; i++) {
       const f = addFish(s, 'guppy', { carriesIch: false, carries: [], pregnant: false });
       f.generation = 1;
-      f.bornHours = s.hours - (10 + i) * 24;
+      f.bornHours = s.hours - (11 + i) * 24;
       f.lengthCm = 1.1 + i * 0.1;
       f.keeper = i === 0;
     }
@@ -543,5 +556,60 @@ describe('換水那題換最擠的那缸（daily-loop.md §3）', () => {
     expect(waterTaskTank(tanks)).toBe(1);
     b.lastWaterChangeHours = b.hours;
     expect(waterTaskTank(tanks)).toBe(0);
+  });
+});
+
+describe('目標題 3 天不重複只看同一題、同一個對象（daily-loop.md §8，#378）', () => {
+  it('換了一尾種魚隔天就能再出；同一尾 3 天內不再出', () => {
+    const s = richTank();
+    s.fish = [];
+    // 店裡買的 3 尾還沒長大的種魚：只出得了「看看種魚長多大了」
+    for (let i = 0; i < 3; i++) {
+      const f = addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'male', pregnant: false });
+      f.lengthCm = 1.5;
+      f.keeper = true;
+    }
+    const tanks = [s];
+    const subjects: number[] = [];
+    for (let day = 0; day < 6; day++) {
+      updateDaily(tanks);
+      const keeper = dailyTasks(tanks)!.tasks.find((t) => t.id === 'goalKeeper');
+      expect(keeper, `day ${day}`).toBeDefined();
+      subjects.push(keeper!.subjectId!);
+      s.hours += 24;
+    }
+    for (let i = 2; i < subjects.length; i++) expect(new Set(subjects.slice(i - 2, i + 1)).size, subjects.join(',')).toBe(3);
+  });
+
+  it('照顧題寫明跟目標的關係才算跟目標有關', () => {
+    expect(dailyText({ id: 'water', why: 'momDue', subjectId: 1 }, () => '小紅')).toBe('換一次水：小紅快生了，水乾淨一點比較好');
+    expect(dailyText({ id: 'feed', why: 'fry' })).toBe('餵一次飼料：小魚正在長，吃飽長得快');
+    expect(goalRelated({ id: 'water', why: 'momDue' })).toBe(true);
+    expect(goalRelated({ id: 'water' })).toBe(false);
+    expect(goalRelated({ id: 'goalHide' })).toBe(true);
+  });
+
+  it('比一比要兩尾都點過才算', () => {
+    const s = richTank();
+    const kids = [0, 1].map((i) => {
+      const f = addFish(s, 'guppy', { carriesIch: false, carries: [], pregnant: false });
+      f.generation = 1;
+      f.bornHours = s.hours - 12 * 24;
+      f.lengthCm = 1.1 + i * 0.2;
+      return f;
+    });
+    const tanks = [s];
+    updateDaily(tanks);
+    const pick = goalDaily(tanks).find((g) => g.id === 'goalCompare')!;
+    expect([pick.subjectId, pick.otherId].sort()).toEqual(kids.map((f) => f.id).sort());
+    expect(dailyText(pick, (id) => (id === kids[0].id ? '小紅' : '小德'))).toMatch(/^比一比小(紅|德)和小(紅|德)，誰的顏色比較深？$/);
+    const d = dailyTasks(tanks)!;
+    d.tasks = [{ id: 'goalCompare', done: false, subjectId: pick.subjectId, otherId: pick.otherId }];
+    d.marked = [];
+    s.hours += 1;
+    markDailyFish(tanks, pick.subjectId!);
+    expect(updateDaily(tanks)).toEqual([]);
+    markDailyFish(tanks, pick.otherId!);
+    expect(updateDaily(tanks)).toEqual(['goalCompare']);
   });
 });

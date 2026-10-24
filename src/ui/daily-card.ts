@@ -16,6 +16,20 @@ const DAILY_ART: Record<DailyTaskId, string> = {
   goalKeeper: artUrl('owner'),
   goalAlbino: artUrl('codex'),
   goalOrders: artUrl('orders'),
+  goalCompare: artUrl('codex'),
+  goalFirstBrood: artUrl('codex'),
+  goalColorDays: artUrl('codex'),
+  goalFins: artUrl('codex'),
+  goalSplit: artUrl('split'),
+  goalKeeperFed: artUrl('feed'),
+  goalNurseryBox: `${ART}gear/nursery-box.webp`,
+  goalTemp: artUrl('gear'),
+  goalHide: `${ART}scape/plant-anubias.webp`,
+  goalCountBrood: artUrl('codex'),
+  goalFryFed: artUrl('feed'),
+  goalCrowded: artUrl('tanks'),
+  goalMove: artUrl('split'),
+  goalSnake: artUrl('codex'),
   test: artUrl('testkit'),
   feed: artUrl('feed'),
   water: artUrl('waterchange'),
@@ -50,6 +64,20 @@ export const DAILY_SHORT: Record<DailyTaskId, string> = {
   goalKeeper: '看種魚長多大',
   goalAlbino: '找紅眼睛小魚',
   goalOrders: '看能交的訂單',
+  goalCompare: '比誰顏色深',
+  goalFirstBrood: '看第一窩老大',
+  goalColorDays: '看還差幾天轉色',
+  goalFins: '看候選的尾鰭',
+  goalSplit: '看公母分開沒',
+  goalKeeperFed: '看種魚吃得好嗎',
+  goalNurseryBox: '檢查育幼盒',
+  goalTemp: '確認水溫',
+  goalHide: '看母魚躲哪',
+  goalCountBrood: '數新的一窩',
+  goalFryFed: '看小魚吃飼料',
+  goalCrowded: '看哪缸最擠',
+  goalMove: '搬魚到別缸',
+  goalSnake: '數蛇紋小魚',
   test: '測一次水',
   feed: '餵一次飼料',
   water: '換一次水',
@@ -104,14 +132,16 @@ export function dailyCard(d: DailyState | null, claimable: boolean, deps: DailyC
   const done = d.tasks.filter((t) => t.done).length;
   const all = done === d.tasks.length;
   if (all && d.claimed) return null;
-  const row = ({ id, done: ok, subjectId }: DailyTask) =>
-    h(
+  const row = (task: DailyTask) => {
+    const { id, done: ok } = task;
+    return h(
       `button.daily-task${ok ? '.done' : ''}`,
-      { type: 'button', title: dailyText({ id, subjectId }, deps.name), disabled: ok, onclick: () => deps.go(id) },
+      { type: 'button', title: dailyText(task, deps.name), disabled: ok, onclick: () => deps.go(id) },
       h('img', { src: DAILY_ART[id], alt: '', draggable: 'false' }),
       h('span', {}, DAILY_SHORT[id]),
       h('i.daily-check', { 'aria-hidden': 'true' }),
     );
+  };
   return h(
     `div.daily.glass${all ? '.ready' : ''}`,
     {},

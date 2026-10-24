@@ -511,6 +511,8 @@ export function splitPanel(ctx: PanelContext, suggested: SplitPlan): Node {
   const { game, sheet, toasts } = ctx;
   const state = game.state;
   const advice = splitAdvice(state);
+  // 每日小事「看看能不能搬一些到別缸」
+  markDaily(game.tanks, 'goalMove');
   const plans: SplitPlan[] = [suggested, ...(['by_size', 'by_sex', 'half'] as SplitPlan[]).filter((p) => p !== suggested)].filter((p) => splitGroup(state, p).length > 0);
   let plan = plans[0] ?? suggested;
   const others = game.tanks.map((t, i) => ({ t, i })).filter(({ i }) => i !== game.active);
@@ -1250,6 +1252,8 @@ export function buyNurseryForDue(ctx: PanelContext): void {
 export function nurseryPanel(ctx: PanelContext): Node {
   const { game, sheet, toasts } = ctx;
   const s = game.state;
+  // 每日小事「檢查一下育幼盒」
+  if (s.nurseryBox) markDaily(game.tanks, 'goalNurseryBox');
   if (!s.nurseryBox)
     return h(
       'div.stack',
@@ -1446,8 +1450,9 @@ export function treatPanel(ctx: PanelContext, advice: string): Node {
 
 export function maintenancePanel({ game, sheet, toasts, undoable, openScape }: PanelContext): Node {
   const s = game.state;
-  // 每日小事「看看過濾器和加熱棒」
+  // 每日小事「看看過濾器和加熱棒」「確認水溫」
   markDaily(game.tanks, 'gear');
+  markDaily(game.tanks, 'goalTemp');
   const eq = s.equipment;
   // 每一列前面放那樣設備的商品圖（跟商店、圖鑑同一張），一眼看得出是哪個
   const pic = (art: string) => {
@@ -1714,6 +1719,8 @@ export function tanksPanel(ctx: PanelContext): Node {
   const { game, sheet, toasts } = ctx;
   const coins = economy(game.state).coins;
   const reopen = () => sheet.open('我的水缸', () => tanksPanel(ctx));
+  // 每日小事「看看哪一缸最擠」
+  markDaily(game.tanks, 'goalCrowded');
   const rows = game.tanks.map((t, i) => {
     const living = t.fish.filter((f) => f.alive).length;
     const urgent = todos(t).filter((x) => x.tone !== 'ok');

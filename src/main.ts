@@ -1538,13 +1538,48 @@ async function start(): Promise<void> {
       if (at !== game.active) game.switchTo(at);
       select(fishId!);
     };
-    const task = sim.dailyTasks(game.tanks)?.tasks.find((t) => t.id === id);
+    const today = sim.dailyTasks(game.tanks);
+    const task = today?.tasks.find((t) => t.id === id);
+    const subject = fish(task?.subjectId);
+    // 先切到這一缸再打開面板（有育幼盒的、最擠的、母魚在的那缸）
+    const inTank = (at: number, open: () => void) => () => {
+      if (at >= 0 && at !== game.active) game.switchTo(at);
+      open();
+    };
+    const tankOf = (fishId: number | undefined) => game.tanks.findIndex((t) => t.fish.some((f) => f.id === fishId && f.alive));
+    const worst = () => {
+      const crowd = game.tanks.map(sim.crowdingRatio);
+      return crowd.indexOf(Math.max(...crowd));
+    };
     const go: Record<sim.DailyTaskId, () => void> = {
-      goalBelly: fish(task?.subjectId),
-      goalColor: fish(task?.subjectId),
-      goalKeeper: fish(task?.subjectId),
+      goalBelly: subject,
+      goalColor: subject,
+      goalKeeper: subject,
       goalAlbino: () => toasts.show('在新的一窩裡點一尾紅眼睛的小魚'),
       goalOrders: () => panelSheet('客人的訂單', (p) => p.ordersPanel(ctx)),
+      // 比一比：先點還沒看過的那尾
+      goalCompare: () => fish(task?.subjectId !== undefined && !today?.seen?.includes(task.subjectId) ? task.subjectId : task?.otherId)(),
+      goalFirstBrood: subject,
+      goalColorDays: subject,
+      goalFins: subject,
+      goalSplit: subject,
+      goalKeeperFed: subject,
+      goalNurseryBox: inTank(
+        game.tanks.findIndex((t) => !!t.nurseryBox),
+        () => panelSheet('育幼盒', (p) => p.nurseryPanel(ctx)),
+      ),
+      goalTemp: inTank(tankOf(task?.subjectId), maintenance),
+      goalHide: subject,
+      goalCountBrood: subject,
+      goalFryFed: startFeeding,
+      goalCrowded: () => panelSheet('我的水缸', (p) => p.tanksPanel(ctx)),
+      goalMove: () => {
+        const at = worst();
+        if (at !== game.active) game.switchTo(at);
+        const advice = sim.splitAdvice(game.state)[0];
+        panelSheet('分缸', (p) => p.splitPanel(ctx, advice?.plan ?? 'half'));
+      },
+      goalSnake: subject,
       test: () => testBtn.click(),
       feed: startFeeding,
       // 該換水的缸裡最擠的那缸：先切過去
