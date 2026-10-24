@@ -92,7 +92,10 @@ export function ichTreatment(tanks: TankState[]): { days: number; medDays: numbe
   for (const { t, fish } of sick) {
     heatC = Math.min(heatC, ichHeatC(t));
     warm &&= Math.max(t.water.tempC, t.equipment.heater?.targetC ?? 0) >= ichHeatC(t) - 0.5;
-    const tf = temperatureFactor(Math.max(t.water.tempC, t.equipment.heater?.targetC ?? 0));
+    // 加熱棒還在慢慢升溫（一天約 2°C）：照現在和設定的中間算，不然天數會說得太短（#359 架構）
+    const heater = t.equipment.heater;
+    const ramping = heater?.setpointC !== undefined && heater.targetC > t.water.tempC;
+    const tf = temperatureFactor(ramping ? (t.water.tempC + heater!.targetC) / 2 : Math.max(t.water.tempC, heater?.targetC ?? 0));
     for (const f of fish) days = Math.max(days, Math.ceil(((1 - f.ich.progress) * 96) / tf / 24));
     medDays = Math.min(medDays, ichMedDays(t));
   }

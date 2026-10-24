@@ -18,6 +18,9 @@ import {
   removeDeadFish,
   rinseFilterMedia,
   setHeaterTarget,
+  installHeater,
+  ICH_SWING_C,
+  tempSwing24,
   unplugHeater,
   simulate,
   TANKS,
@@ -200,6 +203,29 @@ describe('設備與環境', () => {
     runDays(s, 2);
     expect(s.water.tempC).toBeLessThan(19);
     expect(computeStressors(s, s.fish[0]).temperature).toBeGreaterThan(0.5);
+
+    // 換上新的加熱棒：從涼掉的水溫慢慢升回 25°C，一天差不到 3°C（#359 架構），四五天後回到設定溫度
+    installHeater(s, HEATERS.h50);
+    let swing = 0;
+    runDays(s, 5, { onHour: (st) => (swing = Math.max(swing, tempSwing24(st))) });
+    expect(swing).toBeLessThan(ICH_SWING_C);
+    expect(s.water.tempC).toBeGreaterThan(24.5);
+  });
+
+  it('加熱棒調高調低是慢慢走的：25→28°C 一天差不到 3°C，兩天內到；調回去也一樣（#355）', () => {
+    const s = createTank({ ...STARTER, seed: 9, matureMedia: true });
+    runDays(s, 2);
+    let swing = 0;
+    const watch = { onHour: (st: TankState) => (swing = Math.max(swing, tempSwing24(st))) };
+    setHeaterTarget(s, 28);
+    expect(s.equipment.heater!.setpointC).toBe(25);
+    runDays(s, 3, watch);
+    expect(s.water.tempC).toBeGreaterThan(27.5);
+    expect(s.equipment.heater!.setpointC).toBeUndefined();
+    setHeaterTarget(s, 25);
+    runDays(s, 3, watch);
+    expect(s.water.tempC).toBeLessThan(25.5);
+    expect(swing).toBeLessThan(ICH_SWING_C);
   });
 
   it('加熱棒卡住一直加熱：水溫衝過 33°C 把孔雀魚煮熟；拔掉插頭後慢慢降回室溫', () => {

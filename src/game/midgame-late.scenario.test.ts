@@ -11,7 +11,7 @@ import { midgamePlayer } from './midgame-player';
  * - C9 重複版別太吵（§6.5）：第 36～90 天每個種子 ≤ 3 張
  * - 開獎（自家配的那窩出生，midgame.md §7.8）：每個種子 ≤ 第 90 天，種子 1～3 的中位數 ≤ 第 85 天
  * 第 80～120 天魚越生越多（midgame.md §7.4、§7.8，#338）：照推薦選，擠缸死魚 ≤ 2 尾、沒有一缸連續超過 3 天 ≥ 100%、
- *   C14 每個種子 ≤ 8 張（白點治好魚活得多，暫時放寬到 #359，strain-fixing.md §9）、種子 1～3 的中位數 ≤ 6 張（§8，#351）
+ *   C14 每個種子 ≤ 7 張、種子 1～3 的中位數 ≤ 6 張（strain-fixing.md §8，#351、#359）
  */
 describe('第 36～120 天的選擇點（design/midgame.md §6、§7）', () => {
   const reveals: number[] = [];
@@ -73,7 +73,7 @@ describe('第 36～120 天的選擇點（design/midgame.md §6、§7）', () => 
       }
       const c14 = late.filter((n) => n.choice === 'C14').length;
       crowdCards.push(c14);
-      expect(c14, crowdLog).toBeLessThanOrEqual(8);
+      expect(c14, crowdLog).toBeLessThanOrEqual(7);
     }, 600_000);
   }
 

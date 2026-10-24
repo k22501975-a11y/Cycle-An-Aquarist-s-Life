@@ -11,7 +11,7 @@ import { nextRandom } from './random';
 import { economy } from './economy';
 import { plantHitchhikers } from './snails';
 import { FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
-import type { FilterSpec, HardscapeSpec, SubstrateSpec } from './equipment';
+import type { FilterSpec, HardscapeSpec, HeaterSpec, SubstrateSpec } from './equipment';
 import { onHardscapeAdded, onHardscapeRemoved } from './aquascape';
 import { testWater, type TestKitReading } from './readings';
 import { NEWBIE_HEALTHY_DAYS, noteAct, recordEvent, TEST_LOG_MAX, type DiseaseKind, type Fish, type Plant, type TankState } from './state';
@@ -320,6 +320,13 @@ export function setHeaterTarget(state: TankState, targetC: number): void {
   if (!heater || heater.targetC === targetC) return;
   heater.setpointC ??= heater.targetC;
   heater.targetC = targetC;
+}
+
+/** 換上新的加熱棒（設定照舊的溫度）：恆溫器從現在的水溫慢慢走過去，壞掉期間水涼了也不會一天拉回 3°C 以上（#359 架構）。 */
+export function installHeater(state: TankState, spec: HeaterSpec): void {
+  const targetC = state.equipment.heater?.targetC ?? 25;
+  const from = Math.round(state.water.tempC * 10) / 10;
+  state.equipment.heater = { spec, targetC, broken: false, heating: false, ...(Math.abs(from - targetC) > 0.5 ? { setpointC: from } : {}) };
 }
 
 /** 拔掉卡住的加熱棒插頭：停止加熱，但加熱棒還是壞的，要換一支。 */
