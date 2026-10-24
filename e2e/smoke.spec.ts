@@ -45,7 +45,12 @@ test('先停在開始畫面，按「開始」才演開場動畫；演完會自�
   await page.goto('/?intro');
   await expect(intro).toHaveClass(/short/);
   await intro.locator('.intro-start').click();
-  await intro.click({ force: true, timeout: 5_000 }).catch(() => {});
+  // 只在開場還沒收時點：已經在淡出（.out）的開場不擋點擊，force 點會穿過去點到面板背景，把開缸面板關掉（#369 審查）。
+  // 在頁面裡一次判斷加點，免得判斷完到點下去之間剛好開始淡出
+  await page.evaluate(() => {
+    const el = document.querySelector('#intro');
+    if (el && !el.classList.contains('out')) el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  });
   await expect(intro).toHaveCount(0, { timeout: 60_000 });
   await expect(page.locator('.setup-panel')).toBeVisible();
 });
