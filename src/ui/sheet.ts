@@ -181,9 +181,9 @@ export class Toasts {
     this.pop(text, tone, action);
   }
 
-  /** 只記進通知匣、不跳出來（老闆完整的話；任務卡上已經閃過短句）。不算沒看過：教學 5 分鐘鈴鐺就漲到 10，像有 10 件事沒做（#257）。 */
-  log(text: string, tone: Tone = 'info'): void {
-    this.record(text, tone, undefined, false);
+  /** 只記進通知匣、不跳出來（老闆完整的話；任務卡上已經閃過短句）。不算沒看過：教學 5 分鐘鈴鐺就漲到 10，像有 10 件事沒做（#257）。action 是通知匣那則的按鈕。 */
+  log(text: string, tone: Tone = 'info', action?: ToastAction): void {
+    this.record(text, tone, action, false);
   }
 
   /** 打開通知匣：都算看過了。 */

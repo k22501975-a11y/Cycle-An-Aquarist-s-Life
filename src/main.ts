@@ -275,6 +275,18 @@ async function start(): Promise<void> {
       if (request === sheetRequest) sheet.open(title, () => render(p), options);
     });
   };
+  /** 自動餵食器：先打開商品卡，按「買下裝上」才扣錢（daily-loop.md §7）。 */
+  const offerFeeder = (tank: number) =>
+    panelSheet('自動餵食器', (p) =>
+      p.feederOffer({
+        buy: () => {
+          sheet.close();
+          const why = game.actAll((tanks) => sim.buyFeeder(tanks, tank));
+          toasts.show(why ?? `${sim.tankLabel(game.tanks, tank)}裝好自動餵食器了，每天 9 點、19 點自動餵。`, why ? 'warn' : 'info');
+        },
+        close: () => sheet.close(),
+      }),
+    );
   /** 背景先載：失敗（網頁版離線）不吵，真的要打開時再提示。 */
   const prefetchDeferred = () =>
     void importDeferred().then(
@@ -1821,11 +1833,9 @@ async function start(): Promise<void> {
       case 'shop_tank':
         panelSheet('我的水缸', (p) => p.tanksPanel(ctx));
         break;
-      case 'buy_feeder': {
-        const why = game.actAll((tanks) => sim.buyFeeder(tanks, item.tank));
-        toasts.show(why ?? `${sim.tankLabel(game.tanks, item.tank)}裝好自動餵食器了，每天 9 點、19 點自動餵。`, why ? 'warn' : 'info');
+      case 'buy_feeder':
+        offerFeeder(item.tank);
         break;
-      }
       case 'fish':
       case 'treat':
         if (item.subjectId !== undefined) select(item.subjectId);
@@ -1913,7 +1923,8 @@ async function start(): Promise<void> {
         sleepingNow = false;
         // 報告只列 3 行（daily-loop.md §2）：其他的和水草、小螺、新訂單收進鈴鐺，想看再點開
         const slim = slimReport(report);
-        for (const i of [...slim.rest].reverse()) toasts.log(i.text, i.tone === 'bad' ? 'bad' : i.tone === 'warn' ? 'warn' : 'info');
+        // 收進鈴鐺的餵食器提示保留「裝上 ›」按鈕（daily-loop.md §7）
+        for (const i of [...slim.rest].reverse()) toasts.log(i.text, i.tone === 'bad' ? 'bad' : i.tone === 'warn' ? 'warn' : 'info', i.action === 'buy_feeder' ? { label: '裝上 ›', run: () => offerFeeder(i.tank) } : undefined);
         for (const m of [...slim.marks].reverse()) toasts.log(m.note);
         celebration.release();
         // 報告說的那條魚、那株草在缸裡亮一下，一眼找得到是誰
