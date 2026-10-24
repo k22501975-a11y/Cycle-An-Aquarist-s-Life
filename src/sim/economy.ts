@@ -6,7 +6,7 @@ import { phenotype, type GuppyGenome, type GuppyPhenotype } from './genetics';
 import { updateOrders, type OrderBoard } from './orders';
 import type { GoalState } from './goals';
 import type { MarketArrival } from './arrivals';
-import type { DailyState, DailyTaskId } from './daily';
+import type { DailyEarly, DailyState, DailyTaskId } from './daily';
 
 /**
  * 經濟（GAME_DESIGN 第 7 節、market-and-breeding.md §3.1）：
@@ -136,6 +136,8 @@ export interface Economy {
   powerPending?: boolean;
   /** 今天的每日小事（F3）；舊存檔沒有，開完缸第一次更新時出題。 */
   daily?: DailyState;
+  /** 換天以後、出題以前畫面回報的動作（出題時算進去）。 */
+  dailyEarly?: DailyEarly;
   /** 前兩天出過的小事（同一題 3 天內不重複出，U6）。 */
   dailyRecent?: Array<{ day: number; ids: DailyTaskId[] }>;
   /** 連續幾天開了小事寶箱、最後一次是第幾天（連續 7 天送大寶箱，U5）。 */

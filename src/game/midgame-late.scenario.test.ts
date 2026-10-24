@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { midgamePlayer } from './midgame-player';
+import { REVEAL_CULL_DAYS } from '../sim/choices';
 
 /**
  * 第 36～80 天驗收（design/midgame.md §6、§6.4，#326）：基準玩法玩 90 天，種子 1～3，照推薦選。
@@ -31,10 +32,12 @@ describe('第 36～120 天的選擇點（design/midgame.md §6、§7）', () => 
       reveals.push(reveal);
       expect(reveal, log).toBeLessThanOrEqual(90);
       // 開獎那天早上報告第一項就是開獎（半夜出事才排第二）（#357）。同一窩不再另外說「昨晚生了 N 尾」，
-      // 但同一晚別尾母魚生的照說：種子 3 第 82 天另一尾生了 19 尾，報告裡有那一行
-      const kinds = nights.find((n) => n.day === reveal)!.line.split(' ').pop()!.split(',');
+      // 但同一晚別尾母魚生的照說（最多一行）
+      const revealNight = nights.find((n) => n.day === reveal)!;
+      const kinds = revealNight.line.split(' ').pop()!.split(',');
       expect(kinds[0] === 'reveal' || kinds[1] === 'reveal', kinds.join(',')).toBe(true);
-      expect(kinds.filter((k) => k === 'birth').length, kinds.join(',')).toBeLessThanOrEqual(seed === 3 ? 1 : 0);
+      expect(revealNight.dreamMomBirth, kinds.join(',')).toBe(false);
+      expect(kinds.filter((k) => k === 'birth').length, kinds.join(',')).toBeLessThanOrEqual(1);
       // 同一天最多一張（早上的卡和交貨時的卡加起來）
       const cards = nights.filter((n) => n.choice || n.orderChoice);
       expect(cards.filter((n) => n.choice && n.orderChoice), log).toEqual([]);
@@ -48,14 +51,17 @@ describe('第 36～120 天的選擇點（design/midgame.md §6、§7）', () => 
       const span = [...points.slice(from).filter((d) => d < 80), 80];
       for (let i = 1; i < span.length; i++) {
         const [a, b] = [span[i - 1], span[i]];
-        expect(b - a, `${a}→${b} ${log}`).toBeLessThanOrEqual(pregnant(a) && pregnant(b) ? 7 : 6);
+        // 開獎到 C16 本來就隔 REVEAL_CULL_DAYS 天（choices.ts），跟懷孕期間一樣算 ≤ 7
+        const cull = a === reveal && nights.find((n) => n.day === b)?.choice === 'C16';
+        expect(b - a, `${a}→${b} ${log}`).toBeLessThanOrEqual((pregnant(a) && pregnant(b)) || cull ? REVEAL_CULL_DAYS : 6);
       }
       expect(nights.find((n) => n.day === 60)!.coins, log).toBeGreaterThanOrEqual(800);
       // 開局挑快生的母魚（§6.6）：第一窩 ≤ 第 10 天
       expect(nights.find((n) => n.line.includes('birth'))?.day ?? Infinity, log).toBeLessThanOrEqual(10);
       // 照推薦孕期調高水溫（§6.6）：從 C13 到開獎不死魚、不出紅色水質警告
       const preg = nights.filter((n) => n.day >= first('C13') && n.day <= reveal);
-      expect(preg.filter((n) => n.line.includes('death')).map((n) => n.day), log).toEqual([]);
+      // 餓死不算：早上報告連兩天說「今天不餵會餓死」還不理才會餓死（#362 企劃定案），跟下面不算 starving 警告一樣
+      expect(preg.filter((n) => n.deaths.some((c) => c !== 'starvation')).map((n) => n.day), log).toEqual([]);
       expect(preg.flatMap((n) => n.alarms.filter((a) => !a.endsWith(':starving'))), log).toEqual([]);
       // C9 別太吵（§6.5）：第 36～90 天每個種子 ≤ 3 張
       expect(nights.filter((n) => n.day >= 36 && n.day <= 90 && n.choice === 'C9').length, log).toBeLessThanOrEqual(3);

@@ -164,6 +164,7 @@ export function ordersPanel(ctx: PanelContext): Node {
   const { game, sheet } = ctx;
   // 每日小事「看一眼店裡的訂單」
   markDaily(game.tanks, 'orders');
+  markDaily(game.tanks, 'goalOrders');
   const board = orderBoard(game.state);
   const refresh = () => sheet.open('客人的訂單', () => ordersPanel(ctx));
   const anyReady = board.orders.some((o) => orderSupply(game.tanks, o) >= o.count);

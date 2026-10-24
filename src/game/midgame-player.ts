@@ -31,6 +31,8 @@ export interface MidgameNight {
   line: string;
   /** 早上報告有夢想魚那窩的懷孕里程碑（胎斑變黑、看得到眼睛，midgame.md §6.4）。 */
   bellyMilestone: boolean;
+  /** 報告裡的「昨晚生了 N 尾」有沒有在說夢想魚那尾母魚（開獎那窩只由開獎卡說，#357）。 */
+  dreamMomBirth: boolean;
   /** 種魚長大了卻因為生病晚配的天數（到這天為止）。 */
   sickDays: number;
   /** 早上各缸的水質警報（「第幾缸:警報」，例如 1:too_hot）。 */
@@ -177,12 +179,15 @@ function run(seed: number, days: number, opts: { neglectCrowd?: boolean; onDay?:
     const why = !card ? null : card.id === 'C14' && opts.neglectCrowd ? chooseOption(tanks, 'C14', 'water') : pickRecommended(tanks, card);
     const line = morningLine(report);
     const cs = choiceState(tanks);
-    const bellyMilestone = report.items.some((i) => i.kind === 'belly' && i.subjectId !== undefined && i.subjectId === cs.reveal?.momId);
+    // 留種的母魚（開獎前就是那尾）懷孕期間的里程碑
+    const dreamMom = cs.reveal?.momId ?? cs.pair?.[0];
+    const bellyMilestone = report.items.some((i) => i.kind === 'belly' && i.subjectId !== undefined && i.subjectId === dreamMom);
+    const dreamMomBirth = report.items.some((i) => i.kind === 'birth' && i.subjectId !== undefined && i.subjectId === cs.reveal?.momId);
     const night0 = s.hours - 24;
     const died = tanks.map((t) => t.events.filter((e) => e.type === 'fish_died' && e.hours > night0));
     const deaths = died.flat().map((e) => String(e.cause));
     const crowdDeaths = died.reduce((a, d, i) => a + (Math.max(evening[i] ?? 0, crowdingRatio(tanks[i])) >= 1 ? d.length : 0), 0);
-    out.push({ crowdDeaths, crowd: tanks.map((t) => Math.round(crowdingRatio(t) * 100) / 100), deaths, bellyMilestone, sickDays: cs.sickDays ?? 0, day: Math.floor(s.hours / 24) + 1, choice: card?.id, orderChoice, quiet: line === '安靜的一晚。', coins: economy(s).coins, tanks: tanks.length, inBreeding: tanks.find((t) => t.purpose === 'breeding')?.fish.filter((f) => f.alive).length ?? 0, alarms: tanks.flatMap((t, i) => [...waterAlarms(t)].map((x) => `${i}:${x}`)), line: `${card ? `<${(card.options.find((o) => o.recommended) ?? card.options[0]).key}>` : ''}${why ? `（選不了：${why}）` : ''}${line} ${report.items.map((i) => i.kind).join(',')}` });
+    out.push({ crowdDeaths, crowd: tanks.map((t) => Math.round(crowdingRatio(t) * 100) / 100), deaths, bellyMilestone, dreamMomBirth, sickDays: cs.sickDays ?? 0, day: Math.floor(s.hours / 24) + 1, choice: card?.id, orderChoice, quiet: line === '安靜的一晚。', coins: economy(s).coins, tanks: tanks.length, inBreeding: tanks.find((t) => t.purpose === 'breeding')?.fish.filter((f) => f.alive).length ?? 0, alarms: tanks.flatMap((t, i) => [...waterAlarms(t)].map((x) => `${i}:${x}`)), line: `${card ? `<${(card.options.find((o) => o.recommended) ?? card.options[0]).key}>` : ''}${why ? `（選不了：${why}）` : ''}${line} ${report.items.map((i) => i.kind).join(',')}` });
     opts.onDay?.(tanks, Math.floor(s.hours / 24) + 1);
   }
   return { nights: out, tanks };

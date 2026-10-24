@@ -7,7 +7,7 @@ import { strainFacts, strainRun } from './strain-fixing-run';
  * - C18 取名（40%）≤ 第 200 天、品系完成（75%）≤ 第 360 天：至少 2 個種子（種子 1、2）
  * - 第 80～200 天：懷孕期間相鄰的卡或里程碑 ≤ 7 天，其他 ≤ 6 天；一天最多一張
  * - 擠缸死魚 ≤ 2 尾；第 260 天金幣 ≥ 第 120 天 − 這段買缸花的一半（缸算半價的資產，§9），第 120～260 天隨時 ≥ 300
- * - 尾鰭：每個種子第一代到最新一代少 ≤ 20 分；中位數 ≤ 15（種子 1～3 都 ≤ 15）
+ * - 尾鰭：每個種子第一代到最新一代少 ≤ 20 分；中位數 ≤ 15（§6 第 3 點）：分檔平行跑算不了中位數，改成種子 2、3 ≤ 15、種子 1 ≤ 20，中位數就一定 ≤ 15
  */
 describe('固定品系 300 天劇本（strain-fixing.md §7）', () => {
   it('種子 1', () => {
@@ -17,7 +17,6 @@ describe('固定品系 300 天劇本（strain-fixing.md §7）', () => {
     expect(f.gen2, f.log).toBeGreaterThan(f.gen1);
     expect(run.namedDay, f.log).toBeLessThanOrEqual(200);
     expect(run.doneDay, f.log).toBeLessThanOrEqual(360);
-    expect(f.tailDrop, f.log).toBeLessThanOrEqual(15);
     expect(f.gaps, f.log).toEqual([]);
     expect(f.doubleCards, f.log).toEqual([]);
     expect(f.crowdDeaths, f.log).toBeLessThanOrEqual(2);

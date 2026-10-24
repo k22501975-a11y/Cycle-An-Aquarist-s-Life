@@ -1,11 +1,15 @@
 import { addHardscape } from './actions';
 import { addCuttings, economy, FOOD_PER_MEAL, PLANT_PRICES, price } from './economy';
 import { HARDSCAPE } from './equipment';
+import { phenotype } from './genetics';
+import { fastestColoring, showingMother } from './next-step';
 import { dueMothers, nurseryRefusal } from './nursery';
 import { isCycled } from './processes/nitrogen';
-import { isShrimpSpecies, PLANT_SPECIES, type PlantSpeciesId } from './species';
+import { FISH_SPECIES, isShrimpSpecies, PLANT_SPECIES, type PlantSpeciesId } from './species';
 import { tankStarted } from './setup';
-import { noteAct, type DailyAct, type TankState } from './state';
+import { crowdingRatio } from './processes/fauna';
+import { CROWD_WARN } from './split';
+import { ADULT_SIZE, noteAct, type DailyAct, type Fish, type TankState } from './state';
 
 /**
  * 每日 3 件小事（design/first-10-minutes.md F3）：每個遊戲天早上從玩家缸裡做得到的事挑 3 件，
@@ -13,14 +17,22 @@ import { noteAct, type DailyAct, type TankState } from './state';
  * 題庫分照顧、觀察、造景、整理四類（U6），同一題 3 天內不重複；造景題要手上或缸裡有石頭、沉木才出。
  * 小事不能要玩家花錢（mvp.md §4.4.2，#188）：會花錢的題目，花費要比寶箱最少的魚幣少很多才出（DAILY_COST）。
  * 判定看出題以後玩家有沒有再做一次（任何一缸都算）；要點畫面的題目（找螺、看魚、翻圖鑑…）由畫面呼叫 markDaily。
+ * 跟著目標走（design/daily-loop.md §3）：3 題裡至少 2 題跟現在的目標有關（看懷孕母魚的胎斑、點最快轉色的那尾…），
+ * 造景、整理一天最多 1 題，造景題要 7 天沒動過造景才出；會攪沙嚇到魚的造景題（搬石頭、翻面、換層、縮放）不再出。
+ * 同一天出題前就做過的也算（例如早上已經換過水了）。
  */
 
-export type DailyCategory = 'care' | 'observe' | 'scape' | 'tidy';
+export type DailyCategory = 'goal' | 'care' | 'observe' | 'scape' | 'tidy';
 
-export const DAILY_CATEGORY_LABEL: Record<DailyCategory, string> = { care: '照顧', observe: '觀察', scape: '造景', tidy: '整理' };
+export const DAILY_CATEGORY_LABEL: Record<DailyCategory, string> = { goal: '目標', care: '照顧', observe: '觀察', scape: '造景', tidy: '整理' };
 
 /** 每一題屬於哪一類（題庫，U6）。 */
 export const DAILY_CATEGORY = {
+  goalBelly: 'goal',
+  goalColor: 'goal',
+  goalKeeper: 'goal',
+  goalAlbino: 'goal',
+  goalOrders: 'goal',
   test: 'care',
   feed: 'care',
   water: 'care',
@@ -52,6 +64,15 @@ export type DailyTaskId = keyof typeof DAILY_CATEGORY;
 export const DAILY_IDS = Object.keys(DAILY_CATEGORY) as DailyTaskId[];
 
 export const DAILY_COUNT = 3;
+/** 每天至少幾題跟現在的目標有關（daily-loop.md §3）。 */
+export const DAILY_GOAL_COUNT = 2;
+/** 造景題要玩家幾天沒動過造景才出。 */
+export const SCAPE_IDLE_DAYS = 7;
+/** 會攪起底沙、嚇到魚的造景題（搬石頭、翻面、換層、縮放）：不再出（舊存檔的題目照樣判定）。 */
+const RETIRED: ReadonlySet<DailyTaskId> = new Set(['scape', 'scapeFlip', 'scapeLayer', 'scapeScale']);
+/** 新的一窩出生幾天後看得出紅眼睛（choices.ts 的 ALBINO_DAYS）、幾天內還算「新的一窩」。 */
+const ALBINO_SHOWS_DAYS = 5;
+const NEW_BROOD_DAYS = 25;
 /** 同一題至少隔幾天才再出（出過的第 3 天才能再出）。 */
 export const DAILY_GAP_DAYS = 3;
 /** 多久沒換水才出「換水」題（不鼓勵天天大換水）。 */
@@ -99,6 +120,8 @@ export const DAILY_COST: Record<DailyTaskId, number> = Object.fromEntries(DAILY_
 export interface DailyTask {
   id: DailyTaskId;
   done: boolean;
+  /** 目標題要點的那尾魚（最快轉色的、種魚、懷孕的母魚）。 */
+  subjectId?: number;
 }
 
 export interface DailyState {
@@ -119,7 +142,19 @@ export interface DailyState {
   chestSeed?: number;
 }
 
+/** 換天以後、出題以前畫面回報的動作和點過的魚（出題時一起算進去）。 */
+export interface DailyEarly {
+  day: number;
+  ids: DailyTaskId[];
+  fish: number[];
+}
+
 export const DAILY_TEXT: Record<DailyTaskId, string> = {
+  goalBelly: '看看懷孕母魚的胎斑',
+  goalColor: '點最快轉色的那尾看看',
+  goalKeeper: '看看種魚長多大了',
+  goalAlbino: '在新的一窩裡找紅眼睛的小魚',
+  goalOrders: '看一眼訂單板，有沒有能交的',
   test: '測一次水',
   feed: '餵一次飼料',
   water: '換一次水',
@@ -146,6 +181,20 @@ export const DAILY_TEXT: Record<DailyTaskId, string> = {
   deadSnail: '撈出死掉的大螺',
   rinse: '用換出來的缸水洗一次濾材',
 };
+
+/** 目標題寫得出魚名的說法（tutorial-lines.md §13）。 */
+export const DAILY_NAMED: Partial<Record<DailyTaskId, (name: string) => string>> = {
+  goalBelly: (name) => `看看${name}的胎斑`,
+  goalColor: (name) => `點${name}看看，牠最快轉色`,
+  goalKeeper: (name) => `看看${name}長多大了`,
+};
+
+/** 一題的完整說明：有對象的目標題帶上魚名（name 由畫面給）。 */
+export function dailyText(task: Pick<DailyTask, 'id' | 'subjectId'>, name?: (fishId: number) => string | null): string {
+  const named = DAILY_NAMED[task.id];
+  const who = task.subjectId !== undefined ? name?.(task.subjectId) : null;
+  return named && who ? named(who) : DAILY_TEXT[task.id];
+}
 
 /** 看動作時間判定的題目（其他的由畫面回報）。 */
 const TIMED_TIME = {
@@ -205,7 +254,13 @@ export function eligibleDaily(tanks: TankState[]): DailyTaskId[] {
   const any = (f: (t: TankState) => boolean) => tanks.some(f);
   const bag = (e.hardscapeBag ?? []).length > 0;
   const placed = any((t) => (t.equipment.hardscape ?? []).length > 0);
+  const goal = new Set(goalDaily(tanks).map((g) => g.id));
   const ok: Record<DailyTaskId, boolean> = {
+    goalBelly: goal.has('goalBelly'),
+    goalColor: goal.has('goalColor'),
+    goalKeeper: goal.has('goalKeeper'),
+    goalAlbino: goal.has('goalAlbino'),
+    goalOrders: goal.has('goalOrders'),
     test: true,
     feed: any(living),
     water: any((t) => home.hours - (t.lastWaterChangeHours ?? 0) >= WATER_TASK_GAP_HOURS),
@@ -233,7 +288,51 @@ export function eligibleDaily(tanks: TankState[]): DailyTaskId[] {
     deadSnail: any((t) => (t.snails?.snails ?? []).some((x) => !x.alive)),
     rinse: any((t) => !!t.equipment.filter && isCycled(t) && t.hours - (t.dailyActs?.rinse ?? 0) >= RINSE_TASK_GAP_HOURS),
   };
-  return DAILY_IDS.filter((id) => ok[id] && DAILY_COST[id] < CHEST_COINS_MIN / DAILY_COUNT);
+  // 造景題要最近 7 天都沒動過造景（daily-loop.md §3）
+  const scapeIdle = tanks.every((t) => t.lastScapeHours === undefined || home.hours - t.lastScapeHours >= SCAPE_IDLE_DAYS * 24);
+  return DAILY_IDS.filter((id) => ok[id] && !RETIRED.has(id) && (DAILY_CATEGORY[id] !== 'scape' || scapeIdle) && DAILY_COST[id] < CHEST_COINS_MIN / DAILY_COUNT);
+}
+
+/** 新的一窩裡看得出紅眼睛的白子小魚（品系那段）。 */
+function albinoFry(t: TankState, f: Fish): boolean {
+  if (!f.alive || (f.generation ?? 0) < 1 || f.bornHours === undefined || !f.genome) return false;
+  const age = (t.hours - f.bornHours) / 24;
+  return age >= ALBINO_SHOWS_DAYS && age <= NEW_BROOD_DAYS && phenotype(f.genome).albino;
+}
+
+/**
+ * 跟現在的目標有關的題目，照優先順序（daily-loop.md §3、tutorial-lines.md §13）：懷孕看胎斑、快生放育幼盒、等轉色、留種看長多大、
+ * 品系找紅眼睛、擠缸看訂單板；沒有這些時照現在在做的事給照顧題（小魚多要多餵、養水要測水看趨勢、擠缸要換水）。
+ */
+export function goalDaily(tanks: TankState[]): Array<{ id: DailyTaskId; subjectId?: number }> {
+  const out: Array<{ id: DailyTaskId; subjectId?: number }> = [];
+  const mom = showingMother(tanks);
+  if (mom) out.push({ id: 'goalBelly', subjectId: mom.fish.id });
+  if (tanks.some((t) => !!t.nurseryBox && dueMothers(t).some((f) => !nurseryRefusal(t, f)))) out.push({ id: 'nursery' });
+  const fast = fastestColoring(tanks);
+  if (fast) out.push({ id: 'goalColor', subjectId: fast.fish.id });
+  const keeper = tanks.flatMap((t) => t.fish).find((f) => f.alive && f.keeper && !isShrimpSpecies(f.species) && f.lengthCm < FISH_SPECIES[f.species].adultLengthCm * ADULT_SIZE && f.id !== fast?.fish.id);
+  if (keeper) out.push({ id: 'goalKeeper', subjectId: keeper.id });
+  if (tanks.some((t) => t.fish.some((f) => albinoFry(t, f)))) out.push({ id: 'goalAlbino' });
+  const crowded = tanks.some((t) => crowdingRatio(t) >= CROWD_WARN);
+  if (crowded && (economy(tanks[0]).orders?.orders.length ?? 0) > 0) out.push({ id: 'goalOrders' });
+  // 照顧題（出得了才算）
+  const young = tanks.some((t) => t.fish.some((f) => f.alive && (f.generation ?? 0) >= 1 && !isShrimpSpecies(f.species) && f.lengthCm < FISH_SPECIES[f.species].adultLengthCm * ADULT_SIZE));
+  if (young) out.push({ id: 'feed' });
+  if (!tanks.every(isCycled)) out.push({ id: 'test' }, { id: 'records' });
+  if (crowded) out.push({ id: 'water' });
+  return out;
+}
+
+/** 「換水」那題要換哪一缸：該換水的缸裡最擠的那缸（擠缸要換水，daily-loop.md §3），都不用換就第一缸。 */
+export function waterTaskTank(tanks: TankState[]): number {
+  const home = tanks[0];
+  let best = -1;
+  tanks.forEach((t, i) => {
+    if (home.hours - (t.lastWaterChangeHours ?? 0) < WATER_TASK_GAP_HOURS) return;
+    if (best < 0 || crowdingRatio(t) > crowdingRatio(tanks[best])) best = i;
+  });
+  return Math.max(0, best);
 }
 
 /** 天數和種子混成 0–1 的亂數（不動模擬的亂數，讀檔重算也一樣）。 */
@@ -244,8 +343,11 @@ function hash01(day: number, seed: number, salt: number): number {
   return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
 }
 
-/** 用天數和存檔種子挑題目：先打散，盡量每類各一題，不夠再補。 */
-function pick(ids: DailyTaskId[], day: number, seed: number): DailyTaskId[] {
+/** 造景、整理合起來算一類：一天最多 1 題（daily-loop.md §3）。 */
+const chore = (id: DailyTaskId) => DAILY_CATEGORY[id] === 'scape' || DAILY_CATEGORY[id] === 'tidy';
+
+/** 用天數和存檔種子挑 n 題：先打散，盡量每類各一題，不夠再補；造景、整理最多 1 題（taken 是已經挑好的）。 */
+function pick(ids: DailyTaskId[], day: number, seed: number, n: number, taken: DailyTaskId[]): DailyTaskId[] {
   const rest = [...ids];
   const order: DailyTaskId[] = [];
   let x = (Math.imul(day + 1, 0x9e3779b1) ^ seed) >>> 0;
@@ -254,15 +356,34 @@ function pick(ids: DailyTaskId[], day: number, seed: number): DailyTaskId[] {
     order.push(rest.splice(x % rest.length, 1)[0]);
   }
   const out: DailyTaskId[] = [];
-  const cats = new Set<DailyCategory>();
+  const cats = new Set<DailyCategory>(taken.map((id) => DAILY_CATEGORY[id]));
+  const choreOk = () => ![...taken, ...out].some(chore);
   for (const id of order) {
-    if (out.length < DAILY_COUNT && !cats.has(DAILY_CATEGORY[id])) {
+    if (out.length < n && !cats.has(DAILY_CATEGORY[id]) && (!chore(id) || choreOk())) {
       out.push(id);
       cats.add(DAILY_CATEGORY[id]);
     }
   }
-  for (const id of order) if (out.length < DAILY_COUNT && !out.includes(id)) out.push(id);
+  for (const id of order) if (out.length < n && !out.includes(id) && (!chore(id) || choreOk())) out.push(id);
   return out;
+}
+
+/** 今天的題目：先挑最多 2 題最近沒出過的目標題，剩下的照舊打散。 */
+function issueTasks(tanks: TankState[], day: number, seed: number): DailyTask[] {
+  const recent = recentIds(tanks, day);
+  const eligible = eligibleDaily(tanks);
+  const ok = new Set(eligible);
+  // 同一題還是要隔 3 天（U6），目標題輪著出
+  const chosen = goalDaily(tanks).filter((g) => ok.has(g.id) && !recent.has(g.id)).slice(0, DAILY_GOAL_COUNT);
+  const taken = chosen.map((g) => g.id);
+  const others = pick(
+    eligible.filter((id) => !taken.includes(id) && !recent.has(id) && DAILY_CATEGORY[id] !== 'goal'),
+    day,
+    seed,
+    DAILY_COUNT - chosen.length,
+    taken,
+  );
+  return [...chosen.map((g) => ({ id: g.id, done: false, ...(g.subjectId !== undefined ? { subjectId: g.subjectId } : {}) })), ...others.map((id) => ({ id, done: false }))];
 }
 
 function isDone(id: DailyTaskId, d: DailyState, tanks: TankState[]): boolean {
@@ -290,22 +411,24 @@ export function updateDaily(tanks: TankState[]): DailyTaskId[] {
   const e = economy(home);
   const day = Math.floor(home.hours / 24);
   if (!e.daily || e.daily.day !== day) {
-    const recent = recentIds(tanks, day);
-    const ids = pick(
-      eligibleDaily(tanks).filter((id) => !recent.has(id)),
-      day,
-      home.rng.seed,
-    );
+    const tasks = issueTasks(tanks, day, home.rng.seed);
+    const ids = tasks.map((t) => t.id);
     e.dailyRecent = [...(e.dailyRecent ?? []).filter((r) => r.day < day && r.day > day - DAILY_GAP_DAYS), { day, ids }];
+    // 同一天出題前就做過的也算（daily-loop.md §3：早上已經換過水了）：「之前」只算到今天開始
+    const dayStart = day * 24;
+    const before = (h: number | undefined) => (h !== undefined && h >= dayStart ? dayStart - 1e-6 : h);
+    const early = e.dailyEarly?.day === day ? e.dailyEarly : null;
+    delete e.dailyEarly;
     e.daily = {
       day,
       issuedHours: home.hours,
-      tasks: ids.map((id) => ({ id, done: false })),
-      before: Object.fromEntries(TIMED.map((id) => [id, lastTime(id, tanks)])),
-      marked: [],
+      tasks,
+      before: Object.fromEntries(TIMED.map((id) => [id, before(lastTime(id, tanks))])),
+      marked: [...(early?.ids ?? [])],
       claimed: false,
       chestSeed: home.rng.seed,
     };
+    for (const id of early?.fish ?? []) markDailyFish(tanks, id);
   }
   const fresh: DailyTaskId[] = [];
   for (const t of e.daily.tasks) {
@@ -317,10 +440,40 @@ export function updateDaily(tanks: TankState[]): DailyTaskId[] {
   return fresh;
 }
 
+/** 今天出題了沒：還沒出題（換天以後畫面先回報）就先記著，出題時一起算（daily-loop.md §3）。 */
+function todays(tanks: TankState[]): { d: DailyState | null; early: DailyEarly | null } {
+  const home = tanks[0];
+  if (!home) return { d: null, early: null };
+  const e = economy(home);
+  const day = Math.floor(home.hours / 24);
+  if (e.daily?.day === day) return { d: e.daily, early: null };
+  if (!tankStarted(home)) return { d: null, early: null };
+  if (e.dailyEarly?.day !== day) e.dailyEarly = { day, ids: [], fish: [] };
+  return { d: null, early: e.dailyEarly };
+}
+
 /** 畫面回報玩家做了某件要點畫面的事（找到螺、點魚看、翻圖鑑…）。 */
 export function markDaily(tanks: TankState[], id: DailyTaskId): void {
-  const d = tanks[0] && economy(tanks[0]).daily;
-  if (d && !d.marked.includes(id)) d.marked.push(id);
+  const { d, early } = todays(tanks);
+  const list = d?.marked ?? early?.ids;
+  if (list && !list.includes(id)) list.push(id);
+}
+
+/** 畫面回報玩家點了一尾魚：算「點一尾魚看看」，也算點對象是牠的目標題；點到新的一窩裡紅眼睛的小魚算找到了。 */
+export function markDailyFish(tanks: TankState[], fishId: number): void {
+  const { d, early } = todays(tanks);
+  if (early) {
+    if (!early.fish.includes(fishId)) early.fish.push(fishId);
+    return;
+  }
+  if (!d) return;
+  const at = tanks.find((t) => t.fish.some((f) => f.id === fishId));
+  const fish = at?.fish.find((f) => f.id === fishId);
+  if (!at || !fish) return;
+  const mark = (id: DailyTaskId) => !d.marked.includes(id) && d.marked.push(id);
+  mark(isShrimpSpecies(fish.species) ? 'shrimp' : 'observe');
+  for (const t of d.tasks) if (t.subjectId === fishId) mark(t.id);
+  if (albinoFry(at, fish)) mark('goalAlbino');
 }
 
 /** 今天的題目（還沒出題回傳 null）。 */

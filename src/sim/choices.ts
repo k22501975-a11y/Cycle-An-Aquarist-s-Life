@@ -259,6 +259,7 @@ export interface LineBrood {
   k: number;
   gen: number;
   albino?: boolean;
+  fins?: boolean;
   snake?: boolean;
   told?: boolean;
   sexing?: boolean;
@@ -2009,6 +2010,15 @@ export function takeBellyNotes(tanks: TankState[]): Array<{ fishId: number; text
     out.push({ fishId: p.mom.id, text: `因為${s.sickCause === 'ich' ? '白點' : '生病'}，配對晚了約 ${s.sickDays} 天` });
   }
   const r = s.reveal;
+  // 開獎那窩懷孕前段：C13 說懷上了，過一半才有 C15 開獎準備，中間十來天說一次肚子圓起來了（懷孕期間節奏 ≤ 7 天，midgame.md §6.4）
+  if (!r && (s.picked.C13 !== undefined || s.shown.C13 !== undefined) && p.mom.pregnancy >= LINE_BELLY.at && p.mom.pregnancy < REVEAL_SHOWS) {
+    const key = `${p.mom.id}@pre:round`;
+    const seen = (s.milestoneSeen ??= []);
+    if (!seen.includes(key)) {
+      seen.push(key);
+      out.push({ fishId: p.mom.id, text: `${callName(p.mom)}的肚子圓起來了` });
+    }
+  }
   // 開獎那窩；之後 C17、C19 換了一對、等這對的下一代那段也一樣（strain-fixing.md §2.1「懷孕期間同 midgame §6.4」）
   const line = !!r?.done && s.nextGen !== undefined && p.mom.sire?.id === p.dad.id;
   if (!r || (!line && (r.done || r.momId !== p.mom.id))) return out;
@@ -2027,6 +2037,8 @@ export function takeBellyNotes(tanks: TankState[]): Array<{ fishId: number; text
 
 /** 小魚出生幾天後看得出紅眼睛（白子里程碑）。 */
 export const ALBINO_DAYS = 5;
+/** 小魚出生幾天後尾鰭散開（尾鰭里程碑：紅眼睛和蛇紋中間的空檔）。 */
+export const FINS_DAYS = 12;
 /** 小魚出生幾天後蛇紋看得出來（蛇紋里程碑）。 */
 export const SNAKE_DAYS = 20;
 /** 出生幾天後算得出穩定度（公母、蛇紋都看得出來，出穩定度卡）。 */
@@ -2087,6 +2099,7 @@ function noteLineBroods(tanks: TankState[], s: ChoiceState): void {
 
 /**
  * 早上報告的品系里程碑（strain-fixing.md §2.2）：一個早上最多一行。
+ * - 每窩出生 FINS_DAYS 天：「新的這窩小魚尾鰭開始散開了，看得出誰的尾巴比較大」
  * - 每窩出生 SNAKE_DAYS 天：「{魚名}身上的蛇紋出來了。」（那窩有看得出蛇紋的公魚才說）
  * - 開獎之後的每窩出生 STABILITY_DAYS 天：穩定度卡「這窩 n 尾裡，k 尾是白子紅蛇王，穩定度 X%」
  */
@@ -2104,6 +2117,11 @@ export function takeLineNotes(tanks: TankState[]): Array<{ fishId: number; text:
       const red = kids.filter(({ fish }) => phenotype(fish.genome!).albino);
       // 舊存檔早就過了一週的那幾窩不補說
       if (i > 0 && red.length > 0 && age < ALBINO_DAYS + 3) return [{ fishId: red[0].fish.id, text: `新的這窩小魚眼睛看得清楚了：${kids.length} 尾裡有 ${red.length} 尾是紅眼睛的白子。` }];
+    }
+    // 紅眼睛到蛇紋中間十來天：說一次尾鰭（呼應 C17 挑尾鰭好的那組，tutorial-lines.md）
+    if (!b.fins && age >= FINS_DAYS) {
+      b.fins = true;
+      if (kids.length > 0 && age < FINS_DAYS + 3) return [{ fishId: kids[0].fish.id, text: '新的這窩小魚尾鰭開始散開了，看得出誰的尾巴比較大' }];
     }
     if (!b.snake && age >= SNAKE_DAYS) {
       b.snake = true;
