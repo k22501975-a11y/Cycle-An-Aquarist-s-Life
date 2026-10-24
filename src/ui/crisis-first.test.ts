@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, TANKS, unplugHeater, type TankState } from '../sim';
-import { crisisTodos, capsSummary } from './status';
+import { addFish, addPlant, catchPests, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, TANKS, unplugHeater, type TankState } from '../sim';
+import { crisisTodos, capsSummary, wipedOut } from './status';
 import { morningReport, REPORT_LINES, slimReport, snapshot } from './morning-report';
 
 /** 養好水、一株草、10 尾孔雀魚的缸，加熱棒設 25°C。 */
@@ -78,5 +78,46 @@ describe('危機排第一行（#375）', () => {
       simulate(s, 24);
     }
     expect(s.fish.filter((f) => !f.alive).length).toBeLessThanOrEqual(2);
+  });
+
+  it('魚死光了（#377）：早上第一行說最後怎麼死的、叫玩家去買魚，任務卡指向商店；沒魚不說魚在睡覺', () => {
+    const s = tank();
+    economy(s).coins = 3000;
+    s.water.tempC = 40;
+    s.equipment.heater!.broken = true;
+    s.equipment.heater!.stuckOn = true;
+    simulate(s, 48);
+    expect(s.fish.some((f) => f.alive)).toBe(false);
+    // 撈掉屍體、拔插頭、換新加熱棒，水溫回來：剩下的只有「魚都沒了」
+    s.fish = [];
+    s.equipment.heater = { spec: HEATERS.h50, targetC: 25, broken: false, heating: false };
+    s.water.tempC = 25;
+    const before = snapshot([s]);
+    simulate(s, 12);
+    const r = morningReport(before, [s], 12, null);
+    const first = slimReport(r).lines[0];
+    expect(first).toMatchObject({ kind: 'wiped', tone: 'bad', action: 'shop_fish', standing: true });
+    expect(first.text).toBe('缸裡的魚都沒了，最後一尾是水溫不適。手上還有 3000 元，到商店重新買魚');
+    expect(r.items.some((i) => i.text.includes('睡覺'))).toBe(false);
+    expect(wipedOut([s])).toMatchObject({ step: '魚都沒了，去商店重新買魚', claim: false });
+    // 錢不多：叫玩家去領起步包
+    economy(s).coins = 50;
+    expect(wipedOut([s])).toMatchObject({ step: '魚都沒了，去商店領起步包', claim: true });
+    // 又買了魚就不說
+    addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'male', pregnant: false });
+    expect(wipedOut([s])).toBeNull();
+  });
+
+  it('今天的小事「撈一次小螺」：這缸沒有螺、撈到 0 隻也算（g23）', () => {
+    const a = tank(31);
+    const b = tank(32);
+    const tanks = [a, b];
+    linkTanks(tanks);
+    updateDaily(tanks);
+    const d = dailyTasks(tanks)!;
+    d.tasks = [{ id: 'pests', done: false }];
+    expect(catchPests(b, true)).toBe(0);
+    updateDaily(tanks);
+    expect(dailyTasks(tanks)!.tasks[0].done).toBe(true);
   });
 });

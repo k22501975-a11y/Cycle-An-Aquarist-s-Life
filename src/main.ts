@@ -1525,6 +1525,12 @@ async function start(): Promise<void> {
   const goDaily = (id: sim.DailyTaskId) => {
     const maintenance = () => panelSheet('設備與維護', (p) => p.maintenancePanel(ctx));
     const snails = () => panelSheet('螺', (p) => p.snailPanel(ctx));
+    // 螺的題目：先切到有這種螺的缸（g23：看著沒有螺的繁殖缸按「撈」，題目沒算）
+    const snailsIn = (has: (t: sim.TankState) => boolean) => () => {
+      const at = game.tanks.findIndex(has);
+      if (at >= 0 && at !== game.active && !has(game.state)) game.switchTo(at);
+      snails();
+    };
     // 目標題：切到那尾魚在的缸、打開牠的卡片（點開就算看過了）
     const fish = (fishId: number | undefined) => () => {
       const at = fishId === undefined ? -1 : game.tanks.findIndex((t) => t.fish.some((f) => f.id === fishId && f.alive));
@@ -1570,9 +1576,9 @@ async function start(): Promise<void> {
       },
       trim: () => panelSheet('修剪水草', (p) => p.trimListPanel(ctx)),
       cuttings: () => openShop('plants'),
-      clutch: snails,
-      pests: snails,
-      deadSnail: snails,
+      clutch: snailsIn((t) => (t.snails?.clutches.length ?? 0) > 0),
+      pests: snailsIn((t) => sim.pestCount(t) > 0),
+      deadSnail: snailsIn((t) => (t.snails?.snails ?? []).some((x) => !x.alive)),
       rinse: maintenance,
     };
     go[id]();
@@ -1876,6 +1882,9 @@ async function start(): Promise<void> {
         break;
       case 'shop_tank':
         panelSheet('我的水缸', (p) => p.tanksPanel(ctx));
+        break;
+      case 'shop_fish':
+        openShop('fish');
         break;
       case 'buy_feeder':
         offerFeeder(item.tank);
