@@ -868,9 +868,9 @@ export class TankView {
 
   /**
    * 缸上小標記（daily-loop.md §2）的位置（CSS 像素，相對畫布左上角）：水草在那株頂端（沒給或找不到就最高的那株），
-   * 螺在第一隻看得到的螺上方（沒有就沙面左邊），訂單在水面下靠右，小觀察在水面下靠左。沒有水草可以標就回傳 null。
+   * 螺在第一隻看得到的螺上方（沒有就沙面左邊），訂單在水面下靠右。沒有水草可以標就回傳 null。
    */
-  markPos(kind: 'plant' | 'snail' | 'order' | 'note', id?: number): { x: number; y: number } | null {
+  markPos(kind: 'plant' | 'snail' | 'orders', id?: number): { x: number; y: number } | null {
     const b = this.bounds;
     let p: { x: number; y: number } | null = null;
     if (kind === 'plant') {
@@ -883,7 +883,7 @@ export class TankView {
     } else if (kind === 'snail') {
       const t = this.snails.targets()[0];
       p = t ? { x: t.x, y: t.y - t.r - 2 } : { x: b.width * 0.14, y: floorAt(b, b.width * 0.14) - 24 };
-    } else p = { x: b.width * (kind === 'order' ? 0.8 : 0.3), y: b.surface + 46 };
+    } else p = { x: b.width * 0.8, y: b.surface + 46 };
     if (!p) return null;
     const k = this.app.screen.width / Math.max(1, this.app.canvas.getBoundingClientRect().width);
     return { x: (p.x + this.root.x) / k, y: (p.y + this.root.y) / k };

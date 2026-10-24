@@ -39,7 +39,7 @@ import { DEATH_ADVICE, describeEvent, FIRST_PESTS_LINE, firstDeathOwnerLine, fis
 import { mergeEventToasts, type EventToast } from './ui/notify-gate';
 import { personaChip } from './ui/persona';
 import { dreamCard, dreamStrip, dreamTeaser } from './ui/dream-card';
-import { dailyCard, dailyDoneText } from './ui/daily-card';
+import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
 import type { PanelContext, ShopTab } from './ui/panels';
 import { Guide } from './ui/guide';
 import { questTray } from './ui/quest-tray';
@@ -51,7 +51,7 @@ import { kickOwnerQueue, ownerGuide, ownerSay, setOwnerBlocker } from './ui/owne
 import { fryArt, guppyArt, maleFinOf, plantArt } from './ui/shop-cards';
 import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
 import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt } from './ui/order-alert';
-import { splitMarks, TankMarks } from './ui/tank-marks';
+import { TankMarks } from './ui/tank-marks';
 import { flyCoins, rewardBurst } from './ui/coin-fly';
 import type { ReportItem } from './ui/morning-report';
 import { loadCodexSeen, saveCodexSeen } from './ui/codex-seen';
@@ -1853,8 +1853,12 @@ async function start(): Promise<void> {
         break;
     }
   };
-  /** 早上報告卡的按鈕（選擇卡、魚的長相）：過夜和離線回來的報告共用。 */
+  /** 早上報告卡的按鈕（右上角今天的小事、選擇卡、魚的長相）：過夜和離線回來的報告共用。 */
   const reportHooks = ({ chooseOption, lineName }: Pick<DeferredUi, 'chooseOption' | 'lineName'>) => {
+    const today = sim.dailyTasks(game.tanks);
+    const daily = today
+      ? { tasks: today.tasks.map((t) => ({ id: t.id, art: dailyArt(t.id), text: DAILY_SHORT[t.id], done: t.done })), go: (id: string) => goDaily(id as sim.DailyTaskId) }
+      : undefined;
     const choose = (item: ReportItem, key: string, picks: number[], text?: string) => {
       const card = item.choice ?? item.broodSetting;
       return card ? game.actAll((tanks) => chooseOption(tanks, card.id, key, picks, text)) : null;
@@ -1866,7 +1870,7 @@ async function start(): Promise<void> {
       const p = sim.phenotype(f.genome);
       return { sex: f.sex, name: sim.strainName(p), look: sim.lookIndex(p), fins: sim.finWords(p), line: lineName(game.tanks, f) };
     };
-    return { picture: reportPicture, go: goReport, choose, fishLook };
+    return { picture: reportPicture, go: goReport, daily, choose, fishLook };
   };
   /** 離線回來：離開期間有缸太擠，先出一張報告卡（第一行「你不在的時候…太擠了」，接著擠缸卡，midgame.md §7.7）。 */
   const showAway = (awayHours: number) => {
@@ -1918,7 +1922,7 @@ async function start(): Promise<void> {
       }
       // 半夜出狀況：快轉的話切回正常速度，醒來先處理
       if (r.crisis && game.clock.timeScale > sim.DEFAULT_TIME_SCALE) game.clock.timeScale = sim.DEFAULT_TIME_SCALE;
-      const { report, marks } = splitMarks(morningReport(before, game.tanks, r.hours, r.crisis));
+      const report = morningReport(before, game.tanks, r.hours, r.crisis);
       speed.render();
       save();
       analytics.track('sleep', { hours: r.hours, stopped: r.crisis !== null, items: report.items.length });
@@ -1933,8 +1937,9 @@ async function start(): Promise<void> {
         // 收進鈴鐺的餵食器提示保留「裝上 ›」按鈕（daily-loop.md §7）
         for (const i of [...slim.rest].reverse()) toasts.log(i.text, i.tone === 'bad' ? 'bad' : i.tone === 'warn' ? 'warn' : 'info', i.action === 'buy_feeder' ? { label: '裝上 ›', run: () => offerFeeder(i.tank) } : undefined);
         for (const m of [...slim.marks].reverse()) toasts.log(m.note);
+        // 水草、小螺、新訂單也放到缸上，點了才說一句
+        tankMarks.set(slim.marks);
         celebration.release();
-        tankMarks.set(marks);
         // 報告說的那條魚、那株草在缸裡亮一下，一眼找得到是誰
         const about = report.items.find((i) => game.tanks[i.tank] === game.state && (i.subjectId !== undefined || i.plantId !== undefined));
         if (about) view.spotlight(about.subjectId !== undefined ? 'fish' : 'plant', about.subjectId ?? about.plantId!);

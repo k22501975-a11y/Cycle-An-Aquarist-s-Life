@@ -57,13 +57,13 @@ test('開缸演出途中不能過一晚', async ({ page }) => {
   await expect(page.locator('.night')).toHaveCount(0);
 });
 
-type Marking = { cycle: { marks: { set(marks: Array<{ kind: string; tank: number; text: string }>): void } } };
+type Marking = { cycle: { marks: { set(marks: Array<{ kind: string; tank: number; text: string; note: string }>): void } } };
 
 /** 缸上的小標記（daily-loop.md §2）：點了換成一句話；訂單那句再點一下打開訂單板。 */
 test('缸上的小標記：點了說一句，訂單那句打開訂單板', async ({ page }) => {
   await startClean(page);
-  await page.evaluate(() => (window as unknown as Marking).cycle.marks.set([{ kind: 'order', tank: 0, text: '阿德那邊來了 2 張新訂單' }]));
-  const mark = page.locator('.tank-mark.order');
+  await page.evaluate(() => (window as unknown as Marking).cycle.marks.set([{ kind: 'orders', tank: 0, text: '阿德那邊有 2 張新訂單', note: '' }]));
+  const mark = page.locator('.tank-mark.orders');
   await expect(mark).toBeVisible();
   await mark.dispatchEvent('click');
   await expect(mark).toHaveCount(0);
