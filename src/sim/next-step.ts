@@ -42,7 +42,9 @@ export type NextTarget =
   | 'fastest' // 打開最快轉色那尾小魚的卡片
   | 'fry_box' // 打開育幼盒（把主缸的小魚撈進去）
   | 'scape' // 造景模式
-  | 'test'; // 測水
+  | 'test' // 測水
+  | 'equipment' // 危機（#375）：切到那缸、打開設備與維護（拔插頭、換加熱棒、開風扇）
+  | 'remove_dead'; // 危機（#375）：切到那缸、拿網子撈死魚
 
 export interface NextStep {
   /** 對應的目標 id。 */
@@ -50,6 +52,8 @@ export interface NextStep {
   /** 一句話（≤ 20 字左右，畫面放得下）。 */
   text: string;
   target: NextTarget;
+  /** 要先切到第幾缸（危機在別缸時）。 */
+  tank?: number;
 }
 
 const living = (tanks: TankState[]) => tanks.flatMap((t) => t.fish.filter((f) => f.alive));

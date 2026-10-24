@@ -84,6 +84,19 @@ export function waterSummary(caps: Capsule[]): { tone: Tone; value: string } {
   return { tone: 'ok', value: '正常' };
 }
 
+/**
+ * 右上角那顆水質（#375：繁殖缸加熱棒卡住熱死整缸，看著主缸的右上角還寫「正常」）：
+ * 哪一缸有危機就是「危險」，危機在別缸時標籤換成那缸的名字；沒有危機才看這缸的水質讀數。
+ */
+export function capsSummary(tanks: TankState[], active: number): { tone: Tone; value: string; label: string; title?: string } {
+  const crisis = crisisTodos(tanks);
+  const here = crisis.find((c) => c.tank === active);
+  const there = crisis.find((c) => c.tank !== active);
+  if (here) return { tone: 'bad', value: '危險', label: '水質', title: here.text };
+  if (there) return { tone: 'bad', value: '危險', label: tankLabel(tanks, there.tank), title: there.text };
+  return { ...waterSummary(waterCapsules(tanks[active])), label: '水質' };
+}
+
 /** 「第 3 週・週二 14:05」：第 1 天是第 1 週的週一。 */
 export function clockLabel(hours: number): string {
   const t = hours * 3600;
@@ -208,6 +221,26 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
   if (out.length === 0) out.push({ text: living.length === 0 ? '去商店買魚和水草吧' : '一切正常', tone: 'ok' });
   const rank = { bad: 0, warn: 1, ok: 2 };
   return out.sort((a, b) => rank[a.tone] - rank[b.tone]);
+}
+
+/** 危機類的待辦（#375）：停電、設備壞了、水溫超出魚能撐的、還沒撈的死魚。 */
+const CRISIS_TODO = /^(停電中|撈出 \d+ 條死魚|加熱棒|水溫偏[高低])/;
+
+/**
+ * 每缸的危機（#375：加熱棒卡住 13 天、整缸熱死，早上報告、任務卡、右上角都沒說）。
+ * 早上報告固定排第一行、任務卡改指向處理方法、右上角的水質跟著變。停電整個房間只算一次。
+ */
+export function crisisTodos(tanks: TankState[]): Array<Todo & { tank: number }> {
+  if (tanks[0] && !tankStarted(tanks[0])) return [];
+  const out: Array<Todo & { tank: number }> = [];
+  tanks.forEach((t, i) => {
+    for (const x of todos(t, tanks.filter((o) => o !== t))) {
+      if (x.tone !== 'bad' || !CRISIS_TODO.test(x.text)) continue;
+      if (SHARED_TODO.test(x.text) && out.some((o) => o.text === x.text)) continue;
+      out.push({ ...x, tank: i });
+    }
+  });
+  return out;
 }
 
 /** 這些待辦是整個房間共用的，不用在每一缸重複提醒。 */
