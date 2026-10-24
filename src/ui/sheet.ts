@@ -27,6 +27,8 @@ export class Sheet {
     const closeBtn = h('button.sheet-close', { onclick: () => this.close(), 'aria-label': '關閉' }, '✕');
     this.panel.append(h('div.sheet-head', {}, this.icon, this.title, closeBtn), this.body);
     host.append(this.backdrop, this.panel);
+    // 收起來的面板只是移到畫面外，內容還在：設 inert，Tab、讀屏和自動化都碰不到裡面的按鈕（#366）
+    this.panel.inert = true;
   }
 
   get isOpen(): boolean {
@@ -53,6 +55,7 @@ export class Sheet {
     if (fresh) this.panel.scrollTop = this.body.scrollTop = 0;
     this.backdrop.classList.add('open');
     this.panel.classList.add('open');
+    this.panel.inert = false;
     if (fresh) {
       this.cancelCloseLater();
       this.onOpen?.();
@@ -91,6 +94,7 @@ export class Sheet {
     this.render = null;
     this.backdrop.classList.remove('open');
     this.panel.classList.remove('open');
+    this.panel.inert = true;
     this.onClose?.();
   }
 }

@@ -161,8 +161,9 @@ button.todo-item.go:hover { color: var(--accent, #f0c96a); }
 /* ---- 面板 ---- */
 .sheet-backdrop { position: fixed; inset: 0; z-index: 19; background: rgba(0, 12, 18, 0.45); opacity: 0; pointer-events: none; transition: opacity 0.25s; }
 .sheet-backdrop.open { opacity: 1; pointer-events: auto; }
-.sheet { position: fixed; z-index: 20; left: 50%; bottom: 0; width: 100%; max-width: 560px; max-height: 78dvh; overflow-y: auto; transform: translate(-50%, 105%); transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1); background: var(--glass-strong); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); color: var(--text); border: 1px solid var(--line); border-bottom: none; border-radius: 24px 24px 0 0; padding: 4px 20px calc(env(safe-area-inset-bottom) + 18px); box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5); }
-.sheet.open { transform: translate(-50%, 0); }
+.sheet { position: fixed; z-index: 20; left: 50%; bottom: 0; width: 100%; max-width: 560px; max-height: 78dvh; overflow-y: auto; transform: translate(-50%, 105%); transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), visibility 0s linear 0.3s; visibility: hidden; background: var(--glass-strong); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); color: var(--text); border: 1px solid var(--line); border-bottom: none; border-radius: 24px 24px 0 0; padding: 4px 20px calc(env(safe-area-inset-bottom) + 18px); box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5); }
+/* 收起時滑出動畫跑完才藏起來（visibility 延後 0.3 秒），打開時馬上看得到（#366） */
+.sheet.open { transform: translate(-50%, 0); visibility: visible; transition-delay: 0s; }
 @media (orientation: landscape) {
   /* 橫向：面板從右邊滑出，不擋住水缸 */
   .sheet { left: auto; right: 0; top: 0; bottom: 0; width: min(420px, 50vw); max-width: none; max-height: none; transform: translateX(105%); border: 1px solid var(--line); border-right: none; border-radius: 24px 0 0 24px; padding-right: calc(env(safe-area-inset-right) + 20px); }
@@ -1012,8 +1013,9 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 /* 全螢幕面板（商店、設定、選單）：蓋滿畫面、缸藏在後面，內容置中、圖卡排得開 */
 .sheet-backdrop.full { background: rgba(5, 18, 25, 0.96); }
 .sheet.full,
-.sheet.full.open { left: 0; right: 0; top: 0; bottom: 0; width: 100%; max-width: none; max-height: none; border: 0; border-radius: 0; transform: none; opacity: 1; padding: 0 max(20px, calc((100vw - 1080px) / 2)) calc(env(safe-area-inset-bottom) + 18px); padding-left: max(calc(env(safe-area-inset-left) + 20px), calc((100vw - 1080px) / 2)); padding-right: max(calc(env(safe-area-inset-right) + 20px), calc((100vw - 1080px) / 2)); box-shadow: none; transition: opacity 0.2s ease; }
+.sheet.full.open { left: 0; right: 0; top: 0; bottom: 0; width: 100%; max-width: none; max-height: none; border: 0; border-radius: 0; transform: none; opacity: 1; padding: 0 max(20px, calc((100vw - 1080px) / 2)) calc(env(safe-area-inset-bottom) + 18px); padding-left: max(calc(env(safe-area-inset-left) + 20px), calc((100vw - 1080px) / 2)); padding-right: max(calc(env(safe-area-inset-right) + 20px), calc((100vw - 1080px) / 2)); box-shadow: none; transition: opacity 0.2s ease, visibility 0s linear 0.2s; }
 .sheet.full:not(.open) { opacity: 0; pointer-events: none; }
+.sheet.full.open { transition-delay: 0s; }
 .sheet.full .sheet-head { margin: 0 calc(-1 * max(20px, (100vw - 1080px) / 2)); padding-left: max(20px, calc((100vw - 1080px) / 2)); padding-right: max(20px, calc((100vw - 1080px) / 2)); }
 .sheet.full .card-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
 @media (orientation: landscape) and (max-height: 500px) {
