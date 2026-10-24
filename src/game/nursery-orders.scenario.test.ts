@@ -91,9 +91,9 @@ const median = (xs: number[]) => {
 };
 
 describe('育幼盒驗收劇本（mvp.md §4.4.2 第 5 點）', () => {
-  // 第一窩什麼時候生看運氣（店裡的母魚懷孕到幾成），所以看 10 個種子的中位數，也跟「沒有育幼盒」比
-  it('10 個種子的中位數：第一張訂單 ≤ 第 20 天、第 37 天訂單收入 ≥ 300，而且比沒有盒子好', () => {
-    const seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  // 第一窩什麼時候生看運氣（店裡的母魚懷孕到幾成），所以看 20 個種子的中位數（10 個種子時盒子和沒盒子的第一張一般單差不到兩天，每日小事一換就翻過來，#378），也跟「沒有育幼盒」比
+  it('20 個種子的中位數：第一張訂單 ≤ 第 20 天、第 37 天訂單收入 ≥ 300，而且比沒有盒子好', () => {
+    const seeds = Array.from({ length: 20 }, (_, i) => i + 1);
     const box = seeds.map((seed) => run(seed));
     const none = seeds.map((seed) => run(seed, true));
     const dbg = JSON.stringify({ box: box.map((r) => [r.first, r.firstRegular, r.earned[37]]), none: none.map((r) => [r.first, r.firstRegular, r.earned[37]]) });
@@ -104,5 +104,5 @@ describe('育幼盒驗收劇本（mvp.md §4.4.2 第 5 點）', () => {
     // 第一張一般單不晚於沒盒子（企劃 2026-10-21 定案，polish-to-9.md §6）：店裡的懷孕母魚 3～20 天內就生第一胎以後，
     // 沒盒子的第一窩也常有幾尾活下來交小孔雀單；盒子的好處主要在收入（上一條的 1.5 倍）
     expect.soft(median(box.map((r) => r.firstRegular)), dbg).toBeLessThanOrEqual(median(none.map((r) => (r.firstRegular === Infinity ? 99 : r.firstRegular))));
-  }, 180_000);
+  }, 360_000);
 });
