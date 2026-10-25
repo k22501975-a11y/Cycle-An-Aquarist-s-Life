@@ -532,4 +532,33 @@ describe('冬天搬去有加熱棒的缸、空缸不再叫保溫（#400，g30）
     const r = morningReport(snapshot(tanks), tanks, 1, null);
     expect(r.items.filter((i) => i.tank === 0 && /保溫|加熱棒/.test(i.text))).toEqual([]);
   });
+
+  it('有白點的魚先留在原缸，任務卡說留了幾尾（#401 架構）', () => {
+    const { tanks, a, b } = twoCold();
+    a.fish[0].ich = { stage: 'visible', progress: 0.5 };
+    const plan = warmMove(tanks, 0)!;
+    expect(plan.sick).toBe(1);
+    expect(plan.fish.some((f) => f.id === a.fish[0].id)).toBe(false);
+    expect(guideStep(tanks, 'g')?.text).toContain('有病的 1 尾先留著，免得傳染');
+    moveToWarmTank(tanks, 0);
+    expect(b.fish.some((f) => f.ich.stage === 'visible')).toBe(false);
+  });
+
+  it('小魚優先搬去不會被吃的缸；會被吃的放進暖缸的育幼盒（#401 架構）', () => {
+    const { tanks, a, b } = twoCold();
+    for (const f of a.fish.slice(0, 6)) Object.assign(f, { lengthCm: 0.7, ageDays: 3 });
+    // 第 3 缸：一樣暖、空位更多，但有大魚
+    const c = createTank({ tank: TANKS.std40, filter: FILTERS.hangOn, heater: { spec: HEATERS.h50, targetC: 25 }, light: { spec: LIGHTS.basic }, roomTempC: 16, seed: 43, matureMedia: true });
+    c.hours = a.hours;
+    c.water.tempC = 25;
+    addFish(c, 'guppy', { carriesIch: false, carries: [], sex: 'female', pregnant: false });
+    b.nurseryBox = true;
+    tanks.push(c);
+    linkTanks(tanks);
+    expect(warmMove(tanks, 0)?.to).toBe(1);
+    const moved = moveToWarmTank(tanks, 0)!;
+    expect(moved.to).toBe(1);
+    expect(moved.boxed).toBeGreaterThan(0);
+    expect(b.fish.filter((f) => f.nursery).length).toBe(moved.boxed);
+  });
 });

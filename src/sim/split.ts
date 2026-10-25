@@ -33,7 +33,7 @@ const young = (f: Fish) => {
 };
 
 /** 會被缸裡成魚吃掉的小魚（嘴巴塞得下）。 */
-function preyAtRisk(all: Fish[]): Fish[] {
+export function preyAtRisk(all: Fish[]): Fish[] {
   // 育幼盒裡的魚隔著網子，不算
   const living = all.filter((f) => !f.nursery);
   const mouths = living.filter((f) => !isJuvenile(f) && FISH_SPECIES[f.species].mouthRatio > 0).map((f) => f.lengthCm * FISH_SPECIES[f.species].mouthRatio);

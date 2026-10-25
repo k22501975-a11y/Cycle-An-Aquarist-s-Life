@@ -1544,7 +1544,7 @@ export function maintenancePanel(ctx: PanelContext): Node {
                       warmMoveStep(game.tanks, game.active)
                       ? button(`搬去${tankLabel(game.tanks, warmMove(game.tanks, game.active)!.to)}`, () => {
                           const moved = game.actAll((tanks) => moveToWarmTank(tanks, game.active));
-                          if (moved) toasts.show(`把 ${moved.count} 尾連袋子泡進${tankLabel(game.tanks, moved.to)}，水溫差不多了再放出來`);
+                          if (moved) toasts.show(`把 ${moved.count} 尾連袋子泡進${tankLabel(game.tanks, moved.to)}，水溫差不多了再放出來${moved.boxed > 0 ? `，${moved.boxed} 尾小魚先放進育幼盒，免得被大魚吃` : ''}`);
                           sheet.refresh();
                         })
                       : null,
