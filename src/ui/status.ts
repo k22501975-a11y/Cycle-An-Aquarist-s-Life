@@ -1,6 +1,6 @@
 import type { ReportAction } from './morning-report';
 import { DEATH_CAUSE_LABELS } from './labels';
-import { dueMothers, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading, waterLook } from '../sim';
+import { dueMothers, nextStep, type NextStep, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading, waterLook } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -243,6 +243,49 @@ export function crisisTodos(tanks: TankState[]): Array<Todo & { tank: number }> 
   });
   // 馬上會出事的（停電、死魚、卡住、水溫）排在已經拔掉的壞加熱棒前面，哪一缸都一樣（#382：這缸的「換一支」佔住任務卡，別缸的死魚 40 天沒人提醒）
   return [...out.filter((c) => !lingering(c)), ...out.filter(lingering)];
+}
+
+/**
+ * 任務卡的下一步：危機不等人（#375）：加熱棒卡住、水溫超出、沒撈的死魚，先叫玩家處理；魚死光了叫玩家去商店重新開始（#377），
+ * 壞掉拔了插頭的加熱棒之後再換（#382）。拔了插頭的壞加熱棒在生病要下藥、或室溫魚撐得住時先說別的，
+ * 不然沒錢換的時候任務卡卡住 40 天、白點也沒人叫你治（#388）；錢不夠換就說還差多少、先去交訂單湊錢。其他照 nextStep。
+ */
+export function guideStep(tanks: TankState[], goal: string): NextStep | null {
+  const crises = crisisTodos(tanks);
+  const urgent = crises.find((c) => !lingering(c));
+  const wiped = urgent ? null : wipedOut(tanks);
+  if (wiped) return { goal, text: wiped.step, target: 'shop_fish' };
+  const heater = urgent ? undefined : crises[0];
+  const next = urgent ? null : nextStep(tanks);
+  const crisis = urgent ?? (heater && next && (next.target === 'treat' || heaterCanWait(tanks[heater.tank])) ? undefined : heater);
+  if (!crisis) return next;
+  const where = tanks.length > 1 && !/^停電中/.test(crisis.text) ? `${tankLabel(tanks, crisis.tank)}：` : '';
+  const broke = lingering(crisis) ? heaterReplacement(tanks[crisis.tank]) : null;
+  if (broke && broke.short > 0) return { goal, text: `${where}加熱棒壞了，換一支要 ${broke.cost} 元（還差 ${broke.short} 元），先交訂單湊錢`, target: 'orders' };
+  return { goal, text: `${where}${crisis.text}`, target: crisis.go === 'remove_dead' ? 'remove_dead' : 'equipment', tank: crisis.tank };
+}
+
+/**
+ * 拔了插頭的壞加熱棒可以先放著（#388）：這缸沒有魚，或房間一天的冷熱都在缸裡每種魚的適溫內（孔雀魚 22～28°C，台灣多數時候室溫就夠）。
+ * 這時任務卡先說別的事（生病下藥、目標），不然沒錢換的時候任務卡卡住幾十天。
+ */
+export function heaterCanWait(t: TankState): boolean {
+  const living = t.fish.filter((f) => f.alive);
+  if (living.length === 0) return true;
+  const env = t.environment;
+  const swing = env.roomSwingC ?? 1.5;
+  return living.every((f) => {
+    const { temp } = FISH_SPECIES[f.species];
+    return env.roomTempC - swing >= temp.min && env.roomTempC + swing <= temp.max;
+  });
+}
+
+/** 換一支同款加熱棒要多少錢、手上的錢夠不夠（不夠就叫玩家先交訂單湊錢，#388）。 */
+export function heaterReplacement(t: TankState): { cost: number; short: number } | null {
+  const spec = t.equipment.heater?.spec;
+  if (!spec) return null;
+  const cost = price(`heater:${spec.id}`);
+  return { cost, short: Math.max(0, cost - (t.economy?.coins ?? 0)) };
 }
 
 /** 不會馬上出事、可以晚點處理的危機：已經拔掉插頭的壞加熱棒（魚死光時排在重新開始後面）。 */

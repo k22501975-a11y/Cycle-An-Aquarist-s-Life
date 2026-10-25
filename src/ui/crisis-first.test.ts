@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, TANKS, unplugHeater, type TankState } from '../sim';
-import { crisisTodos, capsSummary, lingering, wipedOut } from './status';
+import { addFish, addPlant, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, TANKS, unplugHeater, type TankState } from '../sim';
+import { crisisTodos, capsSummary, guideStep, heaterCanWait, lingering, wipedOut } from './status';
 import { morningReport, REPORT_LINES, slimReport, snapshot } from './morning-report';
+import { fishName } from './labels';
 
 /** 養好水、一株草、10 尾孔雀魚的缸，加熱棒設 25°C。 */
 function tank(seed = 31): TankState {
@@ -196,5 +197,57 @@ describe('比一比只點了一尾（g25）', () => {
     expect(comparePartner(tanks, a.id)).toBeNull();
     updateDaily(tanks);
     expect(dailyTasks(tanks)!.tasks[0].done).toBe(true);
+  });
+
+  it('魚的編號只留每缸那段，不寫 8 位數（g26）', () => {
+    const f = { ...tank().fish[0], id: 10_000_003 };
+    expect(fishName(f)).toMatch(/ #3$/);
+  });
+});
+
+describe('拔了插頭的壞加熱棒不卡住任務卡（#388，g26）', () => {
+  /** 兩缸，繁殖缸的加熱棒壞了、拔了插頭，手上 200 元。 */
+  function broke(roomTempC = 24.8) {
+    const a = tank(31);
+    const b = tank(32);
+    b.label = '繁殖缸';
+    const tanks = [a, b];
+    linkTanks(tanks);
+    for (const t of tanks) {
+      t.environment.roomTempC = roomTempC;
+      t.environment.roomSwingC = 2.3;
+    }
+    b.equipment.heater!.broken = true;
+    unplugHeater(b);
+    economy(a).coins = 200;
+    return { tanks, b };
+  }
+
+  it('室溫孔雀魚撐得住：任務卡先說別的；生白點時叫你下藥', () => {
+    const { tanks, b } = broke();
+    expect(crisisTodos(tanks).filter(lingering)).toHaveLength(1);
+    expect(heaterCanWait(b)).toBe(true);
+    expect(guideStep(tanks, 'g')?.text ?? '').not.toContain('加熱棒');
+    b.fish[0].ich = { stage: 'visible', progress: 0, cause: 'relapse' };
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'treat', text: '有魚生病了，去下藥' });
+  });
+
+  it('房間太冷：還是叫你換；錢不夠就說還差多少、先交訂單湊錢', () => {
+    const { tanks, b } = broke(20);
+    expect(heaterCanWait(b)).toBe(false);
+    const cost = price(`heater:${b.equipment.heater!.spec.id}`);
+    expect(cost).toBeGreaterThan(200);
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'orders', text: `繁殖缸：加熱棒壞了，換一支要 ${cost} 元（還差 ${cost - 200} 元），先交訂單湊錢` });
+    economy(b).coins = cost;
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'equipment', tank: 1, text: '繁殖缸：加熱棒壞了，換一支' });
+    // 生病還是先下藥
+    b.fish[0].ich = { stage: 'visible', progress: 0, cause: 'relapse' };
+    expect(guideStep(tanks, 'g')?.target).toBe('treat');
+  });
+
+  it('這缸沒有魚：先放著', () => {
+    const { b } = broke(20);
+    b.fish = [];
+    expect(heaterCanWait(b)).toBe(true);
   });
 });
