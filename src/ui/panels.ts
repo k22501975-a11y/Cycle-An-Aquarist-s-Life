@@ -1553,8 +1553,8 @@ export function maintenancePanel(ctx: PanelContext): Node {
                       if (owed) toasts.show(`阿德：「老客人先拿去，有錢再還。」欠 ${owed} 元，之後每筆收入扣一半來還`);
                       sheet.refresh();
                     })
-                  : // 只能賒一支、別缸魚比較多：說先賒給那缸（#407）
-                    creditTarget(game.tanks) && creditTarget(game.tanks) !== game.state && coldWithoutHeater(game.state)
+                  : // 只能賒一支、別缸魚比較多：說先賒給那缸（#407）；賣魚就湊得到這缸的就照樣給賣魚按鈕（#408 架構）
+                    creditTarget(game.tanks) && creditTarget(game.tanks) !== game.state && coldWithoutHeater(game.state) && creditSale(game.state) === 0
                     ? h('div.hint', {}, heaterCreditRefusal(game.state) ?? '')
                     : // 還有魚可以賣就先賣（mvp.md §4.4.6 收緊）
                     coldWithoutHeater(game.state) && creditSale(game.state) > 0
