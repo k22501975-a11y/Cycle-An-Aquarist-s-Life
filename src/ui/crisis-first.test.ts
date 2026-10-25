@@ -263,21 +263,46 @@ describe('起步包放對缸、買不起藥有下一步（#391，g27）', () => 
     return { tanks, a, b };
   }
 
+  /** 兩缸的魚都死光了（每缸都死過魚）。 */
+  function wiped(roomTempC = 20) {
+    const x = two(roomTempC);
+    for (const t of x.tanks) {
+      t.fish = [];
+      t.events.push({ type: 'fish_died', hours: t.hours } as (typeof t.events)[number]);
+    }
+    economy(x.a).coins = 50;
+    return x;
+  }
+
   it('起步包不放進加熱棒壞掉的缸，就算正在看那缸', () => {
-    const { tanks, b } = two();
+    const { tanks, b } = wiped();
     b.equipment.heater!.broken = true;
     unplugHeater(b);
     expect(starterPackTank(tanks, 1)).toBe(0);
   });
 
   it('兩缸一樣好：放目前這缸', () => {
-    const { tanks } = two();
+    const { tanks } = wiped();
     expect(starterPackTank(tanks, 1)).toBe(1);
     expect(starterPackTank(tanks, 0)).toBe(0);
   });
 
+  it('還沒養好水的新缸比有白點蟲的缸更往後排（#392 架構）', () => {
+    const { tanks, a, b } = wiped();
+    a.water.ichCysts = 0.5;
+    b.bacteria = { aob: 0.02, nob: 0.02 };
+    expect(starterPackTank(tanks, 1)).toBe(0);
+  });
+
+  it('領不到的缸不挑：從來沒養過魚的缸不會被選到（#392 架構）', () => {
+    const { tanks, a, b } = wiped();
+    b.events = b.events.filter((e) => e.type !== 'fish_died');
+    expect(canClaimStarterPack(b, [a])).toBe(false);
+    expect(starterPackTank(tanks, 1)).toBe(0);
+  });
+
   it('還有白點蟲的缸往後排', () => {
-    const { tanks, a } = two();
+    const { tanks, a } = wiped();
     a.water.ichCysts = 0.5;
     expect(starterPackTank(tanks, 0)).toBe(1);
   });

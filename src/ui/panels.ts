@@ -890,8 +890,12 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
               // 放進孔雀魚住得最安穩的那缸，不一定是正在看的這缸（#391）
               const into = starterPackTank(game.tanks, game.active);
               const where = game.tanks.length > 1 && into !== game.active ? `，放進${tankLabel(game.tanks, into)}` : '';
+              const pack = game.actAll((tanks) => claimStarterPack(tanks[into], (s2, sex) => addFish(s2, 'guppy', { carriesIch: false, carries: [], sex, pregnant: false }), tanks.filter((_, j) => j !== into)));
+              if (!pack) {
+                toasts.show('現在領不到起步包', 'warn');
+                return;
+              }
               game.switchTo(into);
-              game.act((st) => claimStarterPack(st, (s2, sex) => addFish(s2, 'guppy', { carriesIch: false, carries: [], sex, pregnant: false }), game.others));
               ctx.sound?.('quest');
               toasts.show(`收下 3 條孔雀魚${where}，這次慢慢來`);
               sheet.open('商店', () => shopPanel(ctx, 'fish'));

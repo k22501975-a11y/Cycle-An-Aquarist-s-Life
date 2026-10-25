@@ -1,6 +1,7 @@
 import { isJuvenile, isLightOn, noteAct, recordEvent, type Fish, type TankState } from './state';
 import type { ChoiceState } from './choices';
 import { growthStage } from './growth';
+import { CYCLED_BACTERIA } from './processes/nitrogen';
 import { FISH_SPECIES, isShrimpSpecies, type FishSpeciesId, type PlantSpeciesId } from './species';
 import { phenotype, type GuppyGenome, type GuppyPhenotype } from './genetics';
 import { updateOrders, type OrderBoard } from './orders';
@@ -213,7 +214,7 @@ export function noteStarterPack(state: TankState): void {
 
 /**
  * 起步包要放哪一缸（#391）：不是看玩家正在看哪缸，而是挑孔雀魚住得最安穩的那缸。
- * 加熱棒壞了而室溫撐不住、沒開過濾、水裡還有白點蟲、氨或亞硝偏高的都往後排；一樣好就放目前這缸。
+ * 加熱棒壞了而室溫撐不住、沒開過濾、還沒養好水、水裡還有白點蟲、氨或亞硝偏高的都往後排；一樣好就放目前這缸。
  */
 export function starterPackTank(tanks: TankState[], active = 0): number {
   const { temp } = FISH_SPECIES.guppy;
@@ -227,12 +228,16 @@ export function starterPackTank(tanks: TankState[], active = 0): number {
     else if (!heater && !roomOk) s -= 50;
     if (!t.equipment.filter?.on) s -= 30;
     if (t.water.ichPathogen + t.water.ichCysts >= 0.01) s -= 20;
+    // 還沒養好水的新缸：魚放進去會氨中毒，比有白點蟲的缸更不適合（#392 架構）
+    if (Math.min(t.bacteria.aob, t.bacteria.nob) < CYCLED_BACTERIA) s -= 25;
     if (t.water.tan >= 0.5 || t.water.no2 >= 0.5) s -= 10;
     return s;
   };
+  // 領不到的缸（例如從來沒養過魚、又還沒說好要送）不挑，不然收下會失敗
+  const claimable = (i: number) => canClaimStarterPack(tanks[i], tanks.filter((_, j) => j !== i));
   let best = Math.min(Math.max(0, active), tanks.length - 1);
   tanks.forEach((t, i) => {
-    if (score(t) > score(tanks[best])) best = i;
+    if (claimable(i) && (!claimable(best) || score(t) > score(tanks[best]))) best = i;
   });
   return best;
 }
