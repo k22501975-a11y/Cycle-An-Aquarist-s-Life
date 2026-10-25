@@ -1,6 +1,6 @@
 import type { DeathAdviceCause } from './moments';
 import { guppyLook } from '../render/strains';
-import { dueMothers, hidingFactor, nurseryFish, NURSERY_FRY_CAPACITY, NURSERY_RELEASE_CM, isJuvenile, isShrimpSpecies, FISH_SPECIES, growthStage, ICH_CAUSE_LABELS, type IchCause, SNAILS, phenotype, PLANT_SPECIES, sexVisible, strainName, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
+import { dueMothers, hidingFactor, ID_BLOCK, nurseryFish, NURSERY_FRY_CAPACITY, NURSERY_RELEASE_CM, isJuvenile, isShrimpSpecies, FISH_SPECIES, growthStage, ICH_CAUSE_LABELS, type IchCause, SNAILS, phenotype, PLANT_SPECIES, sexVisible, strainName, type Fish, type SimEvent, type Symptom, type TankState } from '../sim';
 
 export const SYMPTOM_LABELS: Record<Symptom, string> = {
   hiding: '躲在角落',
@@ -157,7 +157,12 @@ export function fishName(fish: Fish): string {
   const young = !sexVisible(fish)
     ? shrimp ? (stage === 'fry' ? '仔蝦' : '幼蝦') : stage === 'fry' ? '仔魚' : '幼魚'
     : fish.sex === 'male' ? (shrimp ? '公蝦' : '公魚') : shrimp ? '母蝦' : '母魚';
-  return `${FISH_SPECIES[fish.species].name}${young} #${fish.id}`;
+  return `${FISH_SPECIES[fish.species].name}${young} #${shortId(fish.id)}`;
+}
+
+/** 給玩家看的魚編號：每缸的 id 從 ID_BLOCK 的倍數起算（#10000003），只留後面那段（#3），不然 8 位數根本記不住（g26）。 */
+export function shortId(id: number): number {
+  return id % ID_BLOCK;
 }
 
 /** 品系名（目前只有成年的公孔雀魚看得出品系）。 */

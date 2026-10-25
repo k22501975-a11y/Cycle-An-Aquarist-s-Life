@@ -475,7 +475,10 @@ async function start(): Promise<void> {
     if (id !== null) sim.markDailyFish(game.tanks, id);
     // 比一比只點了一尾：提示再點另一尾才算（g25）
     const partner = id === null ? null : sim.comparePartner(game.tanks, id);
-    if (partner) toasts.show(`再點${fishName(partner)}，比一比誰的顏色深`);
+    // 另一尾在這缸就讓牠亮一下，不然玩家看不出編號是哪尾（g26）；在別缸就說是哪一缸
+    const here = partner && game.state.fish.includes(partner);
+    if (partner && here) view.spotlight('fish', partner.id);
+    if (partner) toasts.show(here ? '再點另一尾發亮的，比一比誰的顏色深' : `再到${sim.tankLabel(game.tanks, game.tanks.findIndex((t) => t.fish.includes(partner)))}點${fishName(partner)}，比一比誰的顏色深`);
     const picked = id === null ? undefined : game.state.fish.find((f) => f.id === id);
     if (picked) sim.noteBellySeen(picked);
     view.selectFish(id);
