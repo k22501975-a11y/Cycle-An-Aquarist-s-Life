@@ -58,6 +58,14 @@ export function creditCost(t: TankState): number {
   return price(`heater:${creditHeater(t).id}`);
 }
 
+/** 今天賣魚就湊得到同款加熱棒的話，要賣幾尾（湊不到或錢已經夠回 0；設備面板改寫「賣 N 尾給阿德就夠換」）。 */
+export function creditSale(t: TankState): number {
+  const short = creditCost(t) - economy(t).coins;
+  if (short <= 0) return 0;
+  const sale = emergencySale(householdTanks(t), short);
+  return sale.coins >= short ? sale.count : 0;
+}
+
 /** 為什麼不能跟阿德賒加熱棒；可以回 null（mvp.md §4.4.6：錢不夠、今天賣魚也湊不到、水溫已經低於適溫，同時間只能賒一支）。 */
 export function heaterCreditRefusal(t: TankState): string | null {
   const owed = economy(t).heaterLoan ?? 0;
@@ -66,8 +74,11 @@ export function heaterCreditRefusal(t: TankState): string | null {
   const short = creditCost(t) - economy(t).coins;
   if (short <= 0) return '錢夠了，直接買一支就好';
   // §4.4.6：賣魚還湊得到就先賣，設備面板的按鈕跟任務卡同一個條件（#398 架構）
-  if (emergencySale(householdTanks(t), short).coins >= short) return '今天賣幾尾魚給水族店就湊得到，先賣魚';
-  if (t.water.tempC >= coldLimitC(t)) return '水溫還撐得住，先想辦法湊錢';
+  if (creditSale(t)) return '今天賣幾尾魚給水族店就湊得到，先賣魚';
+  // 水溫已經低於適溫，或室溫低於適溫、水溫正在往下掉（mvp.md §4.4.6 收緊）
+  const limit = coldLimitC(t);
+  const falling = t.environment.roomTempC < limit && t.water.tempC < t.water.tempAvgC;
+  if (t.water.tempC >= limit && !falling) return '水溫還撐得住，先想辦法湊錢';
   return null;
 }
 
