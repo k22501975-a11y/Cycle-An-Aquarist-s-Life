@@ -1,6 +1,6 @@
 import type { ReportAction } from './morning-report';
 import { DEATH_CAUSE_LABELS } from './labels';
-import { dueMothers, nextStep, type NextStep, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading, waterLook } from '../sim';
+import { dueMothers, raiseCashStep, creditCost, heaterCreditRefusal, needsInsulation, nextStep, type NextStep, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, starterPackAllCold, starterPackTank, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading, waterLook } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -258,7 +258,7 @@ export function guideStep(tanks: TankState[], goal: string): NextStep | null {
   const crises = crisisTodos(tanks);
   const urgent = crises.find((c) => !lingering(c));
   const wiped = urgent ? null : wipedOut(tanks);
-  if (wiped) return { goal, text: wiped.step, target: 'shop_fish' };
+  if (wiped) return { goal, text: wiped.step, target: wiped.target ?? 'shop_fish', tank: wiped.tank };
   const heater = urgent ? undefined : crises[0];
   const next = urgent ? null : nextStep(tanks);
   // 室溫撐得住、又還沒錢換，才先說別的事；錢夠了就叫玩家換，不然放到冬天魚會冷死（#394）
@@ -267,9 +267,15 @@ export function guideStep(tanks: TankState[], goal: string): NextStep | null {
   if (!crisis) return next;
   const where = tanks.length > 1 && !/^停電中/.test(crisis.text) ? `${tankLabel(tanks, crisis.tank)}：` : '';
   // 水溫偏低又是加熱棒壞了：錢不夠也要說還差多少、怎麼湊（#395）
+  const t = tanks[crisis.tank];
   const cold = /^水溫偏低.*加熱棒壞了/.test(crisis.text);
-  const broke = lingering(crisis) || cold ? heaterReplacement(tanks[crisis.tank]) : null;
-  if (broke && broke.short > 0) return { goal, text: `${where}${cold ? '水溫偏低，' : ''}加熱棒壞了，換一支要 ${broke.cost} 元（還差 ${broke.short} 元），先交訂單湊錢`, target: 'orders' };
+  // 冷到要救急（#397，mvp.md §4.4.6）：先保溫撐住，再湊錢；賣魚也湊不到就跟阿德賒一支
+  if (/^水溫偏低/.test(crisis.text) && needsInsulation(t)) return { goal, text: `${where}水溫偏低（${t.water.tempC.toFixed(1)}°C），先保溫：缸外包毛巾、泡溫水瓶`, target: 'insulate', tank: crisis.tank };
+  const broke = lingering(crisis) || cold ? heaterReplacement(t) : null;
+  // 沒有交得出的單就叫玩家賣魚湊（#397）
+  const raise = broke && broke.short > 0 ? raiseCashStep(tanks, `${where}${cold ? '水溫偏低，' : ''}加熱棒壞了，換一支`, broke.cost) : null;
+  if (raise && cold && (raise.stuck || (raise.target === 'sell' && !raise.enough)) && !heaterCreditRefusal(t)) return { goal, text: creditStep(where, t), target: 'heater_credit', tank: crisis.tank };
+  if (raise) return { goal, text: raise.text, target: raise.target };
   return { goal, text: `${where}${crisis.text}`, target: crisis.go === 'remove_dead' ? 'remove_dead' : 'equipment', tank: crisis.tank };
 }
 
@@ -296,6 +302,11 @@ export function heaterReplacement(t: TankState): { cost: number; short: number }
   return { cost, short: Math.max(0, cost - (t.economy?.coins ?? 0)) };
 }
 
+/** 跟阿德賒加熱棒的那句（mvp.md §4.4.6）。 */
+function creditStep(where: string, t: TankState): string {
+  return `${where}水太冷了，阿德說可以先賒一支加熱棒（${creditCost(t)} 元，有錢再還）`;
+}
+
 /** 不會馬上出事、可以晚點處理的危機：已經拔掉插頭的壞加熱棒（魚死光時排在重新開始後面）。 */
 export function lingering(c: Pick<Todo, 'text'>): boolean {
   return /^加熱棒壞了/.test(c.text);
@@ -308,7 +319,7 @@ export function lingering(c: Pick<Todo, 'text'>): boolean {
 /** 最後一尾死後多久以內，「魚都沒了」那句還說死因（遊戲小時）。 */
 const WIPED_CAUSE_HOURS = 72;
 
-export function wipedOut(tanks: TankState[]): { text: string; step: string; claim: boolean } | null {
+export function wipedOut(tanks: TankState[]): { text: string; step: string; claim: boolean; target?: NextStep['target']; tank?: number } | null {
   if (!tanks[0] || !tankStarted(tanks[0])) return null;
   if (tanks.some((t) => t.fish.some((f) => f.alive) || (t.quarantine?.fish ?? []).some((f) => f.alive))) return null;
   const died = tanks.flatMap((t) => t.events.filter((e) => e.type === 'fish_died'));
@@ -320,8 +331,27 @@ export function wipedOut(tanks: TankState[]): { text: string; step: string; clai
   const cause = recent ? (DEATH_CAUSE_LABELS[last.cause ?? ''] ?? '') : '';
   const claim = canClaimStarterPack(tanks[0], tanks.slice(1));
   const coins = tanks[0].economy?.coins ?? 0;
+  const head = `缸裡的魚都沒了${cause ? `，最後一尾是${cause}` : ''}。`;
+  // 每一缸都太冷（#397）：起步魚放進去也會冷死，先叫玩家換加熱棒
+  if (claim && starterPackAllCold(tanks)) {
+    const tank = starterPackTank(tanks);
+    const t = tanks[tank];
+    const where = tanks.length > 1 ? tankLabel(tanks, tank) : '';
+    const cost = heaterReplacement(t)?.cost ?? price('heater:h25');
+    const what = `魚都沒了，水太冷，${where}${t.equipment.heater ? '換' : '裝'}一支加熱棒`;
+    const raise = raiseCashStep(tanks, what, cost);
+    // 沒魚可賣、也沒單可交：阿德可以先賒一支（mvp.md §4.4.6）
+    const credit = raise?.stuck && !heaterCreditRefusal(t);
+    return {
+      text: `${head}現在水溫 ${t.water.tempC.toFixed(1)}°C，起步魚放進去也會冷死：先把${where}的加熱棒弄好，再到商店領老闆送的起步包`,
+      step: credit ? `魚都沒了，${creditStep(where, t)}` : (raise?.text ?? `${what}，再領起步包`),
+      claim,
+      target: credit ? 'heater_credit' : (raise?.target ?? 'equipment'),
+      tank,
+    };
+  }
   return {
-    text: `缸裡的魚都沒了${cause ? `，最後一尾是${cause}` : ''}。${claim ? '阿德老闆送你一包起步魚（1 公 2 母），到商店領' : `手上還有 ${coins} 元，到商店重新買魚`}`,
+    text: `${head}${claim ? '阿德老闆送你一包起步魚（1 公 2 母），到商店領' : `手上還有 ${coins} 元，到商店重新買魚`}`,
     step: claim ? '魚都沒了，去商店領起步包' : '魚都沒了，去商店重新買魚',
     claim,
   };

@@ -53,6 +53,10 @@ export interface TankState {
   lastWaterChangeHours?: number;
   /** 早上報告說過「你救回來了」（測到氨或亞硝、換水、讀數降下來；每缸一次，G8）。 */
   rescueNoted?: boolean;
+  /** 臨時保溫（缸外包毛巾、泡溫水瓶，mvp.md §4.4.6）到第幾個遊戲小時為止；這段時間散熱減半。 */
+  insulatedUntil?: number;
+  /** 上次臨時保溫是第幾個遊戲天（每天一次）。 */
+  insulatedDay?: number;
   /**
    * 養水期延長：還在養水、水裡有氨時又放店裡的魚，硝化菌長好以後還要多撐 leftH 小時才算養好
    * （design/polish-to-9.md §4 教學順序）。addedHours 是最近一次延長的時間，同一批魚只算一次。

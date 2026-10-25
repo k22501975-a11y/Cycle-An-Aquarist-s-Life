@@ -2,7 +2,7 @@ import type { SoundId } from '../audio/sounds';
 import { FEATURES } from '../features';
 import { substrateName, tankSubstrateLook } from '../render/substrate';
 import { kitColor, type KitParam } from '../render/ops-fx';
-import { DREAM_MALE, isShrimpSpecies, isFrySale, storeOffer, takeStoreFemales, addBottledBacteria, addFish, CARE_EAT_THRESHOLD, careTarget, guardianOf, hasSpawnSite, isBroodParent, PARENTAL, addSnail, APPLE_COLOR_LABELS, catchPests, collectTrap, doseMolluscicide, buyPlant as plantFromShop, isLightOn, PESTS, pestCount, removeClutches, removeDeadSnails, scrapeNeriteEggs, setTrap, snailBloom, SNAILS, type AppleColor, type PestKind, type SnailKind, addFishToQuarantine, addCuttings, addHardscape, addPlant, transferMedia, mediaAvailable, buybackRefusal, setKeeper, cureRefusal, mallBag, useCure, GUPPY_STRAIN_PRICES, GUPPY_FIN_STRAINS, GUPPY_STRAINS, finWords, matingSuccess, predictOffspring, canClaimStarterPack, claimStarterPack, starterPackTank, buyTank, addHolidayTablet, buyTankRefusal, HOLIDAY_TABLET_DAYS, installFeeder, feederInstalledText, LOCKED_SPECIES, speciesUnlocked, tankLock, unlockHint, moveFish, newTankCost, purposeCost, setTankPurpose, suggestPurpose, TANK_PURPOSES, type TankPurpose, removeTank, removeTankRefusal, slotPrice, TANK_SETS, tankLabel, type TankSizeId, chargeMeal, economy, FISH_PRICES, BETTA_FEMALE_PRICE, fishBuybackPrice, PLANT_PRICES, plantBuybackPrice, price, sellCuttings, sellableCuttings, chestCuttingsOf, sellFish, sellsLeftToday, spend, takeCutting, buyQuarantine, HARDSCAPE, removeHardscape, placeFromBag, replaceSubstrate, SUBSTRATES, doseAntibiotic, doseDewormer, doseQuarantine, hasVisible, isJuvenile, crowdingRatio, COMFORT_BAND, dripMinutes, dripGrade, dripTutorialLeft, recordDrip, farmHabit, habitGap, habitOf, phBeyondSurvival, SPLIT_PLAN_LABELS, splitAdvice, splitGroup, splitTank, rescueFryToBox, BOX_CAPACITY, buyNurseryBox, dueMothers, moveDueToNursery, moveToNursery, NURSERY_FRY_CAPACITY, NURSERY_RELEASE_CM, nurseryFish, nurseryRefusal, releaseNursery, rescueFryToNursery, type SplitPlan, daysUntilSexVisible, growthFactors, growthStage, maxLengthCm, sexVisible, stageLabel, phenotype, strainName, QUARANTINE_DAYS, quarantineDays, readyForTank, releaseQuarantine, swallowCm, tooSmallForTank, PINCH_MEALS, orderBoard, matchingFish, orderSupply, moveToQuarantine, AIR_PUMPS, CHILLERS, CO2_KITS, doseIchMedication, DEFAULT_FOOD, feed, FANS, FOOD_GRADES, FOOD_KINDS, mealMg, mealPrice, tapFeed, type TapFeedResult, FILTERS, FISH_SPECIES, freeAmmonia, HEATERS, hidingFactor, LIGHTS, monthOf, observeSymptoms, PLANT_SPECIES, REGION_LABELS, removeDeadFish, replaceFilter, rinseFilterMedia, seasonName, setHeaterTarget, installHeater, ichHeatC, ICH_MED_WORKING, changeDilutesIch, treatingIch, topUp, unplugHeater, trimPlant, waterChange, suggestedWaterChange, type DripOutcome, type Fish, type FishSpeciesId, type FoodGrade, type FoodKind, type Symptom, type PlantSpeciesId, type Region, type TankState, type TestKitReading, markDaily, needsSetup, type MallItemId } from '../sim';
+import { DREAM_MALE, isShrimpSpecies, isFrySale, storeOffer, takeStoreFemales, addBottledBacteria, addFish, CARE_EAT_THRESHOLD, careTarget, guardianOf, hasSpawnSite, isBroodParent, PARENTAL, addSnail, APPLE_COLOR_LABELS, catchPests, collectTrap, doseMolluscicide, buyPlant as plantFromShop, isLightOn, PESTS, pestCount, removeClutches, removeDeadSnails, scrapeNeriteEggs, setTrap, snailBloom, SNAILS, type AppleColor, type PestKind, type SnailKind, addFishToQuarantine, addCuttings, addHardscape, addPlant, transferMedia, mediaAvailable, buybackRefusal, setKeeper, cureRefusal, mallBag, useCure, GUPPY_STRAIN_PRICES, GUPPY_FIN_STRAINS, GUPPY_STRAINS, finWords, matingSuccess, predictOffspring, canClaimStarterPack, claimStarterPack, starterPackAllCold, starterPackTank, buyTank, addHolidayTablet, buyTankRefusal, HOLIDAY_TABLET_DAYS, installFeeder, feederInstalledText, LOCKED_SPECIES, speciesUnlocked, tankLock, unlockHint, moveFish, newTankCost, purposeCost, setTankPurpose, suggestPurpose, TANK_PURPOSES, type TankPurpose, removeTank, removeTankRefusal, slotPrice, TANK_SETS, tankLabel, type TankSizeId, chargeMeal, economy, FISH_PRICES, BETTA_FEMALE_PRICE, fishBuybackPrice, PLANT_PRICES, plantBuybackPrice, price, sellCuttings, sellableCuttings, chestCuttingsOf, sellFish, sellsLeftToday, spend, takeCutting, buyQuarantine, HARDSCAPE, removeHardscape, placeFromBag, replaceSubstrate, SUBSTRATES, doseAntibiotic, doseDewormer, doseQuarantine, hasVisible, isJuvenile, crowdingRatio, COMFORT_BAND, dripMinutes, dripGrade, dripTutorialLeft, recordDrip, farmHabit, habitGap, habitOf, phBeyondSurvival, SPLIT_PLAN_LABELS, splitAdvice, splitGroup, splitTank, rescueFryToBox, BOX_CAPACITY, buyNurseryBox, dueMothers, moveDueToNursery, moveToNursery, NURSERY_FRY_CAPACITY, NURSERY_RELEASE_CM, nurseryFish, nurseryRefusal, releaseNursery, rescueFryToNursery, type SplitPlan, daysUntilSexVisible, growthFactors, growthStage, maxLengthCm, sexVisible, stageLabel, phenotype, strainName, QUARANTINE_DAYS, quarantineDays, readyForTank, releaseQuarantine, swallowCm, tooSmallForTank, PINCH_MEALS, orderBoard, matchingFish, orderSupply, moveToQuarantine, AIR_PUMPS, CHILLERS, CO2_KITS, doseIchMedication, DEFAULT_FOOD, feed, FANS, FOOD_GRADES, FOOD_KINDS, mealMg, mealPrice, tapFeed, type TapFeedResult, FILTERS, FISH_SPECIES, freeAmmonia, HEATERS, hidingFactor, LIGHTS, monthOf, observeSymptoms, PLANT_SPECIES, REGION_LABELS, removeDeadFish, replaceFilter, rinseFilterMedia, seasonName, setHeaterTarget, installHeater, ichHeatC, ICH_MED_WORKING, changeDilutesIch, treatingIch, topUp, unplugHeater, trimPlant, waterChange, suggestedWaterChange, type DripOutcome, type Fish, type FishSpeciesId, type FoodGrade, type FoodKind, type Symptom, type PlantSpeciesId, type Region, type TankState, type TestKitReading, markDaily, needsSetup, needsInsulation, insulateTank, INSULATE_BUMP_C, heaterCreditRefusal, takeHeaterCredit, type MallItemId } from '../sim';
 import { choiceState, lineName } from '../sim/choices';
 import { applySeason, type Game } from '../game/game';
 import { h } from './dom';
@@ -885,11 +885,18 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
         ? h(
             'div.item.gift',
             {},
-            h('div', {}, h('b', {}, '老闆送你重新開始'), h('div.hint', {}, '整缸都沒了也別灰心。水族店老闆送你 1 公 2 母的孔雀魚（送的不能賣回店裡，生的小魚可以）。先想想上次出了什麼事。')),
-            button('收下', () => {
-              // 放進孔雀魚住得最安穩的那缸，不一定是正在看的這缸（#391）
+            h(
+              'div',
+              {},
+              h('b', {}, '老闆送你重新開始'),
+              h('div.hint', {}, '整缸都沒了也別灰心。水族店老闆送你 1 公 2 母的孔雀魚（送的不能賣回店裡，生的小魚可以）。先想想上次出了什麼事。'),
+              // 每一缸都太冷就先提醒（#397：一月兩缸加熱棒都壞，起步魚放進 15.5°C 的缸）
+              starterPackAllCold(game.tanks) ? h('div.warn-text', {}, `現在每一缸的水都太冷，魚放進去會冷死。先到「設備」把加熱棒換好，等水溫回到 ${FISH_SPECIES.guppy.temp.min}°C 以上再領。`) : null,
+            ),
+            button(starterPackAllCold(game.tanks) ? '還是收下' : '收下', () => {
+              // 放進孔雀魚住得最安穩的那缸，不一定是正在看的這缸（#391）；有好幾缸就寫出放進哪缸（g29）
               const into = starterPackTank(game.tanks, game.active);
-              const where = game.tanks.length > 1 && into !== game.active ? `，放進${tankLabel(game.tanks, into)}` : '';
+              const where = game.tanks.length > 1 ? `，放進${tankLabel(game.tanks, into)}` : '';
               const pack = game.actAll((tanks) => claimStarterPack(tanks[into], (s2, sex) => addFish(s2, 'guppy', { carriesIch: false, carries: [], sex, pregnant: false }), tanks.filter((_, j) => j !== into)));
               if (!pack) {
                 toasts.show('現在領不到起步包', 'warn');
@@ -1510,10 +1517,28 @@ export function maintenancePanel(ctx: PanelContext): Node {
             }, 'primary')
           : eq.heater.broken
             ? // 壞掉的加熱棒在這裡就能換（#382：任務卡帶到這裡卻只寫「請到商店換一支」，照任務卡玩會卡十幾天）
-              button(`換一支（${price(`heater:${eq.heater.spec.id}`)} 元）`, () => {
-                const spec = eq.heater!.spec;
-                if (purchase(ctx, price(`heater:${spec.id}`), (st) => installHeater(st, spec), `換上新的${spec.name}`)) sheet.refresh();
-              }, 'primary')
+              h(
+                'div.row',
+                {},
+                button(`換一支（${price(`heater:${eq.heater.spec.id}`)} 元）`, () => {
+                  const spec = eq.heater!.spec;
+                  if (purchase(ctx, price(`heater:${spec.id}`), (st) => installHeater(st, spec), `換上新的${spec.name}`)) sheet.refresh();
+                }, 'primary'),
+                // 冬天沒錢換（#397，mvp.md §4.4.6）：先保溫撐住，或跟阿德賒一支
+                needsInsulation(game.state)
+                  ? button('先保溫', () => {
+                      if (game.act((st) => insulateTank(st))) toasts.show(`包上毛巾、泡進溫水瓶，水溫回升 ${INSULATE_BUMP_C}°C，接下來半天散熱慢一半`);
+                      sheet.refresh();
+                    })
+                  : null,
+                !heaterCreditRefusal(game.state)
+                  ? button('跟阿德賒一支', () => {
+                      const owed = game.act((st) => takeHeaterCredit(st));
+                      if (owed) toasts.show(`阿德：「老客人先拿去，有錢再還。」欠 ${owed} 元，之後每筆收入扣一半來還`);
+                      sheet.refresh();
+                    })
+                  : null,
+              )
             : h('div.row', {}, button('−', () => game.act((st) => setHeaterTarget(st, eq.heater!.targetC - 1))), button('+', () => game.act((st) => setHeaterTarget(st, eq.heater!.targetC + 1)))),
       )
     : null;

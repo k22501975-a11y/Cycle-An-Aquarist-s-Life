@@ -483,6 +483,8 @@ const NEXT_GLOW: Record<NextTarget, QuestTarget | null> = {
   fastest: null,
   fry_box: null,
   scape: null,
+  insulate: null,
+  heater_credit: null,
 };
 
 function goalDoneText(g: Goal): string {

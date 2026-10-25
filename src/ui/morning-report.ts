@@ -1,5 +1,5 @@
 import { crisisText, type Crisis } from '../game/crisis';
-import { BLOOM_NOTE, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
+import { BLOOM_NOTE, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
 import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, breederIds, breederName, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 import { crisisTodos, wipedOut } from './status';
@@ -27,12 +27,15 @@ export type ReportAction =
   | 'nursery' // 把快生的母魚放進育幼盒
   | 'shop_tank' // 我的水缸（買第二缸）
   | 'buy_feeder' // 這缸裝自動餵食器（一天兩次，daily-loop.md §4）
-  | 'shop_fish'; // 商店的魚頁（魚都死光了，#377：領起步包或重新買魚）
+  | 'shop_fish' // 商店的魚頁（魚都死光了，#377：領起步包或重新買魚）
+  | 'insulate' // 冬天沒加熱棒：一鍵臨時保溫（#397）
+  | 'heater_credit'; // 冬天沒錢換加熱棒：跟阿德賒一支（#397）
 
 export type ReportKind =
   | 'crisis'
   | 'death'
   | 'wiped' // 魚都死光了（#377）
+  | 'loan' // 還阿德加熱棒的錢（#397）
   | 'birth'
   | 'eaten'
   | 'grown'
@@ -157,6 +160,8 @@ interface TankSnap {
 export interface Snapshot {
   tanks: TankSnap[];
   coins: number;
+  /** 還欠阿德加熱棒的錢（#397）。 */
+  heaterLoan?: number;
 }
 
 const allFish = (t: TankState) => [...t.fish, ...(t.quarantine?.fish ?? [])];
@@ -165,6 +170,7 @@ const allFish = (t: TankState) => [...t.fish, ...(t.quarantine?.fish ?? [])];
 export function snapshot(tanks: TankState[]): Snapshot {
   return {
     coins: economy(tanks[0]).coins,
+    heaterLoan: economy(tanks[0]).heaterLoan,
     tanks: tanks.map((t) => ({
       tank: t,
       events: t.events.at(-1),
@@ -462,9 +468,26 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     const where = tanks.length > 1 && !/^停電中/.test(c.text) ? `${tankLabel(tanks, c.tank)}：` : '';
     items.push({ kind: c.go === 'remove_dead' ? 'death' : 'equipment', tank: c.tank, tone: 'bad', text: where + c.text, action: c.go ?? 'equipment', standing: true });
   }
+  // 冬天沒加熱棒（#397，mvp.md §4.4.6）：第一行叫玩家先保溫，點一下就做好
+  tanks.forEach((t, index) => {
+    if (!needsInsulation(t)) return;
+    const where = tanks.length > 1 ? `${tankLabel(tanks, index)}：` : '';
+    const text = `${where}水溫偏低（${t.water.tempC.toFixed(1)}°C），先保溫：缸外包毛巾、泡溫水瓶`;
+    const cold = items.find((i) => i.tank === index && i.action === 'equipment' && /水溫偏低/.test(i.text));
+    if (cold) Object.assign(cold, { kind: 'crisis', text, action: 'insulate', goLabel: '保溫' });
+    else items.push({ kind: 'crisis', tank: index, tone: 'bad', text, action: 'insulate', goLabel: '保溫', standing: true });
+  });
+  // 跟阿德賒的加熱棒（#397）：昨晚有還錢就說還剩多少，還清了也說一聲
+  const owed = economy(tanks[0]).heaterLoan ?? 0;
+  if ((before.heaterLoan ?? 0) !== owed && before.heaterLoan !== undefined) {
+    items.push({ kind: 'loan', tank: 0, tone: owed > 0 ? 'info' : 'good', text: owed > 0 ? `還了阿德 ${before.heaterLoan! - owed} 元加熱棒的錢，還剩 ${owed} 元` : '跟阿德賒的加熱棒錢還清了' });
+  }
   // 魚都死光了（#377）：每天早上第一行說怎麼了、從哪裡重新開始，直到缸裡又有魚
   const wiped = wipedOut(tanks);
-  if (wiped) items.push({ kind: 'wiped', tank: 0, tone: 'bad', text: wiped.text, action: 'shop_fish', goLabel: wiped.claim ? '去領' : '去買魚', standing: true });
+  // 太冷的話先去弄加熱棒（#397）
+  const go = wiped?.target === 'equipment' || wiped?.target === 'orders' || wiped?.target === 'heater_credit' ? wiped.target : 'shop_fish';
+  const goLabel = { equipment: '去換', orders: '看訂單', heater_credit: '先賒一支', shop_fish: wiped?.claim ? '去領' : '去買魚' }[go];
+  if (wiped) items.push({ kind: 'wiped', tank: wiped.tank ?? 0, tone: 'bad', text: wiped.text, action: go, goLabel, standing: true });
   // 選育進度（midgame.md §2）：有第一窩或留種的魚就每天一行，取代一般的小觀察
   const progress = crisis ? null : breedingProgress(tanks);
   if (progress) items.push({ kind: 'breeding', tank: 0, tone: 'good', text: progress });
