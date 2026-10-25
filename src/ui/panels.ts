@@ -1524,6 +1524,14 @@ export function maintenancePanel(ctx: PanelContext): Node {
                   const spec = eq.heater!.spec;
                   if (purchase(ctx, price(`heater:${spec.id}`), (st) => installHeater(st, spec), `換上新的${spec.name}`)) sheet.refresh();
                 }, 'primary'),
+                // 冬天錢不夠換：第一步先把魚搬去有加熱棒的缸（mvp.md §4.4.6，#401）
+                warmMoveStep(game.tanks, game.active)
+                  ? button(`搬去${tankLabel(game.tanks, warmMove(game.tanks, game.active)!.to)}`, () => {
+                      const moved = game.actAll((tanks) => moveToWarmTank(tanks, game.active));
+                      if (moved) toasts.show(`把 ${moved.count} 尾連袋子泡進${tankLabel(game.tanks, moved.to)}，水溫差不多了再放出來${moved.boxed > 0 ? `，${moved.boxed} 尾小魚先放進育幼盒，免得被大魚吃` : ''}`);
+                      sheet.refresh();
+                    })
+                  : null,
                 // 冬天沒錢換（#397，mvp.md §4.4.6）：先保溫撐住，或跟阿德賒一支
                 needsInsulation(game.state)
                   ? button('先保溫', () => {
@@ -1540,14 +1548,7 @@ export function maintenancePanel(ctx: PanelContext): Node {
                   : // 還有魚可以賣就先賣（mvp.md §4.4.6 收緊）
                     coldWithoutHeater(game.state) && creditSale(game.state) > 0
                     ? button(`賣 ${creditSale(game.state)} 尾給阿德就夠換 ›`, () => sheet.open('商店', () => shopPanel(ctx, 'sell')))
-                    : // 賒也賒不到：魚先搬去有加熱棒的缸（#400）
-                      warmMoveStep(game.tanks, game.active)
-                      ? button(`搬去${tankLabel(game.tanks, warmMove(game.tanks, game.active)!.to)}`, () => {
-                          const moved = game.actAll((tanks) => moveToWarmTank(tanks, game.active));
-                          if (moved) toasts.show(`把 ${moved.count} 尾連袋子泡進${tankLabel(game.tanks, moved.to)}，水溫差不多了再放出來${moved.boxed > 0 ? `，${moved.boxed} 尾小魚先放進育幼盒，免得被大魚吃` : ''}`);
-                          sheet.refresh();
-                        })
-                      : null,
+                    : null,
               )
             : h('div.row', {}, button('−', () => game.act((st) => setHeaterTarget(st, eq.heater!.targetC - 1))), button('+', () => game.act((st) => setHeaterTarget(st, eq.heater!.targetC + 1)))),
       )
