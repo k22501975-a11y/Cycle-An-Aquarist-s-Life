@@ -1,5 +1,6 @@
 import { installHeater } from './actions';
-import { economy, price } from './economy';
+import { economy, householdTanks, price } from './economy';
+import { emergencySale } from './raise-cash';
 import { HEATERS } from './equipment';
 import { FISH_SPECIES } from './species';
 import type { TankState } from './state';
@@ -57,12 +58,15 @@ export function creditCost(t: TankState): number {
   return price(`heater:${creditHeater(t).id}`);
 }
 
-/** 為什麼不能跟阿德賒加熱棒；可以回 null（mvp.md §4.4.6：賣魚也湊不到、水溫已經低於適溫，同時間只能賒一支）。 */
+/** 為什麼不能跟阿德賒加熱棒；可以回 null（mvp.md §4.4.6：錢不夠、今天賣魚也湊不到、水溫已經低於適溫，同時間只能賒一支）。 */
 export function heaterCreditRefusal(t: TankState): string | null {
   const owed = economy(t).heaterLoan ?? 0;
   if (owed > 0) return `還欠阿德 ${owed} 元，還清之前不能再賒`;
   if (workingHeater(t)) return '這缸的加熱棒是好的';
-  if (economy(t).coins >= creditCost(t)) return '錢夠了，直接買一支就好';
+  const short = creditCost(t) - economy(t).coins;
+  if (short <= 0) return '錢夠了，直接買一支就好';
+  // §4.4.6：賣魚還湊得到就先賣，設備面板的按鈕跟任務卡同一個條件（#398 架構）
+  if (emergencySale(householdTanks(t), short).coins >= short) return '今天賣幾尾魚給水族店就湊得到，先賣魚';
   if (t.water.tempC >= coldLimitC(t)) return '水溫還撐得住，先想辦法湊錢';
   return null;
 }

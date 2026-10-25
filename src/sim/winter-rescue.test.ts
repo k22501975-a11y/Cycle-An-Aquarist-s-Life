@@ -75,3 +75,12 @@ describe('加熱棒不會接連壞（mvp.md §4.4.6）', () => {
     expect(economy(b).heaterBrokeHours).toBe(a.hours);
   });
 });
+
+describe('賒帳按鈕跟任務卡同一個條件（#398 架構）', () => {
+  it('今天賣魚湊得到就不能賒', () => {
+    const t = cold();
+    economy(t).coins = 50;
+    for (let i = 0; i < 10; i++) addFish(t, 'guppy', { carriesIch: false, carries: [], sex: i % 2 ? 'male' : 'female', pregnant: false });
+    expect(heaterCreditRefusal(t)).toBe('今天賣幾尾魚給水族店就湊得到，先賣魚');
+  });
+});
