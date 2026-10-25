@@ -96,6 +96,32 @@ export function heaterLiftC(volumeL: number, watts: number): number {
   return (watts * 0.86) / volumeL / baseLossRate(volumeL);
 }
 
+/**
+ * 新裝的加熱棒正在把水慢慢加熱（g33：剛裝好、水還在升溫，任務卡卻寫「水溫偏低，檢查加熱棒」，腳本亂按白點藥）：
+ * 加熱棒是好的、有電，水溫低於 minC，而且照室溫最低點一直開著撐得過 minC。回傳約幾小時回到加熱棒設的溫度（撐不到設定就照撐得到的），
+ * 不是在升溫、或撐不住（真的要處理）回 null。照 updateTemperature 一樣的散熱、恆溫器慢慢調高（setpointC）一小時一小時算。
+ */
+export function heaterWarmup(state: TankState, minC: number): { hours: number; toC: number } | null {
+  const { water, equipment, environment } = state;
+  const heater = equipment.heater;
+  if (!heater || heater.broken || heater.stuckOn || environment.powerOut || water.tempC >= minC) return null;
+  const volume = equipment.tank.volumeL;
+  const lift = heaterLiftC(volume, heater.spec.watts);
+  if (environment.roomTempC - (environment.roomSwingC ?? 1.5) + lift < minC) return null;
+  const toC = Math.min(heater.targetC, environment.roomTempC + lift - 0.5);
+  const loss = 1 - Math.exp(-baseLossRate(volume));
+  const gain = (heater.spec.watts * 0.86) / volume;
+  let t = water.tempC;
+  let set = heater.setpointC ?? heater.targetC;
+  for (let h = 1; h <= 24 * 10; h++) {
+    set = Math.min(heater.targetC, set + HEATER_RAMP_C_PER_HOUR);
+    t += (environment.roomTempC - t) * loss;
+    if (t < set - 0.2) t += gain;
+    if (t >= toC - 0.3) return { hours: h, toC: Math.round(toC) };
+  }
+  return null;
+}
+
 export function updateTemperature(state: TankState, dt: number): void {
   const { water, equipment } = state;
   const volume = equipment.tank.volumeL;

@@ -1,4 +1,4 @@
-import { BUYBACK_MIN_SIZE, buybackRefusal, economy, FISH_PRICES, guppyBuybackTier, householdTanks, noteBredSale, noteEarned, noteRaisedGone, PLANT_PRICES, sellableCuttings } from './economy';
+import { BUYBACK_MIN_SIZE, buybackRefusal, economy, FISH_PRICES, guppyBuybackTier, householdTanks, noteBredSale, noteEarned, noteRaisedGone, PLANT_PRICES, sellableCuttings, type Economy } from './economy';
 import { DREAM_FISH } from './dream';
 import { phenotype, type FinTrait, type GuppyPhenotype } from './genetics';
 import { daysToLength } from './growth';
@@ -631,6 +631,14 @@ function replaceOrder(state: TankState, board: OrderBoard, ctx: OrderContext, ol
 
 /** 連續幾天沒有真的收入（賣魚、賣插枝、交單），訂單板就保證出一張現在交得出來的小單（polish-to-9.md §4「收入空檔」）。 */
 export const INCOME_GAP_DAYS = 6;
+/** 還欠阿德加熱棒錢、手上又低於這個數時，保底單隔 LOAN_GAP_DAYS 天就出（mvp.md §4.4.6 g33：危機過後錢回不來）。 */
+export const LOAN_GAP_COINS = 200;
+export const LOAN_GAP_DAYS = 3;
+
+/** 多久沒有真的收入就掛保底單。 */
+function incomeGapDays(e: Economy): number {
+  return (e.heaterLoan ?? 0) > 0 && e.coins < LOAN_GAP_COINS ? LOAN_GAP_DAYS : INCOME_GAP_DAYS;
+}
 
 /** 這張單什麼時候下架（遊戲小時）：單上寫了要等幾天就照那個；一般 ORDER_EXPIRE_DAYS 天、小孔雀單 FRY_ORDER_EXPIRE_DAYS 天、保底單 INCOME_GAP_DAYS 天。 */
 export function orderExpiresHours(o: ShopOrder): number {
@@ -705,7 +713,7 @@ function ensureIncomeOrder(state: TankState, board: OrderBoard): void {
   const e = economy(state);
   const today = Math.floor(state.hours / 24);
   if (e.lastEarnedDay === undefined) e.lastEarnedDay = today;
-  if (today - e.lastEarnedDay < INCOME_GAP_DAYS) return;
+  if (today - e.lastEarnedDay < incomeGapDays(e)) return;
   const current = board.orders.find((o) => o.gap);
   if (current && gapDeliverable(tanks, current)) return;
   board.orders = board.orders.filter((x) => !x.gap);

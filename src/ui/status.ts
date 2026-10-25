@@ -1,6 +1,6 @@
 import type { ReportAction } from './morning-report';
 import { DEATH_CAUSE_LABELS } from './labels';
-import { dueMothers, raiseCashStep, creditCost, creditTarget, heaterCreditRefusal, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, nextStep, type NextStep, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, starterPackAllCold, starterPackTank, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading, waterLook } from '../sim';
+import { dueMothers, raiseCashStep, creditCost, creditTarget, heaterCreditRefusal, heaterWarmup, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, nextStep, type NextStep, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, starterPackAllCold, starterPackTank, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading, waterLook } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -192,7 +192,10 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
     const hottest = Math.min(...living.map((f) => FISH_SPECIES[f.species].temp.max));
     const coldest = Math.max(...living.map((f) => FISH_SPECIES[f.species].temp.min));
     if (t > hottest + 0.5) out.push({ text: `水溫偏高（${t.toFixed(1)}°C），開風扇或冷水機`, tone: t > hottest + 2 ? 'bad' : 'warn', go: 'equipment' });
-    else if (t < coldest - 0.5) {
+    else if (t < coldest - 0.5 && heaterWarmup(state, coldest - 0.5)) {
+      // 新加熱棒正在把水加熱：不出水溫偏低的警報（g33：寫「檢查加熱棒」，玩家會亂按）
+      out.push({ text: warmupText(state, coldest - 0.5)!, tone: 'ok', go: 'equipment' });
+    } else if (t < coldest - 0.5) {
       // 加熱棒壞了就直接說要換一支，「檢查加熱棒」點進去不知道要做什麼（#395）
       const fix = !eq.heater ? '裝一支加熱棒' : eq.heater.broken ? '加熱棒壞了，換一支' : '檢查加熱棒';
       out.push({ text: `水溫偏低（${t.toFixed(1)}°C），${fix}`, tone: t < coldest - 2 ? 'bad' : 'warn', go: 'equipment' });
@@ -226,6 +229,24 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
   if (out.length === 0) out.push({ text: living.length === 0 ? '去商店買魚和水草吧' : '一切正常', tone: 'ok' });
   const rank = { bad: 0, warn: 1, ok: 2 };
   return out.sort((a, b) => rank[a.tone] - rank[b.tone]);
+}
+
+/** 「新加熱棒加熱中，約 X 小時回到 T°C」（g33）；不是在升溫回 null。超過兩天寫幾天。 */
+function warmupText(t: TankState, minC: number): string | null {
+  const w = heaterWarmup(t, minC);
+  if (!w) return null;
+  return `新加熱棒加熱中，約 ${w.hours > 48 ? `${Math.ceil(w.hours / 24)} 天` : `${w.hours} 小時`}回到 ${w.toC}°C`;
+}
+
+/** 有缸的新加熱棒正在升溫（水溫還低於魚的適溫）：任務卡說還要多久（g33）。 */
+function warmupStep(tanks: TankState[], goal: string): NextStep | null {
+  for (const [i, t] of tanks.entries()) {
+    const living = t.fish.filter((f) => f.alive);
+    if (living.length === 0) continue;
+    const text = warmupText(t, Math.max(...living.map((f) => FISH_SPECIES[f.species].temp.min)) - 0.5);
+    if (text) return { goal, text: tanks.length > 1 ? `${tankLabel(tanks, i)}：${text}` : text, target: 'equipment', tank: i };
+  }
+  return null;
 }
 
 /** 危機類的待辦（#375）：停電、設備壞了、水溫超出魚能撐的、還沒撈的死魚。 */
@@ -264,7 +285,8 @@ export function guideStep(tanks: TankState[], goal: string): NextStep | null {
   // 室溫撐得住、又還沒錢換，才先說別的事；錢夠了就叫玩家換，不然放到冬天魚會冷死（#394）
   const canWait = (c: { tank: number }) => heaterCanWait(tanks[c.tank]) && (heaterReplacement(tanks[c.tank])?.short ?? 0) > 0;
   const crisis = urgent ?? (heater && next && (next.target === 'treat' || canWait(heater)) ? undefined : heater);
-  if (!crisis) return next;
+  // 新加熱棒還在升溫：任務卡說還要多久，不叫你去下藥以外的事（g33）
+  if (!crisis) return next?.target === 'treat' ? next : (warmupStep(tanks, goal) ?? next);
   const where = tanks.length > 1 && !/^停電中/.test(crisis.text) ? `${tankLabel(tanks, crisis.tank)}：` : '';
   // 水溫偏低又是加熱棒壞了：錢不夠也要說還差多少、怎麼湊（#395）
   const t = tanks[crisis.tank];

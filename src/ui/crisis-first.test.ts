@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, canDeliverAnyOrder, emergencySale, orderBoard, starterPackAllCold, moveToWarmTank, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, buyCheapHeater, coldestRoomC, sellFish, creditTarget, heaterCreditRefusal, takeHeaterCredit, fishBuybackPrice, type ShopOrder, type TankSpec, type TankState } from '../sim';
-import { crisisTodos, capsSummary, guideStep, heaterCanWait, lingering, warmMoveStep, wipedOut } from './status';
+import { addFish, addPlant, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, canDeliverAnyOrder, emergencySale, orderBoard, starterPackAllCold, moveToWarmTank, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, buyCheapHeater, coldestRoomC, sellFish, creditTarget, heaterCreditRefusal, takeHeaterCredit, fishBuybackPrice, installHeater, noteEarned, type ShopOrder, type TankSpec, type TankState } from '../sim';
+import { crisisTodos, capsSummary, guideStep, heaterCanWait, lingering, todos, warmMoveStep, wipedOut } from './status';
 import { morningReport, REPORT_LINES, slimReport, snapshot } from './morning-report';
 import { fishName } from './labels';
 
@@ -693,3 +693,46 @@ describe('冬天搬去有加熱棒的缸、空缸不再叫保溫（#400，g30）
   });
 });
 
+
+describe('冬天危機過後（mvp.md §4.4.6 g33）', () => {
+  it('新加熱棒升溫中：不出「水溫偏低」，任務卡說約多久回到設定溫度', () => {
+    const a = tank(71);
+    a.environment.roomTempC = 16;
+    a.water.tempC = 19;
+    installHeater(a, HEATERS.h50);
+    expect(todos(a, []).some((x) => /水溫偏低/.test(x.text))).toBe(false);
+    const step = guideStep([a], 'g');
+    expect(step).toMatchObject({ target: 'equipment' });
+    expect(step?.text).toMatch(/^新加熱棒加熱中，約 \d+ (小時|天)回到 25°C$/);
+    expect(crisisTodos([a])).toEqual([]);
+    // 加熱棒撐不到魚的致死低溫以上：照樣警報
+    a.equipment.heater = { spec: { ...HEATERS.h25, watts: 2 }, targetC: 25, broken: false, heating: false };
+    expect(todos(a, []).some((x) => /水溫偏低/.test(x.text))).toBe(true);
+  });
+
+  it('賣魚湊不齊：寫出賣完還差多少（g33：還差 333 元時寫「賣 5 尾約 32 元」，玩家以為賣了就夠）', () => {
+    const a = tank(72);
+    a.environment.roomTempC = 16;
+    a.equipment.heater!.broken = true;
+    unplugHeater(a);
+    a.water.tempC = 19;
+    a.insulatedDay = Math.floor(a.hours / 24);
+    economy(a).coins = 0;
+    economy(a).heaterLoan = 280;
+    orderBoard(a).orders = [];
+    const sale = emergencySale([a], 350);
+    expect(sale.coins).toBeLessThan(350);
+    expect(guideStep([a], 'g')?.text).toBe(`水溫偏低，加熱棒壞了，換一支要 350 元（還差 350 元），賣掉今天能賣的 ${sale.count} 尾約 ${sale.coins} 元，還差 ${350 - sale.coins} 元`);
+  });
+
+  it('還欠阿德錢、昨晚的收入先不扣：早上報告寫阿德說不急', () => {
+    const a = tank(73);
+    economy(a).heaterLoan = 280;
+    economy(a).coins = 50;
+    const before = snapshot([a]);
+    economy(a).coins += 30;
+    noteEarned(a, 30);
+    const r = morningReport(before, [a], 1, null);
+    expect(r.items.some((i) => i.text === '阿德說不急，等你缸穩了再還（還欠 280 元）')).toBe(true);
+  });
+});

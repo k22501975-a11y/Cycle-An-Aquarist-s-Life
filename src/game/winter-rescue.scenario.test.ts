@@ -52,7 +52,7 @@ function follow(tanks: TankState[]): boolean {
     }
     case 'sell': {
       // 照任務卡說的尾數賣
-      const n = Number(/賣 (\d+) 尾/.exec(s.text)?.[1] ?? 0);
+      const n = Number(/賣(?:掉今天能賣的)? (\d+) 尾/.exec(s.text)?.[1] ?? 0);
       let sold = 0;
       for (const f of emergencySale(tanks, Infinity).fish.slice(0, n)) sold += sellFish(tanks.find((x) => x.fish.includes(f))!, f.id);
       return sold > 0;
@@ -114,7 +114,7 @@ describe('冬天加熱棒都壞、沒錢、沒單可交（#397，mvp.md §4.4.6 
     expect(tanks.reduce((n, t) => n + t.fish.filter((f) => f.alive).length, 0)).toBeGreaterThan(fish / 2);
   }, 60_000);
 
-  it('賒過一支、另一缸還是冷（g30）：任務卡叫玩家把魚搬去有加熱棒的缸，大部分救得回來', () => {
+  it('賒過一支、另一缸還是冷（g30）：任務卡叫玩家買便宜加熱棒或把魚搬去有加熱棒的缸，大部分救得回來', () => {
     // g30：孔雀魚之家 40L 4 尾大魚＋36 尾小魚，繁殖缸 20L 跟阿德賒的加熱棒是好的，手上沒錢
     const a = coldTank(41, TANKS.std40, 'h50');
     const fry = a.fish.filter((f) => f.generation === 1);
@@ -139,13 +139,13 @@ describe('冬天加熱棒都壞、沒錢、沒單可交（#397，mvp.md §4.4.6 
     const fish = tanks.reduce((n, t) => n + t.fish.length, 0);
     const log: string[] = [];
     const { died, did } = play(tanks, 6, log);
-    expect(did.some((d) => d.endsWith('move_warm')), log.join('\n')).toBe(true);
+    // 危機中暫停還款（g33）：賣魚的錢夠買 25W 就先買，不然搬去有加熱棒的缸
+    expect(did.some((d) => d.endsWith('move_warm') || d.endsWith('buy_heater')), log.join('\n')).toBe(true);
     // 搬過去之後沒有冷死的（小魚被大魚吃掉是平常的事，原本的缸也會吃）
     const cold = tanks.flatMap((t) => t.events).filter((e) => e.type === 'fish_died' && e.cause === 'temperature').length;
     expect(cold, log.join('\n')).toBe(0);
     expect(fish - died, log.join('\n')).toBeGreaterThan(fish / 2);
-    // 空缸早上不再叫保溫
-    expect(a.fish.some((f) => f.alive)).toBe(false);
+    // 搬空了的缸早上不再叫保溫；買了加熱棒的就不冷了
     expect(needsInsulation(a)).toBe(false);
   }, 60_000);
 
@@ -187,11 +187,15 @@ describe('冬天加熱棒都壞、沒錢、沒單可交（#397，mvp.md §4.4.6 
     expect(fish).toBeGreaterThan(30);
   }, 60_000);
 
-  it('g31：繁殖缸在下白點藥也叫你搬魚（魚一起泡藥），不會整缸冷死（#404）', () => {
-    const { tanks } = g31(20);
+  it('g31：手上 20 元、繁殖缸在下白點藥，孔雀魚之家也不會整缸冷死（#404）', () => {
+    const { tanks, a } = g31(20);
     const log: string[] = [];
     const { did } = play(tanks, 2, log);
-    expect(did.some((d) => d.endsWith('move_warm')), log.join('\n')).toBe(true);
+    // 危機中暫停還款（g33）：賣魚的錢夠買 25W 就先買，不然搬去下藥中的繁殖缸；孔雀魚之家不會整缸冷死
+    expect(did.some((d) => d.endsWith('move_warm') || d.endsWith('buy_heater')), log.join('\n')).toBe(true);
+    const alive = tanks.reduce((n, t) => n + t.fish.filter((f) => f.alive).length, 0);
+    expect(alive, log.join('\n')).toBeGreaterThan(20);
+    expect(a.fish.some((f) => f.alive) || tanks[1].fish.length > 10, log.join('\n')).toBe(true);
   }, 60_000);
 
   it('g32：兩缸都冷、只能賒一支，小缸先冷到也把加熱棒賒給魚多的大缸，小缸的魚再搬過去，魚幾乎都救得回來（#407）', () => {
