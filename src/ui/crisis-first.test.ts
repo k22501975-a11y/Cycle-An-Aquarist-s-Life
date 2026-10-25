@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, TANKS, unplugHeater, type TankState } from '../sim';
+import { addFish, addPlant, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, type TankState } from '../sim';
 import { crisisTodos, capsSummary, guideStep, heaterCanWait, lingering, wipedOut } from './status';
 import { morningReport, REPORT_LINES, slimReport, snapshot } from './morning-report';
 import { fishName } from './labels';
@@ -249,5 +249,54 @@ describe('拔了插頭的壞加熱棒不卡住任務卡（#388，g26）', () => 
     const { b } = broke(20);
     b.fish = [];
     expect(heaterCanWait(b)).toBe(true);
+  });
+});
+
+describe('起步包放對缸、買不起藥有下一步（#391，g27）', () => {
+  function two(roomTempC = 20) {
+    const a = tank(31);
+    const b = tank(32);
+    b.label = '繁殖缸';
+    const tanks = [a, b];
+    linkTanks(tanks);
+    for (const t of tanks) t.environment.roomTempC = roomTempC;
+    return { tanks, a, b };
+  }
+
+  it('起步包不放進加熱棒壞掉的缸，就算正在看那缸', () => {
+    const { tanks, b } = two();
+    b.equipment.heater!.broken = true;
+    unplugHeater(b);
+    expect(starterPackTank(tanks, 1)).toBe(0);
+  });
+
+  it('兩缸一樣好：放目前這缸', () => {
+    const { tanks } = two();
+    expect(starterPackTank(tanks, 1)).toBe(1);
+    expect(starterPackTank(tanks, 0)).toBe(0);
+  });
+
+  it('還有白點蟲的缸往後排', () => {
+    const { tanks, a } = two();
+    a.water.ichCysts = 0.5;
+    expect(starterPackTank(tanks, 0)).toBe(1);
+  });
+
+  it('藥買不起：說還差多少、先交訂單湊錢；錢夠就叫下藥', () => {
+    const { tanks, b } = two(24);
+    b.fish[0].ich = { stage: 'visible', progress: 0, cause: 'relapse' };
+    const cost = price('med:ich');
+    economy(b).coins = 25;
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'orders', text: `藥要 ${cost} 元（還差 ${cost - 25} 元），先交訂單湊錢` });
+    economy(b).coins = cost;
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'treat', text: '有魚生病了，去下藥' });
+  });
+
+  it('藥買不起但背包有特效藥：照樣叫去下藥', () => {
+    const { tanks, b } = two(24);
+    b.fish[0].ich = { stage: 'visible', progress: 0, cause: 'relapse' };
+    economy(b).coins = 25;
+    economy(b).mall = { cure: 1, tankset: 0 };
+    expect(guideStep(tanks, 'g')?.target).toBe('treat');
   });
 });
