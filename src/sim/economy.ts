@@ -216,11 +216,7 @@ export function noteStarterPack(state: TankState): void {
   if (e.starterPackPromised === undefined && canClaimStarterPack(state, tanks.filter((t) => t !== state))) e.starterPackPromised = state.hours;
 }
 
-/**
- * 起步包要放哪一缸（#391）：不是看玩家正在看哪缸，而是挑孔雀魚住得最安穩的那缸。
- * 加熱棒壞了而室溫撐不住、沒開過濾、還沒養好水、水裡還有白點蟲、氨或亞硝偏高的都往後排；一樣好就放目前這缸。
- */
-/** 孔雀魚放進這缸會不會冷到或熱到：沒有能用的加熱棒、室溫又撐不住，或現在的水溫已經在適溫外（#397）。 */
+/** 孔雀魚放進這缸會不會冷到：沒有能用的加熱棒、室溫又撐不住，或現在的水溫已經在適溫外（#397）。 */
 export function starterPackTooCold(t: TankState): boolean {
   const { temp } = FISH_SPECIES.guppy;
   const env = t.environment;
@@ -234,6 +230,10 @@ export function starterPackAllCold(tanks: TankState[]): boolean {
   return tanks.every((t) => starterPackTooCold(t));
 }
 
+/**
+ * 起步包要放哪一缸（#391）：不是看玩家正在看哪缸，而是挑孔雀魚住得最安穩的那缸。
+ * 加熱棒壞了而室溫撐不住、沒開過濾、還沒養好水、水裡還有白點蟲、氨或亞硝偏高、現在水溫在適溫外的都往後排；一樣好就放目前這缸。
+ */
 export function starterPackTank(tanks: TankState[], active = 0): number {
   const { temp } = FISH_SPECIES.guppy;
   const score = (t: TankState): number => {

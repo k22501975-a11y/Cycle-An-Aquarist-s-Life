@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, createTank, economy, FILTERS, HEATER_FAILURE_GAP_DAYS, HEATERS, heaterCreditRefusal, insulateRefusal, insulateTank, LIGHTS, linkTanks, needsInsulation, noteEarned, sellFish, simulate, takeHeaterCredit, TANKS, type TankState } from '.';
+import { addFish, createTank, economy, FILTERS, HEATER_FAILURE_GAP_DAYS, HEATERS, creditSale, heaterCreditRefusal, insulateRefusal, insulateTank, LIGHTS, linkTanks, needsInsulation, noteEarned, sellFish, simulate, takeHeaterCredit, TANKS, type TankState } from '.';
 import { breakHeater } from './processes/thermal';
 
 function cold(roomTempC = 16): TankState {
@@ -73,5 +73,27 @@ describe('加熱棒不會接連壞（mvp.md §4.4.6）', () => {
     a.equipment.heater!.broken = false;
     breakHeater(a);
     expect(economy(b).heaterBrokeHours).toBe(a.hours);
+  });
+});
+
+describe('賒帳按鈕跟任務卡同一個條件（#398 架構）', () => {
+  it('今天賣魚湊得到就不能賒', () => {
+    const t = cold();
+    economy(t).coins = 50;
+    for (let i = 0; i < 10; i++) addFish(t, 'guppy', { carriesIch: false, carries: [], sex: i % 2 ? 'male' : 'female', pregnant: false });
+    expect(heaterCreditRefusal(t)).toBe('今天賣幾尾魚給水族店就湊得到，先賣魚');
+  });
+});
+
+describe('賒帳的水溫條件（mvp.md §4.4.6 收緊）', () => {
+  it('水溫還在適溫內但室溫低、水溫正在往下掉：可以賒；水溫穩著就不行', () => {
+    const t = cold();
+    economy(t).coins = 50;
+    t.water.tempC = 23;
+    t.water.tempAvgC = 23;
+    expect(heaterCreditRefusal(t)).toContain('水溫還撐得住');
+    t.water.tempAvgC = 24;
+    expect(heaterCreditRefusal(t)).toBeNull();
+    expect(creditSale(t)).toBe(0);
   });
 });
