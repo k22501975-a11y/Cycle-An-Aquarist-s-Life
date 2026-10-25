@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, canDeliverAnyOrder, emergencySale, orderBoard, starterPackAllCold, moveToWarmTank, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, buyCheapHeater, type ShopOrder, type TankState } from '../sim';
+import { addFish, addPlant, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, canDeliverAnyOrder, emergencySale, orderBoard, starterPackAllCold, moveToWarmTank, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, buyCheapHeater, coldestRoomC, sellFish, fishBuybackPrice, type ShopOrder, type TankState } from '../sim';
 import { crisisTodos, capsSummary, guideStep, heaterCanWait, lingering, warmMoveStep, wipedOut } from './status';
 import { morningReport, REPORT_LINES, slimReport, snapshot } from './morning-report';
 import { fishName } from './labels';
@@ -556,6 +556,28 @@ describe('冬天搬去有加熱棒的缸、空缸不再叫保溫（#400，g30）
     expect(buyCheapHeater(a)?.id).toBe('h25');
     expect(economy(a).coins).toBe(20);
     expect(a.equipment.heater?.broken).toBe(false);
+  });
+
+  it('便宜加熱棒照這地區最冷那個月算撐不撐得住，不是只看今天（#405 架構）', () => {
+    const { a } = twoCold();
+    economy(a).coins = 300;
+    expect(coldestRoomC('north')).toBe(14);
+    expect(coldestRoomC('south')).toBe(17);
+    // 今天室溫還有 21°C：只看今天 25W 連適溫都撐得到；照 1 月最冷 14°C 算只撐得住不冷死
+    a.environment.roomTempC = 21;
+    expect(cheapHeater(a)).toMatchObject({ spec: { id: 'h25' }, comfy: false });
+  });
+
+  it('還欠加熱棒錢時，緊急賣魚逐尾扣一半還款，算出來的跟真的賣完到手一樣（#405 架構）', () => {
+    const { tanks, a } = twoCold();
+    // 每尾價錢是奇數時逐尾 ceil 會比整筆 ceil 多扣
+    economy(a).heaterLoan = 280;
+    expect(emergencySale(tanks, 1_000_000).fish.map(fishBuybackPrice).some((p) => p % 2 === 1)).toBe(true);
+    const sale = emergencySale(tanks, 1_000_000);
+    expect(sale.count).toBeGreaterThan(1);
+    const before = economy(a).coins;
+    for (const f of sale.fish) sellFish(tanks.find((t: TankState) => t.fish.includes(f))!, f.id);
+    expect(economy(a).coins - before).toBe(sale.coins);
   });
 
   it('湊不到錢時說真正原因，不叫「先交訂單」（#404）', () => {

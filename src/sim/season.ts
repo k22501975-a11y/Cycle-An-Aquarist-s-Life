@@ -45,6 +45,11 @@ export function roomClimate(month: number, region: Region = 'north', airConditio
   return { meanC: Math.round(meanC * 10) / 10, swingC };
 }
 
+/** 這個地區一年裡最冷的室溫（最冷那個月的平均減日夜溫差）：救急買的加熱棒要撐到這裡才算撐得過冬天。 */
+export function coldestRoomC(region: Region = 'north'): number {
+  return Math.min(...MONTHLY_MEAN[region].map((c, i) => c - MONTHLY_SWING[i]));
+}
+
 export function seasonName(month: number): string {
   const m = Math.floor((((month % 12) + 12) % 12)) + 1;
   if (m <= 2) return '冬天';
