@@ -1,7 +1,7 @@
 import { installHeater } from './actions';
 import { economy, fishBuybackPrice, householdTanks, price } from './economy';
 import { moveFish } from './household';
-import { moveToNursery, nurseryFish, NURSERY_FRY_CAPACITY } from './nursery';
+import { moveToNursery, nurseryFish, NURSERY_FRY_CAPACITY, usesNursery } from './nursery';
 import { hasVisible } from './processes/disease';
 import { ICH_MED_WORKING } from './next-step';
 import { crowdingRatio } from './processes/fauna';
@@ -163,6 +163,11 @@ export function warmMove(tanks: TankState[], from: number): { to: number; fish: 
     fish.push(f);
     left -= cm;
     if (!isJuvenile(f) || f.lengthCm > mouth) continue;
+    // 蝦苗、親魚自己顧的苗不能放育幼盒：直接算會被吃（#402 架構）
+    if (!usesNursery(f.species)) {
+      exposed++;
+      continue;
+    }
     // 盒子放不下的小魚照樣搬（冷缸已經低於適溫，留著一定冷死；搬過去只是可能被吃）
     if (boxLeft > 0) {
       box.push(f);
