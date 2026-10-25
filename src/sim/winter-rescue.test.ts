@@ -36,7 +36,7 @@ describe('臨時保溫（mvp.md §4.4.6）', () => {
 });
 
 describe('跟阿德賒加熱棒（mvp.md §4.4.6）', () => {
-  it('錢不夠、水溫低於適溫才賒得到；同時只能賒一支；收入扣一半來還', () => {
+  it('錢不夠、水溫低於適溫才賒得到；同時只能賒一支', () => {
     const t = cold();
     economy(t).coins = 500;
     expect(heaterCreditRefusal(t)).toBe('錢夠了，直接買一支就好');
@@ -50,17 +50,44 @@ describe('跟阿德賒加熱棒（mvp.md §4.4.6）', () => {
     expect(economy(t).heaterLoan).toBe(350);
     t.equipment.heater!.broken = true;
     expect(heaterCreditRefusal(t)).toBe('還欠阿德 350 元，還清之前不能再賒');
-    // 賣一尾魚：一半拿去還
-    const f = t.fish[0];
+  });
+
+  it('還款：缸穩了、手上有 200 元以上才扣，每筆扣 3 成；手上少或有危機時先不扣（mvp.md §4.4.6 g33）', () => {
+    const t = cold();
+    t.equipment.heater!.broken = false;
+    t.water.tempC = 25;
+    economy(t).heaterLoan = 350;
+    // 手上少：先不扣，記一筆「阿德說不急」
+    economy(t).coins = 50 + 100;
+    expect(noteEarned(t, 100)).toBe(0);
+    expect(economy(t).heaterLoan).toBe(350);
+    expect(economy(t).loanWaived).toBe(1);
+    // 缸穩了、手上夠：扣 3 成
+    economy(t).coins = 300 + 101;
+    expect(noteEarned(t, 101)).toBe(31);
+    expect(economy(t).coins).toBe(370);
+    expect(economy(t).heaterLoan).toBe(319);
+    // 有危機（加熱棒壞了）：先不扣
+    t.equipment.heater!.broken = true;
+    economy(t).coins += 100;
+    expect(noteEarned(t, 100)).toBe(0);
+    // 有魚看得到病：先不扣
+    t.equipment.heater!.broken = false;
+    t.fish[0].ich = { stage: 'visible', progress: 0.2 };
+    expect(noteEarned(t, 100)).toBe(0);
+    t.fish[0].ich = { stage: 'none', progress: 0 };
+    // 還清了就拿掉
+    economy(t).coins += 2000;
+    noteEarned(t, 2000);
+    expect(economy(t).heaterLoan).toBeUndefined();
+    // 賣魚也照同樣的規則扣
+    economy(t).heaterLoan = 100;
+    economy(t).coins = 500;
+    const f = addFish(t, 'guppy', { carriesIch: false, carries: [], sex: 'female', pregnant: false });
     const before = economy(t).coins;
     const got = sellFish(t, f.id);
     expect(got).toBeGreaterThan(0);
-    expect(economy(t).coins - before).toBe(got - Math.ceil(got / 2));
-    expect(economy(t).heaterLoan).toBe(350 - Math.ceil(got / 2));
-    // 還清了就拿掉
-    economy(t).coins += 1000;
-    noteEarned(t, 1000);
-    expect(economy(t).heaterLoan).toBeUndefined();
+    expect(economy(t).coins - before).toBe(got - Math.ceil(got * 0.3));
   });
 });
 

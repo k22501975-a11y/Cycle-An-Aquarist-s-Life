@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { newGameState } from './game';
 import { addFish, addPlant, changeDilutesIch, checkGoals, dailyTasks, doseIchMedication, feed, FISH_SPECIES, goalState, ichHeatC, ichMedDays, ichMedShort, ichTreatment, needsMedicine, nextStep, PINCH_MEALS, setHeaterTarget, simulate, updateDaily, useTestKit, waterChange, type TankState } from '../sim';
 
@@ -6,6 +6,13 @@ import { addFish, addPlant, changeDilutesIch, checkGoals, dailyTasks, doseIchMed
  * 照下一步治白點（#324，評測 g20）：開局魚第 4 天出現白點，照任務卡做——叫下藥就下一份、說藥效中就把加熱棒調到說的溫度（孔雀魚缸 28°C，不超過適溫上限）等——
  * 每天餵、測水、該換水就換。一次白點最多花一份藥，而且 14 天內治好。
  */
+// 室溫照現實日期算（applySeason）：固定在十月中，不然跨過午夜室溫差 0.1°C，seed 3 就會多冒一次白點
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-15T12:00:00'));
+});
+afterAll(() => vi.useRealTimers());
+
 const alive = (s: TankState) => s.fish.filter((f) => f.alive);
 const meal = (s: TankState) => alive(s).reduce((a, f) => a + FISH_SPECIES[f.species].dailyFoodMg, 0) / 2;
 const sick = (s: TankState) => alive(s).some((f) => f.ich.stage === 'visible');

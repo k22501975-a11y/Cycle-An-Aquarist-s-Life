@@ -41,6 +41,11 @@ import {
   PLANT_PRICES,
   SNAILS,
   INCOME_GAP_DAYS,
+  LOAN_GAP_COINS,
+  LOAN_GAP_DAYS,
+  FRY_BUY_DAYS,
+  isFrySale,
+  sellFish,
   incomeGapOrder,
   reachableInTime,
   orderStarter,
@@ -507,6 +512,34 @@ describe('收入空檔保底（polish-to-9.md §4）', () => {
     addCuttings(s, 'anubias', trimPlant(s, plant.id));
     expect(fulfillOrder([s], gap.id)).toBeGreaterThan(0);
     expect(e.lastEarnedDay).toBe(20);
+  });
+
+  it(`還欠阿德加熱棒錢、手上又低於 ${LOAN_GAP_COINS} 元：${LOAN_GAP_DAYS} 天沒真收入就出保底單（mvp.md §4.4.6 g33）`, () => {
+    const s = tank();
+    s.hours = 20 * 24 + 8;
+    const e = economy(s);
+    grown(s);
+    const board = fishOnly(s);
+    e.lastEarnedDay = 20 - LOAN_GAP_DAYS;
+    updateOrders(s);
+    expect(board.orders.some((o) => o.gap)).toBe(false);
+    e.heaterLoan = 280;
+    e.coins = 60;
+    s.hours += 1;
+    updateOrders(s);
+    expect(board.orders.filter((o) => o.gap)).toHaveLength(1);
+  });
+
+  it('一尾 2 元的小魚不算真收入：賣了也不重算收入空檔（g33）', () => {
+    const s = tank();
+    s.hours = 20 * 24 + 8;
+    const e = economy(s);
+    e.lastEarnedDay = 15;
+    const fry = addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'male', pregnant: false });
+    Object.assign(fry, { lengthCm: 1, ageDays: FRY_BUY_DAYS });
+    expect(isFrySale(fry)).toBe(true);
+    expect(sellFish(s, fry.id)).toBeGreaterThan(0);
+    expect(e.lastEarnedDay).toBe(15);
   });
 
   it('只收自己缸裡長出來、生出來的：手上的插枝（寶箱、買來、別人送的）不算；什麼都沒有就不出保底單', () => {

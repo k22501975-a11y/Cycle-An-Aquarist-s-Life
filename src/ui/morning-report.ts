@@ -164,6 +164,8 @@ export interface Snapshot {
   coins: number;
   /** 還欠阿德加熱棒的錢（#397）。 */
   heaterLoan?: number;
+  /** 有幾筆收入先不扣還款（g33）。 */
+  loanWaived?: number;
 }
 
 const allFish = (t: TankState) => [...t.fish, ...(t.quarantine?.fish ?? [])];
@@ -173,6 +175,7 @@ export function snapshot(tanks: TankState[]): Snapshot {
   return {
     coins: economy(tanks[0]).coins,
     heaterLoan: economy(tanks[0]).heaterLoan,
+    loanWaived: economy(tanks[0]).loanWaived,
     tanks: tanks.map((t) => ({
       tank: t,
       events: t.events.at(-1),
@@ -505,6 +508,9 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   const owed = economy(tanks[0]).heaterLoan ?? 0;
   if ((before.heaterLoan ?? 0) !== owed && before.heaterLoan !== undefined) {
     items.push({ kind: 'loan', tank: 0, tone: owed > 0 ? 'info' : 'good', text: owed > 0 ? `還了阿德 ${before.heaterLoan! - owed} 元加熱棒的錢，還剩 ${owed} 元` : '跟阿德賒的加熱棒錢還清了' });
+  } else if (owed > 0 && (economy(tanks[0]).loanWaived ?? 0) > (before.loanWaived ?? 0)) {
+    // 手上太少或缸還沒穩，昨晚的收入先不扣（mvp.md §4.4.6 g33）
+    items.push({ kind: 'loan', tank: 0, tone: 'info', text: `阿德說不急，等你缸穩了再還（還欠 ${owed} 元）` });
   }
   // 魚都死光了（#377）：每天早上第一行說怎麼了、從哪裡重新開始，直到缸裡又有魚
   const wiped = wipedOut(tanks);

@@ -163,8 +163,10 @@ export interface Economy {
    * 訂單板的收入空檔保底用（polish-to-9.md §4「收入空檔」）；舊存檔沒有，第一次檢查時從那天開始算。
    */
   lastEarnedDay?: number;
-  /** 跟阿德賒加熱棒還欠多少（mvp.md §4.4.6）：之後每筆收入扣一半來還，不收利息；0 或沒有就是沒欠。 */
+  /** 跟阿德賒加熱棒還欠多少（mvp.md §4.4.6）：之後每筆收入扣 3 成來還（LOAN_SHARE），不收利息；0 或沒有就是沒欠。 */
   heaterLoan?: number;
+  /** 還欠阿德錢時，有幾筆收入因為手上太少或缸還沒穩先不扣（早上報告看有沒有變多，寫「阿德說不急」）。 */
+  loanWaived?: number;
   /** 最近一次加熱棒故障是第幾個遊戲小時（全家共用）：7 天內不會再壞第二支（mvp.md §4.4.6）。 */
   heaterBrokeHours?: number;
   /** 手上的插枝裡有幾株是寶箱來的：只能種，不能賣回店家、交單、上架或送人換錢（polish-to-9.md §4）。 */
@@ -302,14 +304,47 @@ export function applyLedger(state: TankState, entry: { delta: number; ledgerSeq:
   return true;
 }
 
-/** 記下今天有真的收入（訂單板看多久沒收入，orders.ts 的收入空檔保底）。寶箱魚幣不算。 */
-/** 記一筆真的收入。coins 是這筆入帳多少：還欠阿德加熱棒的錢就扣一半來還（mvp.md §4.4.6），回傳還了多少。 */
-export function noteEarned(state: TankState, coins = 0): number {
+/** 每筆收入扣幾成還阿德加熱棒的錢（mvp.md §4.4.6 g33 之後：原本一半，危機過後錢回不來）。 */
+export const LOAN_SHARE = 0.3;
+/** 手上（入帳後）低於這個數就先不扣還款：阿德說不急（g33）。 */
+export const LOAN_PAUSE_COINS = 200;
+
+/** 這缸還沒穩：有活魚，而且有魚看得到病、加熱棒壞了或卡住、停電，或水溫超出魚的適溫（還款暫停的「有病、有危機」）。 */
+function unsettled(t: TankState): boolean {
+  const living = t.fish.filter((f) => f.alive);
+  if (living.length === 0) return false;
+  if (living.some((f) => f.ich.stage === 'visible' || (f.infections ?? []).some((i) => i.stage === 'visible'))) return true;
+  const heater = t.equipment.heater;
+  if (heater?.broken || heater?.stuckOn || t.environment.powerOut) return true;
+  const min = Math.max(...living.map((f) => FISH_SPECIES[f.species].temp.min));
+  const max = Math.min(...living.map((f) => FISH_SPECIES[f.species].temp.max));
+  return t.water.tempC < min - 0.5 || t.water.tempC > max + 0.5;
+}
+
+/**
+ * 這筆收入要扣多少還阿德（g33）：每筆扣 LOAN_SHARE（無條件進位），扣完不能讓手上低於 LOAN_PAUSE_COINS 以下就先不扣；
+ * 任何一缸有病、有危機也先不扣。coinsAfter 是這筆入帳後手上有多少，owed 是還欠多少。緊急賣魚算到手的錢也用這個（raise-cash.ts）。
+ */
+export function loanPayment(state: TankState, coinsAfter: number, income: number, owed = economy(state).heaterLoan ?? 0): number {
+  if (owed <= 0 || income <= 0 || coinsAfter < LOAN_PAUSE_COINS || householdTanks(state).some(unsettled)) return 0;
+  return Math.min(owed, Math.ceil(income * LOAN_SHARE));
+}
+
+/**
+ * 記一筆收入（訂單板看多久沒收入，orders.ts 的收入空檔保底；寶箱魚幣不算）。coins 是這筆入帳多少：
+ * 還欠阿德加熱棒的錢就照 loanPayment 扣來還（mvp.md §4.4.6），回傳還了多少；暫停扣款時記在 loanWaived，早上報告寫阿德說不急。
+ * real 為 false 的（一尾 2 元的小魚）不算真收入，不重算收入空檔（g33：擠缸自動賣小魚讓保底單一直不出）。
+ */
+export function noteEarned(state: TankState, coins = 0, real = true): number {
   const e = economy(state);
-  e.lastEarnedDay = Math.floor(state.hours / 24);
+  if (real) e.lastEarnedDay = Math.floor(state.hours / 24);
   const owed = e.heaterLoan ?? 0;
   if (owed <= 0 || coins <= 0) return 0;
-  const pay = Math.min(owed, Math.ceil(coins / 2));
+  const pay = loanPayment(state, e.coins, coins, owed);
+  if (pay === 0) {
+    e.loanWaived = (e.loanWaived ?? 0) + 1;
+    return 0;
+  }
   e.coins -= pay;
   e.heaterLoan = owed - pay;
   if (e.heaterLoan <= 0) delete e.heaterLoan;
@@ -496,7 +531,8 @@ export function sellFish(state: TankState, fishId: number): number {
   state.fish = state.fish.filter((f) => f !== fish);
   const e = economy(state);
   e.coins += coins;
-  noteEarned(state, coins);
+  // 一尾 2 元的小魚不算真收入（g33：擠缸自動賣小魚，保底單一直不出）
+  noteEarned(state, coins, !isFrySale(fish));
   e.fishSold = (e.fishSold ?? 0) + 1;
   noteBredSale(state, fish, coins, 'shop');
   return coins;
