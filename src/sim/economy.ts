@@ -211,6 +211,32 @@ export function noteStarterPack(state: TankState): void {
   if (e.starterPackPromised === undefined && canClaimStarterPack(state, tanks.filter((t) => t !== state))) e.starterPackPromised = state.hours;
 }
 
+/**
+ * 起步包要放哪一缸（#391）：不是看玩家正在看哪缸，而是挑孔雀魚住得最安穩的那缸。
+ * 加熱棒壞了而室溫撐不住、沒開過濾、水裡還有白點蟲、氨或亞硝偏高的都往後排；一樣好就放目前這缸。
+ */
+export function starterPackTank(tanks: TankState[], active = 0): number {
+  const { temp } = FISH_SPECIES.guppy;
+  const score = (t: TankState): number => {
+    const env = t.environment;
+    const swing = env.roomSwingC ?? 1.5;
+    const heater = t.equipment.heater;
+    const roomOk = env.roomTempC - swing >= temp.min && env.roomTempC + swing <= temp.max;
+    let s = 0;
+    if (heater?.broken) s -= heater.stuckOn ? 100 : roomOk ? 5 : 50;
+    else if (!heater && !roomOk) s -= 50;
+    if (!t.equipment.filter?.on) s -= 30;
+    if (t.water.ichPathogen + t.water.ichCysts >= 0.01) s -= 20;
+    if (t.water.tan >= 0.5 || t.water.no2 >= 0.5) s -= 10;
+    return s;
+  };
+  let best = Math.min(Math.max(0, active), tanks.length - 1);
+  tanks.forEach((t, i) => {
+    if (score(t) > score(tanks[best])) best = i;
+  });
+  return best;
+}
+
 /** 領起步包：1 公 2 母、確認健康的孔雀魚。送的魚不能賣回店裡（牠們生的可以）。 */
 export function claimStarterPack(state: TankState, addGuppy: (state: TankState, sex: 'male' | 'female') => Fish, others: TankState[] = []): boolean {
   if (!canClaimStarterPack(state, others)) return false;

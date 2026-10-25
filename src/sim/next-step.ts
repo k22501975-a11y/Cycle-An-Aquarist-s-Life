@@ -1,4 +1,4 @@
-import { economy } from './economy';
+import { economy, price } from './economy';
 import { HUNGRY } from './readings';
 import { CALM_DAYS, GOALS, goalState, nextGoals, PURPOSE_GOAL_COUNT, raisedCount, type Goal } from './goals';
 import { COLORING_AT, daysToLength, growthStage, maxLengthCm } from './growth';
@@ -160,6 +160,12 @@ export function ichTreatment(tanks: TankState[]): { days: number; medDays: numbe
 /** 生病時的下一步：白點藥效中就叫玩家調水溫等，不要再叫下藥（#324）。 */
 function sickStep(tanks: TankState[]): Omit<NextStep, 'goal'> {
   const ich = ichTreatment(tanks);
+  // 要下藥但最便宜的藥都買不起：叫玩家先交訂單湊錢，不要一直叫補藥（#391）
+  if (!ich || ich.short) {
+    const cost = ich ? price('med:ich') : Math.min(price('med:ich'), price('med:antibiotic'), price('med:dewormer'));
+    const { coins, mall } = economy(tanks[0]);
+    if (coins < cost && !(mall?.cure ?? 0)) return { text: `藥要 ${cost} 元（還差 ${cost - coins} 元），先交訂單湊錢`, target: 'orders' };
+  }
   if (ich?.short) return { text: '藥效撐不到白點掉，再補一份藥', target: 'treat' };
   if (ich) return { text: `藥效中，${ich.heatC ? `${ich.fixHeater ? '加熱棒壞了，換一支再' : '水溫'}調到 ${ich.heatC}°C，` : ''}約 ${ich.days} 天會好`, target: 'treat' };
   return { text: '有魚生病了，去下藥', target: 'treat' };
