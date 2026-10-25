@@ -2,7 +2,7 @@ import { crisisText, type Crisis } from '../game/crisis';
 import { BLOOM_NOTE, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
 import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, breederIds, breederName, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
-import { crisisTodos, wipedOut } from './status';
+import { crisisTodos, lingering, warmMoveStep, wipedOut } from './status';
 import { quietObservation } from './morning-observe';
 
 /**
@@ -29,7 +29,8 @@ export type ReportAction =
   | 'buy_feeder' // 這缸裝自動餵食器（一天兩次，daily-loop.md §4）
   | 'shop_fish' // 商店的魚頁（魚都死光了，#377：領起步包或重新買魚）
   | 'insulate' // 冬天沒加熱棒：一鍵臨時保溫（#397）
-  | 'heater_credit'; // 冬天沒錢換加熱棒：跟阿德賒一支（#397）
+  | 'heater_credit' // 冬天沒錢換加熱棒：跟阿德賒一支（#397）
+  | 'move_warm'; // 冬天加熱棒弄不到：冷缸的魚搬去有加熱棒的缸（#400）
 
 export type ReportKind =
   | 'crisis'
@@ -462,6 +463,8 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   }
   // 還沒處理的危機（#375）：白天卡住的加熱棒、越來越燙的水、沒撈的死魚，昨晚沒有新事件也每天早上說，直到處理好
   for (const c of crisisTodos(tanks)) {
+    // 空缸拔了插頭的壞加熱棒不用每天早上說（#400，g30：40 尾冷死後每天都叫你換）；全家死光時下面「魚都沒了」那行會說
+    if (lingering(c) && !tanks[c.tank].fish.some((f) => f.alive)) continue;
     const same = items.filter((i) => i.tank === c.tank);
     const told = c.go === 'remove_dead' ? same.some((i) => i.kind === 'death' || (i.kind === 'crisis' && i.action === 'remove_dead')) : same.some((i) => i.kind === 'equipment' || (i.kind === 'crisis' && i.action === 'equipment'));
     if (told) continue;
@@ -476,6 +479,11 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     const cold = items.find((i) => i.tank === index && i.action === 'equipment' && /水溫偏低/.test(i.text));
     if (cold) Object.assign(cold, { kind: 'crisis', text, action: 'insulate', goLabel: '保溫' });
     else items.push({ kind: 'crisis', tank: index, tone: 'bad', text, action: 'insulate', goLabel: '保溫', standing: true });
+  });
+  // 保溫撐不住、加熱棒又弄不到（#400，g30）：叫玩家把魚搬去有加熱棒的缸
+  tanks.forEach((_, index) => {
+    const text = warmMoveStep(tanks, index);
+    if (text) items.push({ kind: 'crisis', tank: index, tone: 'bad', text, action: 'move_warm', goLabel: '搬魚', standing: true });
   });
   // 跟阿德賒的加熱棒（#397）：昨晚有還錢就說還剩多少，還清了也說一聲
   const owed = economy(tanks[0]).heaterLoan ?? 0;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, canDeliverAnyOrder, emergencySale, orderBoard, starterPackAllCold, type ShopOrder, type TankState } from '../sim';
-import { crisisTodos, capsSummary, guideStep, heaterCanWait, lingering, wipedOut } from './status';
+import { addFish, addPlant, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, canDeliverAnyOrder, emergencySale, orderBoard, starterPackAllCold, moveToWarmTank, needsInsulation, warmMove, type ShopOrder, type TankState } from '../sim';
+import { crisisTodos, capsSummary, guideStep, heaterCanWait, lingering, warmMoveStep, wipedOut } from './status';
 import { morningReport, REPORT_LINES, slimReport, snapshot } from './morning-report';
 import { fishName } from './labels';
 
@@ -466,5 +466,70 @@ describe('早上報告：先保溫、還阿德多少（#397）', () => {
     expect(slim.lines[0]).toMatchObject({ action: 'insulate', goLabel: '保溫' });
     expect(slim.lines[0].text).toContain('先保溫');
     expect(r.items.some((i) => i.kind === 'loan' && i.text === '還了阿德 80 元加熱棒的錢，還剩 200 元')).toBe(true);
+  });
+});
+
+describe('冬天搬去有加熱棒的缸、空缸不再叫保溫（#400，g30）', () => {
+  /** 第 1 缸加熱棒壞了、16°C 室溫、沒錢又已經跟阿德賒過一支；第 2 缸（20L）賒來的加熱棒是好的。 */
+  function twoCold() {
+    const a = tank(41);
+    a.environment.roomTempC = 16;
+    a.equipment.heater!.broken = true;
+    unplugHeater(a);
+    a.water.tempC = 19;
+    const b = createTank({ tank: TANKS.nano20, filter: FILTERS.hangOn, heater: { spec: HEATERS.h25, targetC: 25 }, light: { spec: LIGHTS.basic }, roomTempC: 16, seed: 42, matureMedia: true });
+    b.hours = a.hours;
+    b.label = '繁殖缸';
+    b.water.tempC = 25;
+    const tanks = [a, b];
+    linkTanks(tanks);
+    economy(a).coins = 0;
+    economy(a).heaterLoan = 280;
+    orderBoard(a).orders = [];
+    a.insulatedDay = Math.floor(a.hours / 24);
+    return { tanks, a, b };
+  }
+
+  it('保溫過了、賒不到、賣魚也湊不到：任務卡和早上報告叫你把魚搬到繁殖缸，點了就搬', () => {
+    const { tanks, a, b } = twoCold();
+    for (const f of a.fish) Object.assign(f, { lengthCm: 1.6, stress: 0 });
+    const step = guideStep(tanks, 'g');
+    expect(step).toMatchObject({ target: 'move_warm', tank: 0 });
+    expect(step?.text).toContain('連袋子泡進繁殖缸（25.0°C）慢慢對水再放');
+    const r = morningReport(snapshot(tanks), tanks, 1, null);
+    expect(r.items.some((i) => i.action === 'move_warm' && i.goLabel === '搬魚' && i.tone === 'bad')).toBe(true);
+    const moved = moveToWarmTank(tanks, 0)!;
+    expect(moved.to).toBe(1);
+    expect(b.fish.filter((f) => f.alive)).toHaveLength(moved.count);
+    expect(a.fish.filter((f) => f.alive).length + moved.count).toBe(10);
+    // 慢慢對水：緊迫比直接撈過去小
+    expect(Math.max(...b.fish.map((f) => f.stress))).toBeLessThan(0.5);
+  });
+
+  it('暖缸放不下全部：先搬留種的，寫最要緊的幾尾', () => {
+    const { tanks, a } = twoCold();
+    economy(a).choices = { ...(economy(a).choices ?? {}), pair: [a.fish[9].id] } as never;
+    const plan = warmMove(tanks, 0)!;
+    expect(plan.fish.length).toBeLessThan(plan.total);
+    expect(plan.fish[0].id).toBe(a.fish[9].id);
+    expect(guideStep(tanks, 'g')?.text).toContain(`最要緊的 ${plan.fish.length} 尾（共 10 尾）`);
+  });
+
+  it('還賒得到、或錢夠換：不叫搬魚', () => {
+    const { tanks, a } = twoCold();
+    economy(a).heaterLoan = undefined;
+    expect(guideStep(tanks, 'g')?.target).toBe('heater_credit');
+    economy(a).coins = 1000;
+    expect(warmMoveStep(tanks, 0)).toBeNull();
+  });
+
+  it('魚都冷死撈掉了的空缸：早上不再叫保溫、也不再天天叫換加熱棒', () => {
+    const { tanks, a, b } = twoCold();
+    a.insulatedDay = undefined;
+    addFish(b, 'guppy', { carriesIch: false, carries: [], sex: 'male', pregnant: false });
+    a.fish = [];
+    expect(needsInsulation(a)).toBe(false);
+    const r = morningReport(snapshot(tanks), tanks, 1, null);
+    expect(r.items.filter((i) => i.tank === 0 && /保溫|加熱棒/.test(i.text))).toEqual([]);
   });
 });
