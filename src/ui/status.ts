@@ -192,7 +192,11 @@ export function todos(state: TankState, others: TankState[] = []): Todo[] {
     const hottest = Math.min(...living.map((f) => FISH_SPECIES[f.species].temp.max));
     const coldest = Math.max(...living.map((f) => FISH_SPECIES[f.species].temp.min));
     if (t > hottest + 0.5) out.push({ text: `水溫偏高（${t.toFixed(1)}°C），開風扇或冷水機`, tone: t > hottest + 2 ? 'bad' : 'warn', go: 'equipment' });
-    else if (t < coldest - 0.5) out.push({ text: `水溫偏低（${t.toFixed(1)}°C），檢查加熱棒`, tone: t < coldest - 2 ? 'bad' : 'warn', go: 'equipment' });
+    else if (t < coldest - 0.5) {
+      // 加熱棒壞了就直接說要換一支，「檢查加熱棒」點進去不知道要做什麼（#395）
+      const fix = !eq.heater ? '裝一支加熱棒' : eq.heater.broken ? '加熱棒壞了，換一支' : '檢查加熱棒';
+      out.push({ text: `水溫偏低（${t.toFixed(1)}°C），${fix}`, tone: t < coldest - 2 ? 'bad' : 'warn', go: 'equipment' });
+    }
   }
   const level = (state.water.levelL ?? eq.tank.volumeL) / eq.tank.volumeL;
   if (level < 0.9) out.push({ text: `水位降到 ${Math.round(level * 100)}%，該補水了`, tone: level < 0.8 && eq.heater ? 'bad' : 'warn', go: 'equipment' });
@@ -257,17 +261,21 @@ export function guideStep(tanks: TankState[], goal: string): NextStep | null {
   if (wiped) return { goal, text: wiped.step, target: 'shop_fish' };
   const heater = urgent ? undefined : crises[0];
   const next = urgent ? null : nextStep(tanks);
-  const crisis = urgent ?? (heater && next && (next.target === 'treat' || heaterCanWait(tanks[heater.tank])) ? undefined : heater);
+  // 室溫撐得住、又還沒錢換，才先說別的事；錢夠了就叫玩家換，不然放到冬天魚會冷死（#394）
+  const canWait = (c: { tank: number }) => heaterCanWait(tanks[c.tank]) && (heaterReplacement(tanks[c.tank])?.short ?? 0) > 0;
+  const crisis = urgent ?? (heater && next && (next.target === 'treat' || canWait(heater)) ? undefined : heater);
   if (!crisis) return next;
   const where = tanks.length > 1 && !/^停電中/.test(crisis.text) ? `${tankLabel(tanks, crisis.tank)}：` : '';
-  const broke = lingering(crisis) ? heaterReplacement(tanks[crisis.tank]) : null;
-  if (broke && broke.short > 0) return { goal, text: `${where}加熱棒壞了，換一支要 ${broke.cost} 元（還差 ${broke.short} 元），先交訂單湊錢`, target: 'orders' };
+  // 水溫偏低又是加熱棒壞了：錢不夠也要說還差多少、怎麼湊（#395）
+  const cold = /^水溫偏低.*加熱棒壞了/.test(crisis.text);
+  const broke = lingering(crisis) || cold ? heaterReplacement(tanks[crisis.tank]) : null;
+  if (broke && broke.short > 0) return { goal, text: `${where}${cold ? '水溫偏低，' : ''}加熱棒壞了，換一支要 ${broke.cost} 元（還差 ${broke.short} 元），先交訂單湊錢`, target: 'orders' };
   return { goal, text: `${where}${crisis.text}`, target: crisis.go === 'remove_dead' ? 'remove_dead' : 'equipment', tank: crisis.tank };
 }
 
 /**
  * 拔了插頭的壞加熱棒可以先放著（#388）：這缸沒有魚，或房間一天的冷熱都在缸裡每種魚的適溫內（孔雀魚 22～28°C，台灣多數時候室溫就夠）。
- * 這時任務卡先說別的事（生病下藥、目標），不然沒錢換的時候任務卡卡住幾十天。
+ * 這時任務卡先說別的事（生病下藥、目標），不然沒錢換的時候任務卡卡住幾十天。錢夠換的話 guideStep 還是會叫玩家換（#394）。
  */
 export function heaterCanWait(t: TankState): boolean {
   const living = t.fish.filter((f) => f.alive);
