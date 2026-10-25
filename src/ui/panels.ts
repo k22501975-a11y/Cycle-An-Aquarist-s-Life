@@ -1444,7 +1444,8 @@ export function treatPanel(ctx: PanelContext, advice: string): Node {
   const s = ctx.game.state;
   // 白點藥效中（#324）：加熱棒還沒調高的話，給一顆直接調高的按鈕（藥在高溫下見效快；不超過缸裡魚的適溫上限）
   const heatC = ichHeatC(s);
-  const heat = s.water.medication >= ICH_MED_WORKING && s.equipment.heater && s.equipment.heater.targetC < heatC - 0.5;
+  // 壞了的加熱棒調不上去：不給調溫的按鈕（任務卡會叫玩家先換一支，#389 架構）
+  const heat = s.water.medication >= ICH_MED_WORKING && s.equipment.heater && !s.equipment.heater.broken && s.equipment.heater.targetC < heatC - 0.5;
   const heatBtn = heat
     ? button(`水溫調到 ${heatC}°C`, () => {
         ctx.game.act((st) => setHeaterTarget(st, heatC));

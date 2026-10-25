@@ -169,4 +169,16 @@ describe('治白點中換水沖淡藥（#384，g25）', () => {
     checkGoals(tanks);
     expect(goalState(tanks).cured).toBe(true);
   });
+
+  it('要升溫的那缸加熱棒壞了：叫你先換一支再調，不叫你直接調（#389 架構）', () => {
+    const s = newGameState(1);
+    addFish(s, 'guppy', { sex: 'female', carriesIch: false });
+    s.fish[0].ich = { stage: 'visible', progress: 0, cause: 'new_fish' };
+    s.water.tempC = 25;
+    doseIchMedication(s);
+    expect(nextStep([s])?.text).toMatch(/^藥效中，水溫調到 28°C，約 \d+ 天會好$/);
+    s.equipment.heater!.broken = true;
+    expect(ichTreatment([s])).toMatchObject({ heatC: 28, fixHeater: true, short: false });
+    expect(nextStep([s])?.text).toMatch(/^藥效中，加熱棒壞了，換一支再調到 28°C，約 \d+ 天會好$/);
+  });
 });
