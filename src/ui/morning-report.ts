@@ -2,7 +2,7 @@ import { crisisText, type Crisis } from '../game/crisis';
 import { BLOOM_NOTE, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
 import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, breederIds, breederName, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
-import { crisisTodos, lingering, warmMoveStep, wipedOut } from './status';
+import { cheapHeaterStep, crisisTodos, lingering, warmMoveStep, wipedOut } from './status';
 import { quietObservation } from './morning-observe';
 
 /**
@@ -30,7 +30,8 @@ export type ReportAction =
   | 'shop_fish' // 商店的魚頁（魚都死光了，#377：領起步包或重新買魚）
   | 'insulate' // 冬天沒加熱棒：一鍵臨時保溫（#397）
   | 'heater_credit' // 冬天沒錢換加熱棒：跟阿德賒一支（#397）
-  | 'move_warm'; // 冬天加熱棒弄不到：冷缸的魚搬去有加熱棒的缸（#400）
+  | 'move_warm' // 冬天加熱棒弄不到：冷缸的魚搬去有加熱棒的缸（#400）
+  | 'buy_heater'; // 冬天錢不夠換同款：買撐得住的便宜加熱棒（#404）
 
 export type ReportKind =
   | 'crisis'
@@ -474,6 +475,15 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   // 冬天加熱棒弄不到（#400、#401，mvp.md §4.4.6）：第一步先把魚搬去有加熱棒的缸
   const movesAll = new Set<number>();
   tanks.forEach((_, index) => {
+    // 錢夠買撐得住的便宜加熱棒：這行取代搬魚和保溫（#404）
+    const cheap = cheapHeaterStep(tanks, index);
+    if (cheap) {
+      movesAll.add(index);
+      const cold = items.find((i) => i.tank === index && i.action === 'equipment' && /水溫偏低/.test(i.text));
+      if (cold) Object.assign(cold, { kind: 'crisis', text: cheap, action: 'buy_heater', goLabel: '買一支' });
+      else items.push({ kind: 'crisis', tank: index, tone: 'bad', text: cheap, action: 'buy_heater', goLabel: '買一支', standing: true });
+      return;
+    }
     const text = warmMoveStep(tanks, index);
     if (!text) return;
     if (warmMove(tanks, index)?.fish.length === tanks[index].fish.filter((f) => f.alive).length) movesAll.add(index);

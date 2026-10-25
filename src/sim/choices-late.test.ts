@@ -575,6 +575,23 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     expect(nextDay(tanks)?.id).toBe('C14');
   });
 
+  it('C14 搬一些過去：不選加熱棒壞了、水太冷的缸，選項反灰寫為什麼（#404，g31）', () => {
+    const { tanks, s, st } = latePair();
+    Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard' });
+    orderBoard(s).orders = [];
+    const t2 = tanks[1];
+    t2.equipment.heater!.broken = true;
+    t2.environment.roomTempC = 16;
+    t2.water.tempC = 18;
+    while (crowdingRatio(s) < CROWD_FULL + 0.1) addFish(s, 'guppy', { ...calm, sex: 'female', pregnant: false });
+    const c14 = takeChoice(tanks)!;
+    expect(c14.id).toBe('C14');
+    const move = c14.options.find((o) => o.key === 'move');
+    expect(move?.recommended).toBeFalsy();
+    expect(move?.disabled).toMatch(/太冷了，先把加熱棒弄好$/);
+    expect(chooseOption(tanks, 'C14', 'move')).not.toBeNull();
+  });
+
   it('C14 超過建議量、除了先多換水什麼都選不了（擠的是小小魚、錢也不夠）：不出卡（daily-loop.md §4）', () => {
     const { tanks, s, st, storeMom } = latePair();
     storeMom.keeper = true;

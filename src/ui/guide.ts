@@ -486,6 +486,7 @@ const NEXT_GLOW: Record<NextTarget, QuestTarget | null> = {
   insulate: null,
   heater_credit: null,
   move_warm: null,
+  buy_heater: null,
 };
 
 function goalDoneText(g: Goal): string {

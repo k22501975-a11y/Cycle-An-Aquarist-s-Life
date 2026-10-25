@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, createTank, economy, emergencySale, feed, FILTERS, fulfillOrder, HEATERS, insulateTank, installHeater, LIGHTS, linkTanks, moveToWarmTank, needsInsulation, orderBoard, orderRefusal, pinchMg, price, removeDeadFish, sellFish, simulate, spend, takeHeaterCredit, TANKS, unplugHeater, type TankSpec, type TankState } from '../sim';
+import { addFish, addPlant, createTank, economy, emergencySale, feed, FILTERS, fulfillOrder, HEATERS, insulateTank, installHeater, LIGHTS, linkTanks, moveToWarmTank, buyCheapHeater, needsInsulation, orderBoard, orderRefusal, pinchMg, price, removeDeadFish, sellFish, simulate, spend, takeHeaterCredit, TANKS, unplugHeater, type TankSpec, type TankState } from '../sim';
 import { guideStep } from '../ui/status';
 
 /**
@@ -38,6 +38,8 @@ function follow(tanks: TankState[]): boolean {
       return takeHeaterCredit(t) > 0;
     case 'move_warm':
       return !!moveToWarmTank(tanks, s.tank ?? 0);
+    case 'buy_heater':
+      return !!buyCheapHeater(t);
     case 'remove_dead':
       return tanks.reduce((n, x) => n + removeDeadFish(x), 0) > 0;
     case 'equipment': {
@@ -146,4 +148,50 @@ describe('冬天加熱棒都壞、沒錢、沒單可交（#397，mvp.md §4.4.6 
     expect(a.fish.some((f) => f.alive)).toBe(false);
     expect(needsInsulation(a)).toBe(false);
   }, 60_000);
+
+  /** g31：孔雀魚之家 40L（50W 壞了）4 尾大魚＋30 尾小魚，繁殖缸 20L 跟阿德賒的 25W 是好的、10 尾魚、正在下白點藥。 */
+  function g31(coins: number) {
+    const a = coldTank(51, TANKS.std40, 'h50');
+    a.fish = a.fish.slice(0, 4);
+    for (let i = 0; i < 30; i++) {
+      const f = addFish(a, 'guppy', { carriesIch: false, carries: [], sex: i % 2 ? 'male' : 'female', pregnant: false });
+      Object.assign(f, { lengthCm: 0.8, ageDays: 5, generation: 1, stress: 0 });
+    }
+    const b = coldTank(52, TANKS.nano20, 'h25');
+    b.label = '繁殖缸';
+    b.fish = b.fish.slice(0, 10);
+    installHeater(b, HEATERS.h25);
+    b.water.tempC = 25;
+    b.water.medication = 1;
+    const tanks = [a, b];
+    linkTanks(tanks);
+    economy(a).coins = coins;
+    economy(a).heaterLoan = 280;
+    orderBoard(a).orders = [];
+    return { tanks, a, b };
+  }
+
+  it('g31：手上 250 元，任務卡第一步叫你買 25W，孔雀魚之家冷死 ≤ 2 尾（#404）', () => {
+    const { tanks, a } = g31(250);
+    economy(a).coins = 290;
+    const fish = tanks.reduce((n, t) => n + t.fish.length, 0);
+    const log: string[] = [];
+    play(tanks, 8, log);
+    expect(log[0], log.join('\n')).toMatch(/先買一支25W 加熱棒（280 元）撐過冬天/);
+    const cold = tanks.flatMap((t) => t.events).filter((e) => e.type === 'fish_died' && e.cause === 'temperature').length;
+    expect(cold, log.join('\n')).toBeLessThanOrEqual(2);
+    expect(a.equipment.heater?.broken).toBe(false);
+    // 小魚被大魚吃掉是平常的事；其他死因（冷、病）合起來 ≤ 2 尾
+    const other = tanks.flatMap((t) => t.events).filter((e) => e.type === 'fish_died').length;
+    expect(other, log.join('\n')).toBeLessThanOrEqual(2);
+    expect(fish).toBeGreaterThan(30);
+  }, 60_000);
+
+  it('g31：繁殖缸在下白點藥也叫你搬魚（魚一起泡藥），不會整缸冷死（#404）', () => {
+    const { tanks } = g31(20);
+    const log: string[] = [];
+    const { did } = play(tanks, 2, log);
+    expect(did.some((d) => d.endsWith('move_warm')), log.join('\n')).toBe(true);
+  }, 60_000);
 });
+

@@ -88,6 +88,14 @@ function heaterSetpoint(heater: NonNullable<TankState['equipment']['heater']>, d
   return heater.setpointC;
 }
 
+/** 每小時往室溫靠多少（比例）：小缸散熱快。 */
+const baseLossRate = (volumeL: number) => 0.08 * Math.cbrt(40 / volumeL);
+
+/** 加熱棒一直開著時，水溫最多能比室溫高幾度（加熱和散熱打平；#404 挑撐得住的便宜加熱棒用）。 */
+export function heaterLiftC(volumeL: number, watts: number): number {
+  return (watts * 0.86) / volumeL / baseLossRate(volumeL);
+}
+
 export function updateTemperature(state: TankState, dt: number): void {
   const { water, equipment } = state;
   const volume = equipment.tank.volumeL;
@@ -95,7 +103,7 @@ export function updateTemperature(state: TankState, dt: number): void {
   // 小缸散熱快、水溫變化大。風扇靠蒸發把水溫壓到比室溫低一點。
   // 臨時保溫（包毛巾、泡溫水瓶）時散熱減半（mvp.md §4.4.6）
   const insulated = (state.insulatedUntil ?? -1) > state.hours;
-  const lossRate = 0.08 * Math.cbrt(40 / volume) * (insulated ? INSULATED_LOSS_SHARE : 1);
+  const lossRate = baseLossRate(volume) * (insulated ? INSULATED_LOSS_SHARE : 1);
   const fanCooling = fanRunning(state) ? equipment.fan!.spec.coolingC : 0;
   water.tempC += (roomTemperature(state) + lightHeatC(state) - fanCooling - water.tempC) * (1 - Math.exp(-lossRate * dt));
 

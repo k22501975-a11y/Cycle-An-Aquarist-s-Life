@@ -10,7 +10,7 @@ export function canDeliverAnyOrder(tanks: TankState[]): boolean {
 
 /**
  * 急著用錢、又沒有交得出的單時（#397：冬天加熱棒壞了、缸裡多是小魚，訂單全要再養十幾天）：今天賣幾尾給水族店湊得到多少。
- * 照賣價高的先賣，今天的收購次數用完就停；留種、選好的種魚、育幼盒裡的不賣，最好的一公一母成魚也留著，之後才生得出來。
+ * 照賣價高的先賣，今天的收購次數用完就停；coins 是扣掉還阿德的錢之後到手的；留種、選好的種魚、育幼盒裡的不賣，最好的一公一母成魚也留著，之後才生得出來。
  */
 export function emergencySale(tanks: TankState[], need: number): { count: number; coins: number; fish: Fish[] } {
   const choices = economy(tanks[0]).choices;
@@ -25,14 +25,17 @@ export function emergencySale(tanks: TankState[], need: number): { count: number
     const i = priced.findIndex((x) => x.f.sex === sex && !isJuvenile(x.f));
     if (i >= 0) priced.splice(i, 1);
   }
+  // 還欠阿德加熱棒錢時，每筆收入先扣一半還（noteEarned）：算到手的錢（#404，g31：照任務卡賣了又賣還是不夠）
+  const owed = economy(tanks[0]).heaterLoan ?? 0;
+  const kept = (gross: number) => gross - Math.min(owed, Math.ceil(gross / 2));
   const fish: Fish[] = [];
-  let coins = 0;
+  let gross = 0;
   for (const x of priced.slice(0, sellsLeftToday(tanks[0]))) {
-    if (coins >= need) break;
+    if (kept(gross) >= need) break;
     fish.push(x.f);
-    coins += x.coins;
+    gross += x.coins;
   }
-  return { count: fish.length, coins, fish };
+  return { count: fish.length, coins: kept(gross), fish };
 }
 
 /**
