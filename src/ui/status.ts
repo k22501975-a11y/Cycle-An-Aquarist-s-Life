@@ -318,7 +318,7 @@ export function warmMoveStep(tanks: TankState[], index: number): string | null {
   const where = tanks.length > 1 ? tankLabel(tanks, index) : '這缸';
   const to = tanks[plan.to];
   const some = plan.fish.length < plan.total ? `最要緊的 ${plan.fish.length} 尾（共 ${plan.total} 尾）` : ` ${plan.fish.length} 尾魚`;
-  const box = plan.box.length > 0 ? `，小魚 ${plan.box.length} 尾放進育幼盒` : '';
+  const box = (plan.box.length > 0 ? `，小魚 ${plan.box.length} 尾放進育幼盒` : '') + (plan.exposed > 0 ? '；小魚可能被大魚吃，盒子滿了就多放點水草' : '');
   const sick = plan.sick > 0 ? `；有病的 ${plan.sick} 尾先留著，免得傳染` : '';
   return `${where}水溫只剩 ${t.water.tempC.toFixed(1)}°C，加熱棒一時弄不到：先把${some}連袋子泡進${tankLabel(tanks, plan.to)}（${to.water.tempC.toFixed(1)}°C）慢慢對水再放${box}${sick}`;
 }

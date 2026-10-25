@@ -127,11 +127,12 @@ function mouthCm(t: TankState): number {
 /**
  * 冷缸的魚可以先搬去哪一缸（#400、#401，mvp.md §4.4.6「搬去暖缸」）：
  * 暖缸的加熱棒是好的、水溫在適溫內、沒有魚生病也沒在用藥；搬過去不超過 WARM_MOVE_CROWD。
- * 放不下全部就先搬留種的、懷孕的、小魚，再照賣價高的。小魚不搬進有大魚吞得下牠的缸，那缸育幼盒放得下的話放進盒子（box）。
+ * 放不下全部就先搬留種的、懷孕的、小魚，再照賣價高的。暖缸有大魚吞得下的小魚先放進那缸的育幼盒（box）；
+ * 盒子放不下的照樣搬（exposed，冷缸已經低於適溫，留著一定冷死；企劃 2026-10-25）。
  * 會吞小魚的暖缸排後面，再選空位最多的。看得到病的魚不搬（會傳染），sick 是留在原缸的病魚數。
  * 沒有合格的缸（或這缸不冷、沒魚、全都在生病）回 null。
  */
-export function warmMove(tanks: TankState[], from: number): { to: number; fish: Fish[]; box: Fish[]; total: number; sick: number } | null {
+export function warmMove(tanks: TankState[], from: number): { to: number; fish: Fish[]; box: Fish[]; exposed: number; total: number; sick: number } | null {
   const t = tanks[from];
   if (!t || !hasLiving(t) || !coldWithoutHeater(t)) return null;
   const living = t.fish.filter((f) => f.alive);
@@ -155,19 +156,20 @@ export function warmMove(tanks: TankState[], from: number): { to: number; fish: 
   let boxLeft = boxRoom(dest);
   const fish: Fish[] = [];
   const box: Fish[] = [];
+  let exposed = 0;
   for (const f of [...healthy].sort((a, b) => rank(a) - rank(b) || fishBuybackPrice(b) - fishBuybackPrice(a))) {
     const cm = f.lengthCm * sizeRatio(f);
     if (cm > left) continue;
-    const eaten = isJuvenile(f) && f.lengthCm <= mouth;
-    if (eaten && boxLeft <= 0) continue;
     fish.push(f);
     left -= cm;
-    if (eaten) {
+    if (!isJuvenile(f) || f.lengthCm > mouth) continue;
+    // 盒子放不下的小魚照樣搬（冷缸已經低於適溫，留著一定冷死；搬過去只是可能被吃）
+    if (boxLeft > 0) {
       box.push(f);
       boxLeft--;
-    }
+    } else exposed++;
   }
-  return fish.length > 0 ? { to, fish, box, total: living.length, sick: living.length - healthy.length } : null;
+  return fish.length > 0 ? { to, fish, box, exposed, total: living.length, sick: living.length - healthy.length } : null;
 }
 
 /** 照 warmMove 把魚連袋子泡進暖缸、慢慢對水再放（會被吞的小魚直接放進育幼盒）；回傳搬到哪缸、搬了幾尾、幾尾進盒子（搬不了回 null）。 */

@@ -555,7 +555,7 @@ describe('冬天搬去有加熱棒的缸、空缸不再叫保溫（#400，g30）
     expect(b.fish.some((f) => f.ich.stage === 'visible')).toBe(false);
   });
 
-  it('小魚優先搬去不會被吃的缸；只有會吃小魚的缸時，小魚只放進育幼盒，沒盒子就不搬（mvp.md §4.4.6）', () => {
+  it('小魚優先搬去不會被吃的缸；只有會吃小魚的缸時先放育幼盒，放不下照樣搬並提醒（mvp.md §4.4.6）', () => {
     const { tanks, a, b } = twoCold();
     for (const f of a.fish.slice(0, 6)) Object.assign(f, { lengthCm: 0.7, ageDays: 3 });
     const fry = new Set(a.fish.slice(0, 6).map((f) => f.id));
@@ -566,12 +566,14 @@ describe('冬天搬去有加熱棒的缸、空缸不再叫保溫（#400，g30）
     addFish(c, 'guppy', { carriesIch: false, carries: [], sex: 'female', pregnant: false });
     tanks.push(c);
     linkTanks(tanks);
-    expect(warmMove(tanks, 0)).toMatchObject({ to: 1, box: [] });
+    expect(warmMove(tanks, 0)).toMatchObject({ to: 1, box: [], exposed: 0 });
     // 繁殖缸不能用：只剩有大魚的第 3 缸
     b.equipment.heater!.broken = true;
+    // 沒有盒子：小魚照樣搬（留著一定冷死），任務卡提醒會被吃
     const noBox = warmMove(tanks, 0)!;
-    expect(noBox.to).toBe(2);
-    expect(noBox.fish.some((f) => fry.has(f.id))).toBe(false);
+    expect(noBox).toMatchObject({ to: 2, exposed: 6 });
+    expect(noBox.fish.filter((f) => fry.has(f.id))).toHaveLength(6);
+    expect(guideStep(tanks, 'g')?.text).toContain('小魚可能被大魚吃，盒子滿了就多放點水草');
     c.nurseryBox = true;
     const plan = warmMove(tanks, 0)!;
     expect(plan.box.map((f) => f.id).sort()).toEqual([...fry].sort());
