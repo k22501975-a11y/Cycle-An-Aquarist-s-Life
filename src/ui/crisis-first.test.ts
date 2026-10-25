@@ -245,6 +245,24 @@ describe('拔了插頭的壞加熱棒不卡住任務卡（#388，g26）', () => 
     expect(guideStep(tanks, 'g')?.target).toBe('treat');
   });
 
+  it('室溫撐得住但錢夠換：還是叫你換，不要放到冬天（#394，g28）', () => {
+    const { tanks, b } = broke();
+    const cost = price(`heater:${b.equipment.heater!.spec.id}`);
+    economy(b).coins = cost + 1000;
+    expect(heaterCanWait(b)).toBe(true);
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'equipment', tank: 1, text: '繁殖缸：加熱棒壞了，換一支' });
+  });
+
+  it('冬天水溫偏低、加熱棒壞了：直接說換一支；錢不夠就說還差多少、先交訂單湊錢（#395，g28）', () => {
+    const { tanks, b } = broke(16);
+    b.water.tempC = 19;
+    const cost = price(`heater:${b.equipment.heater!.spec.id}`);
+    expect(crisisTodos(tanks).find((c) => c.tank === 1 && c.text.startsWith('水溫偏低'))?.text).toBe('水溫偏低（19.0°C），加熱棒壞了，換一支');
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'orders', text: `繁殖缸：水溫偏低，加熱棒壞了，換一支要 ${cost} 元（還差 ${cost - 200} 元），先交訂單湊錢` });
+    economy(b).coins = cost;
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'equipment', tank: 1, text: '繁殖缸：水溫偏低（19.0°C），加熱棒壞了，換一支' });
+  });
+
   it('這缸沒有魚：先放著', () => {
     const { b } = broke(20);
     b.fish = [];
