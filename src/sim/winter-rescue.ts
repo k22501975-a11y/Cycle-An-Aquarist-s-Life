@@ -77,8 +77,8 @@ export function creditSale(t: TankState): number {
   return sale.coins >= short ? sale.count : 0;
 }
 
-/** 為什麼不能跟阿德賒加熱棒；可以回 null（mvp.md §4.4.6：錢不夠、今天賣魚也湊不到、水溫已經低於適溫，同時間只能賒一支）。 */
-export function heaterCreditRefusal(t: TankState): string | null {
+/** 只看這一缸能不能賒（mvp.md §4.4.6：錢不夠、今天賣魚也湊不到、水溫已經低於適溫，同時間只能賒一支）。 */
+function creditRefusalHere(t: TankState): string | null {
   const owed = economy(t).heaterLoan ?? 0;
   if (owed > 0) return `還欠阿德 ${owed} 元，還清之前不能再賒`;
   if (workingHeater(t)) return '這缸的加熱棒是好的';
@@ -90,6 +90,31 @@ export function heaterCreditRefusal(t: TankState): string | null {
   const limit = coldLimitC(t);
   const falling = t.environment.roomTempC < limit && t.water.tempC < t.water.tempAvgC;
   if (t.water.tempC >= limit && !falling) return '水溫還撐得住，先想辦法湊錢';
+  return null;
+}
+
+/** 這個冬天沒加熱棒會冷死幾尾：室溫最低點（今天和地區最冷月取低的）撐不住的活魚蝦。 */
+function coldDeaths(t: TankState): number {
+  const low = Math.min(t.environment.roomTempC - (t.environment.roomSwingC ?? 1.5), coldestRoomC(t.environment.region));
+  return t.fish.filter((f) => f.alive && low < FISH_SPECIES[f.species].tempLethal.min + 1).length;
+}
+
+/**
+ * 只能賒一支時給哪一缸（#407，g32：賒給正在看的 20L 小缸，90L 大缸 38 尾冷死）：能賒的缸裡沒加熱棒會冷死最多尾的那缸，
+ * 一樣多給大的缸（小缸的魚再搬過去）。跟玩家正在看哪一缸無關；有活魚的缸都不能賒回 null。
+ */
+export function creditTarget(tanks: TankState[]): TankState | null {
+  const ok = tanks.filter((t) => hasLiving(t) && !creditRefusalHere(t));
+  return ok.sort((a, b) => coldDeaths(b) - coldDeaths(a) || b.equipment.tank.volumeL - a.equipment.tank.volumeL)[0] ?? null;
+}
+
+/** 為什麼不能跟阿德賒加熱棒給這缸；可以回 null。別缸更需要的話叫你賒給那缸（#407）。 */
+export function heaterCreditRefusal(t: TankState): string | null {
+  const here = creditRefusalHere(t);
+  if (here) return here;
+  const tanks = householdTanks(t);
+  const best = creditTarget(tanks);
+  if (best && best !== t && coldDeaths(best) > coldDeaths(t)) return `阿德只能先賒一支，先給${tankLabel(tanks, tanks.indexOf(best))}（那缸的魚比較多），這缸的魚再搬過去`;
   return null;
 }
 
