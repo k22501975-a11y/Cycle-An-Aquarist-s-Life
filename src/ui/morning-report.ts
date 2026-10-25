@@ -1,5 +1,5 @@
 import { crisisText, type Crisis } from '../game/crisis';
-import { BLOOM_NOTE, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
+import { BLOOM_NOTE, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
 import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, breederIds, breederName, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 import { crisisTodos, lingering, warmMoveStep, wipedOut } from './status';
@@ -471,19 +471,25 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     const where = tanks.length > 1 && !/^停電中/.test(c.text) ? `${tankLabel(tanks, c.tank)}：` : '';
     items.push({ kind: c.go === 'remove_dead' ? 'death' : 'equipment', tank: c.tank, tone: 'bad', text: where + c.text, action: c.go ?? 'equipment', standing: true });
   }
+  // 冬天加熱棒弄不到（#400、#401，mvp.md §4.4.6）：第一步先把魚搬去有加熱棒的缸
+  const movesAll = new Set<number>();
+  tanks.forEach((_, index) => {
+    const text = warmMoveStep(tanks, index);
+    if (!text) return;
+    if (warmMove(tanks, index)?.fish.length === tanks[index].fish.filter((f) => f.alive).length) movesAll.add(index);
+    const cold = items.find((i) => i.tank === index && i.action === 'equipment' && /水溫偏低/.test(i.text));
+    if (cold) Object.assign(cold, { kind: 'crisis', text, action: 'move_warm', goLabel: '搬魚' });
+    else items.push({ kind: 'crisis', tank: index, tone: 'bad', text, action: 'move_warm', goLabel: '搬魚', standing: true });
+  });
   // 冬天沒加熱棒（#397，mvp.md §4.4.6）：第一行叫玩家先保溫，點一下就做好
   tanks.forEach((t, index) => {
-    if (!needsInsulation(t)) return;
+    // 魚全都要搬走的缸不用再叫保溫
+    if (!needsInsulation(t) || movesAll.has(index)) return;
     const where = tanks.length > 1 ? `${tankLabel(tanks, index)}：` : '';
     const text = `${where}水溫偏低（${t.water.tempC.toFixed(1)}°C），先保溫：缸外包毛巾、泡溫水瓶`;
     const cold = items.find((i) => i.tank === index && i.action === 'equipment' && /水溫偏低/.test(i.text));
     if (cold) Object.assign(cold, { kind: 'crisis', text, action: 'insulate', goLabel: '保溫' });
     else items.push({ kind: 'crisis', tank: index, tone: 'bad', text, action: 'insulate', goLabel: '保溫', standing: true });
-  });
-  // 保溫撐不住、加熱棒又弄不到（#400，g30）：叫玩家把魚搬去有加熱棒的缸
-  tanks.forEach((_, index) => {
-    const text = warmMoveStep(tanks, index);
-    if (text) items.push({ kind: 'crisis', tank: index, tone: 'bad', text, action: 'move_warm', goLabel: '搬魚', standing: true });
   });
   // 跟阿德賒的加熱棒（#397）：昨晚有還錢就說還剩多少，還清了也說一聲
   const owed = economy(tanks[0]).heaterLoan ?? 0;

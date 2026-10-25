@@ -1438,7 +1438,7 @@ async function start(): Promise<void> {
         const moved = game.actAll((tanks) => sim.moveToWarmTank(tanks, tank));
         if (!moved) return toasts.show('現在沒有暖缸放得下', 'warn');
         game.switchTo(moved.to);
-        toasts.show(`把 ${moved.count} 尾連袋子泡進${sim.tankLabel(game.tanks, moved.to)}，水溫差不多了再放出來`);
+        toasts.show(`把 ${moved.count} 尾連袋子泡進${sim.tankLabel(game.tanks, moved.to)}，水溫差不多了再放出來${moved.boxed > 0 ? `，${moved.boxed} 尾小魚先放進育幼盒，免得被大魚吃` : ''}`);
         return;
       }
     }

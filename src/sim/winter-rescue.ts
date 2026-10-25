@@ -1,12 +1,15 @@
 import { installHeater } from './actions';
 import { economy, fishBuybackPrice, householdTanks, price } from './economy';
 import { moveFish } from './household';
+import { moveToNursery, nurseryFish, NURSERY_FRY_CAPACITY } from './nursery';
+import { hasVisible } from './processes/disease';
+import { ICH_MED_WORKING } from './next-step';
 import { crowdingRatio } from './processes/fauna';
 import { sizeRatio } from './processes/population';
 import { emergencySale } from './raise-cash';
 import { HEATERS } from './equipment';
 import { FISH_SPECIES } from './species';
-import type { Fish, TankState } from './state';
+import { isJuvenile, type Fish, type TankState } from './state';
 
 /** 臨時保溫撐幾小時、一按水溫回升幾度（mvp.md §4.4.6）。 */
 export const INSULATE_HOURS = 12;
@@ -100,41 +103,83 @@ export function takeHeaterCredit(t: TankState): number {
 /** 冬天搬魚救急時，暖缸最多塞到多擠（每公升 1 cm；擠幾天比冷死好，之後再分缸或賣）。 */
 export const WARM_MOVE_CROWD = 1;
 
+/** 看得到病的魚（白點或其他病）：搬過去會傳染暖缸，先留在原缸。 */
+const visiblySick = (f: Fish) => f.ich.stage === 'visible' || hasVisible(f);
+
+/** 這缸有魚在生病、或水裡的藥還在作用（白點藥、抗生素、驅蟲藥）：不當暖缸（mvp.md §4.4.6）。 */
+function sickOrMedicated(t: TankState): boolean {
+  const w = t.water;
+  return t.fish.some((f) => f.alive && visiblySick(f)) || Math.max(w.medication, w.antibiotic ?? 0, w.dewormer ?? 0) >= ICH_MED_WORKING;
+}
+
+/** 暖缸的育幼盒還放得下幾尾小魚（沒有盒子、或母魚在盒裡回 0）。 */
+function boxRoom(t: TankState): number {
+  if (!t.nurseryBox) return 0;
+  const inside = nurseryFish(t);
+  return inside.some((f) => !isJuvenile(f)) ? 0 : Math.max(0, NURSERY_FRY_CAPACITY - inside.length);
+}
+
+/** 這缸大魚的嘴最大吞得下幾公分（沿用 splitMove：育幼盒裡的、幼魚不算）。 */
+function mouthCm(t: TankState): number {
+  return Math.max(0, ...t.fish.filter((f) => f.alive && !f.nursery && !isJuvenile(f)).map((f) => f.lengthCm * FISH_SPECIES[f.species].mouthRatio));
+}
+
 /**
- * 冷缸的魚可以先搬去哪一缸（#400，g30：賒帳只能賒一支，另一缸保溫撐不住 16°C 的室溫）：
- * 別缸的加熱棒是好的、水溫在這缸魚的適溫內，選空位最多的那缸。留種、選好的種魚先搬，再來照賣價高的，塞到 WARM_MOVE_CROWD 為止。
- * 搬不了（沒有暖缸、暖缸滿了、這缸不冷或沒魚）回 null。
+ * 冷缸的魚可以先搬去哪一缸（#400、#401，mvp.md §4.4.6「搬去暖缸」）：
+ * 暖缸的加熱棒是好的、水溫在適溫內、沒有魚生病也沒在用藥；搬過去不超過 WARM_MOVE_CROWD。
+ * 放不下全部就先搬留種的、懷孕的、小魚，再照賣價高的。暖缸有大魚吞得下的小魚先放進那缸的育幼盒（box）；
+ * 盒子放不下的照樣搬（exposed，冷缸已經低於適溫，留著一定冷死；企劃 2026-10-25）。
+ * 會吞小魚的暖缸排後面，再選空位最多的。看得到病的魚不搬（會傳染），sick 是留在原缸的病魚數。
+ * 沒有合格的缸（或這缸不冷、沒魚、全都在生病）回 null。
  */
-export function warmMove(tanks: TankState[], from: number): { to: number; fish: Fish[]; total: number } | null {
+export function warmMove(tanks: TankState[], from: number): { to: number; fish: Fish[]; box: Fish[]; exposed: number; total: number; sick: number } | null {
   const t = tanks[from];
   if (!t || !hasLiving(t) || !coldWithoutHeater(t)) return null;
-  const limit = coldLimitC(t);
+  const living = t.fish.filter((f) => f.alive);
+  const healthy = living.filter((f) => !visiblySick(f));
+  if (healthy.length === 0) return null;
+  const min = coldLimitC(t);
+  const max = Math.min(...living.map((f) => FISH_SPECIES[f.species].temp.max));
   const room = (x: TankState) => (WARM_MOVE_CROWD - crowdingRatio(x)) * x.equipment.tank.volumeL;
+  const swallowed = (x: TankState) => healthy.filter((f) => isJuvenile(f) && f.lengthCm <= mouthCm(x)).length;
   const to = tanks
     .map((_, i) => i)
-    .filter((i) => i !== from && workingHeater(tanks[i]) && tanks[i].water.tempC >= limit && room(tanks[i]) > 0)
-    .sort((a, b) => room(tanks[b]) - room(tanks[a]))[0];
+    .filter((i) => i !== from && workingHeater(tanks[i]) && tanks[i].water.tempC >= min && tanks[i].water.tempC <= max && !sickOrMedicated(tanks[i]) && room(tanks[i]) > 0)
+    .sort((a, b) => Math.max(0, swallowed(tanks[a]) - boxRoom(tanks[a])) - Math.max(0, swallowed(tanks[b]) - boxRoom(tanks[b])) || room(tanks[b]) - room(tanks[a]))[0];
   if (to === undefined) return null;
+  const dest = tanks[to];
   const choices = economy(tanks[0]).choices;
   const seed = new Set([...(choices?.pair ?? []), ...(choices?.sires ?? []), ...(choices?.lineKeep ?? [])]);
-  const first = (f: Fish) => (f.keeper || seed.has(f.id) ? 0 : 1);
-  const living = t.fish.filter((f) => f.alive);
-  let left = room(tanks[to]);
+  const rank = (f: Fish) => (f.keeper || seed.has(f.id) ? 0 : !isJuvenile(f) && f.pregnancy > 0 ? 1 : isJuvenile(f) ? 2 : 3);
+  const mouth = mouthCm(dest);
+  let left = room(dest);
+  let boxLeft = boxRoom(dest);
   const fish: Fish[] = [];
-  for (const f of [...living].sort((a, b) => first(a) - first(b) || fishBuybackPrice(b) - fishBuybackPrice(a))) {
+  const box: Fish[] = [];
+  let exposed = 0;
+  for (const f of [...healthy].sort((a, b) => rank(a) - rank(b) || fishBuybackPrice(b) - fishBuybackPrice(a))) {
     const cm = f.lengthCm * sizeRatio(f);
     if (cm > left) continue;
     fish.push(f);
     left -= cm;
+    if (!isJuvenile(f) || f.lengthCm > mouth) continue;
+    // 盒子放不下的小魚照樣搬（冷缸已經低於適溫，留著一定冷死；搬過去只是可能被吃）
+    if (boxLeft > 0) {
+      box.push(f);
+      boxLeft--;
+    } else exposed++;
   }
-  return fish.length > 0 ? { to, fish, total: living.length } : null;
+  return fish.length > 0 ? { to, fish, box, exposed, total: living.length, sick: living.length - healthy.length } : null;
 }
 
-/** 照 warmMove 把魚連袋子泡進暖缸、慢慢對水再放；回傳搬到哪缸、搬了幾尾（搬不了回 null）。 */
-export function moveToWarmTank(tanks: TankState[], from: number): { to: number; count: number } | null {
+/** 照 warmMove 把魚連袋子泡進暖缸、慢慢對水再放（會被吞的小魚直接放進育幼盒）；回傳搬到哪缸、搬了幾尾、幾尾進盒子（搬不了回 null）。 */
+export function moveToWarmTank(tanks: TankState[], from: number): { to: number; count: number; boxed: number } | null {
   const plan = warmMove(tanks, from);
   if (!plan) return null;
+  const dest = tanks[plan.to];
   let count = 0;
-  for (const f of plan.fish) if (moveFish(tanks[from], tanks[plan.to], f.id, true)) count++;
-  return count > 0 ? { to: plan.to, count } : null;
+  for (const f of plan.fish) if (moveFish(tanks[from], dest, f.id, true)) count++;
+  let boxed = 0;
+  for (const f of plan.box) if (moveToNursery(dest, f.id)) boxed++;
+  return count > 0 ? { to: plan.to, count, boxed } : null;
 }
