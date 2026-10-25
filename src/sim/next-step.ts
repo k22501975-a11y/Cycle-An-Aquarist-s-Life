@@ -83,6 +83,9 @@ export function ichMedDays(t: TankState): number {
 /** 白點掉光以後藥效還要撐幾天：掉到底砂的包囊要一兩天才破完，游出來的蟲碰到藥才會死，藥先退了就會再上身（#384）。 */
 export const ICH_MED_TAIL_DAYS = 0.5;
 
+/** 這缸還能用的加熱棒（壞了、拔了插頭的不算）。 */
+const workingHeater = (t: TankState) => (t.equipment.heater && !t.equipment.heater.broken ? t.equipment.heater : null);
+
 /** 這缸身上有白點的魚。 */
 const ichFish = (t: TankState) => t.fish.filter((f) => f.alive && f.ich.stage === 'visible');
 
@@ -91,9 +94,9 @@ const ichFish = (t: TankState) => t.fish.filter((f) => f.alive && f.ich.stage ==
  * assumeHeat：照任務卡把水溫調到 ichHeatC 的話要幾天（還沒調時拿來算藥夠不夠）；exact：不取整數（算藥夠不夠用）。
  */
 function ichDropDays(t: TankState, assumeHeat = false, exact = false): number {
-  const heater = t.equipment.heater;
-  // 加熱棒還在慢慢升溫（一天約 2°C）：照現在和設定的中間算，不然天數會說得太短（#359 架構）
-  const target = Math.max(heater?.targetC ?? 0, assumeHeat ? ichHeatC(t) : 0);
+  const heater = workingHeater(t);
+  // 加熱棒還在慢慢升溫（一天約 2°C）：照現在和設定的中間算，不然天數會說得太短（#359 架構）；壞了的加熱棒調不上去，不能照調高算
+  const target = Math.max(heater?.targetC ?? 0, assumeHeat && heater ? ichHeatC(t) : 0);
   const ramping = (heater?.setpointC !== undefined || assumeHeat) && target > t.water.tempC;
   const tf = temperatureFactor(ramping ? (t.water.tempC + target) / 2 : Math.max(t.water.tempC, target));
   let days = 0;
@@ -129,9 +132,10 @@ export function needsMedicine(t: TankState): boolean {
 /**
  * 看得到的病只有白點、而且那幾缸水裡都還有藥：不用再下（#324）。回傳白點大約幾天會掉（照現在的水溫或加熱棒設的溫度，取高的）、
  * 藥效還剩幾天，和該調到幾度（每缸 ichHeatC 取低的；不比現在高就是 null，不用調）。
- * short：有一缸的藥撐不到白點掉光（換水沖淡了），要補一份（#384）。有別的病、或有一缸沒藥了回 null。
+ * short：有一缸的藥撐不到白點掉光（換水沖淡了），要補一份（#384）。fixHeater：要升溫的那缸加熱棒壞了，先換一支才調得上去（#389 架構）。
+ * 有別的病、或有一缸沒藥了回 null。
  */
-export function ichTreatment(tanks: TankState[]): { days: number; medDays: number; heatC: number | null; short: boolean } | null {
+export function ichTreatment(tanks: TankState[]): { days: number; medDays: number; heatC: number | null; short: boolean; fixHeater: boolean } | null {
   const sick = tanks.map((t) => ({ t, fish: t.fish.filter((f) => f.alive && (f.ich.stage === 'visible' || hasVisible(f))) })).filter((x) => x.fish.length > 0);
   if (sick.length === 0) return null;
   if (sick.some(({ t, fish }) => t.water.medication < ICH_MED_WORKING || fish.some((f) => hasVisible(f)))) return null;
@@ -140,21 +144,24 @@ export function ichTreatment(tanks: TankState[]): { days: number; medDays: numbe
   let heatC = Infinity;
   let warm = true;
   let short = false;
+  let fixHeater = false;
   for (const { t } of sick) {
     heatC = Math.min(heatC, ichHeatC(t));
-    warm &&= Math.max(t.water.tempC, t.equipment.heater?.targetC ?? 0) >= ichHeatC(t) - 0.5;
+    const hot = Math.max(t.water.tempC, workingHeater(t)?.targetC ?? 0) >= ichHeatC(t) - 0.5;
+    warm &&= hot;
+    fixHeater ||= !hot && !workingHeater(t);
     days = Math.max(days, ichDropDays(t));
     medDays = Math.min(medDays, ichMedDays(t));
     short ||= ichMedShort(t);
   }
-  return { days, medDays, heatC: warm ? null : heatC, short };
+  return { days, medDays, heatC: warm ? null : heatC, short, fixHeater };
 }
 
 /** 生病時的下一步：白點藥效中就叫玩家調水溫等，不要再叫下藥（#324）。 */
 function sickStep(tanks: TankState[]): Omit<NextStep, 'goal'> {
   const ich = ichTreatment(tanks);
   if (ich?.short) return { text: '藥效撐不到白點掉，再補一份藥', target: 'treat' };
-  if (ich) return { text: `藥效中，${ich.heatC ? `水溫調到 ${ich.heatC}°C，` : ''}約 ${ich.days} 天會好`, target: 'treat' };
+  if (ich) return { text: `藥效中，${ich.heatC ? `${ich.fixHeater ? '加熱棒壞了，換一支再' : '水溫'}調到 ${ich.heatC}°C，` : ''}約 ${ich.days} 天會好`, target: 'treat' };
   return { text: '有魚生病了，去下藥', target: 'treat' };
 }
 const bredFry = (tanks: TankState[]) => living(tanks).filter((f) => (f.generation ?? 0) >= 1 && !isShrimpSpecies(f.species) && growthStage(f) === 'fry');

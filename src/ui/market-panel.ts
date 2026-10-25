@@ -33,6 +33,7 @@ import type { CloudClient, LedgerWallet, MarketListing, MarketMine, MarketOrder 
 import type { SoundId } from '../audio/sounds';
 import { lineChart } from './charts';
 import { h } from './dom';
+import { shortId } from './labels';
 import { ageLabel } from './panels';
 import type { Sheet, Toasts } from './sheet';
 
@@ -439,7 +440,7 @@ export function listFishPanel(deps: MarketDeps, picked: Fish): Node {
   return h(
     'div.stack',
     {},
-    h('div.item', {}, h('div', {}, h('b', {}, listingTitle(picked)), h('div.hint', {}, `#${picked.id} · 健康 ${pct(picked.health)} · ${ageLabel(picked.ageDays)}`))),
+    h('div.item', {}, h('div', {}, h('b', {}, listingTitle(picked)), h('div.hint', {}, `#${shortId(picked.id)} · 健康 ${pct(picked.health)} · ${ageLabel(picked.ageDays)}`))),
     h('p.hint', {}, '上架後魚還在你的缸裡照常養：生病、長大、懷孕都會照實顯示給買家，死了會自動下架。成交後遊戲會把牠撈出來出貨。'),
     priceForm(min, suggestedFishPrice(picked), (p) => void submit(p)),
   );

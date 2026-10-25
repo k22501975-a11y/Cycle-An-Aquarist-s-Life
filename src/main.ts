@@ -1390,9 +1390,9 @@ async function start(): Promise<void> {
         // 藥撐不到白點掉光（多半是剛換水沖淡了）：叫玩家補一份，不說「不用再下」（#384）
         const rinsed = game.state.lastWaterChangeHours !== undefined && game.state.hours - game.state.lastWaterChangeHours < 24;
         const advice = ich?.short
-          ? `藥效只剩約 ${ich.medDays} 天，撐不到白點掉（約 ${ich.days} 天）${rinsed ? '，剛剛換水把藥沖淡了' : ''}。再補一份白點藥，${ich.heatC ? `水溫調到 ${ich.heatC}°C，` : ''}藥要撐到白點掉光後一天。`
+          ? `藥效只剩約 ${ich.medDays} 天，撐不到白點掉（約 ${ich.days} 天）${rinsed ? '，剛剛換水把藥沖淡了' : ''}。再補一份白點藥，${ich.heatC ? `${ich.fixHeater ? '加熱棒壞了，換一支再' : '水溫'}調到 ${ich.heatC}°C，` : ''}藥要撐到白點掉光後一天。`
           : ich
-            ? `水裡還有白點藥，藥效約剩 ${ich.medDays} 天，不用再下。${ich.heatC ? `水溫調到 ${ich.heatC}°C，` : ''}約 ${ich.days} 天白點會掉。`
+            ? `水裡還有白點藥，藥效約剩 ${ich.medDays} 天，不用再下。${ich.heatC ? `${ich.fixHeater ? '加熱棒壞了，換一支再' : '水溫'}調到 ${ich.heatC}°C，` : ''}約 ${ich.days} 天白點會掉。`
             : fish
             ? `${medDays > 0 ? `這缸白點藥效還剩 ${medDays} 天。` : ''}${causeAdvice(fishName(fish), [], fish)}`
             : '缸裡現在看不到生病的魚。';
