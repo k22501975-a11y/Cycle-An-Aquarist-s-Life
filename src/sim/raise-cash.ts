@@ -25,17 +25,18 @@ export function emergencySale(tanks: TankState[], need: number): { count: number
     const i = priced.findIndex((x) => x.f.sex === sex && !isJuvenile(x.f));
     if (i >= 0) priced.splice(i, 1);
   }
-  // 還欠阿德加熱棒錢時，每筆收入先扣一半還（noteEarned）：算到手的錢（#404，g31：照任務卡賣了又賣還是不夠）
-  const owed = economy(tanks[0]).heaterLoan ?? 0;
-  const kept = (gross: number) => gross - Math.min(owed, Math.ceil(gross / 2));
+  // 還欠阿德加熱棒錢時，每賣一尾先扣一半還（noteEarned 逐筆扣）：算到手的錢（#404，g31：照任務卡賣了又賣還是不夠）
+  let owed = economy(tanks[0]).heaterLoan ?? 0;
   const fish: Fish[] = [];
-  let gross = 0;
+  let coins = 0;
   for (const x of priced.slice(0, sellsLeftToday(tanks[0]))) {
-    if (kept(gross) >= need) break;
+    if (coins >= need) break;
     fish.push(x.f);
-    gross += x.coins;
+    const pay = Math.min(owed, Math.ceil(x.coins / 2));
+    owed -= pay;
+    coins += x.coins - pay;
   }
-  return { count: fish.length, coins: kept(gross), fish };
+  return { count: fish.length, coins, fish };
 }
 
 /**

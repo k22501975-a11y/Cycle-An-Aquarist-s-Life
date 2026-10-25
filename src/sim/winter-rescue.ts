@@ -9,6 +9,7 @@ import { sizeRatio } from './processes/population';
 import { emergencySale } from './raise-cash';
 import { HEATERS, type HeaterSpec } from './equipment';
 import { heaterLiftC } from './processes/thermal';
+import { coldestRoomC } from './season';
 import { FISH_SPECIES, isShrimpSpecies } from './species';
 import { isJuvenile, type Fish, type TankState } from './state';
 
@@ -103,7 +104,7 @@ export function takeHeaterCredit(t: TankState): number {
 
 /**
  * 錢不夠換同款加熱棒時，買得起、又撐得住的最便宜那支（#404，g31：手上 227～312 元買得起 25W，任務卡卻只叫你湊同款 350 元）。
- * 撐得住：室溫最低點加上這支一直開著能升的溫度，比缸裡最怕冷那種魚的致死低溫高 1°C 以上。comfy 是連適溫下限都撐得到。
+ * 撐得住：室溫最低點（今天和這地區最冷那個月取低的，才撐得過整個冬天）加上這支一直開著能升的溫度，比缸裡最怕冷那種魚的致死低溫高 1°C 以上。comfy 是連適溫下限都撐得到。
  * 這缸不冷、加熱棒是好的、錢夠換同款、或都撐不住回 null（mvp.md §4.4.6 救急第 0 步）。
  */
 export function cheapHeater(t: TankState): { spec: HeaterSpec; cost: number; comfy: boolean } | null {
@@ -113,7 +114,7 @@ export function cheapHeater(t: TankState): { spec: HeaterSpec; cost: number; com
   if (same && coins >= price(`heater:${same.id}`)) return null;
   const living = t.fish.filter((f) => f.alive);
   const lethal = Math.max(...living.map((f) => FISH_SPECIES[f.species].tempLethal.min));
-  const low = t.environment.roomTempC - (t.environment.roomSwingC ?? 1.5);
+  const low = Math.min(t.environment.roomTempC - (t.environment.roomSwingC ?? 1.5), coldestRoomC(t.environment.region));
   const volume = t.equipment.tank.volumeL;
   const fit = Object.values(HEATERS)
     .map((spec) => ({ spec, cost: price(`heater:${spec.id}`), holds: low + heaterLiftC(volume, spec.watts) }))
