@@ -315,7 +315,7 @@ export function fulfillOrder(tanks: TankState[], orderId: number, keep: readonly
   const coins = o.count * o.unitPrice;
   economy(state).coins += coins;
   if (firstGiven) noteBredSale(state, firstGiven, coins, 'order');
-  noteEarned(state);
+  noteEarned(state, coins);
   board.orders = board.orders.filter((x) => x !== o);
   board.done += 1;
   board.earned += coins;

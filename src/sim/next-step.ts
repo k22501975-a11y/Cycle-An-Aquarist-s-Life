@@ -1,4 +1,5 @@
 import { economy, price } from './economy';
+import { raiseCashStep } from './raise-cash';
 import { HUNGRY } from './readings';
 import { CALM_DAYS, GOALS, goalState, nextGoals, PURPOSE_GOAL_COUNT, raisedCount, type Goal } from './goals';
 import { COLORING_AT, daysToLength, growthStage, maxLengthCm } from './growth';
@@ -44,7 +45,9 @@ export type NextTarget =
   | 'scape' // 造景模式
   | 'test' // 測水
   | 'equipment' // 危機（#375）：切到那缸、打開設備與維護（拔插頭、換加熱棒、開風扇）
-  | 'remove_dead'; // 危機（#375）：切到那缸、拿網子撈死魚
+  | 'remove_dead' // 危機（#375）：切到那缸、拿網子撈死魚
+  | 'insulate' // 冬天沒加熱棒（#397）：切到那缸、一鍵臨時保溫（包毛巾、泡溫水瓶）
+  | 'heater_credit'; // 冬天沒錢換加熱棒（#397）：切到那缸、跟阿德賒一支
 
 export interface NextStep {
   /** 對應的目標 id。 */
@@ -164,7 +167,8 @@ function sickStep(tanks: TankState[]): Omit<NextStep, 'goal'> {
   if (!ich || ich.short) {
     const cost = ich ? price('med:ich') : Math.min(price('med:ich'), price('med:antibiotic'), price('med:dewormer'));
     const { coins, mall } = economy(tanks[0]);
-    if (coins < cost && !(mall?.cure ?? 0)) return { text: `藥要 ${cost} 元（還差 ${cost - coins} 元），先交訂單湊錢`, target: 'orders' };
+    const raise = coins < cost && !(mall?.cure ?? 0) ? raiseCashStep(tanks, '藥', cost) : null;
+    if (raise) return { text: raise.text, target: raise.target };
   }
   if (ich?.short) return { text: '藥效撐不到白點掉，再補一份藥', target: 'treat' };
   if (ich) return { text: `藥效中，${ich.heatC ? `${ich.fixHeater ? '加熱棒壞了，換一支再' : '水溫'}調到 ${ich.heatC}°C，` : ''}約 ${ich.days} 天會好`, target: 'treat' };

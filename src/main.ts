@@ -1416,6 +1416,22 @@ async function start(): Promise<void> {
       }
       case 'scape':
         return enterScape();
+      case 'insulate': {
+        // 冬天沒加熱棒（#397）：一鍵臨時保溫
+        if (tank !== undefined) game.switchTo(tank);
+        const ok = game.act((st) => sim.insulateTank(st));
+        toasts.show(ok ? `包上毛巾、泡進溫水瓶，水溫回升 ${sim.INSULATE_BUMP_C}°C，接下來半天散熱慢一半` : (sim.insulateRefusal(game.state) ?? '現在不用保溫'), ok ? 'info' : 'warn');
+        return;
+      }
+      case 'heater_credit': {
+        // 冬天沒錢換加熱棒（#397）：跟阿德賒一支
+        if (tank !== undefined) game.switchTo(tank);
+        const owed = game.act((st) => sim.takeHeaterCredit(st));
+        if (!owed) return toasts.show(sim.heaterCreditRefusal(game.state) ?? '現在不用賒', 'warn');
+        audio.play('quest', false);
+        toasts.show(`阿德：「老客人先拿去，有錢再還。」裝上了${game.state.equipment.heater?.spec.name ?? '加熱棒'}，欠 ${owed} 元，之後每筆收入扣一半來還`);
+        return;
+      }
     }
   };
   guide.cheer = (from, coins) => ctx.reward?.(from, coins, 'small');
@@ -1933,6 +1949,10 @@ async function start(): Promise<void> {
         break;
       case 'buy_feeder':
         offerFeeder(item.tank);
+        break;
+      case 'insulate':
+      case 'heater_credit':
+        guide.goNext?.(item.action, item.tank);
         break;
       case 'fish':
       case 'treat':

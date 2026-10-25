@@ -29,6 +29,8 @@ const ACTION_ICON: Record<NonNullable<ReportItem['action']>, ArtIcon> = {
   shop_tank: 'shop',
   buy_feeder: 'feed',
   shop_fish: 'shop',
+  insulate: 'gear',
+  heater_credit: 'shop',
 };
 
 /** 點下去會做什麼（按鈕上的小字）。 */
@@ -48,6 +50,8 @@ const ACTION_LABEL: Record<NonNullable<ReportItem['action']>, string> = {
   shop_tank: '去買缸',
   buy_feeder: '裝上',
   shop_fish: '去買魚',
+  insulate: '保溫',
+  heater_credit: '先賒一支',
 };
 
 /** 早上報告每行的三類（daily-loop.md §2）：要處理的壞消息、目標的進度、好消息。 */

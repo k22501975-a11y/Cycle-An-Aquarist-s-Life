@@ -1,0 +1,50 @@
+import { buybackRefusal, economy, fishBuybackPrice, sellsLeftToday } from './economy';
+import { orderBoard, orderRefusal } from './orders';
+import { isJuvenile, type Fish, type TankState } from './state';
+
+/** 板上有沒有一張現在就交得出來的單（預告單不算）。 */
+export function canDeliverAnyOrder(tanks: TankState[]): boolean {
+  return orderBoard(tanks[0]).orders.some((o) => !o.preview && orderRefusal(tanks, o.id) === null);
+}
+
+/**
+ * 急著用錢、又沒有交得出的單時（#397：冬天加熱棒壞了、缸裡多是小魚，訂單全要再養十幾天）：今天賣幾尾給水族店湊得到多少。
+ * 照賣價高的先賣，今天的收購次數用完就停；留種、選好的種魚、育幼盒裡的不賣，最好的一公一母成魚也留著，之後才生得出來。
+ */
+export function emergencySale(tanks: TankState[], need: number): { count: number; coins: number; fish: Fish[] } {
+  const choices = economy(tanks[0]).choices;
+  const pair = new Set([...(choices?.pair ?? []), ...(choices?.sires ?? [])]);
+  const priced = tanks
+    .flatMap((t) => t.fish)
+    .filter((f) => f.alive && !f.nursery && !pair.has(f.id) && !buybackRefusal(f, true))
+    .map((f) => ({ f, coins: fishBuybackPrice(f) }))
+    .sort((a, b) => b.coins - a.coins);
+  // 留最好的一公一母成魚當種
+  for (const sex of ['male', 'female'] as const) {
+    const i = priced.findIndex((x) => x.f.sex === sex && !isJuvenile(x.f));
+    if (i >= 0) priced.splice(i, 1);
+  }
+  const fish: Fish[] = [];
+  let coins = 0;
+  for (const x of priced.slice(0, sellsLeftToday(tanks[0]))) {
+    if (coins >= need) break;
+    fish.push(x.f);
+    coins += x.coins;
+  }
+  return { count: fish.length, coins, fish };
+}
+
+/**
+ * 錢不夠買急用的東西時該怎麼湊（#388、#391、#397）：有交得出的單就交單；沒有就看今天賣魚湊不湊得到。錢夠回傳 null。
+ * what 是要買的東西（例如「換一支加熱棒」），寫成「換一支加熱棒要 350 元（還差 252 元），…」。
+ */
+export function raiseCashStep(tanks: TankState[], what: string, cost: number): { text: string; target: 'orders' | 'sell'; stuck?: true; enough?: true } | null {
+  const short = cost - economy(tanks[0]).coins;
+  if (short <= 0) return null;
+  const head = `${what}要 ${cost} 元（還差 ${short} 元）`;
+  if (canDeliverAnyOrder(tanks)) return { text: `${head}，先交訂單湊錢`, target: 'orders' };
+  const sale = emergencySale(tanks, short);
+  if (sale.count > 0) return { text: `${head}，賣 ${sale.count} 尾魚給水族店（約 ${sale.coins} 元）湊錢`, target: 'sell', ...(sale.coins >= short ? { enough: true as const } : {}) };
+  // 單交不出、魚也賣不了：只能等訂單（stuck 讓呼叫的人知道沒有立刻湊得到的辦法；enough 是今天賣魚就湊得齊）
+  return { text: `${head}，先交訂單湊錢`, target: 'orders', stuck: true };
+}

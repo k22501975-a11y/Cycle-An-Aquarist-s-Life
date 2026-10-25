@@ -163,6 +163,10 @@ export interface Economy {
    * 訂單板的收入空檔保底用（polish-to-9.md §4「收入空檔」）；舊存檔沒有，第一次檢查時從那天開始算。
    */
   lastEarnedDay?: number;
+  /** 跟阿德賒加熱棒還欠多少（mvp.md §4.4.6）：之後每筆收入扣一半來還，不收利息；0 或沒有就是沒欠。 */
+  heaterLoan?: number;
+  /** 最近一次加熱棒故障是第幾個遊戲小時（全家共用）：7 天內不會再壞第二支（mvp.md §4.4.6）。 */
+  heaterBrokeHours?: number;
   /** 手上的插枝裡有幾株是寶箱來的：只能種，不能賣回店家、交單、上架或送人換錢（polish-to-9.md §4）。 */
   chestCuttings?: Partial<Record<PlantSpeciesId, number>>;
   /** 已經套用到伺服器帳本的第幾筆（市場的收支，docs/ledger.md）；舊存檔沒有＝0。 */
@@ -216,6 +220,20 @@ export function noteStarterPack(state: TankState): void {
  * 起步包要放哪一缸（#391）：不是看玩家正在看哪缸，而是挑孔雀魚住得最安穩的那缸。
  * 加熱棒壞了而室溫撐不住、沒開過濾、還沒養好水、水裡還有白點蟲、氨或亞硝偏高的都往後排；一樣好就放目前這缸。
  */
+/** 孔雀魚放進這缸會不會冷到或熱到：沒有能用的加熱棒、室溫又撐不住，或現在的水溫已經在適溫外（#397）。 */
+export function starterPackTooCold(t: TankState): boolean {
+  const { temp } = FISH_SPECIES.guppy;
+  const env = t.environment;
+  const heater = t.equipment.heater;
+  const roomOk = env.roomTempC - (env.roomSwingC ?? 1.5) >= temp.min;
+  return (!(heater && !heater.broken) && !roomOk) || t.water.tempC < temp.min;
+}
+
+/** 每一缸都太冷（#397：一月兩缸加熱棒都壞，起步包放進 15.5°C 的缸）：收下之前先提醒玩家換加熱棒。 */
+export function starterPackAllCold(tanks: TankState[]): boolean {
+  return tanks.every((t) => starterPackTooCold(t));
+}
+
 export function starterPackTank(tanks: TankState[], active = 0): number {
   const { temp } = FISH_SPECIES.guppy;
   const score = (t: TankState): number => {
@@ -226,6 +244,8 @@ export function starterPackTank(tanks: TankState[], active = 0): number {
     let s = 0;
     if (heater?.broken) s -= heater.stuckOn ? 100 : roomOk ? 5 : 50;
     else if (!heater && !roomOk) s -= 50;
+    // 現在的水溫在適溫外（加熱棒剛換好、水還沒回溫）也往後排（g29）
+    if (t.water.tempC < temp.min || t.water.tempC > temp.max) s -= 15;
     if (!t.equipment.filter?.on) s -= 30;
     if (t.water.ichPathogen + t.water.ichCysts >= 0.01) s -= 20;
     // 還沒養好水的新缸：魚放進去會氨中毒，比有白點蟲的缸更不適合（#392 架構）
@@ -283,8 +303,17 @@ export function applyLedger(state: TankState, entry: { delta: number; ledgerSeq:
 }
 
 /** 記下今天有真的收入（訂單板看多久沒收入，orders.ts 的收入空檔保底）。寶箱魚幣不算。 */
-export function noteEarned(state: TankState): void {
-  economy(state).lastEarnedDay = Math.floor(state.hours / 24);
+/** 記一筆真的收入。coins 是這筆入帳多少：還欠阿德加熱棒的錢就扣一半來還（mvp.md §4.4.6），回傳還了多少。 */
+export function noteEarned(state: TankState, coins = 0): number {
+  const e = economy(state);
+  e.lastEarnedDay = Math.floor(state.hours / 24);
+  const owed = e.heaterLoan ?? 0;
+  if (owed <= 0 || coins <= 0) return 0;
+  const pay = Math.min(owed, Math.ceil(coins / 2));
+  e.coins -= pay;
+  e.heaterLoan = owed - pay;
+  if (e.heaterLoan <= 0) delete e.heaterLoan;
+  return pay;
 }
 
 export function price(key: string): number {
@@ -467,7 +496,7 @@ export function sellFish(state: TankState, fishId: number): number {
   state.fish = state.fish.filter((f) => f !== fish);
   const e = economy(state);
   e.coins += coins;
-  noteEarned(state);
+  noteEarned(state, coins);
   e.fishSold = (e.fishSold ?? 0) + 1;
   noteBredSale(state, fish, coins, 'shop');
   return coins;
@@ -525,7 +554,7 @@ export function sellCuttings(state: TankState, species: PlantSpeciesId): number 
   const coins = n * plantBuybackPrice(species);
   e.cuttings[species] = (e.cuttings[species] ?? 0) - n;
   e.coins += coins;
-  noteEarned(state);
+  noteEarned(state, coins);
   noteAct(state, 'cutting');
   return coins;
 }

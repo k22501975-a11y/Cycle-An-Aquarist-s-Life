@@ -50,11 +50,17 @@ function evaporate(state: TankState, dt: number): void {
   water.levelL = next;
 }
 
+/** 一支加熱棒壞了之後，幾天內不會再壞第二支（現實裡同時壞兩支很少見，mvp.md §4.4.6）。 */
+export const HEATER_FAILURE_GAP_DAYS = 7;
+/** 臨時保溫時散熱剩幾成。 */
+export const INSULATED_LOSS_SHARE = 0.5;
+
 /** 加熱棒故障：多數是不再加熱，約四分之一是恆溫器卡住、一直加熱。 */
 export function breakHeater(state: TankState): void {
   const heater = state.equipment.heater;
   if (!heater || heater.broken) return;
   heater.broken = true;
+  if (state.economy) state.economy.heaterBrokeHours = state.hours;
   heater.stuckOn = nextRandom(state.rng) < HEATER_STUCK_ON_SHARE;
   recordEvent(state, { type: heater.stuckOn ? 'heater_stuck' : 'heater_broke' });
 }
@@ -87,7 +93,9 @@ export function updateTemperature(state: TankState, dt: number): void {
   const volume = equipment.tank.volumeL;
 
   // 小缸散熱快、水溫變化大。風扇靠蒸發把水溫壓到比室溫低一點。
-  const lossRate = 0.08 * Math.cbrt(40 / volume);
+  // 臨時保溫（包毛巾、泡溫水瓶）時散熱減半（mvp.md §4.4.6）
+  const insulated = (state.insulatedUntil ?? -1) > state.hours;
+  const lossRate = 0.08 * Math.cbrt(40 / volume) * (insulated ? INSULATED_LOSS_SHARE : 1);
   const fanCooling = fanRunning(state) ? equipment.fan!.spec.coolingC : 0;
   water.tempC += (roomTemperature(state) + lightHeatC(state) - fanCooling - water.tempC) * (1 - Math.exp(-lossRate * dt));
 
@@ -100,7 +108,10 @@ export function updateTemperature(state: TankState, dt: number): void {
     if (water.tempC < set - 0.2) heater.heating = true;
     else if (water.tempC >= set) heater.heating = false;
     // 新手期照樣擲骰（亂數順序不變），只是不會壞
-    if (chance(state.rng, HEATER_FAILURE_PER_HOUR, dt) && state.hours >= NEWBIE_HEALTHY_DAYS * 24) breakHeater(state);
+    // 一支壞了之後 HEATER_FAILURE_GAP_DAYS 天內不會再壞第二支（全家共用的錢包記著，mvp.md §4.4.6）
+    const lastBroke = state.economy?.heaterBrokeHours;
+    const spaced = lastBroke === undefined || state.hours - lastBroke >= HEATER_FAILURE_GAP_DAYS * 24;
+    if (chance(state.rng, HEATER_FAILURE_PER_HOUR, dt) && state.hours >= NEWBIE_HEALTHY_DAYS * 24 && spaced) breakHeater(state);
   }
   if (heater) {
     if (heater.broken) heater.heating = !!heater.stuckOn && powered;

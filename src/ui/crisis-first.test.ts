@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, type TankState } from '../sim';
+import { addFish, addPlant, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, canDeliverAnyOrder, emergencySale, orderBoard, starterPackAllCold, type ShopOrder, type TankState } from '../sim';
 import { crisisTodos, capsSummary, guideStep, heaterCanWait, lingering, wipedOut } from './status';
 import { morningReport, REPORT_LINES, slimReport, snapshot } from './morning-report';
 import { fishName } from './labels';
@@ -232,12 +232,12 @@ describe('拔了插頭的壞加熱棒不卡住任務卡（#388，g26）', () => 
     expect(guideStep(tanks, 'g')).toMatchObject({ target: 'treat', text: '有魚生病了，去下藥' });
   });
 
-  it('房間太冷：還是叫你換；錢不夠就說還差多少、先交訂單湊錢', () => {
+  it('房間太冷：還是叫你換；錢不夠就說還差多少、沒單可交就叫你賣魚湊（#397）', () => {
     const { tanks, b } = broke(20);
     expect(heaterCanWait(b)).toBe(false);
     const cost = price(`heater:${b.equipment.heater!.spec.id}`);
     expect(cost).toBeGreaterThan(200);
-    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'orders', text: `繁殖缸：加熱棒壞了，換一支要 ${cost} 元（還差 ${cost - 200} 元），先交訂單湊錢` });
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'sell', text: `繁殖缸：加熱棒壞了，換一支要 ${cost} 元（還差 ${cost - 200} 元），賣 3 尾魚給水族店（約 175 元）湊錢` });
     economy(b).coins = cost;
     expect(guideStep(tanks, 'g')).toMatchObject({ target: 'equipment', tank: 1, text: '繁殖缸：加熱棒壞了，換一支' });
     // 生病還是先下藥
@@ -253,12 +253,15 @@ describe('拔了插頭的壞加熱棒不卡住任務卡（#388，g26）', () => 
     expect(guideStep(tanks, 'g')).toMatchObject({ target: 'equipment', tank: 1, text: '繁殖缸：加熱棒壞了，換一支' });
   });
 
-  it('冬天水溫偏低、加熱棒壞了：直接說換一支；錢不夠就說還差多少、先交訂單湊錢（#395，g28）', () => {
+  it('冬天水溫偏低、加熱棒壞了：直接說換一支；錢不夠就說還差多少、賣魚湊錢（#395、#397，g28）', () => {
     const { tanks, b } = broke(16);
     b.water.tempC = 19;
+    // 先保溫（#397）：今天保溫過了才往下說換加熱棒
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'insulate', tank: 1, text: '繁殖缸：水溫偏低（19.0°C），先保溫：缸外包毛巾、泡溫水瓶' });
+    b.insulatedDay = Math.floor(b.hours / 24);
     const cost = price(`heater:${b.equipment.heater!.spec.id}`);
     expect(crisisTodos(tanks).find((c) => c.tank === 1 && c.text.startsWith('水溫偏低'))?.text).toBe('水溫偏低（19.0°C），加熱棒壞了，換一支');
-    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'orders', text: `繁殖缸：水溫偏低，加熱棒壞了，換一支要 ${cost} 元（還差 ${cost - 200} 元），先交訂單湊錢` });
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'sell', text: `繁殖缸：水溫偏低，加熱棒壞了，換一支要 ${cost} 元（還差 ${cost - 200} 元），賣 3 尾魚給水族店（約 175 元）湊錢` });
     economy(b).coins = cost;
     expect(guideStep(tanks, 'g')).toMatchObject({ target: 'equipment', tank: 1, text: '繁殖缸：水溫偏低（19.0°C），加熱棒壞了，換一支' });
   });
@@ -325,12 +328,12 @@ describe('起步包放對缸、買不起藥有下一步（#391，g27）', () => 
     expect(starterPackTank(tanks, 0)).toBe(1);
   });
 
-  it('藥買不起：說還差多少、先交訂單湊錢；錢夠就叫下藥', () => {
+  it('藥買不起：說還差多少、賣魚湊錢；錢夠就叫下藥', () => {
     const { tanks, b } = two(24);
     b.fish[0].ich = { stage: 'visible', progress: 0, cause: 'relapse' };
     const cost = price('med:ich');
     economy(b).coins = 25;
-    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'orders', text: `藥要 ${cost} 元（還差 ${cost - 25} 元），先交訂單湊錢` });
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'sell', text: `藥要 ${cost} 元（還差 ${cost - 25} 元），賣 3 尾魚給水族店（約 175 元）湊錢` });
     economy(b).coins = cost;
     expect(guideStep(tanks, 'g')).toMatchObject({ target: 'treat', text: '有魚生病了，去下藥' });
   });
@@ -341,5 +344,127 @@ describe('起步包放對缸、買不起藥有下一步（#391，g27）', () => 
     economy(b).coins = 25;
     economy(b).mall = { cure: 1, tankset: 0 };
     expect(guideStep(tanks, 'g')?.target).toBe('treat');
+  });
+});
+
+describe('沒單可交時怎麼湊錢（#397，g29）', () => {
+  function cold() {
+    const a = tank(31);
+    const b = tank(32);
+    b.label = '繁殖缸';
+    const tanks = [a, b];
+    linkTanks(tanks);
+    for (const t of tanks) t.environment.roomTempC = 16;
+    b.equipment.heater!.broken = true;
+    unplugHeater(b);
+    b.water.tempC = 19;
+    economy(a).coins = 98;
+    b.insulatedDay = Math.floor(b.hours / 24);
+    return { tanks, a, b };
+  }
+
+  it('有交得出的單：叫你交單', () => {
+    const { tanks, a } = cold();
+    economy(a).cuttings = { rotala: 3 };
+    orderBoard(a).orders = [{ id: 990, kind: 'cutting', plant: 'rotala', count: 1, unitPrice: 20, postedHours: a.hours } as ShopOrder];
+    expect(canDeliverAnyOrder(tanks)).toBe(true);
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'orders' });
+    expect(guideStep(tanks, 'g')?.text).toContain('先交訂單湊錢');
+  });
+
+  it('單交不出：叫你賣幾尾、約多少錢；留最好的一公一母成魚', () => {
+    const { tanks, a } = cold();
+    orderBoard(a).orders = [];
+    const sale = emergencySale(tanks, 350 - 98);
+    expect(sale.coins).toBeGreaterThanOrEqual(350 - 98);
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'sell', text: `繁殖缸：水溫偏低，加熱棒壞了，換一支要 350 元（還差 252 元），賣 ${sale.count} 尾魚給水族店（約 ${sale.coins} 元）湊錢` });
+    // 全部要賣也會留下一公一母成魚
+    const all = emergencySale(tanks, 1_000_000);
+    const left = tanks.flatMap((t) => t.fish).filter((f) => !all.fish.includes(f));
+    expect(left.some((f) => f.sex === 'male')).toBe(true);
+    expect(left.some((f) => f.sex === 'female')).toBe(true);
+  });
+
+  it('今天的收購次數用完了：只能等訂單', () => {
+    const { tanks, a } = cold();
+    orderBoard(a).orders = [];
+    economy(a).sold = { day: Math.floor(a.hours / 24), count: 99 };
+    expect(emergencySale(tanks, 252).count).toBe(0);
+    // 單交不出、魚也賣不了、水又冷：跟阿德賒一支（mvp.md §4.4.6）
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'heater_credit', tank: 1, text: '繁殖缸：水太冷了，阿德說可以先賒一支加熱棒（350 元，有錢再還）' });
+    // 還欠著就不能再賒，只能等訂單
+    economy(a).heaterLoan = 100;
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'orders' });
+  });
+});
+
+describe('兩缸都冷時先提醒再給起步包（#397，g29）', () => {
+  function wipedCold() {
+    const a = tank(31);
+    const b = tank(32);
+    b.label = '繁殖缸';
+    const tanks = [a, b];
+    linkTanks(tanks);
+    for (const t of tanks) {
+      t.environment.roomTempC = 16;
+      t.water.tempC = 15.5;
+      t.equipment.heater!.broken = true;
+      unplugHeater(t);
+      t.fish = [];
+      t.events.push({ type: 'fish_died', hours: t.hours, cause: 'temperature' } as (typeof t.events)[number]);
+    }
+    economy(a).coins = 64;
+    // 死光那一刻就說好要送了（noteStarterPack），之後錢變多也照樣領得到
+    economy(a).starterPackPromised = a.hours;
+    return { tanks, a, b };
+  }
+
+  it('每一缸都太冷：先叫你弄加熱棒，錢不夠就說還差多少', () => {
+    const { tanks, a } = wipedCold();
+    expect(starterPackAllCold(tanks)).toBe(true);
+    const w = wipedOut(tanks)!;
+    expect(w.claim).toBe(true);
+    expect(w.text).toContain('起步魚放進去也會冷死');
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'heater_credit', text: '魚都沒了，第 1 缸水太冷了，阿德說可以先賒一支加熱棒（350 元，有錢再還）' });
+    economy(a).heaterLoan = 100;
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'orders' });
+    expect(guideStep(tanks, 'g')?.text).toMatch(/^魚都沒了，水太冷，.+換一支加熱棒要 350 元（還差 286 元）/);
+    economy(a).coins = 400;
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'equipment', text: expect.stringContaining('再領起步包') });
+  });
+
+  it('有一缸加熱棒好、水溫也夠：照常去領，放進那缸', () => {
+    const { tanks, b } = wipedCold();
+    b.equipment.heater!.broken = false;
+    b.water.tempC = 25;
+    expect(starterPackAllCold(tanks)).toBe(false);
+    expect(starterPackTank(tanks, 0)).toBe(1);
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'shop_fish', text: '魚都沒了，去商店領起步包' });
+  });
+
+  it('加熱棒剛換好、水還沒回溫的缸往後排', () => {
+    const { tanks, a, b } = wipedCold();
+    for (const t of [a, b]) t.equipment.heater!.broken = false;
+    a.water.tempC = 25;
+    b.water.tempC = 36;
+    expect(starterPackTank(tanks, 1)).toBe(0);
+  });
+});
+
+describe('早上報告：先保溫、還阿德多少（#397）', () => {
+  it('冷到要救急：第一行叫你保溫；還錢的那晚說還剩多少', () => {
+    const s = tank();
+    s.environment.roomTempC = 16;
+    s.equipment.heater!.broken = true;
+    unplugHeater(s);
+    s.water.tempC = 19;
+    economy(s).heaterLoan = 280;
+    const before = snapshot([s]);
+    economy(s).heaterLoan = 200;
+    const r = morningReport(before, [s], 1, null);
+    const slim = slimReport(r);
+    expect(slim.lines[0]).toMatchObject({ action: 'insulate', goLabel: '保溫' });
+    expect(slim.lines[0].text).toContain('先保溫');
+    expect(r.items.some((i) => i.kind === 'loan' && i.text === '還了阿德 80 元加熱棒的錢，還剩 200 元')).toBe(true);
   });
 });
