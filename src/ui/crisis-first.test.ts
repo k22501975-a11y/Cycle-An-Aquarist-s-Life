@@ -582,4 +582,18 @@ describe('冬天搬去有加熱棒的缸、空缸不再叫保溫（#400，g30）
     expect(moved.boxed).toBe(6);
     expect(c.fish.filter((f) => f.nursery).map((f) => f.id).sort()).toEqual([...fry].sort());
   });
+
+  it('蝦苗放不進育幼盒：照樣搬，任務卡提醒會被吃（#402 架構）', () => {
+    const { tanks, a, b } = twoCold();
+    b.nurseryBox = true;
+    addFish(b, 'guppy', { carriesIch: false, carries: [], sex: 'female', pregnant: false });
+    const shrimp = addFish(a, 'cherry_shrimp', { carriesIch: false, carries: [], sex: 'female', pregnant: false });
+    Object.assign(shrimp, { lengthCm: 0.3, ageDays: 2 });
+    const plan = warmMove(tanks, 0)!;
+    expect(plan.fish.some((f) => f.id === shrimp.id)).toBe(true);
+    expect(plan.box.some((f) => f.id === shrimp.id)).toBe(false);
+    expect(plan.exposed).toBe(1);
+    expect(guideStep(tanks, 'g')?.text).toContain('小魚可能被大魚吃');
+  });
 });
+
