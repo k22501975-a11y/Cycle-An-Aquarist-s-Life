@@ -1,6 +1,6 @@
 import type { ReportAction } from './morning-report';
 import { DEATH_CAUSE_LABELS } from './labels';
-import { dueMothers, raiseCashStep, creditCost, heaterCreditRefusal, needsInsulation, nextStep, type NextStep, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, starterPackAllCold, starterPackTank, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading, waterLook } from '../sim';
+import { dueMothers, raiseCashStep, creditCost, heaterCreditRefusal, needsInsulation, warmMove, nextStep, type NextStep, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, starterPackAllCold, starterPackTank, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading, waterLook } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -275,6 +275,9 @@ export function guideStep(tanks: TankState[], goal: string): NextStep | null {
   // 沒有交得出的單就叫玩家賣魚湊（#397）
   const raise = broke && broke.short > 0 ? raiseCashStep(tanks, `${where}${cold ? '水溫偏低，' : ''}加熱棒壞了，換一支`, broke.cost) : null;
   if (raise && cold && (raise.stuck || (raise.target === 'sell' && !raise.enough)) && !heaterCreditRefusal(t)) return { goal, text: creditStep(where, t), target: 'heater_credit', tank: crisis.tank };
+  // 賒也賒不到（同時間只能賒一支）：魚先搬去有加熱棒的缸（#400）
+  const move = cold ? warmMoveStep(tanks, crisis.tank) : null;
+  if (move) return { goal, text: move, target: 'move_warm', tank: crisis.tank };
   if (raise) return { goal, text: raise.text, target: raise.target };
   return { goal, text: `${where}${crisis.text}`, target: crisis.go === 'remove_dead' ? 'remove_dead' : 'equipment', tank: crisis.tank };
 }
@@ -300,6 +303,26 @@ export function heaterReplacement(t: TankState): { cost: number; short: number }
   if (!spec) return null;
   const cost = price(`heater:${spec.id}`);
   return { cost, short: Math.max(0, cost - (t.economy?.coins ?? 0)) };
+}
+
+/**
+ * 冬天這缸冷到要救急、加熱棒一時弄不到（錢不夠、今天賣魚也湊不齊、阿德那邊也賒不到）時，叫玩家把魚搬去有加熱棒的缸（#400，g30）。
+ * 任務卡和早上報告共用；不用搬回 null。
+ */
+export function warmMoveStep(tanks: TankState[], index: number): string | null {
+  const t = tanks[index];
+  const plan = warmMove(tanks, index);
+  if (!plan) return null;
+  const broke = heaterReplacement(t);
+  if (broke) {
+    const raise = broke.short > 0 ? raiseCashStep(tanks, '', broke.cost) : null;
+    if (!raise || !(raise.stuck || (raise.target === 'sell' && !raise.enough))) return null;
+  }
+  if (!heaterCreditRefusal(t)) return null;
+  const where = tanks.length > 1 ? tankLabel(tanks, index) : '這缸';
+  const to = tanks[plan.to];
+  const some = plan.fish.length < plan.total ? `最要緊的 ${plan.fish.length} 尾（共 ${plan.total} 尾）` : ` ${plan.fish.length} 尾魚`;
+  return `${where}水溫只剩 ${t.water.tempC.toFixed(1)}°C，加熱棒一時弄不到：先把${some}連袋子泡進${tankLabel(tanks, plan.to)}（${to.water.tempC.toFixed(1)}°C）慢慢對水再放`;
 }
 
 /** 跟阿德賒加熱棒的那句（mvp.md §4.4.6）。 */

@@ -1432,6 +1432,15 @@ async function start(): Promise<void> {
         toasts.show(`阿德：「老客人先拿去，有錢再還。」裝上了${game.state.equipment.heater?.spec.name ?? '加熱棒'}，欠 ${owed} 元，之後每筆收入扣一半來還`);
         return;
       }
+      case 'move_warm': {
+        // 冬天加熱棒弄不到（#400）：冷缸的魚連袋子泡進有加熱棒的缸
+        if (tank === undefined) return;
+        const moved = game.actAll((tanks) => sim.moveToWarmTank(tanks, tank));
+        if (!moved) return toasts.show('現在沒有暖缸放得下', 'warn');
+        game.switchTo(moved.to);
+        toasts.show(`把 ${moved.count} 尾連袋子泡進${sim.tankLabel(game.tanks, moved.to)}，水溫差不多了再放出來`);
+        return;
+      }
     }
   };
   guide.cheer = (from, coins) => ctx.reward?.(from, coins, 'small');
@@ -1952,6 +1961,7 @@ async function start(): Promise<void> {
         break;
       case 'insulate':
       case 'heater_credit':
+      case 'move_warm':
         guide.goNext?.(item.action, item.tank);
         break;
       case 'fish':
