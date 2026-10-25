@@ -1,4 +1,5 @@
 import { buybackRefusal, economy, fishBuybackPrice, sellsLeftToday } from './economy';
+import { orderOutlook } from './order-outlook';
 import { orderBoard, orderRefusal } from './orders';
 import { isJuvenile, type Fish, type TankState } from './state';
 
@@ -45,6 +46,18 @@ export function raiseCashStep(tanks: TankState[], what: string, cost: number): {
   if (canDeliverAnyOrder(tanks)) return { text: `${head}，先交訂單湊錢`, target: 'orders' };
   const sale = emergencySale(tanks, short);
   if (sale.count > 0) return { text: `${head}，賣 ${sale.count} 尾魚給水族店（約 ${sale.coins} 元）湊錢`, target: 'sell', ...(sale.coins >= short ? { enough: true as const } : {}) };
-  // 單交不出、魚也賣不了：只能等訂單（stuck 讓呼叫的人知道沒有立刻湊得到的辦法；enough 是今天賣魚就湊得齊）
-  return { text: `${head}，先交訂單湊錢`, target: 'orders', stuck: true };
+  // 單交不出、魚也賣不了（stuck 讓呼叫的人知道沒有立刻湊得到的辦法；enough 是今天賣魚就湊得齊）：
+  // 說真正卡住的原因，不寫「先交訂單」（#404，g31：單都還要養 16～19 天，照著做是死路）
+  return { text: `${head}，${stuckReason(tanks)}`, target: 'orders', stuck: true };
+}
+
+/** 今天湊不到錢的原因：收購次數用完、單上的魚還要養幾天，或魚都還太小賣不了。 */
+function stuckReason(tanks: TankState[]): string {
+  if (sellsLeftToday(tanks[0]) <= 0) return '今天阿德的收購次數用完了，明天再賣魚湊';
+  const days = orderBoard(tanks[0])
+    .orders.filter((o) => !o.preview)
+    .map((o) => orderOutlook(tanks, o).days)
+    .filter((d): d is number => d !== null && d > 0);
+  if (days.length > 0) return `單上要的魚還要養約 ${Math.min(...days)} 天，今天也沒有魚賣得掉`;
+  return '魚都還太小賣不了，也沒有交得出的單';
 }

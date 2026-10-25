@@ -19,6 +19,7 @@ import { fulfillOrder, matchingFish, orderBoard, orderRefusal, orderSupply, orde
 import { previewPair, typicalStoreGenome, type PreviewKid } from './pair-preview';
 import { FISH_SPECIES, isShrimpSpecies } from './species';
 import { ADULT_SIZE, isJuvenile, recordEvent, type Fish, type TankState } from './state';
+import { coldWithoutHeater } from './winter-rescue';
 
 /**
  * 中期的選擇點（design/midgame.md §1）：第 10～36 天照夢想魚配方，把選育拆成 5 個選擇，
@@ -832,7 +833,8 @@ function mixedPct(mom: Fish, males: Fish[]): number {
 
 /** 別的公魚要搬去哪缸：不是那對在的缸，繁殖缸以外、最不擠的。 */
 function otherTank(tanks: TankState[], not: number, skip: readonly number[] = []): number {
-  const idx = tanks.map((_, i) => i).filter((i) => i !== not && !skip.includes(i));
+  // 加熱棒壞了、水溫低於適溫的缸不搬過去（#404，g31：擠缸卡推薦搬回冷缸，又冷死）
+  const idx = tanks.map((_, i) => i).filter((i) => i !== not && !skip.includes(i) && !coldWithoutHeater(tanks[i]));
   idx.sort((a, b) => Number(tanks[a].purpose === 'breeding') - Number(tanks[b].purpose === 'breeding') || crowdingRatio(tanks[a]) - crowdingRatio(tanks[b]));
   return idx[0] ?? -1;
 }
@@ -992,7 +994,7 @@ function crowdMales(tanks: TankState[], s: Readonly<ChoiceState>, tank: number):
  */
 function crowdMove(tanks: TankState[], s: Readonly<ChoiceState>, tank: number): { fish: Fish[]; to: number } | null {
   const t = tanks[tank];
-  const others = tanks.map((_, i) => i).filter((i) => i !== tank && crowdingRatio(tanks[i]) < CROWD_PREVIEW);
+  const others = tanks.map((_, i) => i).filter((i) => i !== tank && crowdingRatio(tanks[i]) < CROWD_PREVIEW && !coldWithoutHeater(tanks[i]));
   if (others.length === 0) return null;
   const to = others.sort((a, b) => crowdingRatio(tanks[a]) - crowdingRatio(tanks[b]))[0];
   const dest = tanks[to];
@@ -1473,6 +1475,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       const fryHeavy = fryCm >= allCm / 2;
       // 別缸有空、搬過去就不擠了：先搬（還能繼續生、繼續交單），不用停生
       const move = crowdMove(tanks, s, i);
+      // 有空位卻太冷的缸：選項反灰，寫為什麼不能搬（#404）
+      const coldOther = move ? -1 : tanks.findIndex((x, j) => j !== i && crowdingRatio(x) < CROWD_PREVIEW && coldWithoutHeater(x));
       const moveEnough = !!move && crowdingRatio(t) - move.fish.reduce((a, f) => a + f.lengthCm * sizeRatio(f), 0) / t.equipment.tank.volumeL < CROWD_WARN;
       // 擠的多半是小小魚：先停生（搬再多也會一直生）；只是快生了：公母分開要搬得動夠多公魚（搬完不到快養滿）、又沒地方搬才推
       const splitEnough = crowdingRatio(t) - males.fish.reduce((a, f) => a + f.lengthCm * sizeRatio(f), 0) / t.equipment.tank.volumeL < CROWD_WARN;
@@ -1508,7 +1512,11 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
             : []),
           // 已經連賣兩次：推薦以後自動賣（留種的不賣），不用每次跳卡
           ...(sell ? [{ key: 'sell', label: '賣一批', outcome: sell, recommended: recSell && !autoOk }] : []),
-          ...(move ? [{ key: 'move', label: `搬一些到${tankLabel(tanks, move.to)}`, outcome: `${move.fish.length} 尾大一點的搬過去，留種的不動`, recommended: recMove }] : []),
+          ...(move
+            ? [{ key: 'move', label: `搬一些到${tankLabel(tanks, move.to)}`, outcome: `${move.fish.length} 尾大一點的搬過去，留種的不動`, recommended: recMove }]
+            : coldOther >= 0
+              ? [{ key: 'move', label: `搬一些到${tankLabel(tanks, coldOther)}`, outcome: '加熱棒壞了，水太冷', recommended: false, disabled: `${tankLabel(tanks, coldOther)}太冷了，先把加熱棒弄好` }]
+              : []),
           ...(autoOk ? [{ key: 'auto', label: '以後太擠就自動賣給阿德', outcome: `留種的不賣；這次先${o ? `交${sell}` : `賣 ${batch.length} 尾`}`, recommended: recSell }] : []),
           { key: 'tank', label: tanks.length === 2 ? '買第三缸' : '再買一缸', outcome: `20L 套缸 ${tankCost} 元`, recommended: recTank, ...(noTank ? { disabled: noTank } : {}) },
           ...(big ? [{ key: 'big', label: '換大缸', outcome: `90L，${newTankCost(tanks, 'std90')} 元`, recommended: recBig, ...(noBig ? { disabled: noBig } : {}) }] : []),
