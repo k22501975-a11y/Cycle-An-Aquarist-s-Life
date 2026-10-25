@@ -193,5 +193,33 @@ describe('冬天加熱棒都壞、沒錢、沒單可交（#397，mvp.md §4.4.6 
     const { did } = play(tanks, 2, log);
     expect(did.some((d) => d.endsWith('move_warm')), log.join('\n')).toBe(true);
   }, 60_000);
+
+  it('g32：兩缸都冷、只能賒一支，小缸先冷到也把加熱棒賒給魚多的大缸，小缸的魚再搬過去，魚幾乎都救得回來（#407）', () => {
+    // g32 B 次：孔雀魚之家 90L 42 尾 1.6 cm 小魚，繁殖缸 20L 一對種魚＋8 尾小魚，兩缸加熱棒都壞，手上 228 元，魚都還太小賣不了
+    const a = coldTank(61, TANKS.std90, 'h50');
+    a.label = '孔雀魚之家';
+    a.fish = [];
+    for (let i = 0; i < 42; i++) {
+      const f = addFish(a, 'guppy', { carriesIch: false, carries: [], sex: i % 2 ? 'male' : 'female', pregnant: false });
+      Object.assign(f, { lengthCm: 1.6, ageDays: 5, generation: 1, stress: 0 });
+    }
+    const b = coldTank(62, TANKS.nano20, 'h25');
+    b.label = '繁殖缸';
+    b.fish = [...b.fish.slice(0, 2), ...b.fish.slice(4, 12).map((f) => Object.assign(f, { lengthCm: 1.6, ageDays: 5 }))];
+    b.water.tempC = 20;
+    const tanks = [a, b];
+    linkTanks(tanks);
+    economy(a).coins = 228;
+    orderBoard(a).orders = [];
+    const fish = tanks.reduce((n, t) => n + t.fish.length, 0);
+    const log: string[] = [];
+    const { did } = play(tanks, 12, log);
+    expect(did.some((d) => d.endsWith('heater_credit')), log.join('\n')).toBe(true);
+    expect(log.find((l) => /賒一支/.test(l)), log.join('\n')).toMatch(/^\d+d 孔雀魚之家：/);
+    const cold = tanks.flatMap((t) => t.events).filter((e) => e.type === 'fish_died' && e.cause === 'temperature').length;
+    expect(cold, log.join('\n')).toBeLessThanOrEqual(2);
+    // 舊的：賒給繁殖缸，孔雀魚之家的小魚一尾 1 元賣掉 33 尾，只剩 19 尾
+    expect(tanks.reduce((n, t) => n + t.fish.filter((f) => f.alive).length, 0), log.join('\n')).toBeGreaterThanOrEqual(fish - 2);
+  }, 60_000);
 });
 

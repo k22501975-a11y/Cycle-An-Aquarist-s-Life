@@ -1,6 +1,6 @@
 import type { ReportAction } from './morning-report';
 import { DEATH_CAUSE_LABELS } from './labels';
-import { dueMothers, raiseCashStep, creditCost, heaterCreditRefusal, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, nextStep, type NextStep, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, starterPackAllCold, starterPackTank, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading, waterLook } from '../sim';
+import { dueMothers, raiseCashStep, creditCost, creditTarget, heaterCreditRefusal, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, nextStep, type NextStep, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, starterPackAllCold, starterPackTank, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading, waterLook } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -282,7 +282,12 @@ export function guideStep(tanks: TankState[], goal: string): NextStep | null {
   const broke = lingering(crisis) || cold ? heaterReplacement(t) : null;
   // 沒有交得出的單就叫玩家賣魚湊（#397）
   const raise = broke && broke.short > 0 ? raiseCashStep(tanks, `${where}${cold ? '水溫偏低，' : ''}加熱棒壞了，換一支`, broke.cost) : null;
-  if (raise && cold && (raise.stuck || (raise.target === 'sell' && !raise.enough)) && !heaterCreditRefusal(t)) return { goal, text: creditStep(where, t) + because, target: 'heater_credit', tank: crisis.tank };
+  // 只能賒一支：給沒加熱棒會冷死最多尾的那缸，不是正在看、或排在前面的這缸（#407）
+  const credit = raise && cold && (raise.stuck || (raise.target === 'sell' && !raise.enough)) ? creditTarget(tanks) : null;
+  if (credit) {
+    const i = tanks.indexOf(credit);
+    return { goal, text: i === crisis.tank ? creditStep(where, t) + because : creditStep(`${tankLabel(tanks, i)}：`, credit), target: 'heater_credit', tank: i };
+  }
   if (raise) return { goal, text: raise.text + because, target: raise.target };
   return { goal, text: `${where}${crisis.text}`, target: crisis.go === 'remove_dead' ? 'remove_dead' : 'equipment', tank: crisis.tank };
 }

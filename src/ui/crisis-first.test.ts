@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, canDeliverAnyOrder, emergencySale, orderBoard, starterPackAllCold, moveToWarmTank, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, buyCheapHeater, coldestRoomC, sellFish, fishBuybackPrice, type ShopOrder, type TankState } from '../sim';
+import { addFish, addPlant, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, canDeliverAnyOrder, emergencySale, orderBoard, starterPackAllCold, moveToWarmTank, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, buyCheapHeater, coldestRoomC, sellFish, creditTarget, heaterCreditRefusal, takeHeaterCredit, fishBuybackPrice, type ShopOrder, type TankSpec, type TankState } from '../sim';
 import { crisisTodos, capsSummary, guideStep, heaterCanWait, lingering, warmMoveStep, wipedOut } from './status';
 import { morningReport, REPORT_LINES, slimReport, snapshot } from './morning-report';
 import { fishName } from './labels';
@@ -578,6 +578,45 @@ describe('冬天搬去有加熱棒的缸、空缸不再叫保溫（#400，g30）
     const before = economy(a).coins;
     for (const f of sale.fish) sellFish(tanks.find((t: TankState) => t.fish.includes(f))!, f.id);
     expect(economy(a).coins - before).toBe(sale.coins);
+  });
+
+  /** g32：90L 大缸 15 尾、20L 小缸 10 尾，兩缸加熱棒都壞、收購次數用完、單交不出、保溫過了。 */
+  function bigAndSmall(bigFirst: boolean) {
+    const mk = (spec: TankSpec, label: string, n: number, seed: number) => {
+      const t = createTank({ tank: spec, filter: FILTERS.hangOn, heater: { spec: HEATERS.h50, targetC: 25 }, light: { spec: LIGHTS.basic }, roomTempC: 16, seed, matureMedia: true });
+      t.hours = 20;
+      t.label = label;
+      for (let i = 0; i < n; i++) addFish(t, 'guppy', { carriesIch: false, carries: [], sex: i % 2 ? 'male' : 'female', pregnant: false });
+      t.equipment.heater!.broken = true;
+      unplugHeater(t);
+      t.water.tempC = t.water.tempAvgC = 20;
+      t.insulatedDay = Math.floor(t.hours / 24);
+      return t;
+    };
+    const big = mk(TANKS.std90, '孔雀魚之家', 15, 51);
+    const small = mk(TANKS.nano20, '繁殖缸', 10, 52);
+    // 小缸散熱快，先掉到「水溫偏低」：任務卡的危機排在小缸（g32 B 次）
+    small.water.tempC = 19;
+    const tanks = bigFirst ? [big, small] : [small, big];
+    linkTanks(tanks);
+    economy(big).coins = 0;
+    economy(big).sold = { day: Math.floor(big.hours / 24), count: 99 };
+    orderBoard(big).orders = [];
+    return { tanks, big, small };
+  }
+
+  it('只能賒一支：給會冷死最多尾的缸，跟正在看哪缸、缸排第幾無關；小缸的魚再搬過去（#407）', () => {
+    for (const bigFirst of [true, false]) {
+      const { tanks, big, small } = bigAndSmall(bigFirst);
+      expect(creditTarget(tanks)).toBe(big);
+      expect(guideStep(tanks, 'g')).toMatchObject({ target: 'heater_credit', tank: tanks.indexOf(big) });
+      expect(guideStep(tanks, 'g')?.text).toContain('孔雀魚之家：水太冷了，阿德說可以先賒一支加熱棒');
+      expect(heaterCreditRefusal(small)).toBe('阿德只能先賒一支，先給孔雀魚之家（那缸的魚比較多），這缸的魚再搬過去');
+      expect(takeHeaterCredit(small)).toBe(0);
+      expect(takeHeaterCredit(big)).toBeGreaterThan(0);
+      big.water.tempC = 25;
+      expect(guideStep(tanks, 'g')).toMatchObject({ target: 'move_warm', tank: tanks.indexOf(small) });
+    }
   });
 
   it('湊不到錢時說真正原因，不叫「先交訂單」（#404）', () => {
