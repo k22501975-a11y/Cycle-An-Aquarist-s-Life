@@ -1432,6 +1432,15 @@ async function start(): Promise<void> {
         toasts.show(`阿德：「老客人先拿去，有錢再還。」裝上了${game.state.equipment.heater?.spec.name ?? '加熱棒'}，欠 ${owed} 元，之後每筆收入扣一半來還`);
         return;
       }
+      case 'buy_heater': {
+        // 冬天錢不夠換同款（#404）：買一支撐得住的便宜加熱棒裝上
+        if (tank !== undefined) game.switchTo(tank);
+        const spec = game.act((st) => sim.buyCheapHeater(st));
+        if (!spec) return toasts.show('現在買不了加熱棒', 'warn');
+        audio.play('quest', false);
+        toasts.show(`裝上了${spec.name}，水溫會慢慢回升`);
+        return;
+      }
       case 'move_warm': {
         // 冬天加熱棒弄不到（#400）：冷缸的魚連袋子泡進有加熱棒的缸
         if (tank === undefined) return;
@@ -1962,6 +1971,7 @@ async function start(): Promise<void> {
       case 'insulate':
       case 'heater_credit':
       case 'move_warm':
+      case 'buy_heater':
         guide.goNext?.(item.action, item.tank);
         break;
       case 'fish':
