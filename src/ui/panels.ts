@@ -4,7 +4,7 @@ import { substrateName, tankSubstrateLook } from '../render/substrate';
 import { kitColor, type KitParam } from '../render/ops-fx';
 import { DREAM_MALE, isShrimpSpecies, isFrySale, storeOffer, takeStoreFemales, addBottledBacteria, addFish, CARE_EAT_THRESHOLD, careTarget, guardianOf, hasSpawnSite, isBroodParent, PARENTAL, addSnail, APPLE_COLOR_LABELS, catchPests, collectTrap, doseMolluscicide, buyPlant as plantFromShop, isLightOn, PESTS, pestCount, removeClutches, removeDeadSnails, scrapeNeriteEggs, setTrap, snailBloom, SNAILS, type AppleColor, type PestKind, type SnailKind, addFishToQuarantine, addCuttings, addHardscape, addPlant, transferMedia, mediaAvailable, buybackRefusal, setKeeper, GUPPY_STRAIN_PRICES, GUPPY_FIN_STRAINS, GUPPY_STRAINS, finWords, matingSuccess, predictOffspring, canClaimStarterPack, claimStarterPack, starterPackAllCold, starterPackTank, buyTank, addHolidayTablet, buyTankRefusal, HOLIDAY_TABLET_DAYS, installFeeder, feederInstalledText, LOCKED_SPECIES, speciesUnlocked, tankLock, unlockHint, moveFish, newTankCost, purposeCost, setTankPurpose, suggestPurpose, TANK_PURPOSES, type TankPurpose, removeTank, removeTankRefusal, slotPrice, TANK_SETS, tankLabel, type TankSizeId, chargeMeal, economy, FISH_PRICES, BETTA_FEMALE_PRICE, fishBuybackPrice, PLANT_PRICES, plantBuybackPrice, price, sellCuttings, sellableCuttings, chestCuttingsOf, sellFish, sellsLeftToday, spend, takeCutting, buyQuarantine, HARDSCAPE, removeHardscape, placeFromBag, replaceSubstrate, SUBSTRATES, doseAntibiotic, doseDewormer, doseQuarantine, hasVisible, isJuvenile, crowdingRatio, COMFORT_BAND, dripMinutes, dripGrade, dripTutorialLeft, recordDrip, farmHabit, habitGap, habitOf, phBeyondSurvival, SPLIT_PLAN_LABELS, splitAdvice, splitGroup, splitTank, rescueFryToBox, BOX_CAPACITY, buyNurseryBox, dueMothers, moveDueToNursery, moveToNursery, NURSERY_FRY_CAPACITY, NURSERY_RELEASE_CM, nurseryFish, nurseryRefusal, releaseNursery, rescueFryToNursery, type SplitPlan, daysUntilSexVisible, growthFactors, growthStage, maxLengthCm, sexVisible, stageLabel, phenotype, strainName, QUARANTINE_DAYS, quarantineDays, readyForTank, releaseQuarantine, swallowCm, tooSmallForTank, PINCH_MEALS, orderBoard, matchingFish, orderSupply, moveToQuarantine, AIR_PUMPS, CHILLERS, CO2_KITS, doseIchMedication, DEFAULT_FOOD, feed, FANS, FOOD_GRADES, FOOD_KINDS, mealMg, mealPrice, tapFeed, type TapFeedResult, FILTERS, FISH_SPECIES, freeAmmonia, HEATERS, hidingFactor, LIGHTS, monthOf, observeSymptoms, PLANT_SPECIES, REGION_LABELS, removeDeadFish, replaceFilter, rinseFilterMedia, seasonName, setHeaterTarget, installHeater, ichHeatC, ICH_MED_WORKING, changeDilutesIch, treatingIch, topUp, unplugHeater, trimPlant, waterChange, suggestedWaterChange, type DripOutcome, type Fish, type FishSpeciesId, type FoodGrade, type FoodKind, type Symptom, type PlantSpeciesId, type Region, type TankState, type TestKitReading, markDaily, needsSetup, needsInsulation, insulateTank, INSULATE_BUMP_C, heaterCreditRefusal, creditTarget, takeHeaterCredit, coldWithoutHeater, creditSale, warmMove, moveToWarmTank, cheapHeater, buyCheapHeater, SALT_DAYS, SALT_HEAT_C } from '../sim';
 import { cureRefusal, mallBag, useCure, type MallItemId } from '../sim/mall';
-import { saltIchCure, saltRefusal } from '../sim/salt-treat';
+import { saltBlocker, saltIchCure, saltRefusal } from '../sim/salt-treat';
 import { choiceState, lineName } from '../sim/choices';
 import { applySeason, type Game } from '../game/game';
 import { h } from './dom';
@@ -1471,7 +1471,7 @@ export function treatPanel(ctx: PanelContext, advice: string): Node {
       }, 'primary')
     : null;
   // 白點的便宜治法（mvp.md §4.4.6 g33）：30°C 加粗鹽，蝦怕鹽
-  const saltWhy = saltRefusal(s);
+  const saltWhy = saltBlocker(s);
   const salt = s.fish.some((f) => f.alive && f.ich.stage === 'visible')
     ? h(
         'div.row.wrap',
@@ -1481,7 +1481,7 @@ export function treatPanel(ctx: PanelContext, advice: string): Node {
           ctx.toasts.show(`加了一點粗鹽、加熱棒調到 ${SALT_HEAT_C}°C，約 ${SALT_DAYS} 天會好，白點斷根就自動調回來`);
           ctx.sheet.refresh();
         }),
-        h('span.hint', {}, saltWhy && !/粗鹽要/.test(saltWhy) ? saltWhy : `便宜的做法，約 ${SALT_DAYS} 天會好（藥約 4 天），蝦不能用`),
+        h('span.hint', {}, saltWhy ?? `便宜的做法，約 ${SALT_DAYS} 天會好（藥約 4 天），蝦不能用`),
       )
     : null;
   return h('div.stack', {}, h('p.hint.treat-advice', {}, advice), heatBtn, medicineRow(ctx), salt);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addFish, createTank, economy, FILTERS, HEATERS, LIGHTS, nextStep, price, SALT_DAYS, SALT_HEAT_C, saltDaysLeft, simulate, TANKS, waterChange, type TankState } from '.';
-import { saltIchCure, saltRefusal } from './salt-treat';
+import { saltBlocker, saltIchCure, saltRefusal } from './salt-treat';
 
 /** 40L 一缸、8 尾孔雀魚，其中一尾已經長白點（太擠的誘因），水裡也有蟲。 */
 function sick(): TankState {
@@ -60,6 +60,9 @@ describe('粗鹽＋30°C 治白點（mvp.md §4.4.6 g33）', () => {
     const poor = sick();
     economy(poor).coins = 10;
     expect(saltRefusal(poor)).toBe(`粗鹽要 ${price('med:salt')} 元`);
+    // 面板說明只寫錢以外的原因：價錢已經在按鈕上
+    expect(saltBlocker(poor)).toBeNull();
+    expect(saltBlocker(shrimp)).toBe(saltRefusal(shrimp));
     expect(saltIchCure(poor)).toBe(false);
   });
 
