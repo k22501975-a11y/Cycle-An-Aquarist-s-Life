@@ -1,4 +1,4 @@
-import { isJuvenile, isLightOn, noteAct, recordEvent, type Fish, type TankState } from './state';
+import { isJuvenile, isLightOn, recordEvent, type Fish, type TankState } from './state';
 import type { ChoiceState } from './choices';
 import { growthStage } from './growth';
 import { CYCLED_BACTERIA } from './processes/nitrogen';
@@ -274,14 +274,6 @@ export function starterPackTank(tanks: TankState[], active = 0): number {
   return best;
 }
 
-/** 領起步包：1 公 2 母、確認健康的孔雀魚。送的魚不能賣回店裡（牠們生的可以）。 */
-export function claimStarterPack(state: TankState, addGuppy: (state: TankState, sex: 'male' | 'female') => Fish, others: TankState[] = []): boolean {
-  if (!canClaimStarterPack(state, others)) return false;
-  for (const sex of ['male', 'female', 'female'] as const) addGuppy(state, sex).gift = true;
-  economy(state).starterPackHours = state.hours;
-  return true;
-}
-
 /** 共用同一個錢包的所有缸（linkTanks 登記，不進存檔）：訂單板這類全家共用的東西要一次看所有缸。 */
 const households = new WeakMap<Economy, TankState[]>();
 
@@ -299,19 +291,6 @@ export function householdTanks(state: TankState): TankState[] {
 
 export function economy(state: TankState): Economy {
   return (state.economy ??= { coins: STARTING_COINS, kwh: 0, lastBillHours: state.hours, sold: { day: -1, count: 0 }, cuttings: {}, plantBuys: 0 });
-}
-
-/**
- * 套用一筆伺服器帳本的收支（市場的扣款、入帳，docs/ledger.md §3.3）：照 delta 加減，不用伺服器回傳的餘額覆蓋，
- * 不然這中間本機花掉的錢會被加回來。已經套用過的（ledgerSeq 不比現在大）不再加。回傳有沒有套用。
- */
-export function applyLedger(state: TankState, entry: { delta: number; ledgerSeq: number }): boolean {
-  const e = economy(state);
-  if (entry.ledgerSeq <= (e.ledgerSeq ?? 0)) return false;
-  e.coins += entry.delta;
-  if (entry.delta > 0) noteEarned(state);
-  e.ledgerSeq = entry.ledgerSeq;
-  return true;
 }
 
 /** 每筆收入扣幾成還阿德加熱棒的錢（mvp.md §4.4.6 g33 之後：原本一半，危機過後錢回不來）。 */
@@ -445,31 +424,6 @@ export function buybackRefusal(fish: Fish, fry = false): string | null {
 /** 全家最多幾尾留種（選種日挑 1 公 2 母，C4 再加候選公魚；留太多訂單會交不出貨）。 */
 export const MAX_KEEPERS = 6;
 
-/** 為什麼這尾不能標留種；可以就回傳 null（取消留種永遠可以）。 */
-export function keeperRefusal(state: TankState, fish: Fish): string | null {
-  if (fish.keeper) return null;
-  if (!fish.alive) return '死掉了';
-  if (isShrimpSpecies(fish.species)) return '蝦子不用留種，留一群自己就會繁殖';
-  if (fish.listing) return '已經在市場上架了，先下架';
-  const n = householdTanks(state).reduce((k, t) => k + [...t.fish, ...(t.quarantine?.fish ?? [])].filter((f) => f.alive && f.keeper).length, 0);
-  if (n >= MAX_KEEPERS) return `最多留 ${MAX_KEEPERS} 尾種魚，先取消一尾`;
-  return null;
-}
-
-/** 標或取消「留種」（design/midgame.md C2）。回傳不能標的原因；成功回傳 null。 */
-export function setKeeper(state: TankState, fishId: number, on: boolean): string | null {
-  const fish = [...state.fish, ...(state.quarantine?.fish ?? [])].find((f) => f.id === fishId);
-  if (!fish) return '這條魚不在缸裡';
-  if (!on) {
-    delete fish.keeper;
-    return null;
-  }
-  const why = keeperRefusal(state, fish);
-  if (why) return why;
-  fish.keeper = true;
-  return null;
-}
-
 export type GuppyRarity = 'common' | 'strain' | 'rare' | 'prized';
 export const GUPPY_RARITY_LABELS: Record<GuppyRarity, string> = { common: '普通', strain: '品系', rare: '稀有', prized: '極稀有' };
 
@@ -509,7 +463,7 @@ export function plantBuybackPrice(species: PlantSpeciesId): number {
   return Math.max(1, Math.round((PLANT_PRICES[species] / 3) * BUYBACK_SHARE));
 }
 
-function countSale(state: TankState, fry = false): boolean {
+export function countSale(state: TankState, fry = false): boolean {
   const e = economy(state);
   if (e.sold.day !== today(state)) e.sold = { day: today(state), count: 0 };
   // 小小魚一袋 FRY_BAG 尾算一次：袋子還沒裝滿就不用再算
@@ -534,20 +488,6 @@ export function claimQuestReward(state: TankState, questId: string, coins: numbe
   return coins;
 }
 
-export function sellFish(state: TankState, fishId: number): number {
-  const fish = state.fish.find((f) => f.id === fishId);
-  if (!fish || buybackRefusal(fish, true) || !countSale(state, isFrySale(fish))) return 0;
-  const coins = fishBuybackPrice(fish);
-  state.fish = state.fish.filter((f) => f !== fish);
-  const e = economy(state);
-  e.coins += coins;
-  // 一尾 2 元的小魚不算真收入（g33：擠缸自動賣小魚，保底單一直不出）
-  noteEarned(state, coins, !isFrySale(fish));
-  e.fishSold = (e.fishSold ?? 0) + 1;
-  noteBredSale(state, fish, coins, 'shop');
-  return coins;
-}
-
 /** 賣掉或交出一尾魚時呼叫：自己繁殖的第一次，記一筆 first_bred_sale 給畫面演慶祝（polish-to-9.md G2）。 */
 export function noteBredSale(state: TankState, fish: Fish, coins: number, via: 'order' | 'shop'): void {
   if ((fish.generation ?? 0) < 1) return;
@@ -555,17 +495,6 @@ export function noteBredSale(state: TankState, fish: Fish, coins: number, via: '
   if (e.firstBredSale) return;
   e.firstBredSale = true;
   recordEvent(state, { type: 'first_bred_sale', subjectId: fish.id, value: coins, cause: via });
-}
-
-/**
- * 交訂單的魚如果是自己繁殖、養過仔魚期的，記一筆（#183）：中魚單常把剛長大的魚拿走，目標「養大 5 條」不會因此倒退。
- * 賣給店家的不算：那是玩家自己選擇換錢，目標本來就要留著魚看轉色。
- */
-export function noteRaisedGone(state: TankState, fish: Fish): void {
-  // 已經轉色過的算在 raisedEver 裡了
-  if (fish.raisedSeen || (fish.generation ?? 0) < 1 || isShrimpSpecies(fish.species) || growthStage(fish) === 'fry') return;
-  const e = economy(state);
-  e.raisedGone = (e.raisedGone ?? 0) + 1;
 }
 
 /** 轉色期以後的成長階段。 */
@@ -592,33 +521,8 @@ export function sellableCuttings(state: TankState, species: PlantSpeciesId): num
   return Math.max(0, (economy(state).cuttings[species] ?? 0) - chestCuttingsOf(state, species));
 }
 
-/** 把手上的插枝全部賣掉（算一次），回傳拿到多少錢。寶箱來的不收，留在手上可以種。 */
-export function sellCuttings(state: TankState, species: PlantSpeciesId): number {
-  const e = economy(state);
-  const n = sellableCuttings(state, species);
-  if (n <= 0 || !countSale(state)) return 0;
-  const coins = n * plantBuybackPrice(species);
-  e.cuttings[species] = (e.cuttings[species] ?? 0) - n;
-  e.coins += coins;
-  noteEarned(state, coins);
-  noteAct(state, 'cutting');
-  return coins;
-}
-
 export function addCuttings(state: TankState, species: PlantSpeciesId, count: number): void {
   const e = economy(state);
   e.cuttings[species] = (e.cuttings[species] ?? 0) + count;
-}
-
-/** 種一株手上的插枝回缸裡（不用錢）。 */
-export function takeCutting(state: TankState, species: PlantSpeciesId): boolean {
-  const e = economy(state);
-  if ((e.cuttings[species] ?? 0) <= 0) return false;
-  // 先種寶箱來的（種下去就是缸裡的草了）
-  const chest = chestCuttingsOf(state, species);
-  if (chest > 0) e.chestCuttings![species] = chest - 1;
-  e.cuttings[species]! -= 1;
-  noteAct(state, 'cutting');
-  return true;
 }
 

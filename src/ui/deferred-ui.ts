@@ -15,3 +15,5 @@ export { awayReport, morningReport, slimReport, snapshot } from './morning-repor
 // 中期選擇點（sim/choices.ts）也跟著延後載入：早上報告的選擇卡用 chooseOption，任務卡的選育那一行載好才說
 export { chooseOption, lineName } from '../sim/choices';
 setBreedingStep(breedingStep);
+export { setupPanel } from './setup-panel';
+export { flyCoins, rewardBurst } from './coin-fly';

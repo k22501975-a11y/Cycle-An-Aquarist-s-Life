@@ -1,5 +1,5 @@
 import { economy } from './economy';
-import { phenotype, type GuppyPhenotype } from './genetics';
+import { type GuppyPhenotype } from './genetics';
 import { FIN_NAMES } from './orders';
 import type { Fish, TankState } from './state';
 
@@ -82,32 +82,7 @@ export function noteBrood(state: TankState, mother: Fish, sire: NonNullable<Fish
   e.broodLog = [...(e.broodLog ?? []), { motherId: mother.id, fatherId: sire.id, hours: state.hours, mother: mother.genome, father: sire.genome }].slice(-BROOD_LOG);
 }
 
-const broodOf = (f: Fish, log: Brood[]) => (f.alive && f.genome ? log.find((b) => f.motherId === b.motherId && f.bornHours === b.hours) : undefined);
-
-/**
- * 早上報告用（所有缸一起看，小魚可能換過缸）：自己繁殖的孔雀魚第一窩出生滿 LOOKALIKE_DAYS 天就出一次比較卡，
- * 挑公魚（花色在公魚身上）、特徵多的那尾；child 是牠的基因長大後的樣子。第一窩被吃光、賣光的話，就等下一窩。
- */
-export function takeLookalike(tanks: TankState[]): (LookalikeCard & { tank: number }) | null {
-  const e = economy(tanks[0]);
-  const log = e.broodLog;
-  if (e.lookalikeShown || !log?.length) return null;
-  const old = (f: Fish) => {
-    const b = broodOf(f, log);
-    return !!b && tanks[0].hours - b.hours >= LOOKALIKE_DAYS * 24;
-  };
-  const shown = tanks.flatMap((t, tank) => t.fish.filter(old).map((fish) => ({ fish, tank })));
-  if (shown.length === 0) return null;
-  const score = (f: Fish) => (f.sex === 'male' ? 100 : 0) + guppyTraits(phenotype(f.genome!)).length;
-  const pick = shown.reduce((a, x) => (score(x.fish) > score(a.fish) ? x : a));
-  const b = broodOf(pick.fish, log)!;
-  e.lookalikeShown = true;
-  e.broodLog = undefined;
-  const mother = phenotype(b.mother);
-  const father = phenotype(b.father);
-  const child = phenotype(pick.fish.genome!);
-  return { tank: pick.tank, childId: pick.fish.id, motherId: b.motherId, fatherId: b.fatherId, mother, father, child, ...compareLooks(child, mother, father) };
-}
+export const broodOf = (f: Fish, log: Brood[]) => (f.alive && f.genome ? log.find((b) => f.motherId === b.motherId && f.bornHours === b.hours) : undefined);
 
 const FROM: Record<TraitFrom, string> = { mother: '像媽媽', father: '像爸爸', both: '爸媽都有', hidden: '隔代冒出來' };
 

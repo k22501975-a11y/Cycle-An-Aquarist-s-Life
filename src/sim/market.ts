@@ -1,4 +1,4 @@
-import { noteArrival } from './arrivals';
+import { noteArrival } from './arrival-status';
 import { addCuttings, BETTA_FEMALE_PRICE, economy, FISH_PRICES, fishBuybackPrice, guppyBuybackTier, JUVENILE_SHARE, PLANT_PRICES, plantBuybackPrice, sellableCuttings, STRAIN_TIER } from './economy';
 import { phenotype, strainName } from './genetics';
 import { hasVisible } from './processes/disease';

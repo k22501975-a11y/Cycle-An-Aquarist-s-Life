@@ -5,7 +5,7 @@ import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audi
 import { eventSound, type SoundId } from './audio/sounds';
 import { applySeason, blankGameState, Game } from './game/game';
 import { crisisText } from './game/crisis';
-import { setupPanel } from './ui/setup-panel';
+import type { SettingsDeps } from './ui/settings-panel';
 import { browserStore, catchUp, clearSave, loadSave, parseSave, serializeSave, writeSave } from './game/save';
 import { catchUpSave } from './game/catchup-runner';
 import { menuTile, ownerImg } from './ui/art-icons';
@@ -20,9 +20,9 @@ import type { CloudPanelDeps } from './ui/cloud-panel';
 import type { FriendsDeps } from './ui/friends-panel';
 import type { MarketDeps } from './ui/market-panel';
 import type { MallDeps } from './ui/mall-panel';
-import { CATEGORY_LABELS, nativePlatform, Notifier, planNotices, webPushPlatform, type PlannedNotice } from './net/push';
+import { nativePlatform, Notifier, planNotices, webPushPlatform, type PlannedNotice } from './net/push';
 import { Forecaster } from './game/forecaster';
-import { canPromptInstall, isInstalled, isIos, promptInstall, setupPwa } from './ui/pwa';
+import { setupPwa } from './ui/pwa';
 import { loadPaintedArt, startupArt } from './render/painted';
 import { FrameMonitor, lowerQuality } from './game/frame-monitor';
 import { FpsMeter, formatFps } from './game/fps-meter';
@@ -53,7 +53,6 @@ import { fryArt, guppyArt, maleFinOf, plantArt } from './ui/shop-cards';
 import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
 import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt, orderReadyWhat } from './ui/order-alert';
 import { TankMarks } from './ui/tank-marks';
-import { flyCoins, rewardBurst } from './ui/coin-fly';
 import type { ReportItem } from './ui/morning-report';
 import { loadCodexSeen, saveCodexSeen } from './ui/codex-seen';
 import { Sheet, Toasts, actionLive } from './ui/sheet';
@@ -259,6 +258,7 @@ async function start(): Promise<void> {
   const friendsUi = lazyUi(() => import('./ui/friends-panel'));
   const mallUi = lazyUi(() => import('./ui/mall-panel'));
   const loadMarket = lazyUi(() => import('./ui/market-panel'));
+  const settingsUi = lazyUi(() => import('./ui/settings-panel'));
   // 面板、紀錄、圖鑑、早上報告：開機後閒下來就在背景載好（見檔尾 prefetchDeferred），載好之後照舊同步打開
   const importDeferred = () => import('./ui/deferred-ui');
   type DeferredUi = Awaited<ReturnType<typeof importDeferred>>;
@@ -275,7 +275,7 @@ async function start(): Promise<void> {
   };
   // 還沒載好時連點好幾個面板，只打開最後點的那個（不要載完後一層層疊出來）
   let sheetRequest = 0;
-  const panelSheet = (title: string, render: (p: DeferredUi) => Node, options?: { live?: boolean }) => {
+  const panelSheet = (title: string, render: (p: DeferredUi) => Node, options?: { live?: boolean; pinned?: boolean }) => {
     const request = ++sheetRequest;
     withPanels((p) => {
       if (request === sheetRequest) sheet.open(title, () => render(p), options);
@@ -293,6 +293,15 @@ async function start(): Promise<void> {
         close: () => sheet.close(),
       }),
     );
+  /** 特效（金幣飛進錢包）也在那包裡：載好了馬上演；還沒載好就等載完再演，載不到就不演，不跳提示。 */
+  const withEffects = (run: (p: DeferredUi) => void) => {
+    if (deferredUi) run(deferredUi);
+    else
+      void importDeferred().then(
+        (p) => run((deferredUi ??= p)),
+        () => {},
+      );
+  };
   /** 背景先載：失敗（網頁版離線）不吵，真的要打開時再提示。 */
   const prefetchDeferred = () =>
     void importDeferred().then(
@@ -414,21 +423,6 @@ async function start(): Promise<void> {
   };
   // 可安裝的 App：有新版時提示重新整理（先存檔）
   setupPwa((apply) => toasts.show('有新版本了', 'info', { label: '更新', run: () => (save(), apply()) }));
-  const installSection = () => {
-    if (isInstalled()) return [h('p.hint', {}, '已經用安裝好的 App 開啟。')];
-    if (canPromptInstall())
-      return [
-        h('button.btn', {
-          onclick: async () => {
-            if (await promptInstall()) toasts.show('裝好了，之後從主畫面的圖示開啟');
-            sheet.refresh();
-          },
-        }, '安裝到主畫面'),
-        h('p.hint', {}, '裝好後會全螢幕開啟，沒網路也能玩。'),
-      ];
-    if (isIos()) return [h('p.hint', {}, '在 Safari 按下方的「分享」，選「加入主畫面」，就能全螢幕開啟、沒網路也能玩。')];
-    return [h('p.hint', {}, '用瀏覽器選單的「安裝應用程式」或「加到主畫面」，就能全螢幕開啟、沒網路也能玩。')];
-  };
   debugHandle.audio = audio;
 
   // ---- 選取卡：點一條魚，顯示名字、品系、健康與壓力 ----
@@ -839,8 +833,10 @@ async function start(): Promise<void> {
   // 拿到錢時金幣飛進錢包（F8）
   // 獎勵特效分級（V5）：小事寶箱是小的（金幣＋一圈亮點），交單是中的（再加光環和金額），大的是全螢幕慶祝卡
   ctx.reward = (from, amount, tier = 'small') => {
-    flyCoins(from, coinsBtn, amount);
-    rewardBurst(from, tier, tier === 'medium' ? `+${amount}` : undefined);
+    withEffects((p) => {
+      p.flyCoins(from, coinsBtn, amount);
+      p.rewardBurst(from, tier, tier === 'medium' ? `+${amount}` : undefined);
+    });
   };
   // 對水對得完美：新魚一進缸就聚光展開尾巴（F5）
   ctx.welcome = (ids, perfect) => {
@@ -929,65 +925,6 @@ async function start(): Promise<void> {
       ),
     );
   };
-  const notifySection = (): Node[] => {
-    if (!notifier.available)
-      return [h('p.hint', {}, isIos() && !isInstalled() ? 'iPhone 要先把遊戲加到主畫面，才收得到通知。' : cloud.available ? '這個瀏覽器收不到通知。' : '這個版本的通知只有 Android App 版收得到。')];
-    const reopen = () => sheet.open('設定', settings);
-    const p = notifier.prefs;
-    return [
-      h('p.hint', {}, '關掉遊戲後，水缸照樣在跑。開啟通知後，遊戲會先預測接下來會發生什麼，出事前提醒你。'),
-      p.enabled
-        ? h('button.btn', { onclick: async () => (await notifier.disable(), toasts.show('關掉通知了'), reopen()) }, '關閉通知')
-        : h('button.btn.primary', {
-            onclick: async () => {
-              const err = await notifier.enable();
-              if (err) toasts.show(err, 'warn');
-              else {
-                toasts.show('開啟通知了');
-                void refreshForecast();
-              }
-              reopen();
-            },
-          }, '開啟通知'),
-      ...(p.enabled
-        ? (Object.keys(CATEGORY_LABELS) as (keyof typeof CATEGORY_LABELS)[]).map((c) =>
-            h('label.check-row', {}, h('input', { type: 'checkbox', checked: p.categories[c], onchange: (e: Event) => void notifier.setCategory(c, (e.target as HTMLInputElement).checked) }), h('span', {}, CATEGORY_LABELS[c])),
-          )
-        : []),
-      ...(p.enabled && notifier.platform?.kind === 'web' && cloud.available && !cloud.session ? [h('p.hint', {}, '市場和好友的通知要登入雲端存檔才收得到。')] : []),
-      ...(p.enabled && notifier.platform?.kind === 'native' && cloud.available ? [h('p.hint', {}, 'App 版目前收得到水缸的提醒和到貨通知；有人買了你的東西、好友送禮，要打開遊戲才看得到。')] : []),
-    ];
-  };
-  const privacySection = () => [
-    analytics.available
-      ? h(
-          'label.check-row',
-          {},
-          h('input', {
-            type: 'checkbox',
-            checked: analytics.consent === true,
-            onchange: (e: Event) => {
-              analytics.setConsent((e.target as HTMLInputElement).checked);
-              consentCard.remove();
-            },
-          }),
-          h('span', {}, '幫忙改進遊戲：回報匿名的遊戲紀錄'),
-        )
-      : null,
-    h(
-      'p.hint',
-      {},
-      analytics.available
-        ? '只回報像「魚因為氨中毒死掉」「完成教學第 3 步」這類事件，用隨機代號、不連到帳號，180 天後刪除。'
-        : '存檔只放在這台裝置上，不會傳到任何地方。',
-    ),
-    h(
-      'div.row',
-      {},
-      h('a.btn', { href: './legal/privacy.html', target: '_blank', rel: 'noopener' }, '隱私權政策'),
-      h('a.btn', { href: './legal/terms.html', target: '_blank', rel: 'noopener' }, '使用條款'),
-    ),
-  ];
   // 第一次玩一陣子之後問一次要不要幫忙（不打斷新手引導的第一個畫面）
   const consentCard = h(
     'div.consent-card.glass',
@@ -1010,99 +947,32 @@ async function start(): Promise<void> {
     }
   };
   const sessionProps = () => ({ tanks: game.tanks.length, fish: game.tanks.reduce((n, t) => n + t.fish.filter((f) => f.alive).length, 0), day: Math.floor(game.state.hours / 24) });
-  // 設定頁：聲音、顯示、時間、存檔、開發者
-  const settings = () =>
-    h(
-      'div.stack',
-      {},
-      h('h3', {}, '聲音'),
-      ...(
-        [
-          ['master', '主音量'],
-          ['music', '音樂'],
-          ['sfx', '音效'],
-          ['ambience', '環境音'],
-        ] as const
-      ).map(([key, label]) =>
-        h(
-          'label.slider-row',
-          {},
-          h('span', {}, label),
-          h('input', {
-            type: 'range',
-            min: '0',
-            max: '100',
-            value: String(Math.round(audioSettings[key] * 100)),
-            'aria-label': label,
-            oninput: (e: Event) => updateAudio({ [key]: Number((e.target as HTMLInputElement).value) / 100 }),
-          }),
-        ),
-      ),
-      h(
-        'label.check-row',
-        {},
-        h('input', { type: 'checkbox', checked: audioSettings.muted, onchange: (e: Event) => updateAudio({ muted: (e.target as HTMLInputElement).checked }) }),
-        h('span', {}, '靜音'),
-      ),
-      h(
-        'label.check-row',
-        {},
-        h('input', { type: 'checkbox', checked: audioSettings.haptics, onchange: (e: Event) => updateAudio({ haptics: (e.target as HTMLInputElement).checked }) }),
-        h('span', {}, '震動'),
-      ),
-      h('p.hint', {}, '背景音樂是即時彈奏的慢板指彈吉他，每次都不一樣；晚上關燈後會彈得更輕。音樂和音效的音量可以分開調。'),
-      h('h3', {}, '顯示'),
-      h(
-        'label.check-row',
-        {},
-        h('input', { type: 'checkbox', checked: uiPrefs.bigText, onchange: (e: Event) => setBigText((e.target as HTMLInputElement).checked) }),
-        h('span', {}, '放大文字'),
-      ),
-      h(
-        'div.item',
-        {},
-        h('b', {}, '畫質'),
-        h(
-          'div.tabs',
-          {},
-          ...(['low', 'medium', 'high'] as const).map((q) =>
-            h(
-              `button.tab${uiPrefs.quality === q ? '.active' : ''}`,
-              {
-                onclick: () => {
-                  uiPrefs.qualityManual = true;
-                  setQuality(q);
-                  sheet.refresh();
-                },
-              },
-              QUALITY_LABELS[q],
-            ),
-          ),
-        ),
-      ),
-      h('p.hint', {}, '手機發燙或卡頓時調低：低畫質會關掉景深模糊和柔光，水中微粒也會變少。'),
-      h('div.item', {}, h('b', {}, '語言'), h('span.owned', {}, '繁體中文')),
-      h('div.item', {}, h('b', {}, '版本'), h('span.owned', {}, __APP_VERSION__)),
-      h('p.hint', {}, '燈號除了顏色也用形狀區分：圓形正常、三角形注意、菱形危險。'),
-      h('h3', {}, '時間'),
-      h('p.hint', {}, '遊戲時間是現實的 7 倍：現實 1 天＝遊戲 1 週，現實 1 小時＝遊戲 7 小時。關掉網頁時時間照常前進，下次打開會補算（最多兩週）。'),
-      h('p.hint', {}, '暫停和快轉在主畫面時鐘旁邊的速度按鈕。'),
-      h('h3', {}, '存檔'),
-      h('div.row', {}, h('button.btn', { onclick: exportSave }, '匯出存檔'), h('button.btn', { onclick: importSave }, '匯入存檔')),
-      h('p.hint', {}, '遊戲每 10 秒自動存檔，每 30 分鐘自動備份一次；存檔壞掉時會自動用備份還原。換手機時可以匯出成檔案帶過去。'),
-      ...(FEATURES.cloudSave
-        ? [h('h3', {}, '雲端存檔'), h('button.btn', { onclick: openCloud }, cloud.session ? `雲端存檔（${cloud.session.username}）` : '登入雲端存檔')]
-        : []),
-      h('h3', {}, '通知'),
-      ...notifySection(),
-      h('h3', {}, '隱私'),
-      ...privacySection(),
-      // App 版本來就是裝好的，不用顯示安裝說明
-      ...(isNativeApp() ? [] : [h('h3', {}, '安裝'), ...installSection()]),
-      h('h3', {}, '開發者'),
-      h('button.btn', { onclick: () => panelSheet('開發者數值', (p) => p.debugPanel(ctx), { live: true }) }, '開發者'),
-      h('label.check-row', {}, h('input', { type: 'checkbox', checked: uiPrefs.showFps, onchange: (e: Event) => setShowFps((e.target as HTMLInputElement).checked) }), h('span', {}, '顯示幀率（實機量效能用）')),
-    );
+  // 設定頁（ui/settings-panel.ts）：跟其他面板一起延後載入
+  const settingsDeps: SettingsDeps = {
+    sheet,
+    toasts,
+    cloud,
+    notifier,
+    analytics,
+    audio: () => audioSettings,
+    updateAudio,
+    ui: uiPrefs,
+    setBigText,
+    setQuality,
+    setShowFps,
+    exportSave,
+    importSave,
+    openCloud,
+    openDebug: () => panelSheet('開發者數值', (p) => p.debugPanel(ctx), { live: true }),
+    refreshForecast,
+    consentAnswered: () => consentCard.remove(),
+  };
+  const openSettings = () => {
+    const request = ++sheetRequest;
+    void settingsUi().then((m) => {
+      if (request === sheetRequest) sheet.open('設定', () => m.settingsPanel(settingsDeps));
+    });
+  };
   const menu = () =>
     h(
       'div.stack',
@@ -1117,7 +987,7 @@ async function start(): Promise<void> {
         menuTile('codex', '圖鑑', '魚蝦、水草、疾病', () => panelSheet('圖鑑', (p) => p.codexPanel(ctx, codexSeen))),
         menuTile('records', '紀錄', '水質趨勢、事件', () => panelSheet('紀錄', (p) => p.recordsPanel(ctx))),
         menuTile('guide', '教學', '再聽阿德老闆說一次', () => (sheet.close(), guide.restart())),
-        menuTile('settings', '設定', '聲音、顯示、存檔', () => sheet.open('設定', settings)),
+        menuTile('settings', '設定', '聲音、顯示、存檔', openSettings),
       ),
       menuTile(
         'newgame',
@@ -1546,10 +1416,10 @@ async function start(): Promise<void> {
   // 開缸順序（polish-to-9.md §8.1）：開場動畫一收起就停在空缸上，先親手倒沙，到「裝上設備」那一步才挑設備（推薦組合排第一）
   const openSetup = () => whenIntroDone(() => (showWelcome(), playSetup()));
   const openGearPicker = () =>
-    sheet.open(
+    panelSheet(
       '裝上設備',
-      () =>
-        setupPanel(ctx, () => {
+      (p) =>
+        p.setupPanel(ctx, () => {
           save();
           // 挑好設備：接著演「裝上設備」，之後注水、開機
           setupPress();
