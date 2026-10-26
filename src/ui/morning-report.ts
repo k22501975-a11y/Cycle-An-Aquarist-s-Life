@@ -1,5 +1,5 @@
 import { crisisText, type Crisis } from '../game/crisis';
-import { BLOOM_NOTE, fryHome, fryNeedHome, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
+import { BLOOM_NOTE, boxBlocked, fryHome, fryNeedHome, fryPrep, newTankCost, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
 import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, breederIds, breederName, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 import { cheapHeaterStep, crisisTodos, lingering, warmMoveStep, wipedOut } from './status';
@@ -32,7 +32,8 @@ export type ReportAction =
   | 'heater_credit' // 冬天沒錢換加熱棒：跟阿德賒一支（#397）
   | 'move_warm' // 冬天加熱棒弄不到：冷缸的魚搬去有加熱棒的缸（#400）
   | 'buy_heater' // 冬天錢不夠換同款：買撐得住的便宜加熱棒（#404）
-  | 'move_fry'; // 小魚在被吃、別缸養好水了：一鍵搬過去（#425）
+  | 'move_fry' // 小魚在被吃、別缸養好水了：一鍵搬過去（#425）
+  | 'cycle_tank'; // 小魚要搬家、新缸還沒養水：打開「新缸要怎麼養水？」（#428；tank 是新缸）
 
 export type ReportKind =
   | 'crisis'
@@ -205,6 +206,21 @@ function quietText(tanks: TankState[]): string {
   return tanks.some((t) => t.fish.some((f) => f.alive)) ? '昨晚很平靜，魚都在水草裡睡覺' : '昨晚很平靜，水草在燈下慢慢長';
 }
 
+/**
+ * 育幼盒幫不上忙時（盒裡有小魚、母魚又懷孕了，#428）小魚接下來去哪：另一缸養好水就搬過去、有空的新缸就先養水、
+ * 只有一缸就買第二缸。tank 是按鈕要切去的缸（搬小魚是這缸，養水是新缸）。
+ */
+function fryPlan(tanks: TankState[], index: number): { tip: string; action: ReportAction; tank?: number } {
+  const home = fryHome(tanks, index);
+  if (home !== null) return { tip: `${tankLabel(tanks, home)}養好水了，把小魚搬過去`, action: 'move_fry' };
+  const prep = fryPrep(tanks, index);
+  if (prep?.kind === 'cycle')
+    return prep.started ? { tip: `${tankLabel(tanks, prep.tank)}在養水，養好就叫你搬小魚`, action: 'fish' } : { tip: `${tankLabel(tanks, prep.tank)}先養水，養好就能把小魚搬過去`, action: 'cycle_tank', tank: prep.tank };
+  const need = newTankCost(tanks, 'nano20') - economy(tanks[0]).coins;
+  if (prep?.kind === 'buy') return prep.afford ? { tip: '買第二缸給小魚住，她就放得進盒子', action: 'shop_tank' } : { tip: `再存 ${need} 魚幣買第二缸給小魚住`, action: 'orders' };
+  return { tip: '小魚長到 1.6 cm 會自己回主缸', action: 'fish' };
+}
+
 /** 醒來後跟快照比，寫出早上報告。 */
 export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: number, crisis: Crisis | null): MorningReport {
   const items: ReportItem[] = [];
@@ -217,7 +233,7 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   tanks.forEach((t, index) => {
     const snap = before.tanks.find((s) => s.tank === t);
     const where = tanks.length > 1 ? `${tankLabel(tanks, index)}：` : '';
-    const push = (item: Omit<ReportItem, 'tank'>) => items.push({ ...item, tank: index, text: where + item.text });
+    const push = (item: Omit<ReportItem, 'tank'> & { tank?: number }) => items.push({ tank: index, ...item, text: where + item.text });
     const events = snap ? t.events.slice(snap.events ? t.events.lastIndexOf(snap.events) + 1 : 0) : [];
 
     // 死亡：每條都寫死因、當時的數值、下次怎麼避免（U4：死亡必須有原因可循）
@@ -267,11 +283,15 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       // 另一缸能收小魚（#425）：叫玩家一鍵搬過去，不叫撈進育幼盒
       const home = fryNeedHome(t) ? fryHome(tanks, index) : null;
       const shrimp = events.filter((x) => x.type === 'fry_eaten').every((e) => isShrimpSpecies((e.cause ?? 'guppy') as FishSpeciesId));
+      // 還沒有缸收得了、可是有空的新缸沒養水（#428）：按鈕直接打開養水
+      const prep = home === null ? fryPrep(tanks, index) : null;
+      const cycle = prep?.kind === 'cycle' && !prep.started ? prep.tank : null;
       push({
         kind: 'eaten',
         tone: 'warn',
         text: `昨晚有 ${fryEatenText(t, eaten, shrimp, home === null ? null : tankLabel(tanks, home), tanks.length > 1)}`,
-        action: home === null ? 'fry_box' : 'move_fry',
+        action: home !== null ? 'move_fry' : cycle !== null ? 'cycle_tank' : 'fry_box',
+        ...(cycle !== null ? { tank: cycle } : {}),
         count: eaten,
       });
     }
@@ -291,12 +311,19 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       const was = snap.fish.get(f.id);
       return f.alive && f.sex === 'female' && f.id !== dreamMom && was && usesNursery(f.species) && bellyStage(f.pregnancy) > bellyStage(was.pregnancy);
     });
-    if (mom)
-      push(
-        bellyStage(mom.pregnancy) === 2
-          ? { kind: 'belly', tone: 'good', text: '母魚肚子後面出現黑色胎斑，快生了', action: t.nurseryBox ? 'nursery' : 'fish', subjectId: mom.id }
-          : { kind: 'belly', tone: 'good', text: '母魚的肚子圓起來了，看得出懷孕', action: 'fish', subjectId: mom.id },
-      );
+    if (mom) {
+      const due = bellyStage(mom.pregnancy) === 2;
+      const plan = boxBlocked(t) ? fryPlan(tanks, index) : null;
+      if (plan)
+        // 盒裡還有小魚、母魚放不進去（g37 #428）：先說會怎樣，再說現在能做什麼（搬小魚、新缸養水、買第二缸）
+        push({ kind: 'belly', tone: 'warn', text: `${due ? '母魚快生了' : '母魚又懷孕了'}，育幼盒裡還有小魚，她放進去會吃牠們。${plan.tip}`, action: plan.action, ...(plan.tank !== undefined ? { tank: plan.tank } : {}), subjectId: mom.id });
+      else
+        push(
+          due
+            ? { kind: 'belly', tone: 'good', text: '母魚肚子後面出現黑色胎斑，快生了', action: t.nurseryBox ? 'nursery' : 'fish', subjectId: mom.id }
+            : { kind: 'belly', tone: 'good', text: '母魚的肚子圓起來了，看得出懷孕', action: 'fish', subjectId: mom.id },
+        );
+    }
     const swimOut = allFish(t).filter((f) => f.alive && (f.generation ?? 0) >= 1 && f.lengthCm >= FRY_SWIMS_OUT_CM && (snap.fish.get(f.id)?.lengthCm ?? FRY_SWIMS_OUT_CM) < FRY_SWIMS_OUT_CM);
     if (swimOut.length > 0 && !isShrimpSpecies(swimOut[0].species))
       push({ kind: 'fry_grew', tone: 'good', text: `${swimOut.length} 尾小魚長到 1 公分，開始游出水草搶飼料了`, action: 'fish', subjectId: swimOut[0].id, count: swimOut.length });
