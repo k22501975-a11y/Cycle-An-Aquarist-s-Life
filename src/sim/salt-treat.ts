@@ -6,15 +6,19 @@ import type { TankState } from './state';
 
 /* 粗鹽治白點的按鈕（設備面板用）：說為什麼不能用、真的加鹽。跟 salt-cure.ts 分開，字串不放開機必載（canSalt 是同一組條件）。 */
 
-/** 為什麼現在不能用粗鹽治白點；可以回 null。 */
-export function saltRefusal(t: TankState): string | null {
+/** 錢以外，為什麼現在不能用粗鹽治白點；可以回 null（面板的說明用：錢不夠時按鈕上已經寫了價錢）。 */
+export function saltBlocker(t: TankState): string | null {
   if (t.fish.some((f) => f.alive && isShrimpSpecies(f.species))) return '缸裡有蝦，蝦怕鹽，不能用';
   if (!t.fish.some((f) => f.alive && f.ich.stage === 'visible')) return '沒有魚身上有白點';
   if (saltWorking(t)) return '已經在用粗鹽治了';
   const heater = t.equipment.heater;
   if (!heater || heater.broken) return '要加熱棒把水溫調到 30°C，先把加熱棒弄好';
-  if (economy(t).coins < price('med:salt')) return `粗鹽要 ${price('med:salt')} 元`;
   return null;
+}
+
+/** 為什麼現在不能用粗鹽治白點（含錢不夠）；可以回 null。 */
+export function saltRefusal(t: TankState): string | null {
+  return saltBlocker(t) ?? (economy(t).coins < price('med:salt') ? `粗鹽要 ${price('med:salt')} 元` : null);
 }
 
 /** 把鹽補到一份、加熱棒調到 30°C（花 20 元），回傳做了沒。 */
