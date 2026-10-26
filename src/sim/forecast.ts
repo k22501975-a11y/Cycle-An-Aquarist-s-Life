@@ -1,9 +1,11 @@
+import { FORECAST_HOURS } from './clock';
 import { linkTanks } from './household';
 import { hasSteadyFood } from './feeders';
-import { freeAmmonia, hoursUntilStarving, ICH_CAUSE_LABELS } from './processes/fauna';
+import { temperatureFactor } from './chemistry';
+import { DAYS_TO_STARVING, fastSpec, freeAmmonia, GRAZING_BONUS, HUNGER_SLOWDOWN, ICH_CAUSE_LABELS, isYoung, MIN_METABOLISM, starvation, YOUNG_HUNGER_RATE } from './processes/fauna';
 import { FISH_SPECIES } from './species';
 import { TICK_HOURS, step } from './step';
-import type { IchCause, SimEvent, TankState } from './state';
+import type { Fish, IchCause, SimEvent, TankState } from './state';
 
 /**
  * 推播用的預測（GAME_DESIGN 第 11 節）：模擬是確定的（亂數狀態存在缸裡），
@@ -24,8 +26,6 @@ export interface ForecastAlert {
   body: string;
 }
 
-/** 預設看多遠（遊戲小時）：72 小時約現實 10 小時，夠睡一覺。 */
-export const FORECAST_HOURS = 72;
 /** 開始難受的門檻，比真的傷身體的門檻低一點，留時間給玩家處理。 */
 const NH3_WARN = 0.03;
 const NO2_WARN = 0.8;
@@ -133,3 +133,21 @@ export function forecast(tanks: TankState[], hoursAhead = FORECAST_HOURS): Forec
 
 /** 離線補算最多兩週，再遠的餓死提醒不排。 */
 const STARVE_NOTICE_HOURS = 14 * 24;
+
+/**
+ * 從現在起都不餵的話，這條魚幾個遊戲小時後體力耗盡、開始餓死（照現在的水溫估，給離線前的提醒用）。
+ */
+export function hoursUntilStarving(state: TankState, fish: Fish): number {
+  const spec = fastSpec(fish);
+  const tf = temperatureFactor(state.water.tempC);
+  const youngRate = isYoung(fish) ? YOUNG_HUNGER_RATE : 1;
+  let hunger = fish.hunger;
+  let h = 0;
+  while (hunger < spec.start && h < 24 * 60) {
+    const slowdown = Math.max(MIN_METABOLISM, 1 - HUNGER_SLOWDOWN * Math.max(0, hunger - 0.3));
+    hunger += (1 / 24 / DAYS_TO_STARVING) * Math.sqrt(tf) * slowdown * youngRate;
+    h += 1;
+  }
+  const grazing = state.plants.length > 0 || state.algae > 0.05 ? GRAZING_BONUS : 1;
+  return h + Math.max(0, 1 - starvation(state, fish)) * spec.days * 24 * grazing;
+}

@@ -31,10 +31,10 @@
 |---|---|
 | 冷啟動到看得到水缸（手機 4G） | ≤ 3 秒 |
 | 1. 主程式（入口 JS）gzip 後 | ≤ 300 KB（CI，`--dist`；目前約 261 KB） |
-| 2. 開機必載：入口、它靜態 import 的 chunk（Vite manifest 的 `imports`），加上開機一定會載的動態 chunk（`check-assets.mjs` 的 `BOOT_DYNAMIC`：WebGL 渲染器、音效引擎）gzip 後 | ≤ 330 KB（CI，`--dist`；目前約 301 KB） |
+| 2. 開機必載：入口、它靜態 import 的 chunk（Vite manifest 的 `imports`），加上開機一定會載的動態 chunk（`check-assets.mjs` 的 `BOOT_DYNAMIC`：WebGL 渲染器、音效引擎）gzip 後 | ≤ 330 KB（CI，`--dist`；目前約 310 KB） |
 | 2b. 開機實際下載的 JS（含開機時動態載入的 WebGL 渲染器、Pixi 環境擴充、面板包） | ≤ 420 KB（效能與安全用 Playwright 量，每個候選版本一次；2026-10-21 約 362 KB） |
 | 3. JS 程式碼 gzip 後合計（防膨脹：延後載入的 chunk、Worker 也算） | ≤ 520 KB（CI，`--dist`；目前約 420 KB） |
-| 4. 開機必載以外的單一 chunk（延後載入的面板、Worker）gzip 後 | ≤ 60 KB（CI，`--dist`；目前最大是面板包約 29 KB） |
+| 4. 開機必載以外的單一 chunk（延後載入的面板、Worker）gzip 後 | ≤ 60 KB（CI，`--dist`；目前最大是面板包約 58 KB） |
 | 存檔大小 | ≤ 1 MB（localStorage 有 5 MB 上限，還要留給其他資料） |
 
 把只在特定時候用到的介面改成延後載入（`import()`，放進 `src/ui/deferred-ui.ts`，主畫面出來後閒置時預載），可以降第 1、2 條；開機一定要等的模組拆出去只降第 1 條，要加進 `BOOT_DYNAMIC`。第 3 條是總量，延後載入也算，避免整體無限長大。

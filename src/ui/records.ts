@@ -3,7 +3,7 @@ import { lineChart } from './charts';
 import { h } from './dom';
 import { describeEvent } from './labels';
 import type { PanelContext } from './panels';
-import { iconTabs } from './shop-cards';
+import { iconTabs } from './card-kit';
 import { clockLabel } from './status';
 
 /** 趨勢圖看最近幾天。 */

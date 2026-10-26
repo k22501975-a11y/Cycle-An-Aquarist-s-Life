@@ -14,12 +14,12 @@ export interface TestKitReading {
   kh: number;
 }
 
-const AMMONIA_SCALE = [0, 0.25, 0.5, 1, 2, 4, 8];
-const NITRITE_SCALE = [0, 0.25, 0.5, 1, 2, 5];
+export const AMMONIA_SCALE = [0, 0.25, 0.5, 1, 2, 4, 8];
+export const NITRITE_SCALE = [0, 0.25, 0.5, 1, 2, 5];
 const NITRATE_SCALE = [0, 5, 10, 20, 40, 80, 160];
 const PH_SCALE = [6.0, 6.4, 6.6, 6.8, 7.0, 7.2, 7.4, 7.6, 7.8, 8.0, 8.2, 8.4, 8.8];
 
-function nearest(scale: number[], value: number): number {
+export function nearest(scale: number[], value: number): number {
   return scale.reduce((best, v) => (Math.abs(v - value) < Math.abs(best - value) ? v : best), scale[0]);
 }
 
@@ -51,17 +51,6 @@ export function measuredProblem(state: TankState): 'ammonia' | 'nitrite' | null 
 /** 換水的兩個常用量：一般三成、水變差時大換一半（換水面板的預設鈕也是這兩個）。 */
 export const NORMAL_WATER_CHANGE = 0.3;
 export const BIG_WATER_CHANGE = 0.5;
-
-/**
- * 建議換多少水（#237）：量得到氨或亞硝時，挑換完讀數會掉一格的那個量（三成不夠就換一半），沒有問題就是平常的三成。
- * 新缸第 1 天氨讀 0.25（實際約 0.22）：換三成只降到 0.16，色卡還是 0.25；換一半降到 0.11，才讀得到 0。
- */
-export function suggestedWaterChange(state: TankState): number {
-  const problem = measuredProblem(state);
-  if (!problem) return NORMAL_WATER_CHANGE;
-  const [scale, value] = problem === 'ammonia' ? [AMMONIA_SCALE, state.water.tan] : [NITRITE_SCALE, state.water.no2];
-  return nearest(scale, value * (1 - NORMAL_WATER_CHANGE)) < nearest(scale, value) ? NORMAL_WATER_CHANGE : BIG_WATER_CHANGE;
-}
 
 export type Symptom =
   | 'hiding'

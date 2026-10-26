@@ -103,7 +103,7 @@ const ichFish = (t: TankState) => t.fish.filter((f) => f.alive && f.ich.stage ==
  * 這缸的白點大約幾天會掉（照現在的水溫或加熱棒設的溫度，取高的；加熱棒還在慢慢升溫就照中間算）。
  * assumeHeat：照任務卡把水溫調到 ichHeatC 的話要幾天（還沒調時拿來算藥夠不夠）；exact：不取整數（算藥夠不夠用）。
  */
-function ichDropDays(t: TankState, assumeHeat = false, exact = false): number {
+export function ichDropDays(t: TankState, assumeHeat = false, exact = false): number {
   const heater = workingHeater(t);
   // 壞了的加熱棒調不上去，不能照調高算
   const target = Math.max(heater?.targetC ?? 0, assumeHeat && heater ? ichHeatC(t) : 0);
@@ -138,13 +138,6 @@ export function ichMedShort(t: TankState): boolean {
 /** 這缸正在治白點：有魚身上有白點、水裡的藥還有效。 */
 export function treatingIch(t: TankState): boolean {
   return t.water.medication >= ICH_MED_WORKING && ichFish(t).length > 0;
-}
-
-/** 治白點中換掉這麼多水，藥會不會被沖淡到撐不到白點掉（換水時提醒要補藥，#384）。 */
-export function changeDilutesIch(t: TankState, fraction: number): boolean {
-  if (!treatingIch(t)) return false;
-  const med = t.water.medication * (1 - fraction);
-  return med < ICH_MED_WORKING || Math.log(med / ICH_MED_WORKING) / 0.01 / 24 < ichDropDays(t, true, true) + ICH_MED_TAIL_DAYS;
 }
 
 /** 這缸還有魚等著下藥：看得出別的病，或有白點但水裡的白點藥退了、撐不到白點掉。兩缸時「去下藥」切到這缸（#356）。 */

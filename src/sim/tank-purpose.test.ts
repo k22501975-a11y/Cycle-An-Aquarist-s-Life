@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
 import { addFish, addPlant, buyTank, economy, maxLengthCm } from './index';
 import { checkGoals, goalState, nextGoals, PURPOSE_GOAL_COUNT } from './goals';
-import { purposeCost, setTankPurpose, suggestPurpose, TANK_PURPOSES } from './tank-purpose';
+import { purposeCost, TANK_PURPOSES } from './tank-purpose';
+import { setTankPurpose, suggestPurpose } from './tank-purpose-actions';
 import type { TankState } from './state';
 
 const calmFish = { carriesIch: false, carries: [] };

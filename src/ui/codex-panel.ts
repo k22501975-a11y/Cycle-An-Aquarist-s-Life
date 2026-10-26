@@ -3,7 +3,8 @@ import { artImg, type ArtIcon } from './art-icons';
 import { CODEX, isUnlocked, type CodexCategory, type CodexEntry } from './codex';
 import { h } from './dom';
 import type { PanelContext } from './panels';
-import { iconTabs, plantArt, speciesArt } from './shop-cards';
+import { plantArt, speciesArt } from './shop-cards';
+import { iconTabs } from './card-kit';
 
 const ART = `${import.meta.env.BASE_URL}art/`;
 

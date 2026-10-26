@@ -1,7 +1,8 @@
 import { applySetup, economy, RECOMMENDED_SETUP, setupCards, setupCost, setupRefusal, withTank, type SetupCategory, type SetupChoice, type SetupDraft } from '../sim';
 import { h } from './dom';
 import type { PanelContext } from './panels';
-import { cardGrid, priceTag, shopCard } from './shop-cards';
+import { priceTag } from './shop-cards';
+import { cardGrid, shopCard } from './card-kit';
 
 /**
  * 挑設備（F1-a；polish-to-9.md §8.1 起在開缸的「裝上設備」那一步才打開）：最上面是推薦組合一鍵裝好，

@@ -16,3 +16,5 @@ export { awayReport, morningReport, slimReport, snapshot } from './morning-repor
 export { chooseOption, cycleCard, lineName } from '../sim/choices';
 export { choiceVisual } from './choice-card';
 setBreedingStep(breedingStep);
+export { setupPanel } from './setup-panel';
+export { flyCoins, rewardBurst } from './coin-fly';
