@@ -1448,10 +1448,10 @@ async function start(): Promise<void> {
       case 'move_warm': {
         // 冬天加熱棒弄不到（#400）：冷缸的魚連袋子泡進有加熱棒的缸
         if (tank === undefined) return;
-        const moved = game.actAll((tanks) => sim.moveToWarmTank(tanks, tank));
+        const moved = game.actAll((tanks) => sim.moveAndInsulate(tanks, tank));
         if (!moved) return toasts.show('現在沒有暖缸放得下', 'warn');
         game.switchTo(moved.to);
-        toasts.show(`把 ${moved.count} 尾連袋子泡進${sim.tankLabel(game.tanks, moved.to)}，水溫差不多了再放出來${moved.boxed > 0 ? `，${moved.boxed} 尾小魚先放進育幼盒，免得被大魚吃` : ''}`);
+        toasts.show(`把 ${moved.count} 尾連袋子泡進${sim.tankLabel(game.tanks, moved.to)}，水溫差不多了再放出來${moved.boxed > 0 ? `，${moved.boxed} 尾小魚先放進育幼盒，免得被大魚吃` : ''}${moved.insulated ? `；${sim.tankLabel(game.tanks, tank)}留下的包上毛巾保溫` : ''}`);
         return;
       }
     }

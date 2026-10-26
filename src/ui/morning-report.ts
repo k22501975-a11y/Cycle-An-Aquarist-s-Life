@@ -487,16 +487,21 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       else items.push({ kind: 'crisis', tank: index, tone: 'bad', text: cheap, action: 'buy_heater', goLabel: '買一支', standing: true });
       return;
     }
-    const text = warmMoveStep(tanks, index);
-    if (!text) return;
-    if (warmMove(tanks, index)?.fish.length === tanks[index].fish.filter((f) => f.alive).length) movesAll.add(index);
+    const step = warmMoveStep(tanks, index);
+    if (!step) return;
+    // 只搬得走一部分、留下的要保溫：併成一行，點「搬魚」兩件一起做（g34：同一缸寫了兩行，polish-to-9 §7.3）
+    movesAll.add(index);
+    const all = warmMove(tanks, index)?.fish.length === tanks[index].fish.filter((f) => f.alive).length;
+    const both = !all && needsInsulation(tanks[index]);
+    const text = both ? `${step}，其他的先保溫` : step;
+    const goLabel = '搬魚';
     const cold = items.find((i) => i.tank === index && i.action === 'equipment' && /水溫偏低/.test(i.text));
-    if (cold) Object.assign(cold, { kind: 'crisis', text, action: 'move_warm', goLabel: '搬魚' });
-    else items.push({ kind: 'crisis', tank: index, tone: 'bad', text, action: 'move_warm', goLabel: '搬魚', standing: true });
+    if (cold) Object.assign(cold, { kind: 'crisis', text, action: 'move_warm', goLabel });
+    else items.push({ kind: 'crisis', tank: index, tone: 'bad', text, action: 'move_warm', goLabel, standing: true });
   });
   // 冬天沒加熱棒（#397，mvp.md §4.4.6）：第一行叫玩家先保溫，點一下就做好
   tanks.forEach((t, index) => {
-    // 魚全都要搬走的缸不用再叫保溫
+    // 要搬魚的缸已經在搬魚那行說了（魚全搬走就不用保溫）
     if (!needsInsulation(t) || movesAll.has(index)) return;
     const where = tanks.length > 1 ? `${tankLabel(tanks, index)}：` : '';
     const text = `${where}水溫偏低（${t.water.tempC.toFixed(1)}°C），先保溫：缸外包毛巾、泡溫水瓶`;
