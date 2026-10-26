@@ -38,11 +38,13 @@ export { bacteriaCapacity, CYCLE_DELAY_PER_BATCH_H, cycleMaturity, CYCLED_BACTER
 export { currentPar } from './processes/plants';
 export { hidingFactor, MAX_FAUNA, sizeRatio } from './processes/population';
 export { breakHeater, HEATER_EXPOSED_LEVEL, HEATER_FAILURE_GAP_DAYS, heaterLiftC, heaterWarmup, INSULATED_LOSS_SHARE, lightHeatC, waterLevelL } from './processes/thermal';
-export * from './mall';
+// mall.ts 不從這裡匯出：只有商城面板和設備面板用，從這裡匯出會被算進開機必載
 export * from './growth';
 export * from './split';
 export * from './raise-cash';
 export * from './winter-rescue';
+export * from './salt-cure';
+// salt-treat.ts 不從這裡匯出：只有設備面板用，從這裡匯出會被算進開機必載
 export * from './acclimation';
 export * from './drip';
 export * from './snails';

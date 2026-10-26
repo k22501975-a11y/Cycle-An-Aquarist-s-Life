@@ -16,6 +16,7 @@ import { updateParental } from './parental';
 import { noteStarterPack, trackRaised, updateEconomy } from './economy';
 import { trackArrivals } from './arrivals';
 import { settleTurbidity } from './aquascape';
+import { updateSaltCure } from './salt-cure';
 import { TEMP_LOG_HOURS, type TankState } from './state';
 
 export const TICK_HOURS = TICK_GAME_SECONDS / 3600;
@@ -32,6 +33,7 @@ export function step(state: TankState, dtHours: number = TICK_HOURS): void {
   updateGases(state, dtHours);
   updateFeeders(state, dtHours);
   updateFauna(state, dtHours);
+  updateSaltCure(state);
   updatePopulation(state, dtHours);
   updateParental(state, dtHours);
   updateSnails(state, dtHours);

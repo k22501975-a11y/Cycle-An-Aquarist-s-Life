@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, feed, createTank, cureRefusal, FILTERS, freeAmmonia, HEATERS, infect, LIGHTS, linkTanks, mallBag, MAX_TANKS, placeMallTankset, setMallBag, step, TANKS, tanksetRefusal, useCure } from '.';
+import { addFish, feed, createTank, FILTERS, freeAmmonia, HEATERS, infect, LIGHTS, linkTanks, MAX_TANKS, step, TANKS } from '.';
+import { cureRefusal, mallBag, placeMallTankset, setMallBag, tanksetRefusal, useCure } from './mall';
 import type { TankState } from '.';
 
 const home = (): TankState[] => {

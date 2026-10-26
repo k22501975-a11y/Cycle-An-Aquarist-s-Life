@@ -70,6 +70,7 @@ export const PRICES: Record<string, number> = {
   'hardscape:slate': 200,
   'hardscape:driftwood': 350,
   'med:ich': 150,
+  'med:salt': 20,
   'med:antibiotic': 250,
   'med:dewormer': 200,
   'med:snail': 120,
@@ -169,6 +170,8 @@ export interface Economy {
   loanWaived?: number;
   /** 最近一次加熱棒故障是第幾個遊戲小時（全家共用）：7 天內不會再壞第二支（mvp.md §4.4.6）。 */
   heaterBrokeHours?: number;
+  /** 最近一次危機是第幾個遊戲小時（設備壞、一天死 3 尾以上、生病；全家共用）：30 天內、手上又少，保底單出得比較快（mvp.md §4.4.6 g33）。 */
+  crisisHours?: number;
   /** 手上的插枝裡有幾株是寶箱來的：只能種，不能賣回店家、交單、上架或送人換錢（polish-to-9.md §4）。 */
   chestCuttings?: Partial<Record<PlantSpeciesId, number>>;
   /** 已經套用到伺服器帳本的第幾筆（市場的收支，docs/ledger.md）；舊存檔沒有＝0。 */
@@ -307,7 +310,7 @@ export function applyLedger(state: TankState, entry: { delta: number; ledgerSeq:
 /** 每筆收入扣幾成還阿德加熱棒的錢（mvp.md §4.4.6 g33 之後：原本一半，危機過後錢回不來）。 */
 export const LOAN_SHARE = 0.3;
 /** 手上（入帳後）低於這個數就先不扣還款：阿德說不急（g33）。 */
-export const LOAN_PAUSE_COINS = 200;
+export const LOAN_PAUSE_COINS = 250;
 
 /** 這缸還沒穩：有活魚，而且有魚看得到病、加熱棒壞了或卡住、停電，或水溫超出魚的適溫（還款暫停的「有病、有危機」）。 */
 function unsettled(t: TankState): boolean {
@@ -322,7 +325,7 @@ function unsettled(t: TankState): boolean {
 }
 
 /**
- * 這筆收入要扣多少還阿德（g33）：每筆扣 LOAN_SHARE（無條件進位），扣完不能讓手上低於 LOAN_PAUSE_COINS 以下就先不扣；
+ * 這筆收入要扣多少還阿德（g33）：每筆扣 LOAN_SHARE（無條件進位）；這筆入帳後（扣款前）手上低於 LOAN_PAUSE_COINS 就先不扣；
  * 任何一缸有病、有危機也先不扣。coinsAfter 是這筆入帳後手上有多少，owed 是還欠多少。緊急賣魚算到手的錢也用這個（raise-cash.ts）。
  */
 export function loanPayment(state: TankState, coinsAfter: number, income: number, owed = economy(state).heaterLoan ?? 0): number {

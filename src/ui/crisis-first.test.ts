@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, canDeliverAnyOrder, emergencySale, orderBoard, starterPackAllCold, moveToWarmTank, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, buyCheapHeater, coldestRoomC, sellFish, creditTarget, heaterCreditRefusal, takeHeaterCredit, fishBuybackPrice, installHeater, noteEarned, type ShopOrder, type TankSpec, type TankState } from '../sim';
+import { addFish, addPlant, FISH_SPECIES, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, canDeliverAnyOrder, emergencySale, orderBoard, starterPackAllCold, moveToWarmTank, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, buyCheapHeater, coldestRoomC, sellFish, creditTarget, heaterCreditRefusal, takeHeaterCredit, fishBuybackPrice, installHeater, noteEarned, type ShopOrder, type TankSpec, type TankState } from '../sim';
 import { crisisTodos, capsSummary, guideStep, heaterCanWait, lingering, todos, warmMoveStep, wipedOut } from './status';
 import { morningReport, REPORT_LINES, slimReport, snapshot } from './morning-report';
 import { fishName } from './labels';
@@ -328,12 +328,14 @@ describe('起步包放對缸、買不起藥有下一步（#391，g27）', () => 
     expect(starterPackTank(tanks, 0)).toBe(1);
   });
 
-  it('藥買不起：說還差多少、賣魚湊錢；錢夠就叫下藥', () => {
+  it('藥買不起：先推 20 元的粗鹽；連粗鹽都買不起才說還差多少、賣魚湊錢；錢夠就叫下藥', () => {
     const { tanks, b } = two(24);
     b.fish[0].ich = { stage: 'visible', progress: 0, cause: 'relapse' };
     const cost = price('med:ich');
     economy(b).coins = 25;
-    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'sell', text: `藥要 ${cost} 元（還差 ${cost - 25} 元），賣 3 尾魚給水族店（約 175 元）湊錢` });
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'treat', text: `白點藥要 ${cost} 元買不起，先用便宜的治法：水溫調到 30°C、加一點粗鹽（${price('med:salt')} 元），約 7 天會好` });
+    economy(b).coins = 10;
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'sell', text: `藥要 ${cost} 元（還差 ${cost - 10} 元），賣 3 尾魚給水族店（約 175 元）湊錢` });
     economy(b).coins = cost;
     expect(guideStep(tanks, 'g')).toMatchObject({ target: 'treat', text: '有魚生病了，去下藥' });
   });
@@ -695,16 +697,23 @@ describe('冬天搬去有加熱棒的缸、空缸不再叫保溫（#400，g30）
 
 
 describe('冬天危機過後（mvp.md §4.4.6 g33）', () => {
-  it('新加熱棒升溫中：不出「水溫偏低」，任務卡說約多久回到設定溫度', () => {
+  it('新加熱棒升溫中：不出「水溫偏低」，待辦說約多久回到設定溫度；任務卡照常說別的事（#410 架構）', () => {
     const a = tank(71);
     a.environment.roomTempC = 16;
     a.water.tempC = 19;
     installHeater(a, HEATERS.h50);
     expect(todos(a, []).some((x) => /水溫偏低/.test(x.text))).toBe(false);
-    const step = guideStep([a], 'g');
-    expect(step).toMatchObject({ target: 'equipment' });
-    expect(step?.text).toMatch(/^新加熱棒加熱中，約 \d+ (小時|天)回到 25°C$/);
+    expect(todos(a, []).find((x) => /^新加熱棒加熱中/.test(x.text))?.text).toMatch(/^新加熱棒加熱中，約 \d+ (小時|天)回到 25°C$/);
+    expect(guideStep([a], 'g')?.text).not.toMatch(/水溫偏低|加熱中/);
     expect(crisisTodos([a])).toEqual([]);
+    // 水溫離致死低溫不到 1°C：照樣是危機，先保溫
+    a.water.tempC = FISH_SPECIES.guppy.tempLethal.min + 0.5;
+    expect(guideStep([a], 'g')).toMatchObject({ target: 'insulate' });
+    // 目標調得比適溫低：不算加熱中
+    a.water.tempC = 19;
+    a.equipment.heater!.targetC = 20;
+    expect(todos(a, []).some((x) => /^新加熱棒加熱中/.test(x.text))).toBe(false);
+    a.equipment.heater!.targetC = 25;
     // 加熱棒撐不到魚的致死低溫以上：照樣警報
     a.equipment.heater = { spec: { ...HEATERS.h25, watts: 2 }, targetC: 25, broken: false, heating: false };
     expect(todos(a, []).some((x) => /水溫偏低/.test(x.text))).toBe(true);

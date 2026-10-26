@@ -41,8 +41,11 @@ import {
   PLANT_PRICES,
   SNAILS,
   INCOME_GAP_DAYS,
-  LOAN_GAP_COINS,
-  LOAN_GAP_DAYS,
+  RECOVERY_GAP_COINS,
+  RECOVERY_GAP_DAYS,
+  RECOVERY_START_DAY,
+  RECOVERY_WINDOW_DAYS,
+  recordEvent,
   FRY_BUY_DAYS,
   isFrySale,
   sellFish,
@@ -514,20 +517,61 @@ describe('收入空檔保底（polish-to-9.md §4）', () => {
     expect(e.lastEarnedDay).toBe(20);
   });
 
-  it(`還欠阿德加熱棒錢、手上又低於 ${LOAN_GAP_COINS} 元：${LOAN_GAP_DAYS} 天沒真收入就出保底單（mvp.md §4.4.6 g33）`, () => {
+  it(`危機過後 ${RECOVERY_WINDOW_DAYS} 天內、手上又低於 ${RECOVERY_GAP_COINS} 元：${RECOVERY_GAP_DAYS} 天沒真收入就出保底單（mvp.md §4.4.6 g33）`, () => {
     const s = tank();
-    s.hours = 20 * 24 + 8;
+    const day = RECOVERY_START_DAY + 10;
+    s.hours = day * 24 + 8;
     const e = economy(s);
     grown(s);
     const board = fishOnly(s);
-    e.lastEarnedDay = 20 - LOAN_GAP_DAYS;
+    e.lastEarnedDay = day - RECOVERY_GAP_DAYS;
+    e.coins = 60;
+    // 只是欠錢、沒有最近的危機：照平常的規則
+    e.heaterLoan = 280;
     updateOrders(s);
     expect(board.orders.some((o) => o.gap)).toBe(false);
-    e.heaterLoan = 280;
-    e.coins = 60;
+    // 加熱棒壞了（危機）
+    recordEvent(s, { type: 'heater_broke' });
+    expect(e.crisisHours).toBe(s.hours);
     s.hours += 1;
     updateOrders(s);
     expect(board.orders.filter((o) => o.gap)).toHaveLength(1);
+    // 手上有 200 元以上就照平常的規則
+    board.orders = board.orders.filter((o) => !o.gap);
+    e.coins = RECOVERY_GAP_COINS;
+    s.hours += 1;
+    updateOrders(s);
+    expect(board.orders.some((o) => o.gap)).toBe(false);
+  });
+
+  it(`危機超過 ${RECOVERY_WINDOW_DAYS} 天、或開局 ${RECOVERY_START_DAY} 天內：照平常的規則`, () => {
+    const s = tank();
+    const e = economy(s);
+    grown(s);
+    const board = fishOnly(s);
+    e.coins = 60;
+    s.hours = 20 * 24 + 8;
+    e.lastEarnedDay = 20 - RECOVERY_GAP_DAYS;
+    recordEvent(s, { type: 'heater_broke' });
+    s.hours += 1;
+    updateOrders(s);
+    expect(board.orders.some((o) => o.gap)).toBe(false);
+    const day = RECOVERY_START_DAY + RECOVERY_WINDOW_DAYS + 5;
+    s.hours = day * 24 + 8;
+    e.lastEarnedDay = day - RECOVERY_GAP_DAYS;
+    e.crisisHours = (day - RECOVERY_WINDOW_DAYS - 1) * 24;
+    updateOrders(s);
+    expect(board.orders.some((o) => o.gap)).toBe(false);
+  });
+
+  it('一天死 3 尾以上才算危機，死 1、2 尾不算', () => {
+    const s = tank();
+    const e = economy(s);
+    recordEvent(s, { type: 'fish_died', cause: 'old_age' });
+    recordEvent(s, { type: 'fish_died', cause: 'old_age' });
+    expect(e.crisisHours).toBeUndefined();
+    recordEvent(s, { type: 'fish_died', cause: 'old_age' });
+    expect(e.crisisHours).toBe(s.hours);
   });
 
   it('一尾 2 元的小魚不算真收入：賣了也不重算收入空檔（g33）', () => {

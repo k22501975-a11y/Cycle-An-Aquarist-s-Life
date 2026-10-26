@@ -1,4 +1,4 @@
-import { mallBag, placeMallTankset, setMallBag, tanksetRefusal, type MallItemId } from '../sim';
+import { mallBag, placeMallTankset, setMallBag, tanksetRefusal, type MallItemId } from '../sim/mall';
 import type { Game } from '../game/game';
 import type { CloudClient, PointsCatalog } from '../net/cloud';
 import type { SoundId } from '../audio/sounds';

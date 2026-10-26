@@ -52,6 +52,8 @@ export function waterChange(state: TankState, fraction: number, options: WaterCh
   water.antibiotic = mix(water.antibiotic ?? 0, 0);
   water.dewormer = mix(water.dewormer ?? 0, 0);
   if (water.copper) water.copper = mix(water.copper, 0);
+  // 粗鹽療程中換水照換掉的量補鹽（同一包粗鹽），療程結束了才沖淡
+  if (water.salt && !state.saltTreat) water.salt = mix(water.salt, 0);
   water.ichPathogen = mix(water.ichPathogen, 0);
   water.ichCysts *= 1 - f * 0.3;
   // 換水時順便虹吸底砂，帶走部分殘餌與髒污。
@@ -93,6 +95,7 @@ function fillUp(state: TankState, tempC?: number): number {
   water.antibiotic = (water.antibiotic ?? 0) * keep;
   water.dewormer = (water.dewormer ?? 0) * keep;
   if (water.copper) water.copper *= keep;
+  if (water.salt) water.salt *= keep;
   water.tempC = water.tempC * keep + newTemp * fresh;
   water.levelL = undefined;
   return add;

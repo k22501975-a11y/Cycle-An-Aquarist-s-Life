@@ -109,7 +109,8 @@ describe('冬天加熱棒都壞、沒錢、沒單可交（#397，mvp.md §4.4.6 
     // 一缸賣魚換好、另一缸（90L 要 100W，賣魚湊不到）先保溫再跟阿德賒
     expect(did.some((d) => d.endsWith('insulate')), did.join(', ')).toBe(true);
     expect(did.some((d) => d.endsWith('sell') || d.endsWith('heater_credit')), did.join(', ')).toBe(true);
-    expect(tanks.every((t) => t.equipment.heater && !t.equipment.heater.broken)).toBe(true);
+    // 錢不多時另一缸的魚集中過去、那缸先不修（g33 seed 3「先併缸」）：有魚的缸加熱棒都是好的
+    expect(tanks.every((t) => !t.fish.some((f) => f.alive) || (t.equipment.heater && !t.equipment.heater.broken)), did.join(', ')).toBe(true);
     expect(died, did.join(', ')).toBeLessThanOrEqual(2);
     expect(tanks.reduce((n, t) => n + t.fish.filter((f) => f.alive).length, 0)).toBeGreaterThan(fish / 2);
   }, 60_000);

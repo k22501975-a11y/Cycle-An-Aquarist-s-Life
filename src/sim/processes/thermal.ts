@@ -47,6 +47,7 @@ function evaporate(state: TankState, dt: number): void {
   if (water.antibiotic) water.antibiotic *= k;
   if (water.dewormer) water.dewormer *= k;
   if (water.copper) water.copper *= k;
+  if (water.salt) water.salt *= k;
   water.levelL = next;
 }
 
@@ -104,7 +105,8 @@ export function heaterLiftC(volumeL: number, watts: number): number {
 export function heaterWarmup(state: TankState, minC: number): { hours: number; toC: number } | null {
   const { water, equipment, environment } = state;
   const heater = equipment.heater;
-  if (!heater || heater.broken || heater.stuckOn || environment.powerOut || water.tempC >= minC) return null;
+  // 目標調得比適溫低：永遠升不到，不算加熱中（要叫玩家調高，#410 架構）
+  if (!heater || heater.broken || heater.stuckOn || environment.powerOut || water.tempC >= minC || heater.targetC < minC) return null;
   const volume = equipment.tank.volumeL;
   const lift = heaterLiftC(volume, heater.spec.watts);
   if (environment.roomTempC - (environment.roomSwingC ?? 1.5) + lift < minC) return null;
