@@ -97,11 +97,23 @@ test('新手任務 1～9：照老闆的引導從新存檔玩得完，教學第 4
   const plantX = () => gameState<number>(page, '(window.cycle.sim.plantPlacement(s.plants[0])).x');
   const x0 = await plantX();
   // 手指比劃的位置就是剛買的那株（畫面座標要加上缸的位置）
-  const at = await page.evaluate(() => {
-    const q = (window as unknown as { cycle: { view: { scapeHintPos(): { x: number; y: number } } } }).cycle.view.scapeHintPos();
-    const r = document.getElementById('stage')!.getBoundingClientRect();
-    return { x: q.x + r.x, y: q.y + r.y };
-  });
+  const hint = () =>
+    page.evaluate(() => {
+      const q = (window as unknown as { cycle: { view: { scapeHintPos(): { x: number; y: number } | null } } }).cycle.view.scapeHintPos();
+      const r = document.getElementById('stage')!.getBoundingClientRect();
+      return q && { x: Math.round(q.x + r.x), y: Math.round(q.y + r.y) };
+    });
+  // 剛買的那株要畫好、位置停住了再按（機器慢的時候頭幾格還在排版，太早按會按空）
+  let last = await hint();
+  await expect
+    .poll(async () => {
+      const now = await hint();
+      const still = now !== null && last !== null && now.x === last.x && now.y === last.y;
+      last = now;
+      return still;
+    })
+    .toBe(true);
+  const at = last!;
   await page.mouse.move(at.x, at.y);
   await page.mouse.down();
   await page.mouse.move(at.x - 60, at.y, { steps: 6 });
