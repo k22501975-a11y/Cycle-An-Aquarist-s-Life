@@ -35,12 +35,13 @@ test('先停在開始畫面，按「開始」才演開場動畫；演完會自�
   await page.locator('button.tool').first().waitFor({ state: 'attached', timeout: 60_000 });
   await page.waitForTimeout(800);
   await expect(intro).toHaveClass(/gate/);
-  // 阿德老闆的歡迎卡（含夢想魚小卡）等動畫收起來才出，不會被蓋在底下自己消失（#256）
-  await expect(page.locator('.setup-welcome')).toHaveCount(0);
+  // 阿德老闆的歡迎（缸上方一行字＋角落的夢想魚小卡）等動畫收起來才出，不會被蓋在底下自己消失（#256、polish-to-9 §8.1）
+  await expect(page.locator('.opening-line')).toHaveCount(0);
   await startBtn.click();
   await expect(intro).not.toHaveClass(/gate/);
   await expect(intro).toHaveCount(0, { timeout: 60_000 });
-  await expect(page.locator('.setup-welcome .dream-teaser')).toBeVisible();
+  await expect(page.locator('.opening-line')).toBeVisible();
+  await expect(page.locator('.dream-corner .dream-teaser')).toBeVisible();
   // 第二次開是短版，點一下就收（遊戲載好之後）；機器慢的時候點之前可能已經演完在淡出，那就不用點
   await page.goto('/?intro');
   await expect(intro).toHaveClass(/short/);

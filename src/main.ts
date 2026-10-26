@@ -38,12 +38,13 @@ import { ICONS } from './ui/icons';
 import { DEATH_ADVICE, describeEvent, FIRST_PESTS_LINE, firstDeathOwnerLine, fishName, fishStrain, pluralEventText } from './ui/labels';
 import { mergeEventToasts, type EventToast } from './ui/notify-gate';
 import { personaChip } from './ui/persona';
-import { dreamCard, dreamStrip, dreamTeaser } from './ui/dream-card';
+import { dreamCard, dreamStrip } from './ui/dream-card';
+import { openingHud, type OpeningHud } from './ui/opening-hud';
 import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
 import type { PanelContext, ShopTab } from './ui/panels';
 import { Guide } from './ui/guide';
 import { questTray } from './ui/quest-tray';
-import { FIRST_PESTS_TIP, FIRST_TANK_LINE, WELCOME_LINE } from './ui/tutorial';
+import { FIRST_PESTS_TIP, FIRST_TANK_LINE } from './ui/tutorial';
 import { Celebration, type CelebrateSpec } from './ui/celebrate';
 import { firstTime, loadMoments, type DeathAdviceCause, type MomentId } from './ui/moments';
 import { causeAdvice, HUNGER_LABEL, illnessOf, needsAdvice } from './ui/owner-advice';
@@ -439,7 +440,7 @@ async function start(): Promise<void> {
     const cond = fish?.alive ? sim.fishCondition(game.state, fish) : null;
     // 肖像有快取，同一個外觀拿到的是同一個字串；長大換外觀時卡片跟著換圖
     const pic = fish?.alive ? view.portrait(fish) : null;
-    if (!selChanged(fish ? `${fish.id}:${pic?.length}:${fish.alive}:${Math.round(fish.health * 50)}:${Math.round(fish.stress * 50)}:${fishName(fish)}:${cond?.hunger}:${cond?.causes[0]?.key}:${!!fish.keeper}` : '-')) return;
+    if (!selChanged(fish ? `${fish.id}:${pic?.length}:${fish.alive}:${Math.round(fish.health * 50)}:${Math.round(fish.stress * 50)}:${fishName(fish)}:${cond?.hunger}:${cond?.causes[0]?.key}:${!!fish.keeper}:${Math.round(fish.pregnancy * 50)}` : '-')) return;
     selCard.classList.toggle('empty', !fish);
     if (!fish) {
       selCard.replaceChildren(h('div.card-title', {}, '觀察'), h('p.hint', {}, '點缸裡的魚，看看牠的狀況。'));
@@ -458,6 +459,7 @@ async function start(): Promise<void> {
     }
     if (!cond) return;
     const hungry = cond.hunger === 'hungry' || cond.hunger === 'starving';
+    const belly = sim.bellyText(game.state, fish);
     // 魚不太舒服、又找得到原因：多一顆有老闆頭像的「為什麼？」，老闆用一句話說原因和怎麼做
     const ask = needsAdvice(cond) || illnessOf(fish)
       ? h('button.btn.small.primary.ask-owner', { onclick: () => void ownerSay(causeAdvice(fishName(fish), cond.causes, fish), undefined, undefined, true) }, ownerImg('ask-avatar'), '為什麼？')
@@ -470,6 +472,8 @@ async function start(): Promise<void> {
       bar('健康', fish.health, fish.health > 0.6 ? 'ok' : fish.health > 0.3 ? 'warn' : 'bad'),
       bar('壓力', fish.stress, fish.stress < 0.4 ? 'warn' : 'bad'),
       bar('飽足', 1 - cond.hungerValue, hungry ? (cond.hunger === 'starving' ? 'bad' : 'warn') : 'ok'),
+      // 懷孕的母魚：任務卡叫玩家「點她看看肚子」，卡上就要看得到肚子（g35）
+      ...(belly ? [h('p.sel-belly', {}, belly)] : []),
       h('div.row', {}, ask, h('button.btn.small', { onclick: () => panelSheet('觀察這條魚', (p) => p.fishPanel(ctx, fish.id), { live: true }) }, '詳細')),
     );
   };
@@ -559,8 +563,14 @@ async function start(): Promise<void> {
     if (!step || step === 'done') return;
     // 開場還在淡出（約 0.7 秒）時點到的只是要跳過動畫，不算倒沙（#371）
     if (document.getElementById('intro')) return;
-    // 動手倒沙就收起歡迎字；還沒挑設備就先打開挑設備的面板（§8.1）
-    if (step === 'sand') closeWelcome?.();
+    // 動手倒沙：收起夢想魚小卡，那行字換成下一步；打開挑設備面板時整個收起（§8.1）
+    if (step === 'sand') {
+      welcomeHud?.closeDream();
+      welcomeHud?.setLine('鋪好沙以後，點一下裝上設備');
+    } else {
+      welcomeHud?.close();
+      welcomeHud = null;
+    }
     if (step === 'gear' && view.setupWaiting && sim.needsSetup(game.state)) return openGearPicker();
     if (view.setupPress()) {
       audio.play(SETUP_SOUND[step]);
@@ -1515,27 +1525,13 @@ async function start(): Promise<void> {
   });
   document.body.append(h('button.watch-exit', { 'aria-label': '叫回介面', title: '叫回介面', onclick: () => setWatching(false) }, h('i.watch-eye', { 'aria-hidden': 'true' })));
   // 開缸（F1-a）：新遊戲先挑設備，開完缸時間才開始走；關掉面板時主畫面留一個「開缸」按鈕
-  // 開局 0～5 秒：阿德老闆的歡迎疊在挑設備的畫面上，點一下或 5 秒後自己收起來（mvp.md §4.4.4）；設備說明只寫在卡片上
+  // 開局（polish-to-9.md §8.1）：歡迎是缸上方的一行字、夢想魚預告是右上角的小卡，都不擋缸；倒沙時換成下一步，到裝設備那步收起來
   let welcomed = false;
-  let closeWelcome: (() => void) | null = null;
+  let welcomeHud: OpeningHud | null = null;
   const showWelcome = () => {
     if (welcomed) return;
     welcomed = true;
-    const close = () => {
-      closeWelcome = null;
-      welcome.classList.add('out');
-      window.setTimeout(() => welcome.remove(), 300);
-    };
-    closeWelcome = close;
-    const welcome = h(
-      'div.setup-welcome.glass',
-      { role: 'status', onclick: close },
-      ownerImg('setup-welcome-avatar'),
-      h('div.setup-welcome-body', {}, h('p', {}, h('b', {}, '阿德老闆　'), WELCOME_LINE), dreamTeaser()),
-    );
-    document.body.append(welcome);
-    // 多了夢想魚小卡，多停 2 秒讓人看得到
-    window.setTimeout(close, 7000);
+    welcomeHud = openingHud();
   };
   // 開缸順序（polish-to-9.md §8.1）：開場動畫一收起就停在空缸上，先親手倒沙，到「裝上設備」那一步才挑設備（推薦組合排第一）
   const openSetup = () => whenIntroDone(() => (showWelcome(), playSetup()));

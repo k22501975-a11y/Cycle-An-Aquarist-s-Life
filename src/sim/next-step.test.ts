@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, buyPlant, buyTank, fulfillOrder, orderBoard, updateOrders, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, noteBellySeen, setTankPurpose, showingMother, setBreedingStep, simulate } from '.';
+import { addFish, buyPlant, buyTank, fulfillOrder, orderBoard, updateOrders, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, STALE_STEP_HOURS, NURSERY_FRY_CAPACITY, newTankCost, noteBellySeen, setTankPurpose, showingMother, setBreedingStep, simulate } from '.';
 import { breedingStep } from './choices';
 
 describe('主畫面的下一步（U1）', () => {
@@ -184,5 +184,55 @@ describe('「養大 5 條」卡超過 3 天（#258）', () => {
     s.hours += RAISE_STUCK_HOURS + 1;
     s.events.push({ hours: s.hours - 10, type: 'fry_eaten', count: 2 });
     expect(nextStep([s])).toMatchObject({ text: '小魚在主缸會被吃，撈進育幼盒', target: 'fry_box' });
+  });
+
+  it('只有一缸、育幼盒滿了、小魚還在被吃、錢夠：馬上叫你買第二缸（g35，polish-to-9.md §8.2）', () => {
+    const s = newGameState(1);
+    goalState([s]).done.push('cycled');
+    s.nurseryBox = true;
+    const fry = () => {
+      const f = addFish(s, 'guppy', {});
+      f.lengthCm = 0.8;
+      f.ageDays = 3;
+      f.generation = 1;
+      f.bornHours = s.hours - 72;
+      return f;
+    };
+    for (let i = 0; i < NURSERY_FRY_CAPACITY; i++) fry().nursery = true;
+    fry();
+    expect(nextStep([s])).toMatchObject({ goal: 'protect_fry', target: 'feed' });
+    s.events.push({ hours: s.hours - 10, type: 'fry_eaten', count: 1 });
+    economy(s).coins = newTankCost([s], 'nano20');
+    expect(nextStep([s])).toMatchObject({ goal: 'protect_fry', text: '育幼盒滿了，小魚會被吃。買第二個缸給小魚住', target: 'shop_tank' });
+    // 錢不夠：照原本的
+    economy(s).coins = newTankCost([s], 'nano20') - 1;
+    expect(nextStep([s])).toMatchObject({ target: 'feed' });
+  });
+
+  it('等著的同一句停超過 3 天：輪流說小魚的進度，原句換了就重算（polish-to-9.md §8.2）', () => {
+    const s = newGameState(1);
+    goalState([s]).done.push('cycled');
+    s.nurseryBox = true;
+    const f = addFish(s, 'guppy', {});
+    f.lengthCm = 0.8;
+    f.ageDays = 3;
+    f.generation = 1;
+    f.nursery = true;
+    const base = nextStep([s])!;
+    expect(base).toMatchObject({ goal: 'protect_fry', text: '小魚還小，一天餵兩次' });
+    s.hours += STALE_STEP_HOURS - 1;
+    expect(nextStep([s])?.text).toBe(base.text);
+    const seen = new Set<string>();
+    for (let i = 0; i < 8; i++) {
+      s.hours += 12;
+      seen.add(nextStep([s])!.text);
+    }
+    expect([...seen]).toContain(base.text);
+    expect([...seen].some((t) => /^最大的那尾 0\.8 cm 了，再 \d+ 天看得出公母$/.test(t))).toBe(true);
+    expect([...seen]).toContain('育幼盒裡 1 尾，今天被吃 0 尾');
+    // 要玩家動手的句子不輪播
+    f.health = 0.2;
+    f.ich = { stage: 'visible', progress: 1, cause: 'new_fish' };
+    expect(nextStep([s])?.target).toBe('treat');
   });
 });

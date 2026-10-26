@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addFish,
+  bellyText,
   buyNurseryBox,
   buyQuarantine,
   moveFish,
@@ -184,5 +185,23 @@ describe('育幼盒（mvp.md §4.4.2，#187）', () => {
     mom.pregnancy = 0;
     simulate(s, 0.1);
     expect(mom.nursery).toBeUndefined();
+  });
+});
+
+describe('選取卡上的肚子（g35，polish-to-9.md §8.2）', () => {
+  it('肚子看得出來才說，越後面說得越細，帶上大約幾天後生', () => {
+    const s = tank(3);
+    const mom = addFish(s, 'guppy', { sex: 'female' });
+    mom.ageDays = 120;
+    mom.pregnancy = 0.3;
+    expect(bellyText(s, mom)).toBeNull();
+    mom.pregnancy = 0.6;
+    expect(bellyText(s, mom)).toMatch(/^懷孕：肚子圓了，看得到胎斑，大約 \d+ 天後生$/);
+    mom.pregnancy = 0.88;
+    expect(bellyText(s, mom)).toMatch(/^懷孕：胎斑變大、變黑了，大約 \d+ 天後生$/);
+    mom.pregnancy = 0.97;
+    expect(bellyText(s, mom)).toBe('懷孕：胎斑裡看得到小魚的眼睛，大約 1 天後生');
+    const male = addFish(s, 'guppy', { sex: 'male' });
+    expect(bellyText(s, male)).toBeNull();
   });
 });

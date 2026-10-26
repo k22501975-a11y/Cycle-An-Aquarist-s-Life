@@ -33,6 +33,11 @@ test('開場淡出時連點背景 3 下，開缸照樣從倒沙開始；挑設�
   expect(await page.evaluate(() => (window as unknown as { cycle: { view: View } }).cycle.view.setupStep)).toBe('sand');
   const setup = page.locator('.sheet.open .setup-panel');
   await expect(setup).toHaveCount(0);
+  // 歡迎字還在、夢想魚小卡也在；倒沙一按：小卡收起，那行字換成下一步
+  await expect(page.locator('.opening-line')).toContainText('先點一下鋪底沙');
+  await page.locator('button.setup-go').dispatchEvent('pointerdown');
+  await expect(page.locator('.dream-corner')).toHaveCount(0);
+  await expect(page.locator('.opening-line')).toContainText('裝上設備');
   // 一直按提示鈕到「裝上設備」：跳出挑設備面板
   await page.waitForFunction(
     () => {
@@ -45,6 +50,7 @@ test('開場淡出時連點背景 3 下，開缸照樣從倒沙開始；挑設�
     { timeout: 60_000, polling: 300 },
   );
   expect(await page.evaluate(() => (window as unknown as { cycle: { view: View } }).cycle.view.setupStep)).toBe('gear');
+  await expect(page.locator('.opening-line')).toHaveCount(0);
   // 點面板背景不會關
   for (let i = 0; i < 3; i++) await page.mouse.click(60, 200);
   await expect(setup).toBeVisible();
