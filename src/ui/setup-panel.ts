@@ -4,7 +4,8 @@ import type { PanelContext } from './panels';
 import { cardGrid, priceTag, shopCard } from './shop-cards';
 
 /**
- * 開缸畫面（F1-a）：每一類一排設備卡，點卡片選它；底下是總價、剩下的錢、「推薦組合」和「開缸」。
+ * 挑設備（F1-a；polish-to-9.md §8.1 起在開缸的「裝上設備」那一步才打開）：最上面是推薦組合一鍵裝好，
+ * 下面每一類一排設備卡，點卡片選它；底下是總價、剩下的錢、「推薦組合」和「裝上設備」。
  * 卡片資料來自 setupCards()，美術與 UI 之後可以換成正式版面（F1-b 的演出接在「開缸」之後）。
  */
 
@@ -49,20 +50,30 @@ export function setupPanel(ctx: PanelContext, onDone: () => void): HTMLElement {
     priceTag(cost),
     h('span', {}, `　剩 ${(coins - cost).toLocaleString('zh-TW')} 元買魚和水草`),
   );
+  const install = (choice: SetupDraft) => {
+    const why = game.act((s) => applySetup(s, choice));
+    if (why) return toasts.show(why, 'warn');
+    draft = {};
+    sheet.close();
+    onDone();
+  };
   const recommend = h('button.btn', { onclick: () => ((draft = { ...RECOMMENDED_SETUP }), sheet.refresh()) }, '推薦組合');
-  const confirm = h(
-    'button.btn.primary',
-    {
-      disabled: !!refusal,
-      onclick: () => {
-        const why = game.act((s) => applySetup(s, draft));
-        if (why) return toasts.show(why, 'warn');
-        draft = {};
-        sheet.close();
-        onDone();
-      },
-    },
-    '開缸',
+  const confirm = h('button.btn.primary', { disabled: !!refusal, onclick: () => install(draft) }, '裝上設備');
+  // 推薦組合排第一（polish-to-9.md §8.1）：一下就裝好；想自己挑的往下看每一類
+  const quick = h(
+    'section.setup-quick',
+    {},
+    cardGrid(
+      shopCard({
+        art: 'gear/tank-empty.webp',
+        name: '推薦組合',
+        price: setupCost(RECOMMENDED_SETUP),
+        badge: '推薦',
+        chips: ['新手最好上手', '照阿德的建議一次配好'],
+        actions: [h('button.btn.small.primary', { disabled: !!setupRefusal(game.tanks[0], RECOMMENDED_SETUP), onclick: () => install({ ...RECOMMENDED_SETUP }) }, '用這組裝上')],
+      }),
+    ),
+    h('h3', {}, '或自己挑'),
   );
-  return h('div.setup-panel', {}, ...sections, total, refusal ? h('p.dead', {}, refusal) : '', h('div.row', {}, recommend, confirm));
+  return h('div.setup-panel', {}, quick, ...sections, total, refusal ? h('p.dead', {}, refusal) : '', h('div.row', {}, recommend, confirm));
 }

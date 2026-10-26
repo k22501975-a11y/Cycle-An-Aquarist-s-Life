@@ -39,7 +39,7 @@ import { DEATH_ADVICE, describeEvent, FIRST_PESTS_LINE, firstDeathOwnerLine, fis
 import { mergeEventToasts, type EventToast } from './ui/notify-gate';
 import { personaChip } from './ui/persona';
 import { dreamCard, dreamStrip } from './ui/dream-card';
-import { openingHud } from './ui/opening-hud';
+import { openingHud, type OpeningHud } from './ui/opening-hud';
 import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
 import type { PanelContext, ShopTab } from './ui/panels';
 import { Guide } from './ui/guide';
@@ -561,6 +561,17 @@ async function start(): Promise<void> {
   const setupPress = () => {
     const step = view.setupStep;
     if (!step || step === 'done') return;
+    // 開場還在淡出（約 0.7 秒）時點到的只是要跳過動畫，不算倒沙（#371）
+    if (document.getElementById('intro')) return;
+    // 動手倒沙：收起夢想魚小卡，那行字換成下一步；打開挑設備面板時整個收起（§8.1）
+    if (step === 'sand') {
+      welcomeHud?.closeDream();
+      welcomeHud?.setLine('鋪好沙以後，點一下裝上設備');
+    } else {
+      welcomeHud?.close();
+      welcomeHud = null;
+    }
+    if (step === 'gear' && view.setupWaiting && sim.needsSetup(game.state)) return openGearPicker();
     if (view.setupPress()) {
       audio.play(SETUP_SOUND[step]);
       // 燈有定時：還沒到開燈時間就說幾點會亮，不說「開機！」卻是暗的
@@ -1514,28 +1525,28 @@ async function start(): Promise<void> {
   });
   document.body.append(h('button.watch-exit', { 'aria-label': '叫回介面', title: '叫回介面', onclick: () => setWatching(false) }, h('i.watch-eye', { 'aria-hidden': 'true' })));
   // 開缸（F1-a）：新遊戲先挑設備，開完缸時間才開始走；關掉面板時主畫面留一個「開缸」按鈕
-  // 開局（polish-to-9.md §8.1）：歡迎是缸上方的一行字、夢想魚預告是右上角的小卡，都不擋缸；7 秒後收起來
+  // 開局（polish-to-9.md §8.1）：歡迎是缸上方的一行字、夢想魚預告是右上角的小卡，都不擋缸；倒沙時換成下一步，到裝設備那步收起來
   let welcomed = false;
+  let welcomeHud: OpeningHud | null = null;
   const showWelcome = () => {
     if (welcomed) return;
     welcomed = true;
-    const hud = openingHud();
-    window.setTimeout(() => hud.close(), 7000);
+    welcomeHud = openingHud();
   };
-  const openSetup = () => {
-    // 開場動畫還在演就等它收起來再出歡迎卡（7 秒從那時才開始算）
-    whenIntroDone(showWelcome);
-    sheet.open('開缸', () =>
-      setupPanel(ctx, () => {
-        save();
-        sheet.close();
-        // 挑好設備：從空缸開始演倒沙、注水、裝設備、開燈，演完「你的第一個缸」後開始教學
-        playSetup();
-      }),
-      // 開局必經：點背景不關（#371）
+  // 開缸順序（polish-to-9.md §8.1）：開場動畫一收起就停在空缸上，先親手倒沙，到「裝上設備」那一步才挑設備（推薦組合排第一）
+  const openSetup = () => whenIntroDone(() => (showWelcome(), playSetup()));
+  const openGearPicker = () =>
+    sheet.open(
+      '裝上設備',
+      () =>
+        setupPanel(ctx, () => {
+          save();
+          // 挑好設備：接著演「裝上設備」，之後注水、開機
+          setupPress();
+        }),
+      // 開缸必經：點背景不關（#371）
       { pinned: true },
     );
-  };
   // 每日 3 件小事（F3）：換天出新題、做完一件跳通知（寫明還差哪件）。左上角常駐小卡列出三件，做完打勾，三件都做完按寶箱（#185）
   let dailyDay = sim.dailyTasks(game.tanks)?.day;
   const dailyHolder = h('div.daily-holder');
@@ -2019,7 +2030,7 @@ async function start(): Promise<void> {
     if (sleepingNow) return;
     // 開缸演出還在演：演完會跳「你的第一個缸」，夜幕會把它蓋掉
     if (view.settingUp) {
-      toasts.show('等開缸做完再過夜');
+      toasts.showNow('等開缸做完再過夜');
       return;
     }
     if (cloud.session) {

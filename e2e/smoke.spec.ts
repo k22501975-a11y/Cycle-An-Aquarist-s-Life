@@ -53,5 +53,6 @@ test('先停在開始畫面，按「開始」才演開場動畫；演完會自�
     if (el && !el.classList.contains('out')) el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
   });
   await expect(intro).toHaveCount(0, { timeout: 60_000 });
-  await expect(page.locator('.setup-panel')).toBeVisible();
+  // 開場收掉就停在空缸上，先倒沙（polish-to-9.md §8.1）
+  await expect(page.locator('.setup-prompt')).toContainText('點一下，倒入底沙');
 });
