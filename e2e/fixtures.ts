@@ -1,12 +1,33 @@
 import { test as base, expect, type Page } from '@playwright/test';
 
 /**
- * 共用工具：每個測試都會收集頁面錯誤，測試結束時有未捕捉的錯誤就算失敗。
+ * 共用工具：每個測試都會收集頁面錯誤，測試結束時有未捕捉的錯誤就算失敗；頁面裡的「今天」固定在 TEST_DATE。
  * QA 寫新流程時從這裡 import { test, expect }，不要直接用 @playwright/test。
  */
+/**
+ * 頁面裡的「今天」：室溫照現實日期算（game.ts 的 applySeason），不固定的話 11 月以後流程測試會跟著日曆變紅。
+ * 和單元測試（src/test-setup.ts）同一天；要在舊存檔（flows/saves/*.json 的 savedAt 是 10/01）之後，離線補算才有時間可補。
+ */
+export const TEST_DATE = new Date('2026-10-15T12:00:00+08:00');
+
 export const test = base.extend<{ pageErrors: string[] }>({
   pageErrors: [
     async ({ page }, use) => {
+      // 只把時間平移到 TEST_DATE，照樣往前走（量經過多久、離線補算照常）；有帶參數的 new Date(x) 不受影響。
+      // 平移量在測試開始時算好：重新整理頁面時間也接著走，不會倒回 TEST_DATE
+      await page.addInitScript((offset) => {
+        const Real = Date;
+        class TestDate extends Real {
+          constructor(...args: unknown[]) {
+            if (args.length === 0) super(Real.now() + offset);
+            else super(...(args as [number]));
+          }
+          static now(): number {
+            return Real.now() + offset;
+          }
+        }
+        window.Date = TestDate as DateConstructor;
+      }, TEST_DATE.getTime() - Date.now());
       const errors: string[] = [];
       page.on('pageerror', (e) => errors.push(e.message));
       await use(errors);

@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, test } from '../fixtures';
+import { expect, test, TEST_DATE } from '../fixtures';
 import { gameState, startClean, startGame, watchConsoleErrors, type CycleWindow } from './helpers';
 
 // 軟體繪圖在高像素密度下慢三倍，這裡不測畫質，用 1 讓 CI 慢的時候也跑得完
@@ -56,3 +56,12 @@ async function meanLuma(page: Page, png: Buffer): Promise<number> {
     return sum / (d.length / 4);
   }, png.toString('base64'));
 }
+
+test('頁面的日期固定在 TEST_DATE：季節不跟著跑測試那天變，重新整理也接著走', async ({ page }) => {
+  await startGame(page);
+  const today = () => page.evaluate(() => Date.now());
+  const t0 = await today();
+  expect(new Date(t0).toISOString().slice(0, 10)).toBe(TEST_DATE.toISOString().slice(0, 10));
+  await page.reload();
+  expect(await today()).toBeGreaterThanOrEqual(t0);
+});
