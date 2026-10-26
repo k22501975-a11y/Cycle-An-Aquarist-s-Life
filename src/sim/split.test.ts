@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, buyQuarantine, createTank, economy, fryHome, fryNeedHome, isCycled, linkTanks, moveFryHome, NURSERY_FRY_CAPACITY, rescueFryToBox, simulate, FILTERS, FISH_SPECIES, HEATERS, LIGHTS, splitAdvice, splitGroup, splitTank, TANKS, type CreateTankOptions, type TankState } from './index';
+import { addFish, BACTERIA_SEED, BELLY_SHOWS, boxBlocked, buyQuarantine, createTank, economy, fryHome, fryNeedHome, fryPrep, newTankCost, isCycled, linkTanks, moveFryHome, NURSERY_FRY_CAPACITY, rescueFryToBox, simulate, FILTERS, FISH_SPECIES, HEATERS, LIGHTS, splitAdvice, splitGroup, splitTank, TANKS, type CreateTankOptions, type TankState } from './index';
 import { createFish } from './processes/population';
 
 const MATURE: CreateTankOptions = { tank: TANKS.std40, filter: FILTERS.hangOn, heater: { spec: HEATERS.h100, targetC: 25 }, light: { spec: LIGHTS.basic }, matureMedia: true };
@@ -105,7 +105,7 @@ describe('第二缸養好水就把小魚搬過去（g36 #425）', () => {
     expect(isCycled(fresh)).toBe(true);
     expect(fryNeedHome(main)).toBe(true);
     expect(fryHome(tanks, 0)).toBe(1);
-    expect(moveFryHome(tanks, 0)).toEqual({ to: 1, count: 5 });
+    expect(moveFryHome(tanks, 0)).toEqual({ to: 1, count: 5, shrimp: 0 });
     expect(main.fish.filter((f) => f.alive)).toHaveLength(2);
     expect(fresh.fish.every((f) => f.generation === 1 && !f.nursery)).toBe(true);
     expect(fryNeedHome(main)).toBe(false);
@@ -129,5 +129,51 @@ describe('第二缸養好水就把小魚搬過去（g36 #425）', () => {
     brood(main, NURSERY_FRY_CAPACITY, 0.6);
     main.fish.filter((f) => f.generation === 1).forEach((f) => (f.nursery = true));
     expect(fryNeedHome(main)).toBe(true);
+  });
+});
+
+describe('育幼盒幫不上忙時，小魚接下來去哪（g37 #428）', () => {
+  /** 只有一缸：盒裡 3 尾小魚，一尾母魚肚子已經圓了。 */
+  function blocked() {
+    const main = createTank({ ...MATURE, seed: 7 });
+    addFish(main, 'guppy', { sex: 'male' });
+    const mom = addFish(main, 'guppy', { sex: 'female' });
+    mom.pregnancy = BELLY_SHOWS;
+    main.nurseryBox = true;
+    brood(main, 3, 0.8);
+    main.fish.slice(-3).forEach((f) => (f.nursery = true));
+    const tanks = [main];
+    linkTanks(tanks);
+    return { main, mom, tanks };
+  }
+
+  it('盒裡有小魚、母魚肚子圓了：母魚放不進去，小魚要搬家；肚子還沒圓不算', () => {
+    const { main, mom } = blocked();
+    expect(boxBlocked(main)).toBe(true);
+    expect(fryNeedHome(main)).toBe(true);
+    mom.pregnancy = BELLY_SHOWS - 0.01;
+    expect(boxBlocked(main)).toBe(false);
+  });
+
+  it('只有一缸：叫你買第二缸（錢夠不夠也說）；買了空缸先養水，分過濾材就算開始養', () => {
+    const { main, tanks } = blocked();
+    economy(main).coins = newTankCost(tanks, 'nano20');
+    expect(fryPrep(tanks, 0)).toEqual({ kind: 'buy', afford: true });
+    economy(main).coins -= 1;
+    expect(fryPrep(tanks, 0)).toEqual({ kind: 'buy', afford: false });
+    const fresh = createTank({ tank: TANKS.nano20, filter: FILTERS.sponge, heater: { spec: HEATERS.h25, targetC: 25 }, light: { spec: LIGHTS.basic }, seed: 8 });
+    tanks.push(fresh);
+    linkTanks(tanks);
+    expect(fryPrep(tanks, 0)).toEqual({ kind: 'cycle', tank: 1, started: false });
+    fresh.bacteria.aob = fresh.bacteria.nob = BACTERIA_SEED * 10;
+    expect(fryPrep(tanks, 0)).toEqual({ kind: 'cycle', tank: 1, started: true });
+  });
+
+  it('掛在市場上的小魚搬不走，不算要搬家（架構 #427 🟡）', () => {
+    const main = createTank({ ...MATURE, seed: 9 });
+    addFish(main, 'guppy', { sex: 'male' });
+    brood(main, 2, 0.6);
+    main.fish.slice(-2).forEach((f) => (f.listing = 1));
+    expect(fryNeedHome(main)).toBe(false);
   });
 });

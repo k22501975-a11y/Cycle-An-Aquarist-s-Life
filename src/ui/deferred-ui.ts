@@ -13,7 +13,8 @@ export { morningCard } from './morning-card';
 export { feederOffer } from './feeder-offer';
 export { awayReport, morningReport, slimReport, snapshot } from './morning-report';
 // 中期選擇點（sim/choices.ts）也跟著延後載入：早上報告的選擇卡用 chooseOption，任務卡的選育那一行載好才說
-export { chooseOption, lineName } from '../sim/choices';
+export { chooseOption, cycleCard, lineName } from '../sim/choices';
+export { choiceVisual } from './choice-card';
 setBreedingStep(breedingStep);
 export { setupPanel } from './setup-panel';
 export { flyCoins, rewardBurst } from './coin-fly';

@@ -1,13 +1,13 @@
 import { economy } from './economy';
 import { growthStage, sexVisible } from './growth';
-import { moveFish } from './household';
+import { moveFish, newTankCost } from './household';
 import { crowdingRatio } from './processes/fauna';
-import { NURSERY_FRY_CAPACITY, nurseryFish } from './nursery';
+import { BELLY_SHOWS, NURSERY_FRY_CAPACITY, nurseryFish, usesNursery } from './nursery';
 import { isCycled } from './processes/nitrogen';
 import { moveToQuarantine } from './quarantine';
 import { needsSetup } from './setup';
-import { FISH_SPECIES } from './species';
-import { isJuvenile, type Fish, type TankState } from './state';
+import { FISH_SPECIES, isShrimpSpecies } from './species';
+import { BACTERIA_SEED, isJuvenile, type Fish, type TankState } from './state';
 
 /**
  * 分缸提示（design/growth.md §4.1）：小魚長大後缸會越來越擠，成魚會吃小魚，轉色後公母混著會太早亂配。
@@ -108,11 +108,22 @@ export function rescueFryToBox(state: TankState): number {
   return moved;
 }
 
-/** 這缸的小魚需要搬家：缸裡有成魚吞得下的小魚，或育幼盒滿了（再生的就只能在外面被吃）。 */
+/**
+ * 育幼盒幫不上忙了：盒子滿了（再生的只能在外面被吃），或盒裡還有小魚、又有母魚肚子大了
+ * （母魚放進去會吃牠們，下一窩只能生在外面；g37 #428）。
+ */
+export function boxBlocked(state: TankState): boolean {
+  if (!state.nurseryBox) return false;
+  const inside = nurseryFish(state).filter(isJuvenile);
+  if (inside.length >= NURSERY_FRY_CAPACITY) return true;
+  return inside.length > 0 && state.fish.some((f) => f.alive && !f.nursery && f.sex === 'female' && !isJuvenile(f) && usesNursery(f.species) && f.pregnancy >= BELLY_SHOWS);
+}
+
+/** 這缸的小魚需要搬家：缸裡有成魚吞得下的小魚（掛在市場上的不算，搬不走），或育幼盒幫不上忙了。 */
 export function fryNeedHome(state: TankState): boolean {
   const living = state.fish.filter((f) => f.alive);
-  if (preyAtRisk(living).length > 0) return true;
-  return !!state.nurseryBox && nurseryFish(state).filter(isJuvenile).length >= NURSERY_FRY_CAPACITY;
+  if (preyAtRisk(living).some((f) => f.listing === undefined)) return true;
+  return boxBlocked(state);
 }
 
 /** 收得了小魚的缸：開好缸、硝化菌長好，而且沒有吞得下小魚的成魚。沒有回傳 null。 */
@@ -127,12 +138,35 @@ export function fryHome(tanks: TankState[], from: number): number | null {
  * 一鍵把小魚搬進新缸（g36 #425：買了第二缸卻沒人叫你搬，前 15 天被吃 17 尾）：主缸外面和育幼盒裡還沒長大的魚
  * 都慢慢對水搬過去，育幼盒空出來給下一窩。掛在市場上的不搬。沒有能收的缸或沒有小魚回傳 null。
  */
-export function moveFryHome(tanks: TankState[], from: number): { to: number; count: number } | null {
+export function moveFryHome(tanks: TankState[], from: number): { to: number; count: number; shrimp: number } | null {
   const to = fryHome(tanks, from);
   if (to === null) return null;
   const src = tanks[from];
   const fry = src.fish.filter((f) => f.alive && isJuvenile(f) && f.listing === undefined && f.guardian === undefined);
   let count = 0;
-  for (const f of fry) if (moveFish(src, tanks[to], f.id, true)) count++;
-  return count > 0 ? { to, count } : null;
+  let shrimp = 0;
+  for (const f of fry)
+    if (moveFish(src, tanks[to], f.id, true)) {
+      count++;
+      if (isShrimpSpecies(f.species)) shrimp++;
+    }
+  return count > 0 ? { to, count, shrimp } : null;
+}
+
+/** 新缸開始養水了（分過舊缸濾材或倒過硝化菌液，菌比空氣帶來的多很多）。 */
+const CYCLING_STARTED = BACTERIA_SEED * 5;
+
+/**
+ * 小魚要搬家、可是還沒有能收的缸時，下一步是什麼（g37 #428：第二缸買了 5 天都空著，沒人叫你養水）：
+ * - cycle：有開好、沒魚、還沒養好水的缸，先養水（started：已經分過濾材或倒過菌液，等就好）
+ * - buy：只有這一缸、育幼盒幫不上忙：買第二缸（afford：錢夠不夠）
+ * 有能收的缸（直接搬）、或不用搬，回傳 null。
+ */
+export function fryPrep(tanks: TankState[], from: number): { kind: 'cycle'; tank: number; started: boolean } | { kind: 'buy'; afford: boolean } | null {
+  const t = tanks[from];
+  if (!t || !fryNeedHome(t) || fryHome(tanks, from) !== null) return null;
+  const fresh = tanks.findIndex((x, i) => i !== from && !needsSetup(x) && !!x.equipment.filter && !isCycled(x) && !x.fish.some((f) => f.alive));
+  if (fresh >= 0) return { kind: 'cycle', tank: fresh, started: Math.min(tanks[fresh].bacteria.aob, tanks[fresh].bacteria.nob) >= CYCLING_STARTED };
+  if (tanks.length !== 1 || !boxBlocked(t)) return null;
+  return { kind: 'buy', afford: economy(t).coins >= newTankCost(tanks, 'nano20') };
 }

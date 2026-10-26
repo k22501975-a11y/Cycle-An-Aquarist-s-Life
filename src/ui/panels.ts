@@ -1263,7 +1263,11 @@ const HARDSCAPE_NOTES: Record<string, string> = {
 export function putDueInNursery(ctx: PanelContext): boolean {
   const mom = ctx.game.act((st) => moveDueToNursery(st));
   if (!mom) {
-    ctx.toasts.show('育幼盒現在放不進去，打開育幼盒看看', 'warn');
+    // 說放不進去的原因（g37 #428：盒裡還有小魚時只說「放不進去」，玩家不知道怎麼辦）
+    const st = ctx.game.state;
+    const due = dueMothers(st)[0];
+    const why = due ? nurseryRefusal(st, due) : null;
+    ctx.toasts.show(why ? `育幼盒放不進去：${why}` : '育幼盒現在放不進去，打開育幼盒看看', 'warn');
     return false;
   }
   ctx.sound?.('net');
