@@ -157,6 +157,11 @@ export interface Economy {
    * 新遊戲從 0 開始；舊存檔沒有，讀檔時任一缸有水草就當作已經用掉第一次（migrateHousehold）。
    */
   plantBuys?: number;
+  /** 買過店裡的孔雀魚母魚了（開局第一次買的是快生的那尾，polish-to-9.md §7.1）。 */
+  firstMomBought?: boolean;
+  /** 開局第一次買到的那尾快生母魚：懷孕程度（takeStoreFemales 記下）和放進缸後的 id（addFish 對上就記，早上報告的胎斑里程碑用）。 */
+  firstMomPregnancy?: number;
+  firstMomId?: number;
   /** 寶箱累計開出多少魚幣（第 60 天前上限 400，polish-to-9.md §4）。 */
   chestCoins?: number;
   /**

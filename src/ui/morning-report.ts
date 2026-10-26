@@ -456,6 +456,9 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   // 夢想魚那窩懷孕後段的里程碑、生病拖慢配對（midgame.md §6.4）、C9 自動照上次（§6.5）。
   // 放在 takeChoice 後面：早上的小事（lateHousekeeping）當天記下的，當天就說
   for (const n of takeBellyNotes(tanks)) {
+    // 同一尾的一般胎斑那行（上面每缸的「出現黑色胎斑」）讓給里程碑
+    const plain = items.findIndex((i) => i.kind === 'belly' && i.subjectId === n.fishId);
+    if (plain >= 0) items.splice(plain, 1);
     const at = tanks.findIndex((t) => t.fish.some((f) => f.id === n.fishId));
     items.push({ kind: 'belly', tank: Math.max(0, at), tone: 'good', text: n.text, action: 'fish', subjectId: n.fishId, broodSetting: n.setting });
   }

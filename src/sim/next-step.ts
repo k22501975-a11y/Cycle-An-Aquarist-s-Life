@@ -258,12 +258,22 @@ function raiseStuckStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   return fast ? { text: `養到轉色 ${Math.min(5, raisedCount(tanks))}/5，最快的那尾還差約 ${fast.days} 天`, target: 'fastest' } : null;
 }
 
-/** 母魚快生了（要育幼盒）或肚子看得出懷孕時的下一步；都沒有回傳 null。 */
+/** 還沒交過任何單、起步單的小螺缸裡已經湊得齊（第一次買水草附送的螺）：叫玩家去交（polish-to-9.md §7.2：第一筆收入在第 5 分鐘以內）。 */
+function starterStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
+  const board = orderBoard(tanks[0]);
+  if (board.done > 0) return null;
+  const o = board.orders.find((x) => !x.preview && !x.gap && x.kind === 'snail' && orderSupply(tanks, x) >= x.count);
+  return o ? { text: `阿德有一張起步單：交 ${o.count} 隻小螺`, target: 'orders' } : null;
+}
+
+/** 母魚快生了（要育幼盒）或肚子看得出懷孕時的下一步（看過肚子、還沒交過單就先交起步單）；都沒有回傳 null。 */
 function motherStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   if (tanks.some((t) => dueMothers(t).length > 0)) return tanks.some((t) => t.nurseryBox && dueMothers(t).length > 0) ? { text: '母魚快生了，放進育幼盒', target: 'nursery' } : { text: '母魚快生了，買個育幼盒', target: 'nursery' };
   const mom = showingMother(tanks);
+  if (mom && !mom.fish.bellySeen) return { text: '母魚懷孕了，點她看看肚子', target: 'mother' };
+  const starter = starterStep(tanks);
+  if (starter) return starter;
   if (!mom) return null;
-  if (!mom.fish.bellySeen) return { text: '母魚懷孕了，點她看看肚子', target: 'mother' };
   // 看過肚子了：換成倒數，不要一直叫玩家做已經做過的事（#282）
   const days = Math.max(1, Math.round(daysToBirth(tanks[mom.tank], mom.fish) ?? 1));
   const t = tanks[mom.tank];

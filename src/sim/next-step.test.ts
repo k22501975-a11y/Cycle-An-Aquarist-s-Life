@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, buyTank, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, noteBellySeen, setTankPurpose, showingMother, setBreedingStep, simulate } from '.';
+import { addFish, buyPlant, buyTank, fulfillOrder, orderBoard, updateOrders, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, noteBellySeen, setTankPurpose, showingMother, setBreedingStep, simulate } from '.';
 import { breedingStep } from './choices';
 
 describe('主畫面的下一步（U1）', () => {
@@ -30,6 +30,21 @@ describe('主畫面的下一步（U1）', () => {
     expect(nextStep([s])).toMatchObject({ goal: 'cycled', text: '母魚懷孕了，點她看看肚子', target: 'mother' });
     mom.pregnancy = 0.95;
     expect(nextStep([s])).toMatchObject({ goal: 'cycled', text: '母魚快生了，買個育幼盒', target: 'nursery' });
+  });
+
+  it('看過肚子、還沒交過單：下一步先叫你交起步單的 2 隻小螺（polish-to-9.md §7.2），交完才倒數', () => {
+    const s = newGameState(1);
+    const mom = addFish(s, 'guppy', { sex: 'female' });
+    mom.ageDays = 120;
+    mom.pregnancy = 0.9;
+    buyPlant(s, 'anubias');
+    updateOrders(s);
+    expect(nextStep([s])?.text).toBe('母魚懷孕了，點她看看肚子');
+    noteBellySeen(mom);
+    expect(nextStep([s])).toMatchObject({ goal: 'cycled', text: '阿德有一張起步單：交 2 隻小螺', target: 'orders' });
+    const o = orderBoard(s).orders.find((x) => x.kind === 'snail')!;
+    expect(fulfillOrder([s], o.id)).toBeGreaterThan(0);
+    expect(nextStep([s])?.text).toMatch(/^她大約 \d+ 天後生/);
   });
 
   it('點開母魚看過肚子，下一步換成倒數，不會一直叫你再點她（體驗第 14 輪 #282）', () => {

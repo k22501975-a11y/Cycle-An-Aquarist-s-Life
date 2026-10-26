@@ -118,11 +118,13 @@ export const PESTS_VISIBLE = 5;
 /**
  * 在店裡買了一株水草：整個存檔第一次買（first，次數記在共用錢包，見 actions.ts buyPlant）必定、之後 30%（有檢疫盒 8%）
  * 夾帶 2～3 隻扁卷螺（「搭便車的螺」，卵小到看不到，會自己繁殖）。回傳夾帶了幾隻（沒有是 0）。
+ * 第一次買多 FIRST_PLANT_EXTRA_SNAILS 隻：教學一結束就交得出第一張起步單（2 隻），缸裡照樣留 2 隻當種螺（polish-to-9.md §7.2）。
  */
+export const FIRST_PLANT_EXTRA_SNAILS = 2;
 export function plantHitchhikers(state: TankState, first: boolean): number {
   const s = snailState(state);
   if (!first && nextRandom(state.rng) >= (state.quarantine ? PLANT_HITCHHIKE_QUARANTINE : PLANT_HITCHHIKE_CHANCE)) return 0;
-  const n = 2 + Math.floor(nextRandom(state.rng) * 2);
+  const n = 2 + Math.floor(nextRandom(state.rng) * 2) + (first ? FIRST_PLANT_EXTRA_SNAILS : 0);
   s.pests.ramshorn += n;
   return n;
 }

@@ -58,7 +58,9 @@ describe('中期劇本（design/midgame.md §5）', () => {
       const nights = midgamePlayer(seed, 36);
       const c7 = nights.find((n) => n.choice === 'C7');
       expect(c7, `seed ${seed}`).toBeDefined();
-      const bad = nights.filter((n) => n.day > c7!.day).flatMap((n) => n.alarms.filter((a) => !a.endsWith('starving')).map((a) => `${n.day}:${a}`));
+      // 加熱棒半夜卡住（早上報告的 equipment 那條，隨機的設備故障，跟 C7 無關；劇本玩家隔天就換）那天的過熱不算
+      const broke = (n: (typeof nights)[number]) => n.line.split(' ').pop()!.split(',').includes('equipment');
+      const bad = nights.filter((n) => n.day > c7!.day).flatMap((n) => n.alarms.filter((a) => !a.endsWith('starving') && !(a.endsWith('too_hot') && broke(n))).map((a) => `${n.day}:${a}`));
       expect(bad, `seed ${seed}`).toEqual([]);
       const tanks = midgamePlayerTanks(seed, 36);
       const pair = choiceState(tanks).pair!;
