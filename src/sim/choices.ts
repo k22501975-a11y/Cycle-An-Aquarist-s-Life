@@ -14,7 +14,7 @@ import { CROWD_WARN } from './split';
 import { tooSmallForTank } from './quarantine';
 import { addBottledBacteria, mediaAvailable, transferMedia } from './gifts';
 import { guppyTraits } from './lookalike';
-import { BELLY_SHOWS, buyNurseryBox, daysToBirth, DUE_PREGNANCY, moveToNursery, nurseryRefusal, releaseNursery, rescueFryToNursery, usesNursery } from './nursery';
+import { BELLY_DARK, BELLY_SHOWS, buyNurseryBox, daysToBirth, DUE_PREGNANCY, moveToNursery, nurseryRefusal, releaseNursery, rescueFryToNursery, usesNursery } from './nursery';
 import { fulfillOrder, matchingFish, orderBoard, orderRefusal, orderSupply, orderTitle, type ShopOrder } from './orders';
 import { previewPair, typicalStoreGenome, type PreviewKid } from './pair-preview';
 import { FISH_SPECIES, isShrimpSpecies } from './species';
@@ -787,7 +787,7 @@ export const BELLY_MILESTONES = [
 ] as const;
 /** 開局第一尾快生的母魚（polish-to-9.md §7.1，買來就 0.88～0.92）：買回來隔天說胎斑變大，快生時說看得到眼睛（取代一般的「出現黑色胎斑」）。 */
 const FIRST_BELLY = [
-  { key: 'dark', at: 0.85 },
+  { key: 'dark', at: BELLY_DARK },
   { key: 'eyes', at: DUE_PREGNANCY },
 ] as const;
 /** 品系下一代懷孕前段的里程碑（開獎那窩有 C15 開獎準備，之後的每代沒有）。 */

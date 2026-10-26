@@ -103,6 +103,7 @@ button.todo-item.go:hover { color: var(--accent, #f0c96a); }
 .fish-hero { display: grid; place-items: center; height: 130px; border-radius: 16px; background: radial-gradient(closest-side, rgba(120, 220, 230, 0.22), rgba(120, 220, 230, 0)); }
 .fish-hero img { max-width: 78%; max-height: 120px; object-fit: contain; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.5)); }
 .selcard .dead { color: var(--bad); margin: 6px 0; }
+.selcard .sel-belly { margin: 6px 0 2px; font-size: 12px; color: #f2c9a8; }
 .card-x { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; padding: 0; border: 1px solid rgba(243, 234, 216, 0.2); border-radius: 50%; background: transparent; font-size: 11px; line-height: 1; color: var(--muted); }
 .selcard.empty .card-x { display: none; }
 .tank-label { position: absolute; z-index: 3; left: calc(env(safe-area-inset-left) + 18px); color: rgba(243, 234, 216, 0.55); font-size: 11px; letter-spacing: 0.1em; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); background: none; border: 0; padding: 4px 2px; cursor: pointer; }

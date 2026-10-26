@@ -162,6 +162,8 @@ export interface Economy {
   /** 開局第一次買到的那尾快生母魚：懷孕程度（takeStoreFemales 記下）和放進缸後的 id（addFish 對上就記，早上報告的胎斑里程碑用）。 */
   firstMomPregnancy?: number;
   firstMomId?: number;
+  /** 任務卡現在這句（輪播前的原句）從什麼時候開始（polish-to-9.md §8.2：同一句超過 3 天換成進度句）。 */
+  stepSince?: { text: string; hours: number };
   /** 寶箱累計開出多少魚幣（第 60 天前上限 400，polish-to-9.md §4）。 */
   chestCoins?: number;
   /**

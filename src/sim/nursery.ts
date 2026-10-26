@@ -27,6 +27,17 @@ export function daysToBirth(state: TankState, fish: Fish): number | null {
   return ((1 - fish.pregnancy) * breeding.gestationDays) / Math.sqrt(temperatureFactor(state.water.tempC));
 }
 
+/** 胎斑變大、變黑（再兩三天就生）的懷孕程度；早上報告第一尾母魚的里程碑（choices.ts）和選取卡用同一個。 */
+export const BELLY_DARK = 0.85;
+
+/** 選取卡上說這尾母魚的肚子（g35：任務卡叫玩家點她看肚子，卡上要看得到）；肚子還看不出來回傳 null。 */
+export function bellyText(state: TankState, fish: Fish): string | null {
+  if (!fish.alive || fish.sex !== 'female' || fish.pregnancy < BELLY_SHOWS) return null;
+  const days = Math.max(1, Math.round(daysToBirth(state, fish) ?? 1));
+  const look = fish.pregnancy >= DUE_PREGNANCY ? '胎斑裡看得到小魚的眼睛' : fish.pregnancy >= BELLY_DARK ? '胎斑變大、變黑了' : '肚子圓了，看得到胎斑';
+  return `懷孕：${look}，大約 ${days} 天後生`;
+}
+
 /** 玩家點開了這尾母魚的卡片：肚子看得出懷孕的話，記下這一胎看過了（#282）。 */
 export function noteBellySeen(fish: Fish): void {
   if (fish.alive && fish.sex === 'female' && fish.pregnancy >= BELLY_SHOWS) fish.bellySeen = true;

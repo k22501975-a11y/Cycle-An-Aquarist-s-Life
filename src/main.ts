@@ -439,7 +439,7 @@ async function start(): Promise<void> {
     const cond = fish?.alive ? sim.fishCondition(game.state, fish) : null;
     // 肖像有快取，同一個外觀拿到的是同一個字串；長大換外觀時卡片跟著換圖
     const pic = fish?.alive ? view.portrait(fish) : null;
-    if (!selChanged(fish ? `${fish.id}:${pic?.length}:${fish.alive}:${Math.round(fish.health * 50)}:${Math.round(fish.stress * 50)}:${fishName(fish)}:${cond?.hunger}:${cond?.causes[0]?.key}:${!!fish.keeper}` : '-')) return;
+    if (!selChanged(fish ? `${fish.id}:${pic?.length}:${fish.alive}:${Math.round(fish.health * 50)}:${Math.round(fish.stress * 50)}:${fishName(fish)}:${cond?.hunger}:${cond?.causes[0]?.key}:${!!fish.keeper}:${Math.round(fish.pregnancy * 50)}` : '-')) return;
     selCard.classList.toggle('empty', !fish);
     if (!fish) {
       selCard.replaceChildren(h('div.card-title', {}, '觀察'), h('p.hint', {}, '點缸裡的魚，看看牠的狀況。'));
@@ -458,6 +458,7 @@ async function start(): Promise<void> {
     }
     if (!cond) return;
     const hungry = cond.hunger === 'hungry' || cond.hunger === 'starving';
+    const belly = sim.bellyText(game.state, fish);
     // 魚不太舒服、又找得到原因：多一顆有老闆頭像的「為什麼？」，老闆用一句話說原因和怎麼做
     const ask = needsAdvice(cond) || illnessOf(fish)
       ? h('button.btn.small.primary.ask-owner', { onclick: () => void ownerSay(causeAdvice(fishName(fish), cond.causes, fish), undefined, undefined, true) }, ownerImg('ask-avatar'), '為什麼？')
@@ -470,6 +471,8 @@ async function start(): Promise<void> {
       bar('健康', fish.health, fish.health > 0.6 ? 'ok' : fish.health > 0.3 ? 'warn' : 'bad'),
       bar('壓力', fish.stress, fish.stress < 0.4 ? 'warn' : 'bad'),
       bar('飽足', 1 - cond.hungerValue, hungry ? (cond.hunger === 'starving' ? 'bad' : 'warn') : 'ok'),
+      // 懷孕的母魚：任務卡叫玩家「點她看看肚子」，卡上就要看得到肚子（g35）
+      ...(belly ? [h('p.sel-belly', {}, belly)] : []),
       h('div.row', {}, ask, h('button.btn.small', { onclick: () => panelSheet('觀察這條魚', (p) => p.fishPanel(ctx, fish.id), { live: true }) }, '詳細')),
     );
   };
