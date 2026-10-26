@@ -927,6 +927,8 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .setup-dots i.now { background: #fff; box-shadow: 0 0 8px rgba(255, 255, 255, 0.8); }
 .setup-go { font-size: 18px; padding: 14px 26px; min-width: 240px; touch-action: none; user-select: none; -webkit-user-select: none; opacity: 0.72; }
 .setup-prompt.waiting .setup-go { opacity: 1; animation: setup-breathe 1.4s ease-in-out infinite; }
+/* 挑設備的面板開著時先藏起大按鈕：它蓋在面板底部的「推薦組合」上（g36），面板開著也用不到它；關掉面板就回來 */
+body:has(.sheet.open) .setup-prompt { opacity: 0; pointer-events: none; transition: opacity 0.2s; }
 @keyframes setup-breathe { 0%, 100% { box-shadow: 0 0 14px rgba(227, 189, 109, 0.45); } 50% { box-shadow: 0 0 30px rgba(227, 189, 109, 0.95); } }
 /* 開局歡迎：疊在挑設備畫面的缸那一側，點一下收起 */
 /* 開局（polish-to-9.md §8.1）：歡迎是缸上方的一行字、夢想魚預告是角落的小卡，都不擋缸、點不到 */
