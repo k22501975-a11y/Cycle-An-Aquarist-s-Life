@@ -3,15 +3,15 @@ import { raiseCashStep } from './raise-cash';
 import { canSalt, SALT_DAYS, saltDaysLeft, saltWorking } from './salt-cure';
 import { HUNGRY } from './readings';
 import { CALM_DAYS, GOALS, goalState, nextGoals, PURPOSE_GOAL_COUNT, raisedCount, type Goal } from './goals';
-import { COLORING_AT, daysToLength, growthStage, maxLengthCm } from './growth';
+import { COLORING_AT, daysToLength, daysUntilSexVisible, growthStage, maxLengthCm, sexVisible } from './growth';
 import { newTankCost } from './household';
-import { BELLY_SHOWS, daysToBirth, dueMothers } from './nursery';
+import { BELLY_SHOWS, daysToBirth, dueMothers, NURSERY_FRY_CAPACITY, nurseryFish } from './nursery';
 import { orderBoard, orderSupply } from './orders';
 import { temperatureFactor } from './chemistry';
 import { hasVisible } from './processes/disease';
 import { HEATER_RAMP_C_PER_HOUR, heaterLiftC } from './processes/thermal';
 import { FISH_SPECIES, isShrimpSpecies } from './species';
-import type { Fish, TankState } from './state';
+import { isJuvenile, type Fish, type TankState } from './state';
 import { breedingTankRaised, displayTankHighPlants, purposeTanks } from './tank-purpose';
 
 /**
@@ -258,6 +258,23 @@ function raiseStuckStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   return fast ? { text: `養到轉色 ${Math.min(5, raisedCount(tanks))}/5，最快的那尾還差約 ${fast.days} 天`, target: 'fastest' } : null;
 }
 
+/** 主缸小魚最近被吃多久內算「還在被吃」（育幼盒滿了的提示用）。 */
+const FRY_EATEN_RECENT_HOURS = 48;
+
+/**
+ * 只有一缸、育幼盒滿了、外面的小魚最近還在被吃，錢又夠買第二缸：馬上叫玩家去買（g35：之前停在「一天餵兩次」5 天）。
+ * 錢不夠回 null（照原本的步驟）。
+ */
+function boxFullStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
+  if (tanks.length !== 1) return null;
+  const t = tanks[0];
+  if (!t.nurseryBox || nurseryFish(t).filter(isJuvenile).length < NURSERY_FRY_CAPACITY) return null;
+  const exposed = t.fish.some((f) => f.alive && !f.nursery && (f.generation ?? 0) >= 1 && growthStage(f) === 'fry');
+  const eaten = t.events.some((e) => e.type === 'fry_eaten' && t.hours - e.hours <= FRY_EATEN_RECENT_HOURS);
+  if (!exposed || !eaten || economy(t).coins < newTankCost(tanks, 'nano20')) return null;
+  return { text: '育幼盒滿了，小魚會被吃。買第二個缸給小魚住', target: 'shop_tank' };
+}
+
 /** 還沒交過任何單、起步單的小螺缸裡已經湊得齊（第一次買水草附送的螺）：叫玩家去交（polish-to-9.md §7.2：第一筆收入在第 5 分鐘以內）。 */
 function starterStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   const board = orderBoard(tanks[0]);
@@ -290,11 +307,13 @@ function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
       // 不叫玩家多餵：新缸要少餵，懷孕母魚現實上也不用多餵（企劃 2026-10-21）
       return motherStep(tanks) ?? { text: '趁養水，拖塊石頭或水草造景', target: 'scape' };
     case 'protect_fry':
-      if (bredFry(tanks).length > 0) return { text: '小魚還小，一天餵兩次', target: 'feed' };
+      if (bredFry(tanks).length > 0) return boxFullStep(tanks) ?? { text: '小魚還小，一天餵兩次', target: 'feed' };
       return motherStep(tanks) ?? { text: '餵飽母魚，等她懷孕', target: 'feed' };
     case 'raise5': {
       const feedStep = { text: `小魚一天餵兩次，養到轉色（${Math.min(5, raisedCount(tanks))}/5）`, target: 'feed' } as const;
       // 「一天餵兩次」只在小魚真的餓了才說；其他時候說選育走到哪（midgame.md §2）
+      const full = boxFullStep(tanks);
+      if (full) return full;
       if (bredFry(tanks).some((f) => f.hunger >= HUNGRY)) return feedStep;
       const breeding = breedingStep?.(tanks) ?? null;
       return raiseStuckStep(tanks) ?? (breeding ? { text: breeding, target: 'fastest' } : feedStep);
@@ -342,5 +361,45 @@ export function nextStep(tanks: TankState[]): NextStep | null {
   if (!goal || !tanks[0]) return null;
   // 生病不等人：不管現在是哪個目標，先叫玩家治療（體驗第 15 輪 #291：白點 5 天，下一步還在說母魚倒數）
   if (anySick(tanks)) return { goal: goal.id, ...sickStep(tanks) };
-  return { goal: goal.id, ...stepFor(goal, tanks) };
+  return { goal: goal.id, ...rotateStale(tanks, stepFor(goal, tanks)) };
+}
+
+/** 任務卡同一句停多久就開始輪播進度句（polish-to-9.md §8.2）。 */
+export const STALE_STEP_HOURS = 72;
+/** 輪播時每句停多久。 */
+const ROTATE_HOURS = 12;
+/** 只有「等著」的句子才輪播；要玩家動手的（交單、賣魚、下藥…）照原句。 */
+const WAITING: ReadonlySet<NextTarget> = new Set(['feed', 'fastest', 'mother']);
+
+/**
+ * 同一句停超過 STALE_STEP_HOURS：跟原句輪流出現跟目標有關的進度句（最大的那尾多大、育幼盒裡幾尾、最快的還差幾天轉色），
+ * 玩家看得出事情在往前走（g35：「小魚還小，一天餵兩次」停了 8 分鐘）。原句換了就重新算。
+ */
+function rotateStale(tanks: TankState[], step: Omit<NextStep, 'goal'>): Omit<NextStep, 'goal'> {
+  const e = economy(tanks[0]);
+  const now = tanks[0].hours;
+  if (e.stepSince?.text !== step.text) e.stepSince = { text: step.text, hours: now };
+  const age = now - e.stepSince.hours;
+  if (!WAITING.has(step.target) || age < STALE_STEP_HOURS) return step;
+  const lines = progressLines(tanks);
+  if (lines.length === 0) return step;
+  const all = [...lines, step];
+  return all[Math.floor((age - STALE_STEP_HOURS) / ROTATE_HOURS) % all.length];
+}
+
+/** 跟養小魚有關的進度句（沒有自家小魚回空陣列）。 */
+function progressLines(tanks: TankState[]): Array<Omit<NextStep, 'goal'>> {
+  const young = living(tanks).filter((f) => (f.generation ?? 0) >= 1 && !isShrimpSpecies(f.species) && !sexVisible(f));
+  if (young.length === 0) return [];
+  const out: Array<Omit<NextStep, 'goal'>> = [];
+  const big = young.reduce((a, b) => (b.lengthCm > a.lengthCm ? b : a));
+  out.push({ text: `最大的那尾 ${big.lengthCm.toFixed(1)} cm 了，再 ${daysUntilSexVisible(big)} 天看得出公母`, target: 'fastest' });
+  const t = tanks.find((x) => x.nurseryBox && nurseryFish(x).some(isJuvenile));
+  if (t) {
+    const eaten = t.events.filter((ev) => ev.type === 'fry_eaten' && t.hours - ev.hours <= 24).reduce((n, ev) => n + (ev.count ?? 1), 0);
+    out.push({ text: `育幼盒裡 ${nurseryFish(t).filter(isJuvenile).length} 尾，今天被吃 ${eaten} 尾`, target: 'fry_box', tank: tanks.indexOf(t) });
+  }
+  const fast = fastestColoring(tanks);
+  if (fast) out.push({ text: `最快的那尾再約 ${fast.days} 天轉色`, target: 'fastest' });
+  return out;
 }
