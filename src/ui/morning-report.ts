@@ -1,5 +1,5 @@
 import { crisisText, type Crisis } from '../game/crisis';
-import { BLOOM_NOTE, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
+import { BLOOM_NOTE, fryHome, fryNeedHome, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
 import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, breederIds, breederName, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 import { cheapHeaterStep, crisisTodos, lingering, warmMoveStep, wipedOut } from './status';
@@ -31,7 +31,8 @@ export type ReportAction =
   | 'insulate' // 冬天沒加熱棒：一鍵臨時保溫（#397）
   | 'heater_credit' // 冬天沒錢換加熱棒：跟阿德賒一支（#397）
   | 'move_warm' // 冬天加熱棒弄不到：冷缸的魚搬去有加熱棒的缸（#400）
-  | 'buy_heater'; // 冬天錢不夠換同款：買撐得住的便宜加熱棒（#404）
+  | 'buy_heater' // 冬天錢不夠換同款：買撐得住的便宜加熱棒（#404）
+  | 'move_fry'; // 小魚在被吃、別缸養好水了：一鍵搬過去（#425）
 
 export type ReportKind =
   | 'crisis'
@@ -263,12 +264,14 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     // 被吃掉的仔魚（#176）：有就不能寫「一夜平安」，並教玩家怎麼救
     const eaten = events.filter((x) => x.type === 'fry_eaten').reduce((n, e) => n + (e.count ?? 0), 0);
     if (eaten > 0) {
+      // 另一缸能收小魚（#425）：叫玩家一鍵搬過去，不叫撈進育幼盒
+      const home = fryNeedHome(t) ? fryHome(tanks, index) : null;
       const shrimp = events.filter((x) => x.type === 'fry_eaten').every((e) => isShrimpSpecies((e.cause ?? 'guppy') as FishSpeciesId));
       push({
         kind: 'eaten',
         tone: 'warn',
-        text: `昨晚有 ${fryEatenText(t, eaten, shrimp)}`,
-        action: 'fry_box',
+        text: `昨晚有 ${fryEatenText(t, eaten, shrimp, home === null ? null : tankLabel(tanks, home), tanks.length > 1)}`,
+        action: home === null ? 'fry_box' : 'move_fry',
         count: eaten,
       });
     }

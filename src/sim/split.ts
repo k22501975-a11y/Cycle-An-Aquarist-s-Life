@@ -2,7 +2,10 @@ import { economy } from './economy';
 import { growthStage, sexVisible } from './growth';
 import { moveFish } from './household';
 import { crowdingRatio } from './processes/fauna';
+import { NURSERY_FRY_CAPACITY, nurseryFish } from './nursery';
+import { isCycled } from './processes/nitrogen';
 import { moveToQuarantine } from './quarantine';
+import { needsSetup } from './setup';
 import { FISH_SPECIES } from './species';
 import { isJuvenile, type Fish, type TankState } from './state';
 
@@ -103,4 +106,33 @@ export function rescueFryToBox(state: TankState): number {
   let moved = 0;
   for (const f of splitGroup(state, 'by_size')) if (isJuvenile(f) && moveToQuarantine(state, f.id)) moved++;
   return moved;
+}
+
+/** 這缸的小魚需要搬家：缸裡有成魚吞得下的小魚，或育幼盒滿了（再生的就只能在外面被吃）。 */
+export function fryNeedHome(state: TankState): boolean {
+  const living = state.fish.filter((f) => f.alive);
+  if (preyAtRisk(living).length > 0) return true;
+  return !!state.nurseryBox && nurseryFish(state).filter(isJuvenile).length >= NURSERY_FRY_CAPACITY;
+}
+
+/** 收得了小魚的缸：開好缸、硝化菌長好，而且沒有吞得下小魚的成魚。沒有回傳 null。 */
+export function fryHome(tanks: TankState[], from: number): number | null {
+  const at = tanks.findIndex(
+    (t, i) => i !== from && !needsSetup(t) && isCycled(t) && !t.fish.some((f) => f.alive && !isJuvenile(f) && FISH_SPECIES[f.species].mouthRatio > 0),
+  );
+  return at >= 0 ? at : null;
+}
+
+/**
+ * 一鍵把小魚搬進新缸（g36 #425：買了第二缸卻沒人叫你搬，前 15 天被吃 17 尾）：主缸外面和育幼盒裡還沒長大的魚
+ * 都慢慢對水搬過去，育幼盒空出來給下一窩。掛在市場上的不搬。沒有能收的缸或沒有小魚回傳 null。
+ */
+export function moveFryHome(tanks: TankState[], from: number): { to: number; count: number } | null {
+  const to = fryHome(tanks, from);
+  if (to === null) return null;
+  const src = tanks[from];
+  const fry = src.fish.filter((f) => f.alive && isJuvenile(f) && f.listing === undefined && f.guardian === undefined);
+  let count = 0;
+  for (const f of fry) if (moveFish(src, tanks[to], f.id, true)) count++;
+  return count > 0 ? { to, count } : null;
 }

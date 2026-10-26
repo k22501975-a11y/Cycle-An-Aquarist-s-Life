@@ -4,7 +4,7 @@ import { canSalt, SALT_DAYS, saltDaysLeft, saltWorking } from './salt-cure';
 import { HUNGRY } from './readings';
 import { CALM_DAYS, GOALS, goalState, nextGoals, PURPOSE_GOAL_COUNT, raisedCount, type Goal } from './goals';
 import { COLORING_AT, daysToLength, daysUntilSexVisible, growthStage, maxLengthCm, sexVisible } from './growth';
-import { newTankCost } from './household';
+import { newTankCost, tankLabel } from './household';
 import { BELLY_SHOWS, daysToBirth, dueMothers, NURSERY_FRY_CAPACITY, nurseryFish } from './nursery';
 import { orderBoard, orderSupply } from './orders';
 import { temperatureFactor } from './chemistry';
@@ -12,6 +12,7 @@ import { hasVisible } from './processes/disease';
 import { HEATER_RAMP_C_PER_HOUR, heaterLiftC } from './processes/thermal';
 import { FISH_SPECIES, isShrimpSpecies } from './species';
 import { isJuvenile, type Fish, type TankState } from './state';
+import { fryHome, fryNeedHome } from './split';
 import { breedingTankRaised, displayTankHighPlants, purposeTanks } from './tank-purpose';
 
 /**
@@ -51,7 +52,8 @@ export type NextTarget =
   | 'insulate' // 冬天沒加熱棒（#397）：切到那缸、一鍵臨時保溫（包毛巾、泡溫水瓶）
   | 'heater_credit' // 冬天沒錢換加熱棒（#397）：切到那缸、跟阿德賒一支
   | 'move_warm' // 冬天加熱棒弄不到（#400）：冷缸的魚連袋子泡進有加熱棒的缸、慢慢對水再放
-  | 'buy_heater'; // 冬天錢不夠換同款（#404）：買一支撐得住的便宜加熱棒裝上
+  | 'buy_heater' // 冬天錢不夠換同款（#404）：買一支撐得住的便宜加熱棒裝上
+  | 'move_fry'; // 小魚在這缸會被吃、另一缸養好水了（#425）：一鍵把小魚搬過去
 
 export interface NextStep {
   /** 對應的目標 id。 */
@@ -361,7 +363,18 @@ export function nextStep(tanks: TankState[]): NextStep | null {
   if (!goal || !tanks[0]) return null;
   // 生病不等人：不管現在是哪個目標，先叫玩家治療（體驗第 15 輪 #291：白點 5 天，下一步還在說母魚倒數）
   if (anySick(tanks)) return { goal: goal.id, ...sickStep(tanks) };
+  // 小魚在被吃、別缸已經能收：先搬（g36 #425：第二缸養好水 5 天都空著，小魚被吃 17 尾）
+  const fry = fryMoveStep(tanks);
+  if (fry) return { goal: goal.id, ...fry };
   return { goal: goal.id, ...rotateStale(tanks, stepFor(goal, tanks)) };
+}
+
+/** 有缸的小魚需要搬家，而且另一缸養好水、沒有會吃小魚的成魚：叫玩家把小魚搬過去。 */
+function fryMoveStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
+  const from = tanks.findIndex((t, i) => fryNeedHome(t) && fryHome(tanks, i) !== null);
+  if (from < 0) return null;
+  const to = fryHome(tanks, from)!;
+  return { text: `${tankLabel(tanks, to)}養好水了，把小魚搬過去`, target: 'move_fry', tank: from };
 }
 
 /** 任務卡同一句停多久就開始輪播進度句（polish-to-9.md §8.2）。 */
