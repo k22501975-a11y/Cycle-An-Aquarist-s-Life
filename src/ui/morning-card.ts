@@ -34,6 +34,7 @@ const ACTION_ICON: Record<NonNullable<ReportItem['action']>, ArtIcon> = {
   move_warm: 'net',
   buy_heater: 'shop',
   move_fry: 'net',
+  cycle_tank: 'gear',
 };
 
 /** 點下去會做什麼（按鈕上的小字）。 */
@@ -58,6 +59,7 @@ const ACTION_LABEL: Record<NonNullable<ReportItem['action']>, string> = {
   move_warm: '搬魚',
   buy_heater: '買一支',
   move_fry: '搬小魚',
+  cycle_tank: '養新缸',
 };
 
 /** 早上報告每行的三類（daily-loop.md §2）：要處理的壞消息、目標的進度、好消息。 */

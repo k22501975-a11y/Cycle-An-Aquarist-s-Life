@@ -79,6 +79,12 @@ export function colorProgress(fish: Fish): number {
   return isShrimp(fish) ? smooth(0.15, 0.55, r) : smooth(0.55, 0.75, r);
 }
 
+/**
+ * 第一窩出生滿幾天出選種卡（C2）。模擬裡公母要約 38 天才看得清楚（轉色進度 0.35），等那時候已經過了中期，
+ * 所以選種是看早期跡象的預告（企劃 2026-10-22，midgame.md C2）：跟「長得像誰」卡同一天，照基因寫公母和長大後的花色。
+ */
+export const PICK_AFTER_BROOD_DAYS = 12;
+
 /** 看得出公母了沒：基因一出生就決定，只是轉色前看不出來。 */
 export function sexVisible(fish: Fish): boolean {
   return isShrimp(fish) ? fish.lengthCm / maxLengthCm(fish) >= 0.4 : colorProgress(fish) >= 0.35;

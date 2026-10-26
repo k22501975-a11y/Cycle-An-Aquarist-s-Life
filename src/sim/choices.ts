@@ -5,7 +5,7 @@ import { buybackRefusal, economy, FISH_PRICES, FRY_BAG, fishBuybackPrice, isFryS
 import { broodFactor, FOOD_GRADES, nutritionFactor, type FoodGrade, type FoodKind } from './food';
 import { childInbreeding, cross, finWords, GUPPY_STRAIN_PRICES, lookIndex, matingSuccess, phenotype, strainName, type GuppyGenome, type GuppyPhenotype } from './genetics';
 import { tankLock } from './goals';
-import { daysToLength, growthStage, maxLengthCm, sexVisible } from './growth';
+import { daysToLength, growthStage, maxLengthCm, PICK_AFTER_BROOD_DAYS, sexVisible } from './growth';
 import { buyTankRefusal, moveFish, newTankCost, tankLabel } from './household';
 import { crowdingRatio } from './processes/fauna';
 import { isCycled } from './processes/nitrogen';
@@ -271,11 +271,8 @@ export interface LineBrood {
 export const CHOICE_RESHOW_DAYS = 3;
 /** 選種後至少隔幾天才出配對卡（C4）。 */
 export const PAIR_AFTER_PICK_DAYS = 2;
-/**
- * 第一窩出生滿幾天出選種卡（C2）。模擬裡公母要約 38 天才看得清楚（轉色進度 0.35），等那時候已經過了中期，
- * 所以選種是看早期跡象的預告（企劃 2026-10-22，midgame.md C2）：跟「長得像誰」卡同一天，照基因寫公母和長大後的花色。
- */
-export const PICK_AFTER_BROOD_DAYS = 12;
+// 選種日（C2）的天數放在 growth.ts：任務卡的進度句也要用，跟早上報告說的天數一樣（g37）
+export { PICK_AFTER_BROOD_DAYS };
 /** 第一窩出生滿幾天、錢又夠，才出第二缸卡（C3）：小魚快長到 1.6 cm 要離開育幼盒，需要地方長大（midgame.md C3）。 */
 export const TANK_AFTER_BROOD_DAYS = 6;
 /** 種魚至少還要幾天才長大，才出 C7（快長大了就不用問怎麼養）。 */
@@ -2792,6 +2789,15 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
   // 每一窩都問的卡：選了就不用等隔幾天，下一窩（下一尾）到了就問
   if (id === 'C9' || id === 'C10' || id === 'C13') delete s.shown[id];
   return null;
+}
+
+/**
+ * 任務卡「新缸先養水」（g37 #428）：直接打開「新缸要怎麼養水？」，不用等早上報告（早上那張沒點的話隔 3 天才再出）。
+ * 小魚等著搬，不列「自己等」。沒有要養水的新缸回傳 null。
+ */
+export function cycleCard(tanks: TankState[]): ChoiceCard | null {
+  const card = cardFor('C8', tanks, choiceState(tanks));
+  return card && { ...card, options: card.options.filter((o) => o.key !== 'wait') };
 }
 
 /** 魚的稱呼：品系加公母（例如「紅蛇王公魚」）。 */

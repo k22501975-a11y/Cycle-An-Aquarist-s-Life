@@ -1467,9 +1467,27 @@ async function start(): Promise<void> {
         if (!moved) return toasts.show('現在沒有養好水、沒有大魚的缸可以放小魚', 'warn');
         game.switchTo(moved.to);
         audio.play('quest', false);
-        toasts.show(`${moved.count} 尾小魚慢慢對水，搬進${sim.tankLabel(game.tanks, moved.to)}了，這裡沒有大魚會吃牠們`);
+        const who = moved.shrimp === 0 ? '小魚' : moved.shrimp === moved.count ? '小蝦' : '小魚蝦';
+        toasts.show(`${moved.count} 尾${who}慢慢對水，搬進${sim.tankLabel(game.tanks, moved.to)}了，這裡沒有大魚會吃牠們`);
         return;
       }
+      case 'cycle_tank':
+        // 小魚要搬家、新缸還沒養水（#428）：切到新缸，打開「新缸要怎麼養水？」，選了就開始養
+        if (tank !== undefined) game.switchTo(tank);
+        return panelSheet('新缸養水', (p) => {
+          const card = p.cycleCard(game.tanks);
+          if (!card) return h('p.sheet-note', {}, '新缸已經養好水了');
+          return p.choiceVisual(card, (key) => {
+            const why = game.actAll((tanks) => p.chooseOption(tanks, 'C8', key));
+            if (why) return why;
+            sheet.close();
+            audio.play('quest', false);
+            const done = key === 'media' ? '分了一份舊缸濾材過去' : '倒了硝化菌液';
+            const ready = tank !== undefined && sim.isCycled(game.tanks[tank]);
+            toasts.show(ready ? `${done}，新缸的菌夠了，可以把小魚搬過去` : `${done}，新缸約 ${key === 'media' ? 2 : 3} 天養好水，養好就叫你搬小魚`);
+            return null;
+          });
+        });
       case 'move_warm': {
         // 冬天加熱棒弄不到（#400）：冷缸的魚連袋子泡進有加熱棒的缸
         if (tank === undefined) return;
@@ -1991,6 +2009,7 @@ async function start(): Promise<void> {
       case 'move_warm':
       case 'buy_heater':
       case 'move_fry':
+      case 'cycle_tank':
         guide.goNext?.(item.action, item.tank);
         break;
       case 'fish':

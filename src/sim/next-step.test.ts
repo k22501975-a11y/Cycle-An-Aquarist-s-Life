@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, bacteriaCapacity, buyPlant, buyTank, fulfillOrder, orderBoard, updateOrders, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, STALE_STEP_HOURS, NURSERY_FRY_CAPACITY, newTankCost, noteBellySeen, setTankPurpose, showingMother, setBreedingStep, simulate } from '.';
-import { breedingStep } from './choices';
+import { addFish, bacteriaCapacity, buyPlant, buyTank, fulfillOrder, orderBoard, updateOrders, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, STALE_STEP_HOURS, NURSERY_FRY_CAPACITY, newTankCost, noteBellySeen, PICK_AFTER_BROOD_DAYS, setTankPurpose, showingMother, setBreedingStep, simulate } from '.';
+import { breedingStep, choiceState } from './choices';
 
 describe('主畫面的下一步（U1）', () => {
   it('每個目標都說得出下一步，句子短', () => {
@@ -197,8 +197,13 @@ describe('「養大 5 條」卡超過 3 天（#258）', () => {
     const tanks = [s];
     economy(s).coins = newTankCost(tanks, 'nano20');
     const t2 = buyTank(tanks, 'nano20')!;
-    // 還在養水：照原本的步驟
-    expect(nextStep(tanks)?.target).not.toBe('move_fry');
+    // 還沒養水：先叫你養水（g37 #428），點了打開「新缸要怎麼養水？」
+    expect(nextStep(tanks)).toMatchObject({ text: '第 2 缸先養水，小魚才搬得過去', target: 'cycle_tank', tank: 1 });
+    // 分過濾材、還在養：說等就好
+    t2.bacteria.aob = t2.bacteria.nob = bacteriaCapacity(t2) / 4;
+    t2.water.tan = 0.5;
+    expect(nextStep(tanks)).toMatchObject({ text: '第 2 缸在養水，養好就能把小魚搬過去', target: 'test', tank: 1 });
+    t2.water.tan = 0;
     t2.bacteria.aob = t2.bacteria.nob = bacteriaCapacity(t2);
     expect(nextStep(tanks)).toMatchObject({ text: '第 2 缸養好水了，把小魚搬過去', target: 'move_fry', tank: 0 });
   });
@@ -217,13 +222,35 @@ describe('「養大 5 條」卡超過 3 天（#258）', () => {
     };
     for (let i = 0; i < NURSERY_FRY_CAPACITY; i++) fry().nursery = true;
     fry();
+    economy(s).coins = newTankCost([s], 'nano20') - 1;
     expect(nextStep([s])).toMatchObject({ goal: 'protect_fry', target: 'feed' });
-    s.events.push({ hours: s.hours - 10, type: 'fry_eaten', count: 1 });
+    // 錢夠就叫買，不用等小魚真的被吃（g37 #428：等到被吃才叫，已經來不及）
     economy(s).coins = newTankCost([s], 'nano20');
     expect(nextStep([s])).toMatchObject({ goal: 'protect_fry', text: '育幼盒滿了，小魚會被吃。買第二個缸給小魚住', target: 'shop_tank' });
     // 錢不夠：照原本的
     economy(s).coins = newTankCost([s], 'nano20') - 1;
     expect(nextStep([s])).toMatchObject({ target: 'feed' });
+  });
+
+  it('第一窩「再幾天看得出公母」照選種日算，跟早上報告同一個數字；過了選種日就不說（g37）', () => {
+    const s = newGameState(1);
+    goalState([s]).done.push('cycled');
+    s.nurseryBox = true;
+    const f = addFish(s, 'guppy', {});
+    Object.assign(f, { lengthCm: 0.8, ageDays: 3, generation: 1, nursery: true, bornHours: s.hours - 72 });
+    choiceState([s]).firstBrood = f.bornHours;
+    nextStep([s]);
+    const lines: Array<{ text: string; left: number }> = [];
+    for (let i = 0; i < 40; i++) {
+      s.hours += 6;
+      lines.push({ text: nextStep([s])!.text, left: Math.ceil(PICK_AFTER_BROOD_DAYS - (s.hours - f.bornHours!) / 24) });
+    }
+    const sex = lines.filter((l) => l.text.includes('看得出公母'));
+    expect(sex.length).toBeGreaterThan(0);
+    for (const l of sex) {
+      expect(l.left).toBeGreaterThan(0);
+      expect(l.text).toBe(`最大的那尾 0.8 cm 了，再 ${l.left} 天看得出公母`);
+    }
   });
 
   it('等著的同一句停超過 3 天：輪流說小魚的進度，原句換了就重算（polish-to-9.md §8.2）', () => {

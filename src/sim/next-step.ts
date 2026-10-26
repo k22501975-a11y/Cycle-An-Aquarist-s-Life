@@ -3,7 +3,7 @@ import { raiseCashStep } from './raise-cash';
 import { canSalt, SALT_DAYS, saltDaysLeft, saltWorking } from './salt-cure';
 import { HUNGRY } from './readings';
 import { CALM_DAYS, GOALS, goalState, nextGoals, PURPOSE_GOAL_COUNT, raisedCount, type Goal } from './goals';
-import { COLORING_AT, daysToLength, daysUntilSexVisible, growthStage, maxLengthCm, sexVisible } from './growth';
+import { COLORING_AT, daysToLength, daysUntilSexVisible, growthStage, maxLengthCm, PICK_AFTER_BROOD_DAYS, sexVisible } from './growth';
 import { newTankCost, tankLabel } from './household';
 import { BELLY_SHOWS, daysToBirth, dueMothers, NURSERY_FRY_CAPACITY, nurseryFish } from './nursery';
 import { orderBoard, orderSupply } from './orders';
@@ -12,7 +12,7 @@ import { hasVisible } from './processes/disease';
 import { HEATER_RAMP_C_PER_HOUR, heaterLiftC } from './processes/thermal';
 import { FISH_SPECIES, isShrimpSpecies } from './species';
 import { isJuvenile, type Fish, type TankState } from './state';
-import { fryHome, fryNeedHome } from './split';
+import { fryHome, fryNeedHome, fryPrep } from './split';
 import { breedingTankRaised, displayTankHighPlants, purposeTanks } from './tank-purpose';
 
 /**
@@ -53,7 +53,8 @@ export type NextTarget =
   | 'heater_credit' // 冬天沒錢換加熱棒（#397）：切到那缸、跟阿德賒一支
   | 'move_warm' // 冬天加熱棒弄不到（#400）：冷缸的魚連袋子泡進有加熱棒的缸、慢慢對水再放
   | 'buy_heater' // 冬天錢不夠換同款（#404）：買一支撐得住的便宜加熱棒裝上
-  | 'move_fry'; // 小魚在這缸會被吃、另一缸養好水了（#425）：一鍵把小魚搬過去
+  | 'move_fry' // 小魚在這缸會被吃、另一缸養好水了（#425）：一鍵把小魚搬過去
+  | 'cycle_tank'; // 小魚要搬家、新缸還沒養水（#428）：打開「新缸要怎麼養水？」
 
 export interface NextStep {
   /** 對應的目標 id。 */
@@ -364,7 +365,7 @@ export function nextStep(tanks: TankState[]): NextStep | null {
   // 生病不等人：不管現在是哪個目標，先叫玩家治療（體驗第 15 輪 #291：白點 5 天，下一步還在說母魚倒數）
   if (anySick(tanks)) return { goal: goal.id, ...sickStep(tanks) };
   // 小魚在被吃、別缸已經能收：先搬（g36 #425：第二缸養好水 5 天都空著，小魚被吃 17 尾）
-  const fry = fryMoveStep(tanks);
+  const fry = fryMoveStep(tanks) ?? fryPrepStep(tanks);
   if (fry) return { goal: goal.id, ...fry };
   return { goal: goal.id, ...rotateStale(tanks, stepFor(goal, tanks)) };
 }
@@ -375,6 +376,25 @@ function fryMoveStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   if (from < 0) return null;
   const to = fryHome(tanks, from)!;
   return { text: `${tankLabel(tanks, to)}養好水了，把小魚搬過去`, target: 'move_fry', tank: from };
+}
+
+/**
+ * 小魚要搬家、還沒有缸收得了（g37 #428）：有空的新缸就先養水（已經在養就說等幾天），
+ * 只有一缸、育幼盒幫不上忙（盒子滿了，或盒裡有小魚、母魚又快生了）就叫玩家買第二缸。錢不夠照原本的步驟。
+ */
+function fryPrepStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
+  for (let from = 0; from < tanks.length; from++) {
+    const prep = fryPrep(tanks, from);
+    if (!prep) continue;
+    if (prep.kind === 'cycle') {
+      const label = tankLabel(tanks, prep.tank);
+      return prep.started ? { text: `${label}在養水，養好就能把小魚搬過去`, target: 'test', tank: prep.tank } : { text: `${label}先養水，小魚才搬得過去`, target: 'cycle_tank', tank: prep.tank };
+    }
+    if (!prep.afford) continue;
+    const full = nurseryFish(tanks[from]).filter(isJuvenile).length >= NURSERY_FRY_CAPACITY;
+    return { text: full ? '育幼盒滿了，小魚會被吃。買第二個缸給小魚住' : '母魚又懷孕了，盒裡還有小魚。買第二缸給小魚住', target: 'shop_tank' };
+  }
+  return null;
 }
 
 /** 任務卡同一句停多久就開始輪播進度句（polish-to-9.md §8.2）。 */
@@ -400,13 +420,28 @@ function rotateStale(tanks: TankState[], step: Omit<NextStep, 'goal'>): Omit<Nex
   return all[Math.floor((age - STALE_STEP_HOURS) / ROTATE_HOURS) % all.length];
 }
 
+/**
+ * 「再幾天看得出公母」：第一窩照選種日算（跟早上報告、選種卡同一個數字，g37：任務卡說 33 天、報告說 7 天），
+ * 選種日過了就不說（選種卡已經照基因寫了公母）；之後的窩照轉色進度估。
+ */
+function sexLine(tanks: TankState[], big: Fish): string | null {
+  const s = economy(tanks[0]).choices;
+  const first = s?.firstBrood;
+  if (first !== undefined && big.bornHours !== undefined && Math.abs(big.bornHours - first) < 24) {
+    const left = Math.ceil(PICK_AFTER_BROOD_DAYS - (tanks[0].hours - first) / 24);
+    return left > 0 ? `最大的那尾 ${big.lengthCm.toFixed(1)} cm 了，再 ${left} 天看得出公母` : null;
+  }
+  return `最大的那尾 ${big.lengthCm.toFixed(1)} cm 了，再 ${daysUntilSexVisible(big)} 天看得出公母`;
+}
+
 /** 跟養小魚有關的進度句（沒有自家小魚回空陣列）。 */
 function progressLines(tanks: TankState[]): Array<Omit<NextStep, 'goal'>> {
   const young = living(tanks).filter((f) => (f.generation ?? 0) >= 1 && !isShrimpSpecies(f.species) && !sexVisible(f));
   if (young.length === 0) return [];
   const out: Array<Omit<NextStep, 'goal'>> = [];
   const big = young.reduce((a, b) => (b.lengthCm > a.lengthCm ? b : a));
-  out.push({ text: `最大的那尾 ${big.lengthCm.toFixed(1)} cm 了，再 ${daysUntilSexVisible(big)} 天看得出公母`, target: 'fastest' });
+  const sex = sexLine(tanks, big);
+  if (sex) out.push({ text: sex, target: 'fastest' });
   const t = tanks.find((x) => x.nurseryBox && nurseryFish(x).some(isJuvenile));
   if (t) {
     const eaten = t.events.filter((ev) => ev.type === 'fry_eaten' && t.hours - ev.hours <= 24).reduce((n, ev) => n + (ev.count ?? 1), 0);
