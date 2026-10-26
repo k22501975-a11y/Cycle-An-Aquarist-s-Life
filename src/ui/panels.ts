@@ -2,7 +2,7 @@ import type { SoundId } from '../audio/sounds';
 import { FEATURES } from '../features';
 import { substrateName, tankSubstrateLook } from '../render/substrate';
 import { kitColor, type KitParam } from '../render/ops-fx';
-import { DREAM_MALE, isShrimpSpecies, isFrySale, storeOffer, takeStoreFemales, addBottledBacteria, addFish, CARE_EAT_THRESHOLD, careTarget, guardianOf, hasSpawnSite, isBroodParent, PARENTAL, addSnail, APPLE_COLOR_LABELS, catchPests, collectTrap, doseMolluscicide, buyPlant as plantFromShop, isLightOn, PESTS, pestCount, removeClutches, removeDeadSnails, scrapeNeriteEggs, setTrap, snailBloom, SNAILS, type AppleColor, type PestKind, type SnailKind, addFishToQuarantine, addCuttings, addHardscape, addPlant, transferMedia, mediaAvailable, buybackRefusal, setKeeper, GUPPY_STRAIN_PRICES, GUPPY_FIN_STRAINS, GUPPY_STRAINS, finWords, matingSuccess, predictOffspring, canClaimStarterPack, claimStarterPack, starterPackAllCold, starterPackTank, buyTank, addHolidayTablet, buyTankRefusal, HOLIDAY_TABLET_DAYS, installFeeder, feederInstalledText, LOCKED_SPECIES, speciesUnlocked, tankLock, unlockHint, moveFish, newTankCost, purposeCost, setTankPurpose, suggestPurpose, TANK_PURPOSES, type TankPurpose, removeTank, removeTankRefusal, slotPrice, TANK_SETS, tankLabel, type TankSizeId, chargeMeal, economy, FISH_PRICES, BETTA_FEMALE_PRICE, fishBuybackPrice, PLANT_PRICES, plantBuybackPrice, price, sellCuttings, sellableCuttings, chestCuttingsOf, sellFish, sellsLeftToday, spend, takeCutting, buyQuarantine, HARDSCAPE, removeHardscape, placeFromBag, replaceSubstrate, SUBSTRATES, doseAntibiotic, doseDewormer, doseQuarantine, hasVisible, isJuvenile, crowdingRatio, COMFORT_BAND, dripMinutes, dripGrade, dripTutorialLeft, recordDrip, farmHabit, habitGap, habitOf, phBeyondSurvival, SPLIT_PLAN_LABELS, splitAdvice, splitGroup, splitTank, rescueFryToBox, BOX_CAPACITY, buyNurseryBox, dueMothers, moveDueToNursery, moveToNursery, NURSERY_FRY_CAPACITY, NURSERY_RELEASE_CM, nurseryFish, nurseryRefusal, releaseNursery, rescueFryToNursery, type SplitPlan, daysUntilSexVisible, growthFactors, growthStage, maxLengthCm, sexVisible, stageLabel, phenotype, strainName, QUARANTINE_DAYS, quarantineDays, readyForTank, releaseQuarantine, swallowCm, tooSmallForTank, PINCH_MEALS, orderBoard, matchingFish, orderSupply, moveToQuarantine, AIR_PUMPS, CHILLERS, CO2_KITS, doseIchMedication, DEFAULT_FOOD, feed, FANS, FOOD_GRADES, FOOD_KINDS, mealMg, mealPrice, tapFeed, type TapFeedResult, FILTERS, FISH_SPECIES, freeAmmonia, HEATERS, hidingFactor, LIGHTS, monthOf, observeSymptoms, PLANT_SPECIES, REGION_LABELS, removeDeadFish, replaceFilter, rinseFilterMedia, seasonName, setHeaterTarget, installHeater, ichHeatC, ICH_MED_WORKING, changeDilutesIch, treatingIch, topUp, unplugHeater, trimPlant, waterChange, suggestedWaterChange, type DripOutcome, type Fish, type FishSpeciesId, type FoodGrade, type FoodKind, type Symptom, type PlantSpeciesId, type Region, type TankState, type TestKitReading, markDaily, needsSetup, needsInsulation, insulateTank, INSULATE_BUMP_C, heaterCreditRefusal, creditTarget, takeHeaterCredit, coldWithoutHeater, creditSale, warmMove, moveToWarmTank, cheapHeater, buyCheapHeater, SALT_DAYS, SALT_HEAT_C } from '../sim';
+import { DREAM_MALE, isShrimpSpecies, isFrySale, storeOffer, takeStoreFemales, addBottledBacteria, addFish, CARE_EAT_THRESHOLD, careTarget, guardianOf, hasSpawnSite, isBroodParent, PARENTAL, addSnail, APPLE_COLOR_LABELS, catchPests, collectTrap, doseMolluscicide, buyPlant as plantFromShop, isLightOn, PESTS, pestCount, removeClutches, removeDeadSnails, scrapeNeriteEggs, setTrap, snailBloom, SNAILS, type AppleColor, type PestKind, type SnailKind, addFishToQuarantine, addCuttings, addHardscape, addPlant, transferMedia, mediaAvailable, buybackRefusal, setKeeper, GUPPY_STRAIN_PRICES, GUPPY_FIN_STRAINS, GUPPY_STRAINS, finWords, matingSuccess, predictOffspring, canClaimStarterPack, claimStarterPack, starterPackAllCold, starterPackTank, buyTank, addHolidayTablet, buyTankRefusal, HOLIDAY_TABLET_DAYS, installFeeder, feederInstalledText, LOCKED_SPECIES, speciesUnlocked, tankLock, unlockHint, moveFish, newTankCost, purposeCost, setTankPurpose, suggestPurpose, TANK_PURPOSES, type TankPurpose, removeTank, removeTankRefusal, slotPrice, TANK_SETS, tankLabel, type TankSizeId, chargeMeal, economy, FISH_PRICES, BETTA_FEMALE_PRICE, fishBuybackPrice, PLANT_PRICES, plantBuybackPrice, price, sellCuttings, sellableCuttings, chestCuttingsOf, sellFish, sellsLeftToday, spend, takeCutting, buyQuarantine, HARDSCAPE, removeHardscape, placeFromBag, replaceSubstrate, SUBSTRATES, doseAntibiotic, doseDewormer, doseQuarantine, hasVisible, isJuvenile, crowdingRatio, COMFORT_BAND, dripMinutes, dripGrade, dripTutorialLeft, recordDrip, farmHabit, habitGap, habitOf, phBeyondSurvival, SPLIT_PLAN_LABELS, splitAdvice, splitGroup, splitTank, rescueFryToBox, BOX_CAPACITY, buyNurseryBox, dueMothers, moveDueToNursery, moveToNursery, NURSERY_FRY_CAPACITY, NURSERY_RELEASE_CM, nurseryFish, nurseryRefusal, releaseNursery, rescueFryToNursery, type SplitPlan, daysUntilSexVisible, growthFactors, growthStage, maxLengthCm, sexVisible, stageLabel, phenotype, strainName, QUARANTINE_DAYS, quarantineDays, readyForTank, releaseQuarantine, swallowCm, tooSmallForTank, PINCH_MEALS, orderBoard, matchingFish, orderSupply, moveToQuarantine, AIR_PUMPS, CHILLERS, CO2_KITS, doseIchMedication, DEFAULT_FOOD, feed, FANS, FOOD_GRADES, FOOD_KINDS, mealMg, mealPrice, tapFeed, type TapFeedResult, FILTERS, FISH_SPECIES, freeAmmonia, HEATERS, hidingFactor, LIGHTS, monthOf, observeSymptoms, PLANT_SPECIES, REGION_LABELS, removeDeadFish, replaceFilter, rinseFilterMedia, seasonName, setHeaterTarget, installHeater, ichHeatC, ICH_MED_WORKING, changeDilutesIch, treatingIch, topUp, unplugHeater, trimPlant, waterChange, suggestedWaterChange, type DripOutcome, type Fish, type FishSpeciesId, type FoodGrade, type FoodKind, type Symptom, type PlantSpeciesId, type Region, type TankState, type TestKitReading, markDaily, needsSetup, needsInsulation, insulateTank, INSULATE_BUMP_C, heaterCreditRefusal, creditTarget, takeHeaterCredit, coldWithoutHeater, creditSale, warmMove, moveToWarmTank, cheapHeater, buyCheapHeater, SALT_DAYS, SALT_HEAT_C, saltDaysLeft, saltWorking, ichMedShort, ichTreatment, ichMedDays } from '../sim';
 import { cureRefusal, mallBag, useCure, type MallItemId } from '../sim/mall';
 import { saltBlocker, saltIchCure, saltRefusal } from '../sim/salt-treat';
 import { choiceState, lineName } from '../sim/choices';
@@ -72,6 +72,12 @@ function button(label: string, onclick: () => void, kind = ''): HTMLButtonElemen
 /** 藥的按鈕：短名字＋金幣價錢（V4：按鈕不放整句）。 */
 function medButton(label: string, cost: number, onclick: () => void): HTMLButtonElement {
   return h('button.btn.med-btn', { onclick, 'aria-label': `下${label}，${cost} 元` }, label, h('span.btn-cost', {}, h('i.coin'), String(cost)));
+}
+
+/** 治療中的治法（g34，polish-to-9 §7.3）：按鈕灰掉，寫「治療中，約 N 天」。 */
+function busyMedButton(label: string, days: number): HTMLButtonElement {
+  const text = days > 0 ? `治療中，約 ${days} 天` : '治療中';
+  return h('button.btn.med-btn', { disabled: true, 'aria-label': `${label}${text}` }, label, h('span.btn-cost', {}, text));
 }
 
 /** 上次選的飼料（同一次遊戲記住）。 */
@@ -1441,9 +1447,12 @@ function medicineRow({ game, sheet, toasts, undoable }: Pick<PanelContext, 'game
   return h(
     'div.row.wrap',
     {},
-    medButton('白點藥', price('med:ich'), () => {
-      purchase({ game, sheet, toasts, undoable }, price('med:ich'), (st) => doseIchMedication(st), '下了一份白點藥（對蝦有毒）', 'warn', true);
-    }),
+    // 藥效撐得到白點掉就不用再下（藥被換水沖淡、撐不到時照樣可以補）
+    treatingIch(game.state) && !ichMedShort(game.state)
+      ? busyMedButton('白點藥', ichTreatment([game.state])?.days ?? ichMedDays(game.state))
+      : medButton('白點藥', price('med:ich'), () => {
+          purchase({ game, sheet, toasts, undoable }, price('med:ich'), (st) => doseIchMedication(st), '下了一份白點藥（對蝦有毒）', 'warn', true);
+        }),
     medButton('抗生素', price('med:antibiotic'), () => {
       purchase({ game, sheet, toasts, undoable }, price('med:antibiotic'), (st) => doseAntibiotic(st), '下了一份抗生素（也會殺掉一些硝化菌）', 'warn', true);
     }),
@@ -1472,7 +1481,9 @@ export function treatPanel(ctx: PanelContext, advice: string): Node {
     : null;
   // 白點的便宜治法（mvp.md §4.4.6 g33）：30°C 加粗鹽，蝦怕鹽
   const saltWhy = saltBlocker(s);
-  const salt = s.fish.some((f) => f.alive && f.ich.stage === 'visible')
+  // 療程中按鈕灰掉、寫倒數（g34：腳本又按了 4 次都跳「已經在用」）
+  const salting = saltWorking(s) ? h('div.row.wrap', {}, busyMedButton('粗鹽＋30°C', saltDaysLeft(s)), saltDaysLeft(s) > 0 ? null : h('span.hint', {}, '白點還沒斷根：鹽和溫度先維持')) : null;
+  const salt = salting ?? (s.fish.some((f) => f.alive && f.ich.stage === 'visible')
     ? h(
         'div.row.wrap',
         {},
@@ -1483,7 +1494,7 @@ export function treatPanel(ctx: PanelContext, advice: string): Node {
         }),
         h('span.hint', {}, saltWhy ?? `便宜的做法，約 ${SALT_DAYS} 天會好（藥約 4 天），蝦不能用`),
       )
-    : null;
+    : null);
   return h('div.stack', {}, h('p.hint.treat-advice', {}, advice), heatBtn, medicineRow(ctx), salt);
 }
 

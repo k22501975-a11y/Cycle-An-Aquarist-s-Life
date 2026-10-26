@@ -327,3 +327,11 @@ export function moveToWarmTank(tanks: TankState[], from: number): { to: number; 
   for (const f of plan.box) if (moveToNursery(dest, f.id)) boxed++;
   return count > 0 ? { to: plan.to, count, boxed } : null;
 }
+
+/** 早上報告「…其他的先保溫 · 搬魚」那行（g34）：照 moveToWarmTank 搬魚，冷缸裡還留著魚、要保溫的話一起保溫。 */
+export function moveAndInsulate(tanks: TankState[], from: number): { to: number; count: number; boxed: number; insulated: boolean } | null {
+  const moved = moveToWarmTank(tanks, from);
+  if (!moved) return null;
+  const t = tanks[from];
+  return { ...moved, insulated: needsInsulation(t) && insulateTank(t) };
+}

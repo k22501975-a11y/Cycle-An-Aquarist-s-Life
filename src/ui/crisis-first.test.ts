@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, FISH_SPECIES, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, canDeliverAnyOrder, emergencySale, orderBoard, starterPackAllCold, moveToWarmTank, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, buyCheapHeater, coldestRoomC, sellFish, creditTarget, heaterCreditRefusal, takeHeaterCredit, fishBuybackPrice, installHeater, noteEarned, type ShopOrder, type TankSpec, type TankState } from '../sim';
+import { addFish, addPlant, FISH_SPECIES, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, canDeliverAnyOrder, emergencySale, orderBoard, starterPackAllCold, moveToWarmTank, moveAndInsulate, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, buyCheapHeater, coldestRoomC, sellFish, creditTarget, heaterCreditRefusal, takeHeaterCredit, fishBuybackPrice, installHeater, noteEarned, type ShopOrder, type TankSpec, type TankState } from '../sim';
 import { crisisTodos, capsSummary, guideStep, heaterCanWait, lingering, todos, warmMoveStep, wipedOut } from './status';
 import { morningReport, REPORT_LINES, slimReport, snapshot } from './morning-report';
 import { fishName } from './labels';
@@ -515,6 +515,21 @@ describe('冬天搬去有加熱棒的缸、空缸不再叫保溫（#400，g30）
     expect(plan.fish.length).toBeLessThan(plan.total);
     expect(plan.fish[0].id).toBe(a.fish[9].id);
     expect(guideStep(tanks, 'g')?.text).toContain(`最要緊的 ${plan.fish.length} 尾（共 10 尾）`);
+  });
+
+  it('暖缸放不下全部、留下的要保溫：早上報告同一缸只寫一行「…其他的先保溫 · 搬魚」，點了兩件一起做（g34）', () => {
+    const { tanks, a } = twoCold();
+    a.insulatedDay = undefined;
+    const plan = warmMove(tanks, 0)!;
+    expect(plan.fish.length).toBeLessThan(plan.total);
+    const r = morningReport(snapshot(tanks), tanks, 1, null);
+    const mine = r.items.filter((i) => i.tank === 0 && (i.action === 'move_warm' || i.action === 'insulate'));
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({ action: 'move_warm', goLabel: '搬魚' });
+    expect(mine[0].text).toMatch(/，其他的先保溫$/);
+    const moved = moveAndInsulate(tanks, 0)!;
+    expect(moved).toMatchObject({ to: 1, insulated: true });
+    expect(needsInsulation(a)).toBe(false);
   });
 
   it('救急第一步是搬魚，還賒得到也一樣；錢夠換就不叫搬（mvp.md §4.4.6）', () => {
