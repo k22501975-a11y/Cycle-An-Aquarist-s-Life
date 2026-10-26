@@ -928,12 +928,25 @@ i.coin { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; }
 .setup-prompt.waiting .setup-go { opacity: 1; animation: setup-breathe 1.4s ease-in-out infinite; }
 @keyframes setup-breathe { 0%, 100% { box-shadow: 0 0 14px rgba(227, 189, 109, 0.45); } 50% { box-shadow: 0 0 30px rgba(227, 189, 109, 0.95); } }
 /* 開局歡迎：疊在挑設備畫面的缸那一側，點一下收起 */
-.setup-welcome { position: fixed; z-index: 45; left: 50%; top: calc(env(safe-area-inset-top) + 14px); transform: translateX(-50%); width: min(520px, calc(100vw - 28px)); display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 16px; animation: rise 0.3s ease-out; transition: opacity 0.3s; cursor: pointer; }
-.setup-welcome.out { opacity: 0; }
-.setup-welcome p { margin: 0; font-size: 15px; line-height: 1.45; }
-.setup-welcome b { color: var(--gold); font-weight: 600; }
-.setup-welcome-avatar { flex: 0 0 52px; width: 52px; height: 52px; border-radius: 50%; object-fit: cover; }
-@media (orientation: landscape) { .setup-welcome { left: 14px; transform: none; width: calc(100vw - min(420px, 50vw) - 42px); max-width: 520px; } }
+/* 開局（polish-to-9.md §8.1）：歡迎是缸上方的一行字、夢想魚預告是角落的小卡，都不擋缸、點不到 */
+.opening-line { position: fixed; z-index: 24; left: 50%; top: calc(env(safe-area-inset-top) + 108px); transform: translateX(-50%); max-width: calc(100vw - 28px); display: flex; align-items: baseline; gap: 10px; padding: 6px 16px; border-radius: 999px; font-size: 15px; line-height: 1.4; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); background: linear-gradient(90deg, rgba(8, 24, 32, 0), rgba(8, 24, 32, 0.55) 18%, rgba(8, 24, 32, 0.55) 82%, rgba(8, 24, 32, 0)); pointer-events: none; animation: opening-in 0.5s ease-out; transition: opacity 0.4s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.opening-line b { flex: 0 0 auto; color: var(--gold); font-weight: 600; font-size: 13px; letter-spacing: 0.06em; }
+.opening-line span { overflow: hidden; text-overflow: ellipsis; }
+.opening-line.swap span { animation: opening-swap 0.5s ease-out; }
+.setting-up .opening-line { top: calc(env(safe-area-inset-top) + 16px); }
+.dream-corner { position: fixed; z-index: 24; left: calc(env(safe-area-inset-left) + 14px); top: calc(env(safe-area-inset-top) + 152px); pointer-events: none; animation: opening-in 0.6s ease-out 0.4s both; transition: opacity 0.4s; }
+.setting-up .dream-corner { top: calc(env(safe-area-inset-top) + 60px); }
+.dream-corner .dream-teaser { background: rgba(8, 24, 32, 0.62); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); }
+.dream-corner .dream-teaser small { max-width: 180px; font-size: 11px; }
+.dream-corner .dream-teaser span { font-size: 12px; }
+.dream-corner .dream-mini { width: 50px; height: 28px; }
+.opening-line.out, .dream-corner.out { opacity: 0; }
+@keyframes opening-in { from { opacity: 0; transform: translate(var(--tx, 0), -8px); } }
+.opening-line { --tx: -50%; }
+@keyframes opening-swap { from { opacity: 0.2; } }
+/* 橫向開著面板（開缸挑設備）：那行字放在面板左邊的缸上 */
+@media (orientation: landscape) { body:has(.sheet.open:not(.full)) .opening-line { left: calc((100vw - min(420px, 50vw)) / 2); max-width: calc(100vw - min(420px, 50vw) - 28px); } }
+@media (prefers-reduced-motion: reduce) { .opening-line, .dream-corner, .opening-line.swap span { animation: none; } }
 
 /* 每日 3 件小事（F3，#185）：左上角任務卡下面的小卡，三件各一個圖示，做完打勾；全做完發光、出現寶箱 */
 .daily-holder { position: absolute; z-index: 4; left: calc(env(safe-area-inset-left) + 14px); }
@@ -1082,7 +1095,6 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 .dream-strip-dots i.current { box-shadow: 0 0 0 3px rgba(227, 189, 109, 0.3); animation: dream-pulse 1.6s ease-in-out infinite; }
 .dream-strip-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--gold-bright); }
 @keyframes dream-pulse { 50% { box-shadow: 0 0 0 5px rgba(227, 189, 109, 0.1); } }
-.setup-welcome-body { display: flex; flex-direction: column; gap: 6px; }
 .dream-teaser { display: flex; align-items: center; gap: 10px; padding: 4px 10px 4px 4px; border-radius: 12px; background: rgba(227, 189, 109, 0.1); border: 1px solid rgba(227, 189, 109, 0.35); }
 .dream-teaser .dream-mini { width: 64px; height: 36px; object-fit: contain; }
 .dream-teaser span { display: flex; flex-direction: column; font-size: 13px; }
