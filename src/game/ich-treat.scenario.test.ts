@@ -6,10 +6,13 @@ import { addFish, addPlant, changeDilutesIch, checkGoals, dailyTasks, doseIchMed
  * 照下一步治白點（#324，評測 g20）：開局魚第 4 天出現白點，照任務卡做——叫下藥就下一份、說藥效中就把加熱棒調到說的溫度（孔雀魚缸 28°C，不超過適溫上限）等——
  * 每天餵、測水、該換水就換。一次白點最多花一份藥，而且 14 天內治好。
  */
-// 室溫照現實日期算（applySeason）：固定在十月中，不然跨過午夜室溫差 0.1°C，seed 3 就會多冒一次白點
+// 室溫照現實日期算（applySeason）：固定日期，不然跨過午夜室溫差 0.1°C，seed 3 就會多冒一次白點。
+// 治白點的劇本每個月都跑一次（#411：11 月以後室溫低，任務卡在調水溫前就叫補藥）
+const MONTHS = ['2026-10-15', '2026-11-15', '2026-12-15', '2027-01-15', '2027-02-15', '2027-03-15', '2027-05-15', '2027-07-15'];
+const onDate = (date: string) => vi.setSystemTime(new Date(`${date}T12:00:00`));
 beforeAll(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date('2026-10-15T12:00:00'));
+  onDate(MONTHS[0]);
 });
 afterAll(() => vi.useRealTimers());
 
@@ -56,15 +59,19 @@ function followSteps(seed: number, bigChange = false) {
 }
 
 describe('照下一步治白點（#324）', () => {
-  for (const seed of [1, 2, 3]) {
-    it(`seed ${seed}：一次白點只下一份藥，14 天內治好；下完藥任務卡改說藥效中`, () => {
-      const { doses, cured, steps } = followSteps(seed);
-      const log = steps.join(' / ');
-      expect(doses, log).toBe(1);
-      expect(cured, log).toBe(true);
-      expect(steps[1], log).toMatch(/^藥效中，水溫調到 28°C，約 \d+ 天會好$/);
-    });
-  }
+  for (const date of MONTHS)
+    for (const seed of [1, 2, 3]) {
+      it(`${date.slice(0, 7)} seed ${seed}：一次白點只下一份藥，14 天內治好；下完藥任務卡改說藥效中（#411：冬天也一樣）`, () => {
+        onDate(date);
+        const { doses, cured, steps } = followSteps(seed);
+        onDate(MONTHS[0]);
+        const log = steps.join(' / ');
+        expect(doses, log).toBe(1);
+        expect(cured, log).toBe(true);
+        // 7 月水溫本來就超過 28°C，不用再調
+        expect(steps[1], log).toMatch(date.startsWith('2027-07') ? /^藥效中，約 \d+ 天會好$/ : /^藥效中，水溫調到 28°C，約 \d+ 天會好$/);
+      });
+    }
 
   it('調幾度看缸裡的魚：孔雀魚缸 28°C；有水晶蝦（上限 24°C）的缸不叫你調高（架構 #329）', () => {
     const s = newGameState(1);
@@ -102,21 +109,24 @@ describe('照下一步治白點（#324）', () => {
 });
 
 describe('治白點中換水沖淡藥（#384，g25）', () => {
-  for (const seed of [1, 2, 3]) {
-    it(`seed ${seed}：下藥當天換一半的水，任務卡說補一份；照做最多兩份藥治好，之後兩週白點不再回來`, () => {
-      const { s, doses, cured, steps } = followSteps(seed, true);
-      const log = steps.join(' / ');
-      expect(steps[1], log).toBe('藥效撐不到白點掉，再補一份藥');
-      expect(doses, log).toBe(2);
-      expect(cured, log).toBe(true);
-      for (let d = 0; d < 14; d++) {
-        feed(s, meal(s) * PINCH_MEALS);
-        simulate(s, 24);
-        expect(sick(s), `第 ${d + 1} 天又有白點`).toBe(false);
-      }
-      expect(s.water.ichCause).toBeUndefined();
-    });
-  }
+  for (const date of MONTHS)
+    for (const seed of [1, 2, 3]) {
+      it(`${date.slice(0, 7)} seed ${seed}：下藥當天換一半的水，任務卡說補一份；照做最多兩份藥治好，之後兩週白點不再回來`, () => {
+        onDate(date);
+        const { s, doses, cured, steps } = followSteps(seed, true);
+        onDate(MONTHS[0]);
+        const log = steps.join(' / ');
+        expect(steps[1], log).toBe('藥效撐不到白點掉，再補一份藥');
+        expect(doses, log).toBe(2);
+        expect(cured, log).toBe(true);
+        for (let d = 0; d < 14; d++) {
+          feed(s, meal(s) * PINCH_MEALS);
+          simulate(s, 24);
+          expect(sick(s), `第 ${d + 1} 天又有白點`).toBe(false);
+        }
+        expect(s.water.ichCause).toBeUndefined();
+      });
+    }
 
   it('下藥當天換三成水不用補，換一半要補；換完就提醒', () => {
     const s = newGameState(1);

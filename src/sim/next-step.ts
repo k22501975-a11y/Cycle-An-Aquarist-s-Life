@@ -9,6 +9,7 @@ import { BELLY_SHOWS, daysToBirth, dueMothers } from './nursery';
 import { orderBoard, orderSupply } from './orders';
 import { temperatureFactor } from './chemistry';
 import { hasVisible } from './processes/disease';
+import { HEATER_RAMP_C_PER_HOUR, heaterLiftC } from './processes/thermal';
 import { FISH_SPECIES, isShrimpSpecies } from './species';
 import type { Fish, TankState } from './state';
 import { breedingTankRaised, displayTankHighPlants, purposeTanks } from './tank-purpose';
@@ -86,8 +87,8 @@ export function ichMedDays(t: TankState): number {
   return t.water.medication < ICH_MED_WORKING ? 0 : Math.max(1, Math.floor(medDaysLeft(t)));
 }
 
-/** 白點掉光以後藥效還要撐幾天：掉到底砂的包囊要一兩天才破完，游出來的蟲碰到藥才會死，藥先退了就會再上身（#384）。 */
-export const ICH_MED_TAIL_DAYS = 0.5;
+/** 白點掉光以後藥效還要撐幾天：掉到底砂的包囊要一兩天才破完，游出來的蟲碰到藥才會死，藥先退了就會再上身（#384）。半天太保守：冬天換三成水就叫補藥，6 小時就夠（#411，每個月的劇本都跑過）。 */
+export const ICH_MED_TAIL_DAYS = 0.25;
 
 /** 這缸還能用的加熱棒（壞了、拔了插頭的不算）。 */
 const workingHeater = (t: TankState) => (t.equipment.heater && !t.equipment.heater.broken ? t.equipment.heater : null);
@@ -101,12 +102,25 @@ const ichFish = (t: TankState) => t.fish.filter((f) => f.alive && f.ich.stage ==
  */
 function ichDropDays(t: TankState, assumeHeat = false, exact = false): number {
   const heater = workingHeater(t);
-  // 加熱棒還在慢慢升溫（一天約 2°C）：照現在和設定的中間算，不然天數會說得太短（#359 架構）；壞了的加熱棒調不上去，不能照調高算
+  // 壞了的加熱棒調不上去，不能照調高算
   const target = Math.max(heater?.targetC ?? 0, assumeHeat && heater ? ichHeatC(t) : 0);
   const ramping = (heater?.setpointC !== undefined || assumeHeat) && target > t.water.tempC;
-  const tf = temperatureFactor(ramping ? (t.water.tempC + target) / 2 : Math.max(t.water.tempC, target));
-  let days = 0;
-  for (const f of ichFish(t)) days = Math.max(days, ((1 - f.ich.progress) * 96) / tf / 24);
+  const left = Math.max(0, ...ichFish(t).map((f) => 1 - f.ich.progress));
+  if (left === 0) return exact ? 0 : 1;
+  let hours: number;
+  if (!ramping) hours = (left * 96) / temperatureFactor(Math.max(t.water.tempC, target));
+  else {
+    // 加熱棒還在慢慢升溫（一天約 2°C，#359 架構）：一小時一小時照升上去的水溫算。
+    // 冬天室溫低時加熱棒升不到設定，照它撐得到的算（#411：用中間值算太保守，調水溫前就叫你補藥）
+    const reach = Math.min(target, t.environment.roomTempC + heaterLiftC(t.equipment.tank.volumeL, heater!.spec.watts) - 0.5);
+    let done = 0;
+    hours = 0;
+    while (done < left * 96 && hours < 60 * 24) {
+      hours++;
+      done += temperatureFactor(Math.max(t.water.tempC, Math.min(reach, t.water.tempC + HEATER_RAMP_C_PER_HOUR * hours)));
+    }
+  }
+  const days = hours / 24;
   return exact ? days : Math.max(1, Math.ceil(days));
 }
 
