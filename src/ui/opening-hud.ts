@@ -24,7 +24,7 @@ const fadeOut = (el: HTMLElement) => {
 export function openingHud(line = WELCOME_LINE): OpeningHud {
   const text = h('span', {}, line);
   const banner = h('div.opening-line', { role: 'status' }, h('b', {}, '阿德老闆'), text);
-  const dream = h('div.dream-corner', { 'aria-hidden': 'true' }, dreamTeaser());
+  const dream = h('div.dream-corner', {}, dreamTeaser());
   document.body.append(banner, dream);
   return {
     setLine: (t) => {
