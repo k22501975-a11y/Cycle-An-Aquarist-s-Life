@@ -38,12 +38,13 @@ import { ICONS } from './ui/icons';
 import { DEATH_ADVICE, describeEvent, FIRST_PESTS_LINE, firstDeathOwnerLine, fishName, fishStrain, pluralEventText } from './ui/labels';
 import { mergeEventToasts, type EventToast } from './ui/notify-gate';
 import { personaChip } from './ui/persona';
-import { dreamCard, dreamStrip, dreamTeaser } from './ui/dream-card';
+import { dreamCard, dreamStrip } from './ui/dream-card';
+import { openingHud } from './ui/opening-hud';
 import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
 import type { PanelContext, ShopTab } from './ui/panels';
 import { Guide } from './ui/guide';
 import { questTray } from './ui/quest-tray';
-import { FIRST_PESTS_TIP, FIRST_TANK_LINE, WELCOME_LINE } from './ui/tutorial';
+import { FIRST_PESTS_TIP, FIRST_TANK_LINE } from './ui/tutorial';
 import { Celebration, type CelebrateSpec } from './ui/celebrate';
 import { firstTime, loadMoments, type DeathAdviceCause, type MomentId } from './ui/moments';
 import { causeAdvice, HUNGER_LABEL, illnessOf, needsAdvice } from './ui/owner-advice';
@@ -1510,24 +1511,13 @@ async function start(): Promise<void> {
   });
   document.body.append(h('button.watch-exit', { 'aria-label': '叫回介面', title: '叫回介面', onclick: () => setWatching(false) }, h('i.watch-eye', { 'aria-hidden': 'true' })));
   // 開缸（F1-a）：新遊戲先挑設備，開完缸時間才開始走；關掉面板時主畫面留一個「開缸」按鈕
-  // 開局 0～5 秒：阿德老闆的歡迎疊在挑設備的畫面上，點一下或 5 秒後自己收起來（mvp.md §4.4.4）；設備說明只寫在卡片上
+  // 開局（polish-to-9.md §8.1）：歡迎是缸上方的一行字、夢想魚預告是右上角的小卡，都不擋缸；7 秒後收起來
   let welcomed = false;
   const showWelcome = () => {
     if (welcomed) return;
     welcomed = true;
-    const close = () => {
-      welcome.classList.add('out');
-      window.setTimeout(() => welcome.remove(), 300);
-    };
-    const welcome = h(
-      'div.setup-welcome.glass',
-      { role: 'status', onclick: close },
-      ownerImg('setup-welcome-avatar'),
-      h('div.setup-welcome-body', {}, h('p', {}, h('b', {}, '阿德老闆　'), WELCOME_LINE), dreamTeaser()),
-    );
-    document.body.append(welcome);
-    // 多了夢想魚小卡，多停 2 秒讓人看得到
-    window.setTimeout(close, 7000);
+    const hud = openingHud();
+    window.setTimeout(() => hud.close(), 7000);
   };
   const openSetup = () => {
     // 開場動畫還在演就等它收起來再出歡迎卡（7 秒從那時才開始算）
