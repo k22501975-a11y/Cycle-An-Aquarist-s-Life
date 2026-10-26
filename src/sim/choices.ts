@@ -10,7 +10,7 @@ import { buyTankRefusal, moveFish, newTankCost, tankLabel } from './household';
 import { crowdingRatio } from './processes/fauna';
 import { isCycled } from './processes/nitrogen';
 import { sizeRatio } from './processes/population';
-import { CROWD_WARN } from './split';
+import { CROWD_WARN, cyclingTank } from './split';
 import { tooSmallForTank } from './quarantine';
 import { addBottledBacteria, mediaAvailable, transferMedia } from './gifts';
 import { guppyTraits } from './lookalike';
@@ -1291,7 +1291,7 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       };
     }
     case 'C8': {
-      const to = tanks.findIndex((t, i) => i > 0 && !!t.equipment.filter && !isCycled(t) && fishIn(t).length === 0);
+      const to = cyclingTank(tanks);
       if (to < 0) return null;
       const media = tanks.some((t, i) => i !== to && mediaAvailable(t) > 0);
       return {

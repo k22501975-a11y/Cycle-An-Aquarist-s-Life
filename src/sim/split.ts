@@ -157,6 +157,17 @@ export function moveFryHome(tanks: TankState[], from: number): { to: number; cou
 const CYCLING_STARTED = BACTERIA_SEED * 5;
 
 /**
+ * 等著養水的新缸：開好缸、有過濾、還沒養好水、裡面一尾活的都沒有（隔離盒裡的也算魚）。
+ * 「新缸要怎麼養水？」（C8）和小魚搬家的下一步共用同一個判斷，不然兩邊會指到不同的缸。
+ * not 是不要挑的那缸（預設主缸）。沒有回傳 -1。
+ */
+export function cyclingTank(tanks: TankState[], not = 0): number {
+  return tanks.findIndex(
+    (t, i) => i !== not && !needsSetup(t) && !!t.equipment.filter && !isCycled(t) && ![...t.fish, ...(t.quarantine?.fish ?? [])].some((f) => f.alive),
+  );
+}
+
+/**
  * 小魚要搬家、可是還沒有能收的缸時，下一步是什麼（g37 #428：第二缸買了 5 天都空著，沒人叫你養水）：
  * - cycle：有開好、沒魚、還沒養好水的缸，先養水（started：已經分過濾材或倒過菌液，等就好）
  * - buy：只有這一缸、育幼盒幫不上忙：買第二缸（afford：錢夠不夠）
@@ -165,7 +176,7 @@ const CYCLING_STARTED = BACTERIA_SEED * 5;
 export function fryPrep(tanks: TankState[], from: number): { kind: 'cycle'; tank: number; started: boolean } | { kind: 'buy'; afford: boolean } | null {
   const t = tanks[from];
   if (!t || !fryNeedHome(t) || fryHome(tanks, from) !== null) return null;
-  const fresh = tanks.findIndex((x, i) => i !== from && !needsSetup(x) && !!x.equipment.filter && !isCycled(x) && !x.fish.some((f) => f.alive));
+  const fresh = cyclingTank(tanks, from);
   if (fresh >= 0) return { kind: 'cycle', tank: fresh, started: Math.min(tanks[fresh].bacteria.aob, tanks[fresh].bacteria.nob) >= CYCLING_STARTED };
   if (tanks.length !== 1 || !boxBlocked(t)) return null;
   return { kind: 'buy', afford: economy(t).coins >= newTankCost(tanks, 'nano20') };
