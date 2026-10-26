@@ -165,6 +165,18 @@ const STORE_FEMALES = 4;
 /** 店裡一定有一尾「快生了」的（#335：開局挑快生的，第一窩 ≤ 第 10 天）：25°C 約 6～8 天後生，新缸也差不多養好水了。 */
 const STORE_DUE_FROM = 0.7;
 const STORE_DUE_TO = 0.78;
+/**
+ * 開局第一次買的母魚（polish-to-9.md §7.1，企劃 2026-10-26）：挑看得到小魚眼睛、兩三天內就生的（現實的水族店常賣到這種肚子很大的），
+ * 第一窩約第 5～7 分鐘生，不用教完再空等 5 天。之後再買照 STORE_DUE_FROM～STORE_DUE_TO。
+ */
+const FIRST_DUE_FROM = 0.88;
+const FIRST_DUE_TO = 0.92;
+/** 開局多久以內第一次買才算（舊存檔早就養過魚、沒有記號的，不用再送一尾快生的）。 */
+const FIRST_MOM_DAYS = 14;
+/** 還沒買過店裡的孔雀魚母魚（開局第一次買，§7.1）。 */
+export function firstStoreMom(s: TankState): boolean {
+  return !economy(s).firstMomBought && s.hours < FIRST_MOM_DAYS * 24;
+}
 /** 商店母魚卡「快生了」的門檻（midgame.md §6.6，徽章 ui/pregnancy-badge.ts 用同一個）：店裡最大的那尾一定在這以上。 */
 export const PREGNANCY_DUE = 0.7;
 
@@ -172,9 +184,10 @@ export const PREGNANCY_DUE = 0.7;
  * 店裡這個品系今天的母魚懷孕到哪（#335），大的在前：每天換一批，一定有一尾快生了，其他的還沒。
  * 只看日子和品系（不動缸的亂數），商店卡、推薦組合、一鍵買看到的都一樣。
  */
-export function storeFemales(hours: number, strain: number): number[] {
+export function storeFemales(hours: number, strain: number, first = false): number[] {
   const rng = { seed: Math.floor(hours / 24) * 7919 + strain * 104729 + 17 };
-  const out = [STORE_DUE_FROM + (STORE_DUE_TO - STORE_DUE_FROM) * nextRandom(rng)];
+  const [from, to] = first ? [FIRST_DUE_FROM, FIRST_DUE_TO] : [STORE_DUE_FROM, STORE_DUE_TO];
+  const out = [from + (to - from) * nextRandom(rng)];
   // 其他幾尾都還沒到快生（快生的那尾最早生）
   while (out.length < STORE_FEMALES) out.push(PREGNANT_FROM + (STORE_DUE_FROM - PREGNANT_FROM) * nextRandom(rng));
   return out.sort((a, b) => b - a);
@@ -190,7 +203,7 @@ function storeSold(s: TankState): Record<number, number> {
 
 /** 商店卡上標的那尾（今天還沒賣掉的裡面最快生的）；今天賣完了回 undefined（midgame.md §6.6）。 */
 export function storeOffer(s: TankState, strain: number): number | undefined {
-  return storeFemales(s.hours, strain)[storeSold(s)[strain] ?? 0];
+  return storeFemales(s.hours, strain, firstStoreMom(s))[storeSold(s)[strain] ?? 0];
 }
 
 /** 買 n 尾母魚：照懷孕程度從還沒賣掉的往下挑並記下來；店裡今天的賣完了，後面的是 undefined（照一般機率）。 */
@@ -198,7 +211,10 @@ export function takeStoreFemales(s: TankState, strain: number, n: number): Array
   const sold = storeSold(s);
   const from = sold[strain] ?? 0;
   sold[strain] = from + n;
-  const list = storeFemales(s.hours, strain);
+  const first = firstStoreMom(s);
+  const list = storeFemales(s.hours, strain, first);
+  if (first && n > 0 && from === 0) economy(s).firstMomPregnancy = list[0];
+  if (n > 0) economy(s).firstMomBought = true;
   return Array.from({ length: n }, (_, i) => list[from + i]);
 }
 
@@ -242,6 +258,9 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
       // 商店卡上挑的那尾照卡上的（亂數照樣擲，後面的順序不變）
       const rolled = PREGNANT_FROM + (PREGNANT_TO - PREGNANT_FROM) * nextRandom(state.rng);
       fish.pregnancy = options.pregnancy ?? rolled;
+      // 開局第一次買的那尾快生母魚（§7.1）：記下是哪尾，早上報告說她的胎斑里程碑
+      const e = economy(state);
+      if (options.pregnancy !== undefined && options.pregnancy === e.firstMomPregnancy && e.firstMomId === undefined) e.firstMomId = fish.id;
       // 在店裡跟同品系的公魚配過
       // 鰭型品系在店裡是用帶因的正常公魚配的（緞帶、燕尾公魚配不了）
       if (fish.genome) {

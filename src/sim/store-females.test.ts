@@ -22,6 +22,7 @@ describe('商店母魚的懷孕程度（midgame.md §6.6，#335）', () => {
 
   it('同一天連買照懷孕程度往下挑，卡上標的跟著換；賣完照一般機率；隔天換一批（midgame.md §6.6）', () => {
     const s = newGameState(3);
+    economy(s).firstMomBought = true;
     const list = storeFemales(s.hours, 3);
     expect(storeOffer(s, 3)).toBe(list[0]);
     expect(takeStoreFemales(s, 3, 1)).toEqual([list[0]]);
@@ -32,5 +33,17 @@ describe('商店母魚的懷孕程度（midgame.md §6.6，#335）', () => {
     s.hours += 24;
     expect(storeOffer(s, 3)).toBe(storeFemales(s.hours, 3)[0]);
     expect(economy(s).storeSold?.counts).toEqual({});
+  });
+
+  it('開局第一次買的母魚已經快生（0.88～0.92，polish-to-9.md §7.1），買過之後照原本的規則', () => {
+    const s = newGameState(3);
+    const first = storeOffer(s, 3)!;
+    expect(first).toBeGreaterThanOrEqual(0.88);
+    expect(first).toBeLessThanOrEqual(0.92);
+    const [a, b] = takeStoreFemales(s, 3, 2);
+    expect(a).toBe(first);
+    expect(b).toBeLessThan(PREGNANCY_DUE);
+    expect(storeOffer(s, 4)).toBe(storeFemales(s.hours, 4)[0]);
+    expect(storeOffer(s, 4)).toBeLessThan(0.8);
   });
 });

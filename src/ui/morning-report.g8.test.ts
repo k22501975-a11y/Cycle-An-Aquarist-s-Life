@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, createTank, FILTERS, HEATERS, LIGHTS, PLANT_SPECIES, recordEvent, TANKS, testWater, type TankState } from '../sim';
+import { addFish, addPlant, createTank, economy, takeStoreFemales, FILTERS, HEATERS, LIGHTS, PLANT_SPECIES, recordEvent, TANKS, testWater, type TankState } from '../sim';
 import { choiceState } from '../sim/choices';
 import { morningReport, snapshot } from './morning-report';
 
@@ -28,6 +28,21 @@ describe('早上報告寫缸裡真的發生的事（polish-to-9.md G8）', () =>
     expect(item(reportAfter((x) => (mom(x).pregnancy = 0.55), s), 'belly')).toMatchObject({ tone: 'good', text: '母魚的肚子圓起來了，看得出懷孕', subjectId: mom(s).id });
     expect(item(reportAfter((x) => (mom(x).pregnancy = 0.7), s), 'belly')).toBeUndefined();
     expect(item(reportAfter((x) => (mom(x).pregnancy = 0.96), s), 'belly')?.text).toBe('母魚肚子後面出現黑色胎斑，快生了');
+  });
+
+  it('開局第一次買的快生母魚（polish-to-9.md §7.1）：隔天說胎斑變大，快生時說看得到眼睛，不寫一般的胎斑那行', () => {
+    const s = tank();
+    s.fish = s.fish.filter((f) => f.sex === 'male');
+    const [due] = takeStoreFemales(s, 3, 1);
+    expect(due).toBeGreaterThanOrEqual(0.88);
+    const first = addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'female', strain: 3, pregnancy: due });
+    expect(economy(s).firstMomId).toBe(first.id);
+    const belly = (r: ReturnType<typeof reportAfter>) => r.items.filter((i) => i.kind === 'belly').map((i) => i.text);
+    expect(belly(reportAfter(() => {}, s))).toEqual([expect.stringMatching(/的胎斑變大、變黑了，再兩三天就生$/)]);
+    expect(belly(reportAfter(() => {}, s))).toEqual([]);
+    expect(belly(reportAfter((x) => (x.fish.find((f) => f.id === first.id)!.pregnancy = 0.95), s))).toEqual(['胎斑裡看得到小魚的眼睛了！快生了']);
+    // 之後再買的母魚照一般規則
+    expect(takeStoreFemales(s, 3, 1)[0]).toBeLessThan(0.8);
   });
 
   it('夢想魚那窩的母魚：開獎前由里程碑說，開獎後之後每一胎照常寫肚子圓起來（#326）', () => {

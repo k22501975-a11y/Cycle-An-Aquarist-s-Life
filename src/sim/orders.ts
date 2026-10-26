@@ -3,7 +3,7 @@ import { DREAM_FISH } from './dream';
 import { phenotype, type FinTrait, type GuppyPhenotype } from './genetics';
 import { daysToLength } from './growth';
 import { nextRandom, type RngState } from './random';
-import { PESTS, SNAILS, type PestKind } from './snails';
+import { FIRST_PLANT_EXTRA_SNAILS, PESTS, SNAILS, type PestKind } from './snails';
 import { FISH_SPECIES, isShrimpSpecies, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 import { ADULT_SIZE, isJuvenile, type Fish, type TankState } from './state';
 import { hidingFactor } from './processes/population';
@@ -226,6 +226,8 @@ function snailsIn(state: TankState, kind: OrderSnail): number {
 
 /** 第一窩出生後幾天內、選種卡還沒選，先幫玩家留著第一窩最大的 1 公 2 母（選種卡第 12 天出，沒選隔 3 天再出一次）。 */
 export const PICK_RESERVE_DAYS = 18;
+/** 選種卡還沒選之前，第一窩（含之後已經生的）最大的幾成先不交單。 */
+const PICK_RESERVE_SHARE = 0.5;
 
 /**
  * 選種日（midgame.md C2）之前，第一窩先留給玩家挑的魚：自家孔雀魚裡最大的 1 公 2 母，訂單不拿（#303：照提示交單，
@@ -241,7 +243,9 @@ export function reservedForPick(state: TankState): Set<number> {
     .flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])])
     .filter((f) => f.alive && f.species === 'guppy' && (f.generation ?? 0) >= 1)
     .sort((a, b) => b.lengthCm - a.lengthCm);
-  return new Set([...line, ...[...bred.filter((f) => f.sex === 'male').slice(0, 1), ...bred.filter((f) => f.sex === 'female').slice(0, 2)].map((f) => f.id)]);
+  // 選種卡還沒選之前，第一窩最大的一半也先留著（§7.1 第一窩提早生，交單一直收小魚，選種時只剩幾尾挑）
+  const half = bred.slice(0, Math.ceil(bred.length * PICK_RESERVE_SHARE));
+  return new Set([...line, ...[...bred.filter((f) => f.sex === 'male').slice(0, 1), ...bred.filter((f) => f.sex === 'female').slice(0, 2), ...half].map((f) => f.id)]);
 }
 
 /** 這缸（連產卵盒裡的）可以拿去交這張單的魚，差的排前面（不會先把最好的魚交出去）；keep 是玩家要留下來的魚。 */
@@ -753,8 +757,10 @@ function ensureIncomeOrder(state: TankState, board: OrderBoard): void {
 
 /** 起步單掛幾天（§4.4.5：7～10 天）。 */
 export const STARTER_ORDER_DAYS = 10;
-/** 起步單收幾隻小螺（螺還少時少收 1 隻）：第一次買水草必帶 2～3 隻扁卷螺（plantHitchhikers），會自己繁殖。 */
+/** 起步單收幾隻小螺（螺還少時少收 1 隻）：第一次買水草必帶 4～5 隻扁卷螺（plantHitchhikers），會自己繁殖。 */
 export const STARTER_SNAILS = 3;
+/** 第一張起步單（還沒交過單）收幾隻：第一次買水草附送的扁卷螺（2～3 隻）就交得出，教學一結束就有第一筆收入（polish-to-9.md §7.2）。 */
+export const FIRST_STARTER_SNAILS = 2;
 
 /** 缸裡還沒有自家繁殖的魚（§4.4.5 的起步階段，從第 1 天開始，不等養水）。畫面拿來決定要不要畫「生小魚後會有更多客人」的空格。 */
 export function orderStarter(tanks: TankState[]): boolean {
@@ -764,6 +770,7 @@ export function orderStarter(tanks: TankState[]): boolean {
 /**
  * 起步單（第 1 格）：一定交得出的小單，每張 40～120。缸裡剪得出插枝就收 2 段插枝；
  * 不然收期限內繁殖得到 3 隻的小螺（還沒買過水草時算第一株一定夾帶的扁卷螺，plantHitchhikers）。都不成立回傳 null（這格先空著）。
+ * 還沒交過單的第一張一定收 FIRST_STARTER_SNAILS 隻小螺（§7.2）。
  */
 function starterOrder(state: TankState, board: OrderBoard, ctx: OrderContext): ShopOrder | null {
   const r = () => nextRandom(board.rng);
@@ -771,20 +778,22 @@ function starterOrder(state: TankState, board: OrderBoard, ctx: OrderContext): S
   const base = { id: 0, unitPrice: 0, postedHours: state.hours, days: STARTER_ORDER_DAYS };
   const plants = (Object.keys(ctx.cuttings) as PlantSpeciesId[]).filter((p) => (ctx.cuttings[p] ?? 0) >= 2);
   let o: ShopOrder | null = null;
-  if (plants.length > 0) {
+  // 第一張（還沒交過單）：收第一株水草附送的 2 隻扁卷螺，不收插枝
+  if (plants.length > 0 && board.done > 0) {
     const plant = plants[Math.floor(r() * plants.length)];
     o = { ...base, kind: 'cutting', plant, count: 2, unitPrice: round5(Math.min(60, Math.max(20, PLANT_PRICES[plant] / 3 + r() * 5))) };
   } else {
-    // 先看缸裡現有的螺；還沒買過水草就照第一株一定夾帶的 2 隻扁卷螺估（plantHitchhikers 最少 2 隻）
+    // 先看缸裡現有的螺；還沒買過水草就照第一株一定夾帶的扁卷螺估（plantHitchhikers 第一次最少 4 隻）
     const views = [tanks];
-    if ((economy(state).plantBuys ?? 0) === 0) views.push([{ ...state, snails: { snails: [], pests: { ramshorn: 2, bladder: 0, mts: 0 }, clutches: [], appleYoung: 0, neriteEggs: 0 } }]);
+    if ((economy(state).plantBuys ?? 0) === 0) views.push([{ ...state, snails: { snails: [], pests: { ramshorn: 2 + FIRST_PLANT_EXTRA_SNAILS, bladder: 0, mts: 0 }, clutches: [], appleYoung: 0, neriteEggs: 0 } }]);
     const reach = (view: TankState[], snail: OrderSnail, count: number) => {
       const days = daysToFill(view, { ...base, kind: 'snail', snail, count });
       return days !== null && days <= STARTER_ORDER_DAYS - 1;
     };
     // 收 3 隻；螺還少、期限內只長得到 2 隻就收 2 隻（每張一樣 40 元起）
+    const counts = board.done > 0 ? [STARTER_SNAILS, STARTER_SNAILS - 1] : [FIRST_STARTER_SNAILS];
     search: for (const view of views)
-      for (const count of [STARTER_SNAILS, STARTER_SNAILS - 1])
+      for (const count of counts)
         for (const snail of ['ramshorn', 'bladder'] as const)
           if (reach(view, snail, count)) {
             o = { ...base, kind: 'snail', snail, count, unitPrice: Math.round(40 / count + r() * 4) };

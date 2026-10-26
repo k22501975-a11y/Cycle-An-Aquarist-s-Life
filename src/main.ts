@@ -50,7 +50,7 @@ import { causeAdvice, HUNGER_LABEL, illnessOf, needsAdvice } from './ui/owner-ad
 import { kickOwnerQueue, ownerGuide, ownerSay, setOwnerBlocker } from './ui/owner-ask';
 import { fryArt, guppyArt, maleFinOf, plantArt } from './ui/shop-cards';
 import { StrainTracker, strainOwnerLine } from './ui/strain-moment';
-import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt } from './ui/order-alert';
+import { loadSeenOrders, markOrdersSeen, orderAlert, orderArt, orderReadyWhat } from './ui/order-alert';
 import { TankMarks } from './ui/tank-marks';
 import { flyCoins, rewardBurst } from './ui/coin-fly';
 import type { ReportItem } from './ui/morning-report';
@@ -1256,13 +1256,13 @@ async function start(): Promise<void> {
     ordersBadge.textContent = ready.length > 0 ? String(ready.length) : '';
     ordersBadge.className = ready.length > 0 ? 'badge ok' : fresh > 0 ? 'badge dot' : 'badge';
     ordersBtn.classList.toggle('glow', ready.length > 0);
-    // 別的慶祝卡還在演就等下一輪，免得互相蓋掉
-    if (ready.length > 0 && !celebration.isOpen)
+    // 別的慶祝卡還在演就等下一輪，免得互相蓋掉；造景模式中也先不演（全螢幕卡會蓋住正在拖的水草，教學第 4 步買草附送的螺就交得出起步單），收起造景再演
+    if (ready.length > 0 && !celebration.isOpen && !scaping)
       moment('first_order_ready', {
         art: orderArt(ready[0]),
         title: '有訂單可以交貨了！',
         sub: sim.orderTitle(ready[0]),
-        owner: '你養的魚有客人要。按下方的「訂單」就能交貨，錢會直接進錢包',
+        owner: `${orderReadyWhat(ready[0])}有客人要。按下方的「訂單」就能交貨，錢會直接進錢包`,
       });
   };
   const netBtn = tool('net', '撈死魚', '#e88aa8', () => {

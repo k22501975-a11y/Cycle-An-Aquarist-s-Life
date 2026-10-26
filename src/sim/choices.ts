@@ -14,7 +14,7 @@ import { CROWD_WARN } from './split';
 import { tooSmallForTank } from './quarantine';
 import { addBottledBacteria, mediaAvailable, transferMedia } from './gifts';
 import { guppyTraits } from './lookalike';
-import { buyNurseryBox, daysToBirth, moveToNursery, nurseryRefusal, releaseNursery, rescueFryToNursery, usesNursery } from './nursery';
+import { BELLY_SHOWS, buyNurseryBox, daysToBirth, DUE_PREGNANCY, moveToNursery, nurseryRefusal, releaseNursery, rescueFryToNursery, usesNursery } from './nursery';
 import { fulfillOrder, matchingFish, orderBoard, orderRefusal, orderSupply, orderTitle, type ShopOrder } from './orders';
 import { previewPair, typicalStoreGenome, type PreviewKid } from './pair-preview';
 import { FISH_SPECIES, isShrimpSpecies } from './species';
@@ -784,6 +784,11 @@ export const BOX_DUE = 0.88;
 export const BELLY_MILESTONES = [
   { key: 'dark', at: 0.7 },
   { key: 'eyes', at: BOX_DUE },
+] as const;
+/** 開局第一尾快生的母魚（polish-to-9.md §7.1，買來就 0.88～0.92）：買回來隔天說胎斑變大，快生時說看得到眼睛（取代一般的「出現黑色胎斑」）。 */
+const FIRST_BELLY = [
+  { key: 'dark', at: 0.85 },
+  { key: 'eyes', at: DUE_PREGNANCY },
 ] as const;
 /** 品系下一代懷孕前段的里程碑（開獎那窩有 C15 開獎準備，之後的每代沒有）。 */
 const LINE_BELLY = { key: 'round', at: 0.3 } as const;
@@ -2020,6 +2025,18 @@ export function takeBellyNotes(tanks: TankState[]): Array<{ fishId: number; text
     const told = s.broodAutoTold === n.choice;
     s.broodAutoTold = n.choice;
     out.push({ fishId: mom.fish.id, text: `${callName(mom.fish)}快生了，照你的設定${BROOD_AUTO_DO[n.choice] ?? '處理'}`, ...(told ? {} : { setting: broodSettingCard(mom.fish, mom.tank, n.choice) }) });
+  }
+  // 開局買的那尾快生母魚也說懷孕後段的里程碑（§7.1，不只開獎那窩才有）；只說第一胎（生完肚子小了就都算說過）
+  const firstId = economy(tanks[0]).firstMomId;
+  const first = located(tanks).find(({ fish }) => fish.id === firstId && fish.alive && fish.id !== s.reveal?.momId)?.fish;
+  if (first) {
+    const seen = (s.milestoneSeen ??= []);
+    const due = FIRST_BELLY.filter((m) => !seen.includes(`${first.id}@first:${m.key}`));
+    const reached = due.filter((m) => first.pregnancy >= m.at);
+    for (const m of first.pregnancy < BELLY_SHOWS ? due : reached) seen.push(`${first.id}@first:${m.key}`);
+    // 一晚跨過兩個只說後面那個
+    const last = first.pregnancy < BELLY_SHOWS ? undefined : reached[reached.length - 1];
+    if (last) out.push({ fishId: first.id, text: last.key === 'dark' ? `${callName(first)}的胎斑變大、變黑了，再兩三天就生` : '胎斑裡看得到小魚的眼睛了！快生了' });
   }
   if (!p) return out;
   if (!s.sickNoted && (s.sickDays ?? 0) > 0 && p.mom.pregnancy > 0) {

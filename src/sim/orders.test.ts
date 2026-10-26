@@ -273,6 +273,8 @@ describe('店家訂單板（M21）', () => {
       s.fish = [];
       const plant = addPlant(s, 'rotala', 14);
       expect(orderContext(s).stage).toBe('start');
+      // 第一張起步單一定是小螺（polish-to-9.md §7.2，下面另外測）：這裡看交過單以後
+      orderBoard(s).done = 1;
       const orders = refill(s);
       const easy = orders.find((o) => deliverableNow(s, o));
       expect(easy?.kind).toBe('cutting');
@@ -283,6 +285,18 @@ describe('店家訂單板（M21）', () => {
       addCuttings(s, 'rotala', trimPlant(s, plant.id));
       expect(orderRefusal([s], easy!.id)).toBeNull();
       expect(fulfillOrder([s], easy!.id)).toBe(easy!.count * easy!.unitPrice);
+    });
+
+    it('第一張起步單：交 2 隻小螺，第一次買水草附送的扁卷螺就交得出（polish-to-9.md §7.2）', () => {
+      const s = tank(5);
+      s.fish = [];
+      addPlant(s, 'rotala', 14);
+      // 第一次買水草附送 4～5 隻：交 2 隻、留 2 隻當種螺
+      snailState(s).pests.ramshorn = 4;
+      const first = refill(s).find((o) => !o.preview && !o.gap);
+      expect(first).toMatchObject({ kind: 'snail', snail: 'ramshorn', count: 2 });
+      expect(deliverableNow(s, first!)).toBe(true);
+      expect(fulfillOrder([s], first!.id)).toBeGreaterThanOrEqual(40);
     });
 
     it('起步：餵太多長出來的扁卷螺可以交螺單，交掉的螺從缸裡拿走', () => {

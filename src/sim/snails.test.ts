@@ -116,12 +116,12 @@ describe('螺（design/snails.md）', () => {
 });
 
 describe('搭便車的螺（polish-to-9.md §4「第二次確認」）', () => {
-  it('店裡買的水草：第一次必定夾帶 2～3 隻扁卷螺，之後大約 30%', () => {
+  it('店裡買的水草：第一次必定夾帶 4～5 隻扁卷螺（交 2 隻起步單、留 2 隻種螺，polish-to-9.md §7.2），之後大約 30%', () => {
     for (let seed = 1; seed <= 20; seed++) {
       const s = createTank({ ...MATURE, seed });
       buyPlant(s, 'anubias');
-      expect(snailState(s).pests.ramshorn).toBeGreaterThanOrEqual(2);
-      expect(snailState(s).pests.ramshorn).toBeLessThanOrEqual(3);
+      expect(snailState(s).pests.ramshorn).toBeGreaterThanOrEqual(4);
+      expect(snailState(s).pests.ramshorn).toBeLessThanOrEqual(5);
     }
     const s = createTank({ ...MATURE, seed: 7 });
     buyPlant(s, 'anubias');

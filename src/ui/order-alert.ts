@@ -18,6 +18,14 @@ export function orderArt(o: ShopOrder): string {
   return speciesArt(o.species!, o.sex);
 }
 
+/** 第一次「有訂單可以交貨了」卡上說客人要的是什麼（照訂單種類，交螺的單不說「你養的魚」）。 */
+export function orderReadyWhat(o: ShopOrder): string {
+  if (o.kind === 'snail') return '缸裡的小螺';
+  if (o.kind === 'cutting') return '你修下來的插枝';
+  if (o.kind === 'fry') return '你生的小魚';
+  return '你養的魚';
+}
+
 /** 看過的訂單（這台裝置記住，不進存檔）：沒看過的單讓入口亮一個小點。 */
 export const ORDERS_SEEN_KEY = 'cycle.orders.seen.v1';
 
