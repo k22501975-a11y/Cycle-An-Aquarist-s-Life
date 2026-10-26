@@ -46,3 +46,9 @@ export class GameClock {
     return ticks;
   }
 }
+
+/**
+ * 推播預測預設看多遠（遊戲小時）：72 小時約現實 10 小時，夠睡一覺。
+ * 放在這裡而不是 forecast.ts：主程式只要這個數字，預測本身在 Worker 裡跑，forecast.ts 不用進開機必載。
+ */
+export const FORECAST_HOURS = 72;

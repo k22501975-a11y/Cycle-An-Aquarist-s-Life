@@ -1,9 +1,7 @@
-import { economy, PRICES, registerHousehold, spend } from './economy';
+import { economy, PRICES, registerHousehold } from './economy';
 import { PESTS_VISIBLE } from './snails';
-import { tankLock, unlockHint } from './goals';
-import { FILTERS, HEATERS, LIGHTS, TANKS, type FilterSpec, type HeaterSpec, type TankSpec } from './equipment';
-import { nextRandom } from './random';
-import { createTank, type TankState } from './state';
+import { FILTERS, HEATERS, TANKS, type FilterSpec, type HeaterSpec, type TankSpec } from './equipment';
+import type { TankState } from './state';
 
 /**
  * 多缸（GAME_DESIGN 第 14 節：缸位只看錢，但缸越多越難顧）。
@@ -95,47 +93,6 @@ export function syncRoom(from: TankState, to: TankState): void {
   b.powerOut = a.powerOut;
 }
 
-/** 為什麼不能再加缸；可以加就回傳 null。 */
-export function buyTankRefusal(tanks: TankState[], id: TankSizeId): string | null {
-  if (tanks.length >= MAX_TANKS) return `房間最多放 ${MAX_TANKS} 缸`;
-  const lock = tankLock(tanks, id);
-  if (lock) return unlockHint(lock);
-  if (economy(tanks[0]).coins < newTankCost(tanks, id)) return '錢不夠';
-  return null;
-}
-
-/** 買一個新缸（套缸，還沒養水）。回傳新缸；買不起就回傳 null。 */
-export function buyTank(tanks: TankState[], id: TankSizeId): TankState | null {
-  if (buyTankRefusal(tanks, id)) return null;
-  linkTanks(tanks);
-  spend(tanks[0], newTankCost(tanks, id));
-  return placeTankSet(tanks, id);
-}
-
-/** 把一組套缸擺進房間（不收錢；商城的熟成套缸 matureMedia 是 true）。呼叫前要先確認還有缸位。 */
-export function placeTankSet(tanks: TankState[], id: TankSizeId, matureMedia = false): TankState {
-  linkTanks(tanks);
-  const home = tanks[0];
-  const set = TANK_SETS[id];
-  const tank = createTank({
-    tank: set.tank,
-    filter: set.filter,
-    heater: { spec: set.heater, targetC: 25 },
-    light: { spec: LIGHTS.basic },
-    roomTempC: home.environment.roomTempC,
-    tap: home.environment.tap,
-    seed: Math.max(1, Math.floor(nextRandom(home.rng) * 2147483646)),
-    matureMedia,
-  });
-  tank.hours = home.hours;
-  const wallet = economy(home);
-  tank.nextId = wallet.nextTankBlock! * ID_BLOCK + 1;
-  wallet.nextTankBlock! += 1;
-  tanks.push(tank);
-  linkTanks(tanks);
-  return tank;
-}
-
 /** 連袋子泡進新缸慢慢對水（#400 冬天搬去暖缸）：水溫、pH 差造成的緊迫只剩幾分之一。 */
 export const ACCLIMATED_SHOCK_SHARE = 0.25;
 
@@ -156,27 +113,6 @@ export function moveFish(from: TankState, to: TankState, fishId: number, acclima
   fish.arrivedHours = to.hours;
   to.fish.push(fish);
   return true;
-}
-
-/** 為什麼不能收掉這缸；可以就回傳 null。 */
-export function removeTankRefusal(tanks: TankState[], index: number): string | null {
-  const t = tanks[index];
-  if (!t) return '沒有這缸';
-  if (tanks.length <= 1) return '至少要留一缸';
-  if (t.fish.some((f) => f.alive) || (t.quarantine?.fish ?? []).some((f) => f.alive)) return '缸裡還有活的魚蝦，先移到別缸或賣掉';
-  return null;
-}
-
-/** 收掉一個空缸：缸和設備折價賣掉，水草、造景跟著丟掉。回傳拿回多少錢。 */
-export function removeTank(tanks: TankState[], index: number): number {
-  if (removeTankRefusal(tanks, index)) return 0;
-  const t = tanks[index];
-  const id = t.equipment.tank.id as TankSizeId;
-  const refund = Math.round((TANK_SETS[id]?.tankPrice ?? 0) * TANK_RESALE_SHARE);
-  tanks.splice(index, 1);
-  economy(tanks[0]).coins += refund;
-  linkTanks(tanks);
-  return refund;
 }
 
 /**

@@ -1,6 +1,7 @@
 import { addFish, addPlant } from './actions';
 import { economy, type MallBag } from './economy';
-import { linkTanks, MAX_TANKS, placeTankSet } from './household';
+import { linkTanks, MAX_TANKS } from './household';
+import { placeTankSet } from './household-actions';
 import { hasVisible } from './processes/disease';
 import { FISH_SPECIES } from './species';
 import type { Fish, TankState } from './state';

@@ -50,16 +50,6 @@ export function coldestRoomC(region: Region = 'north'): number {
   return Math.min(...MONTHLY_MEAN[region].map((c, i) => c - MONTHLY_SWING[i]));
 }
 
-export function seasonName(month: number): string {
-  const m = Math.floor((((month % 12) + 12) % 12)) + 1;
-  if (m <= 2) return '冬天';
-  if (m <= 4) return '春天';
-  if (m <= 6) return '梅雨季';
-  if (m <= 8) return '夏天';
-  if (m <= 10) return '秋天';
-  return '初冬';
-}
-
 /** 現實日期 → 小數月份。 */
 export function monthOf(date: Date): number {
   const days = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();

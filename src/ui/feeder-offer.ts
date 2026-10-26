@@ -1,6 +1,6 @@
 import { price } from '../sim';
 import { h } from './dom';
-import { shopCard } from './shop-cards';
+import { shopCard } from './card-kit';
 
 /** 早上報告「裝自動餵食器 ›」點了先看商品卡，按「買下裝上」才扣錢（daily-loop.md §7）。 */
 export function feederOffer(deps: { buy: () => void; close: () => void }): HTMLElement {

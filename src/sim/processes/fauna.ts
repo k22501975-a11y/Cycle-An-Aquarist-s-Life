@@ -17,10 +17,10 @@ const FECES_PER_MG_FOOD = 0.25;
  * 吃不飽時代謝會放慢（HUNGER_SLOWDOWN），所以少量餵會停在某個飢餓值，而不是一路餓到底：
  * 一天兩次「一小撮」（0.85 份）停在約 0.4（吃飽），一天一次約 0.62（有點餓）；完全不餵約 8 天到 0.8（見 ADULT_FAST）。
  */
-const DAYS_TO_STARVING = 6;
+export const DAYS_TO_STARVING = 6;
 /** 飢餓值超過 0.3 後，每多 0.1 代謝慢 20%，最慢到原本的 15%。 */
-const HUNGER_SLOWDOWN = 2;
-const MIN_METABOLISM = 0.15;
+export const HUNGER_SLOWDOWN = 2;
+export const MIN_METABOLISM = 0.15;
 /**
  * 寫實的斷食（design/mvp.md §4.7）：飢餓值到 start 以後才開始消耗體力，體力撐 days 天，用完才開始餓死（體弱的先死）。
  * 成魚停餵約 8 天才到 0.8，再撐兩週（第 21 天後才會餓死）；仔魚、幼魚代謝快、存糧少，三到五天就撐不住。
@@ -30,11 +30,11 @@ const ADULT_FAST = { start: 0.75, days: 12 };
 const YOUNG_FAST = { start: 0.6, days: 1 };
 /** 小於成魚體長一半算仔魚、幼魚：飢餓值漲兩倍快。 */
 const YOUNG_LENGTH = 0.5;
-const YOUNG_HUNGER_RATE = 2;
-const GRAZING_BONUS = 1.3;
+export const YOUNG_HUNGER_RATE = 2;
+export const GRAZING_BONUS = 1.3;
 
-const isYoung = (fish: Fish) => fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * YOUNG_LENGTH;
-const fastSpec = (fish: Fish) => (isYoung(fish) ? YOUNG_FAST : ADULT_FAST);
+export const isYoung = (fish: Fish) => fish.lengthCm < FISH_SPECIES[fish.species].adultLengthCm * YOUNG_LENGTH;
+export const fastSpec = (fish: Fish) => (isYoung(fish) ? YOUNG_FAST : ADULT_FAST);
 
 /**
  * 餓到要叫醒玩家（快轉、過一晚停下來）：成魚一開始消耗體力就算；仔魚、幼魚兩倍快變餓，一天只餵一次也常碰到門檻，
@@ -60,24 +60,6 @@ export function isStarving(fish: Fish): boolean {
 export function starvation(state: TankState, fish: Fish): number {
   const grazing = state.plants.length > 0 || state.algae > 0.05 ? GRAZING_BONUS : 1;
   return fish.starvingHours / (fastSpec(fish).days * 24 * grazing);
-}
-
-/**
- * 從現在起都不餵的話，這條魚幾個遊戲小時後體力耗盡、開始餓死（照現在的水溫估，給離線前的提醒用）。
- */
-export function hoursUntilStarving(state: TankState, fish: Fish): number {
-  const spec = fastSpec(fish);
-  const tf = temperatureFactor(state.water.tempC);
-  const youngRate = isYoung(fish) ? YOUNG_HUNGER_RATE : 1;
-  let hunger = fish.hunger;
-  let h = 0;
-  while (hunger < spec.start && h < 24 * 60) {
-    const slowdown = Math.max(MIN_METABOLISM, 1 - HUNGER_SLOWDOWN * Math.max(0, hunger - 0.3));
-    hunger += (1 / 24 / DAYS_TO_STARVING) * Math.sqrt(tf) * slowdown * youngRate;
-    h += 1;
-  }
-  const grazing = state.plants.length > 0 || state.algae > 0.05 ? GRAZING_BONUS : 1;
-  return h + Math.max(0, 1 - starvation(state, fish)) * spec.days * 24 * grazing;
 }
 
 /** 胃口：一次最多吃到「飢餓值 × 幾天份」就飽了（吃不完的飼料留在缸裡腐敗）。 */
