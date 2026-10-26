@@ -112,9 +112,13 @@ async function start(): Promise<void> {
   await loadPaintedArt(startupArt(game.tanks));
   const extraTanks = () => ({ tanks: game.tanks.slice(1), active: game.active });
   const save = () => writeSave(store, game.tanks[0], game.clock.timeScale, Date.now(), extraTanks());
-  // 開發用：在瀏覽器主控台用 cycle.game、cycle.sim 直接操作（截圖、調平衡）。
-  const debugHandle = { game, sim } as Record<string, unknown>;
-  (window as unknown as { cycle: unknown }).cycle = debugHandle;
+  // 開發用：在瀏覽器主控台用 cycle.game、cycle.sim 直接操作（截圖、調平衡）；流程測試也靠它。
+  // sim 整包延後載入（不直接掛 sim 命名空間，不然沒用到的 export 全進開機必載），載好才掛 window.cycle
+  const debugHandle = { game } as Record<string, unknown>;
+  void import('./sim/debug-handle').then((all) => {
+    debugHandle.sim = all;
+    (window as unknown as { cycle: unknown }).cycle = debugHandle;
+  });
   const sheet = new Sheet(document.body);
   const toasts = new Toasts(document.body);
   debugHandle.toasts = toasts;
