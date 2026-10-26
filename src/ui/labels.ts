@@ -278,8 +278,9 @@ const pick = (options: string[], day: number) => options[day % options.length];
 /**
  * 小魚、小蝦被吃的說法（UX r12）：看缸裡現在的情況給不同的建議，同一種情況也每天換一句，連續幾天被吃才不會一直看到同一句。
  * 開頭像「3 尾小魚被大魚吃掉了」，早上報告前面再加「昨晚有」。
+ * home：另一缸養好水、沒有大魚（fryHome）時的缸名，就叫玩家搬過去；otherTank：有別缸但還不能放（#425）。
  */
-export function fryEatenText(state: TankState, count: number, shrimp: boolean): string {
+export function fryEatenText(state: TankState, count: number, shrimp: boolean, home: string | null = null, otherTank = false): string {
   const day = Math.floor(state.hours / 24);
   const who = shrimp ? '隻小蝦' : '尾小魚';
   const head = `${count} ${who}${pick(shrimp ? ['被魚吃掉了', '沒躲好，被魚叼走了'] : ['被大魚吃掉了', '沒躲好，被成魚吞下去了', '被大魚當點心吃了'], day)}`;
@@ -292,7 +293,9 @@ export function fryEatenText(state: TankState, count: number, shrimp: boolean): 
   const fry = state.fish.filter((f) => f.alive && !f.nursery && isJuvenile(f) && f.lengthCm < NURSERY_RELEASE_CM && !isShrimpSpecies(f.species)).length;
   const due = dueMothers(state).length > 0;
   let tip: string;
-  if (shrimp) {
+  if (home && !shrimp) {
+    tip = pick([`${home}養好水了，把小魚搬過去，那裡沒有大魚會吃牠們`, `小魚搬去${home}就安全了，那邊沒有大魚`], day);
+  } else if (shrimp) {
     tip = hiding < 0.35
       ? pick(['小蝦最愛躲在莫絲裡，多綁幾團就好', '缸裡能躲的地方太少，莫絲和矮珍珠是小蝦的家'], day)
       : pick(['水草已經不少，被吃掉一些是正常的，蝦群會慢慢補回來', '小蝦長到看得清楚的大小，魚就不太吃了，再撐幾天'], day);
@@ -305,7 +308,10 @@ export function fryEatenText(state: TankState, count: number, shrimp: boolean): 
   } else if (fry > 0 && boxRoom) {
     tip = pick([`主缸還有 ${fry} 尾小魚，撈進育幼盒，長到 1.6 cm 會自己放回來`, `剩下的 ${fry} 尾小魚趕快撈進育幼盒，大魚就吃不到了`], day);
   } else if (fry > 0 && box) {
-    tip = pick(['育幼盒滿了，盒裡大一點的先放回主缸，騰出位子給更小的', '盒子塞不下了，把盒裡快 1.6 cm 的先放出去'], day);
+    // 放回主缸還是會被吃（g36 #425）：叫玩家準備第二缸，養好水就把小魚搬過去
+    tip = otherTank
+      ? pick(['育幼盒滿了，另一缸養好水就把小魚搬過去', '盒子塞不下了，等另一缸水養好，小魚就搬過去住'], day)
+      : pick(['育幼盒滿了，買第二個缸給小魚住，養好水就搬過去', '盒子塞不下了，開第二缸當小魚的家，大魚就吃不到'], day);
   } else if (hiding < 0.35) {
     tip = pick(['水草太少，大魚一眼就看到小魚。莫絲、矮珍珠這種又密又低的草最好躲', '多種一點莫絲或矮珍珠，小魚鑽進去大魚就抓不到', '缸裡空蕩蕩的，小魚沒地方躲；密一點的水草能救下不少'], day);
   } else if (!box) {

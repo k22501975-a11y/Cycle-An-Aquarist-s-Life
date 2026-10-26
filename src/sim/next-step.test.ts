@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, buyPlant, buyTank, fulfillOrder, orderBoard, updateOrders, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, STALE_STEP_HOURS, NURSERY_FRY_CAPACITY, newTankCost, noteBellySeen, setTankPurpose, showingMother, setBreedingStep, simulate } from '.';
+import { addFish, bacteriaCapacity, buyPlant, buyTank, fulfillOrder, orderBoard, updateOrders, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, STALE_STEP_HOURS, NURSERY_FRY_CAPACITY, newTankCost, noteBellySeen, setTankPurpose, showingMother, setBreedingStep, simulate } from '.';
 import { breedingStep } from './choices';
 
 describe('主畫面的下一步（U1）', () => {
@@ -184,6 +184,23 @@ describe('「養大 5 條」卡超過 3 天（#258）', () => {
     s.hours += RAISE_STUCK_HOURS + 1;
     s.events.push({ hours: s.hours - 10, type: 'fry_eaten', count: 2 });
     expect(nextStep([s])).toMatchObject({ text: '小魚在主缸會被吃，撈進育幼盒', target: 'fry_box' });
+  });
+
+  it('第二缸養好水、主缸小魚會被吃：不管哪個目標，先叫你把小魚搬過去（g36 #425）', () => {
+    const s = newGameState(1);
+    goalState([s]).done.push('cycled');
+    s.nurseryBox = true;
+    for (let i = 0; i < NURSERY_FRY_CAPACITY + 1; i++) {
+      const f = addFish(s, 'guppy', {});
+      Object.assign(f, { lengthCm: 0.8, ageDays: 3, generation: 1, bornHours: s.hours - 72, nursery: i < NURSERY_FRY_CAPACITY || undefined });
+    }
+    const tanks = [s];
+    economy(s).coins = newTankCost(tanks, 'nano20');
+    const t2 = buyTank(tanks, 'nano20')!;
+    // 還在養水：照原本的步驟
+    expect(nextStep(tanks)?.target).not.toBe('move_fry');
+    t2.bacteria.aob = t2.bacteria.nob = bacteriaCapacity(t2);
+    expect(nextStep(tanks)).toMatchObject({ text: '第 2 缸養好水了，把小魚搬過去', target: 'move_fry', tank: 0 });
   });
 
   it('只有一缸、育幼盒滿了、小魚還在被吃、錢夠：馬上叫你買第二缸（g35，polish-to-9.md §8.2）', () => {

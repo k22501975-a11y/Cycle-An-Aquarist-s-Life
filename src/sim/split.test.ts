@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, buyQuarantine, createTank, economy, rescueFryToBox, simulate, FILTERS, FISH_SPECIES, HEATERS, LIGHTS, splitAdvice, splitGroup, splitTank, TANKS, type CreateTankOptions, type TankState } from './index';
+import { addFish, buyQuarantine, createTank, economy, fryHome, fryNeedHome, isCycled, linkTanks, moveFryHome, NURSERY_FRY_CAPACITY, rescueFryToBox, simulate, FILTERS, FISH_SPECIES, HEATERS, LIGHTS, splitAdvice, splitGroup, splitTank, TANKS, type CreateTankOptions, type TankState } from './index';
 import { createFish } from './processes/population';
 
 const MATURE: CreateTankOptions = { tank: TANKS.std40, filter: FILTERS.hangOn, heater: { spec: HEATERS.h100, targetC: 25 }, light: { spec: LIGHTS.basic }, matureMedia: true };
@@ -82,5 +82,52 @@ describe('分缸提示（design/growth.md §4.1）', () => {
     expect(s.fish.filter((f) => f.alive)).toHaveLength(3);
     simulate(s, 24 * 3);
     expect(s.quarantine!.fish.filter((f) => f.alive).length).toBeGreaterThanOrEqual(28);
+  });
+});
+
+describe('第二缸養好水就把小魚搬過去（g36 #425）', () => {
+  function home() {
+    const main = createTank({ ...MATURE, seed: 4 });
+    addFish(main, 'guppy', { sex: 'female' });
+    addFish(main, 'guppy', { sex: 'male' });
+    brood(main, 3, 0.7);
+    const fresh = createTank({ ...MATURE, tank: TANKS.nano20, seed: 5 });
+    const tanks = [main, fresh];
+    linkTanks(tanks);
+    return { main, fresh, tanks };
+  }
+
+  it('養好水、沒有大魚的缸收得了小魚；主缸外面和育幼盒裡的小魚一起搬過去，大魚留下', () => {
+    const { main, fresh, tanks } = home();
+    main.nurseryBox = true;
+    brood(main, 2, 0.6);
+    main.fish.slice(-2).forEach((f) => (f.nursery = true));
+    expect(isCycled(fresh)).toBe(true);
+    expect(fryNeedHome(main)).toBe(true);
+    expect(fryHome(tanks, 0)).toBe(1);
+    expect(moveFryHome(tanks, 0)).toEqual({ to: 1, count: 5 });
+    expect(main.fish.filter((f) => f.alive)).toHaveLength(2);
+    expect(fresh.fish.every((f) => f.generation === 1 && !f.nursery)).toBe(true);
+    expect(fryNeedHome(main)).toBe(false);
+  });
+
+  it('還沒養好水、或那缸有會吃小魚的成魚：不搬', () => {
+    const { fresh, tanks } = home();
+    fresh.water.tan = 1;
+    expect(fryHome(tanks, 0)).toBeNull();
+    expect(moveFryHome(tanks, 0)).toBeNull();
+    fresh.water.tan = 0;
+    addFish(fresh, 'guppy', { sex: 'male' });
+    expect(fryHome(tanks, 0)).toBeNull();
+  });
+
+  it('育幼盒滿了也算要搬家', () => {
+    const { main } = home();
+    main.fish = main.fish.filter((f) => f.generation !== 1);
+    expect(fryNeedHome(main)).toBe(false);
+    main.nurseryBox = true;
+    brood(main, NURSERY_FRY_CAPACITY, 0.6);
+    main.fish.filter((f) => f.generation === 1).forEach((f) => (f.nursery = true));
+    expect(fryNeedHome(main)).toBe(true);
   });
 });

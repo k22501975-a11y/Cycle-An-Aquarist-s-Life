@@ -1460,6 +1460,16 @@ async function start(): Promise<void> {
         toasts.show(`裝上了${spec.name}，水溫會慢慢回升`);
         return;
       }
+      case 'move_fry': {
+        // 小魚在被吃、另一缸養好水了（#425）：一鍵慢慢對水搬過去，切到新缸看牠們
+        if (tank === undefined) return;
+        const moved = game.actAll((tanks) => sim.moveFryHome(tanks, tank));
+        if (!moved) return toasts.show('現在沒有養好水、沒有大魚的缸可以放小魚', 'warn');
+        game.switchTo(moved.to);
+        audio.play('quest', false);
+        toasts.show(`${moved.count} 尾小魚慢慢對水，搬進${sim.tankLabel(game.tanks, moved.to)}了，這裡沒有大魚會吃牠們`);
+        return;
+      }
       case 'move_warm': {
         // 冬天加熱棒弄不到（#400）：冷缸的魚連袋子泡進有加熱棒的缸
         if (tank === undefined) return;
@@ -1980,6 +1990,7 @@ async function start(): Promise<void> {
       case 'heater_credit':
       case 'move_warm':
       case 'buy_heater':
+      case 'move_fry':
         guide.goNext?.(item.action, item.tank);
         break;
       case 'fish':

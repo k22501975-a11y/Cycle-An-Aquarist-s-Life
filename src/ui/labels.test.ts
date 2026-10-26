@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, buyNurseryBox, createTank, TANKS, type TankState } from '../sim';
+import { addFish, addPlant, buyNurseryBox, createTank, NURSERY_FRY_CAPACITY, TANKS, type TankState } from '../sim';
 import { fryEatenText } from './labels';
 
 function tank(): TankState {
@@ -45,6 +45,23 @@ describe('小魚被吃的說法（UX r12）', () => {
     for (let d = 0; d < 4; d++) {
       s.hours = d * 24;
       expect(fryEatenText(s, 1, false)).not.toMatch(/多種|水草太少/);
+    }
+  });
+
+  it('育幼盒滿了不叫你放回主缸：叫你準備第二缸；第二缸能收就叫你搬過去（g36 #425）', () => {
+    const s = tank();
+    buyNurseryBox(s);
+    for (let i = 0; i <= NURSERY_FRY_CAPACITY; i++) {
+      const f = addFish(s, 'guppy', { carriesIch: false, carries: [] });
+      Object.assign(f, { lengthCm: 0.8, ageDays: 3, nursery: i < NURSERY_FRY_CAPACITY || undefined });
+    }
+    for (let d = 0; d < 4; d++) {
+      s.hours = d * 24;
+      const one = fryEatenText(s, 1, false);
+      expect(one).not.toMatch(/放回主缸|放出去/);
+      expect(one).toMatch(/第二.*缸/);
+      expect(fryEatenText(s, 1, false, null, true)).toMatch(/另一缸/);
+      expect(fryEatenText(s, 1, false, '第 2 缸')).toMatch(/第 2 缸.*(搬|安全)/);
     }
   });
 
