@@ -1411,6 +1411,11 @@ async function start(): Promise<void> {
         if (game.state.nurseryBox) withPanels((p) => p.putDueInNursery(ctx));
         else panelSheet('育幼盒', (p) => p.nurseryPanel(ctx));
         return;
+      case 'nursery_soon':
+        // 育幼盒空了、母魚快生（polish-to-9.md §9.1）：切到那缸，直接把她放進去
+        if (tank !== undefined) game.switchTo(tank);
+        withPanels((p) => p.putSoonInNursery(ctx));
+        return;
       case 'treat': {
         // 生病的魚可能在別缸：直接打開用藥（#291），老闆先說是什麼病、下什麼藥。
         // 先找還等著下藥的那缸（#356：這缸下過藥了，病魚在另一缸沒藥），都下過了才找有病魚的

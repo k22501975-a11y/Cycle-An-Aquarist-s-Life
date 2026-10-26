@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, bacteriaCapacity, buyPlant, buyTank, fulfillOrder, orderBoard, updateOrders, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, STALE_STEP_HOURS, NURSERY_FRY_CAPACITY, newTankCost, noteBellySeen, PICK_AFTER_BROOD_DAYS, setTankPurpose, showingMother, setBreedingStep, simulate } from '.';
+import { addFish, bacteriaCapacity, ID_BLOCK, moveSoonToNursery, nurseryFish, buyPlant, buyTank, fulfillOrder, orderBoard, updateOrders, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, STALE_STEP_HOURS, NURSERY_FRY_CAPACITY, newTankCost, noteBellySeen, PICK_AFTER_BROOD_DAYS, setTankPurpose, showingMother, setBreedingStep, simulate } from '.';
 import { breedingStep, choiceState } from './choices';
 
 describe('主畫面的下一步（U1）', () => {
@@ -102,7 +102,9 @@ describe('主畫面的下一步（U1）', () => {
     mom.pregnancy = 0.95;
     expect(nextStep([s])).toMatchObject({ text: '母魚快生了，買個育幼盒', target: 'nursery' });
     s.nurseryBox = true;
-    expect(nextStep([s])?.text).toBe('母魚快生了，放進育幼盒');
+    // 盒子空著：直接叫你把她放進去（polish-to-9.md §9.1）
+    expect(nextStep([s])).toMatchObject({ text: `育幼盒空了，把快生的孔雀魚母魚 #${mom.id % ID_BLOCK} 放進去`, target: 'nursery_soon', tank: 0 });
+    mom.pregnancy = 0;
 
     goalState([s]).done.push('protect_fry', 'raise5', 'sale');
     economy(s).coins = 0;
@@ -278,5 +280,26 @@ describe('「養大 5 條」卡超過 3 天（#258）', () => {
     f.health = 0.2;
     f.ich = { stage: 'visible', progress: 1, cause: 'new_fish' };
     expect(nextStep([s])?.target).toBe('treat');
+  });
+
+  it('育幼盒空了、母魚快生（懷孕 ≥ 0.7）：任務卡叫你放進去，排在照顧句前面；盒裡還有小魚或還早就不叫（polish-to-9.md §9.1，g38）', () => {
+    const s = newGameState(1);
+    goalState([s]).done.push('cycled', 'protect_fry');
+    s.nurseryBox = true;
+    const mom = addFish(s, 'guppy', { sex: 'female' });
+    mom.ageDays = 120;
+    mom.pregnancy = 0.6;
+    expect(nextStep([s])?.target).not.toBe('nursery_soon');
+    mom.pregnancy = 0.75;
+    expect(nextStep([s])).toMatchObject({ text: `育幼盒空了，把快生的孔雀魚母魚 #${mom.id % ID_BLOCK} 放進去`, target: 'nursery_soon', tank: 0 });
+    // 盒裡還有小魚：她放進去會吃牠們，不叫（照 #430 叫買缸或搬小魚）
+    const fry = addFish(s, 'guppy', {});
+    Object.assign(fry, { lengthCm: 0.7, ageDays: 2, generation: 1, nursery: true, pregnancy: 0 });
+    expect(nextStep([s])?.target).not.toBe('nursery_soon');
+    fry.alive = false;
+    // 點了就放進去，任務卡換掉
+    expect(moveSoonToNursery(s)?.id).toBe(mom.id);
+    expect(nurseryFish(s).map((f) => f.id)).toEqual([mom.id]);
+    expect(nextStep([s])?.target).not.toBe('nursery_soon');
   });
 });
