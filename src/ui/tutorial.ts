@@ -16,7 +16,7 @@ export const TEST_AMMONIA_LINE = '測到氨了！先換三成的水';
 /** 教學最後一個任務做完：不跳對話框，任務卡閃這句（§1）。 */
 export const TUTORIAL_DONE_LINE = '新手引導完成！接下來追夢想魚吧';
 /** 開遊戲的歡迎（前 5 分鐘兩個對話框之一，§2）。 */
-export const WELCOME_LINE = '歡迎！這個空缸送你。挑好設備，開你的第一個缸吧！';
+export const WELCOME_LINE = '歡迎！這個空缸送你，先點一下鋪底沙，開你的第一個缸吧！';
 /** 第一次發現搭便車的螺（#213）：一行提示，完整說明放「為什麼？」（§5）。 */
 export const FIRST_PESTS_TIP = '咦，草上有小螺搭便車！牠們會幫忙吃剩飼料';
 

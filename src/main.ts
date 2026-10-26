@@ -557,6 +557,11 @@ async function start(): Promise<void> {
   const setupPress = () => {
     const step = view.setupStep;
     if (!step || step === 'done') return;
+    // 開場還在淡出（約 0.7 秒）時點到的只是要跳過動畫，不算倒沙（#371）
+    if (document.getElementById('intro')) return;
+    // 動手倒沙就收起歡迎字；還沒挑設備就先打開挑設備的面板（§8.1）
+    if (step === 'sand') closeWelcome?.();
+    if (step === 'gear' && view.setupWaiting && sim.needsSetup(game.state)) return openGearPicker();
     if (view.setupPress()) {
       audio.play(SETUP_SOUND[step]);
       // 燈有定時：還沒到開燈時間就說幾點會亮，不說「開機！」卻是暗的
@@ -1512,13 +1517,16 @@ async function start(): Promise<void> {
   // 開缸（F1-a）：新遊戲先挑設備，開完缸時間才開始走；關掉面板時主畫面留一個「開缸」按鈕
   // 開局 0～5 秒：阿德老闆的歡迎疊在挑設備的畫面上，點一下或 5 秒後自己收起來（mvp.md §4.4.4）；設備說明只寫在卡片上
   let welcomed = false;
+  let closeWelcome: (() => void) | null = null;
   const showWelcome = () => {
     if (welcomed) return;
     welcomed = true;
     const close = () => {
+      closeWelcome = null;
       welcome.classList.add('out');
       window.setTimeout(() => welcome.remove(), 300);
     };
+    closeWelcome = close;
     const welcome = h(
       'div.setup-welcome.glass',
       { role: 'status', onclick: close },
@@ -1529,20 +1537,20 @@ async function start(): Promise<void> {
     // 多了夢想魚小卡，多停 2 秒讓人看得到
     window.setTimeout(close, 7000);
   };
-  const openSetup = () => {
-    // 開場動畫還在演就等它收起來再出歡迎卡（7 秒從那時才開始算）
-    whenIntroDone(showWelcome);
-    sheet.open('開缸', () =>
-      setupPanel(ctx, () => {
-        save();
-        sheet.close();
-        // 挑好設備：從空缸開始演倒沙、注水、裝設備、開燈，演完「你的第一個缸」後開始教學
-        playSetup();
-      }),
-      // 開局必經：點背景不關（#371）
+  // 開缸順序（polish-to-9.md §8.1）：開場動畫一收起就停在空缸上，先親手倒沙，到「裝上設備」那一步才挑設備（推薦組合排第一）
+  const openSetup = () => whenIntroDone(() => (showWelcome(), playSetup()));
+  const openGearPicker = () =>
+    sheet.open(
+      '裝上設備',
+      () =>
+        setupPanel(ctx, () => {
+          save();
+          // 挑好設備：接著演「裝上設備」，之後注水、開機
+          setupPress();
+        }),
+      // 開缸必經：點背景不關（#371）
       { pinned: true },
     );
-  };
   // 每日 3 件小事（F3）：換天出新題、做完一件跳通知（寫明還差哪件）。左上角常駐小卡列出三件，做完打勾，三件都做完按寶箱（#185）
   let dailyDay = sim.dailyTasks(game.tanks)?.day;
   const dailyHolder = h('div.daily-holder');
@@ -2026,7 +2034,7 @@ async function start(): Promise<void> {
     if (sleepingNow) return;
     // 開缸演出還在演：演完會跳「你的第一個缸」，夜幕會把它蓋掉
     if (view.settingUp) {
-      toasts.show('等開缸做完再過夜');
+      toasts.showNow('等開缸做完再過夜');
       return;
     }
     if (cloud.session) {
