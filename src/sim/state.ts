@@ -57,6 +57,8 @@ export interface TankState {
   insulatedUntil?: number;
   /** 上次臨時保溫是第幾個遊戲天（每天一次）。 */
   insulatedDay?: number;
+  /** 30°C 加粗鹽治白點中（mvp.md §4.4.6 g33）：開始的遊戲小時和原本加熱棒設的溫度；白點斷根就自動調回去。 */
+  saltTreat?: { hours: number; prevC: number };
   /**
    * 養水期延長：還在養水、水裡有氨時又放店裡的魚，硝化菌長好以後還要多撐 leftH 小時才算養好
    * （design/polish-to-9.md §4 教學順序）。addedHours 是最近一次延長的時間，同一批魚只算一次。
@@ -206,6 +208,8 @@ export interface Water {
   dewormer?: number;
   /** 銅（除螺藥）：螺和蝦都怕。 */
   copper?: number;
+  /** 粗鹽（治白點的便宜做法，1 = 一份）：不會自己退，換水才沖淡；蝦怕鹽。 */
+  salt?: number;
   /** 用於偵測水溫、pH 驟變的移動平均（約數小時）。 */
   tempAvgC: number;
   phAvg: number;
@@ -470,9 +474,15 @@ export function noteAct(state: TankState, act: DailyAct): void {
   (state.dailyActs ??= {})[act] = state.hours;
 }
 
+/** 算「危機」的事件（mvp.md §4.4.6 g33：之後 30 天手上少的話保底單出得快）；死魚要一天 3 尾以上才算。 */
+const CRISIS_EVENTS: ReadonlySet<SimEventType> = new Set(['heater_broke', 'heater_stuck', 'ich_visible', 'disease_visible']);
+const CRISIS_DEATHS = 3;
+
 export function recordEvent(state: TankState, event: Omit<SimEvent, 'hours'>): void {
   state.events.push({ hours: state.hours, ...event });
   if (state.events.length > 200) state.events.splice(0, state.events.length - 200);
+  const crisis = CRISIS_EVENTS.has(event.type) || (event.type === 'fish_died' && state.events.filter((e) => e.type === 'fish_died' && e.hours > state.hours - 24).length >= CRISIS_DEATHS);
+  if (crisis && state.economy) state.economy.crisisHours = state.hours;
 }
 
 export function hourOfDay(state: TankState): number {

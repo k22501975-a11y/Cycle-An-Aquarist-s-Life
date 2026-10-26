@@ -1,5 +1,6 @@
-import { economy, price } from './economy';
+import { economy, LOAN_PAUSE_COINS, price } from './economy';
 import { raiseCashStep } from './raise-cash';
+import { canSalt, SALT_DAYS, saltDaysLeft, saltWorking } from './salt-cure';
 import { HUNGRY } from './readings';
 import { CALM_DAYS, GOALS, goalState, nextGoals, PURPOSE_GOAL_COUNT, raisedCount, type Goal } from './goals';
 import { COLORING_AT, daysToLength, growthStage, maxLengthCm } from './growth';
@@ -131,8 +132,11 @@ export function changeDilutesIch(t: TankState, fraction: number): boolean {
 
 /** 這缸還有魚等著下藥：看得出別的病，或有白點但水裡的白點藥退了、撐不到白點掉。兩缸時「去下藥」切到這缸（#356）。 */
 export function needsMedicine(t: TankState): boolean {
-  return t.fish.some((f) => f.alive && (hasVisible(f) || (f.ich.stage === 'visible' && t.water.medication < ICH_MED_WORKING))) || ichMedShort(t);
+  return t.fish.some((f) => f.alive && (hasVisible(f) || (f.ich.stage === 'visible' && t.water.medication < ICH_MED_WORKING && !salted(t)))) || ichMedShort(t);
 }
+
+/** 這缸正在用 30°C 加粗鹽治白點，水裡的鹽還夠（mvp.md §4.4.6 g33）。 */
+const salted = saltWorking;
 
 /**
  * 看得到的病只有白點、而且那幾缸水裡都還有藥：不用再下（#324）。回傳白點大約幾天會掉（照現在的水溫或加熱棒設的溫度，取高的）、
@@ -164,12 +168,31 @@ export function ichTreatment(tanks: TankState[]): { days: number; medDays: numbe
 
 /** 生病時的下一步：白點藥效中就叫玩家調水溫等，不要再叫下藥（#324）。 */
 function sickStep(tanks: TankState[]): Omit<NextStep, 'goal'> {
+  const sick = tanks.filter((t) => t.fish.some((f) => f.alive && (f.ich.stage === 'visible' || hasVisible(f))));
+  const onlyIch = sick.every((t) => !t.fish.some((f) => f.alive && hasVisible(f)));
+  // 用粗鹽治白點中（g33）：不叫你再下藥
+  if (onlyIch && sick.length > 0 && sick.every((t) => salted(t) || t.water.medication >= ICH_MED_WORKING) && sick.some(salted))
+  {
+    const left = Math.max(...sick.map(saltDaysLeft));
+    return { text: left > 0 ? `粗鹽治白點中（水溫 30°C），約 ${left} 天會好` : '粗鹽治白點中，白點還沒斷根：鹽和 30°C 先維持，換水會照換掉的量補鹽', target: 'treat' };
+  }
   const ich = ichTreatment(tanks);
+  // 還欠阿德錢、買了藥手上就剩不到 LOAN_PAUSE_COINS：先用便宜的粗鹽，錢留著回血（g33）
+  const e = economy(tanks[0]);
+  if (!ich && onlyIch && (e.heaterLoan ?? 0) > 0 && e.coins - price('med:ich') < LOAN_PAUSE_COINS && e.coins >= price('med:ich')) {
+    const i = sick.findIndex(canSalt);
+    if (i >= 0)
+      return { text: `還欠阿德錢，白點藥（${price('med:ich')} 元）先省下來：水溫調到 30°C、加一點粗鹽（${price('med:salt')} 元），約 ${SALT_DAYS} 天會好`, target: 'treat', tank: tanks.indexOf(sick[i]) };
+  }
   // 要下藥但最便宜的藥都買不起：叫玩家先交訂單湊錢，不要一直叫補藥（#391）
   if (!ich || ich.short) {
     const cost = ich ? price('med:ich') : Math.min(price('med:ich'), price('med:antibiotic'), price('med:dewormer'));
-    const { coins, mall } = economy(tanks[0]);
+    const { coins, mall } = e;
     const raise = coins < cost && !(mall?.cure ?? 0) ? raiseCashStep(tanks, '藥', cost) : null;
+    // 白點藥買不起：先用 30°C 加粗鹽（20 元），蝦怕鹽的缸不行（mvp.md §4.4.6 g33：連 3 天買不起藥）
+    const saltable = raise && onlyIch && !ich ? sick.findIndex(canSalt) : -1;
+    if (saltable >= 0)
+      return { text: `白點藥要 ${price('med:ich')} 元買不起，先用便宜的治法：水溫調到 30°C、加一點粗鹽（${price('med:salt')} 元），約 ${SALT_DAYS} 天會好`, target: 'treat', tank: tanks.indexOf(sick[saltable]) };
     if (raise) return { text: raise.text, target: raise.target };
   }
   if (ich?.short) return { text: '藥效撐不到白點掉，再補一份藥', target: 'treat' };

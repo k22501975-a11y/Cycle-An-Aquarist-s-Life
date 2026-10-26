@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Game } from '../game/game';
 import type { CloudClient, CloudResult } from '../net/cloud';
-import { createTank, mallBag, setMallBag, TANKS, type TankState } from '../sim';
+import { createTank, TANKS, type TankState } from '../sim';
+import { mallBag, setMallBag } from '../sim/mall';
 import { useMallItem } from './mall-panel';
 
 /** 假伺服器：每用一次扣一個，記下送了幾次。 */

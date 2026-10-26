@@ -46,9 +46,15 @@ export function insulateRefusal(t: TankState): string | null {
   return null;
 }
 
-/** 冷到要救急、而且今天還沒保溫：任務卡和早上報告第一行叫玩家先保溫。 */
+/** 水溫離缸裡最怕冷那種魚的致死低溫不到 1°C：新加熱棒還在升溫也撐不到，要先保溫（#410 架構）。 */
+export function nearLethalCold(t: TankState): boolean {
+  const living = t.fish.filter((f) => f.alive);
+  return living.length > 0 && t.water.tempC < Math.max(...living.map((f) => FISH_SPECIES[f.species].tempLethal.min)) + 1;
+}
+
+/** 冷到要救急（沒有能用的加熱棒，或新加熱棒還在升溫但魚快冷死了）、而且今天還沒保溫：任務卡和早上報告第一行叫玩家先保溫。 */
 export function needsInsulation(t: TankState): boolean {
-  return hasLiving(t) && coldWithoutHeater(t) && !insulateRefusal(t);
+  return hasLiving(t) && (coldWithoutHeater(t) || (t.water.tempC < coldLimitC(t) - 0.5 && nearLethalCold(t))) && !insulateRefusal(t);
 }
 
 /** 臨時保溫：缸外包毛巾、寶特瓶裝溫水泡進缸裡。INSULATE_HOURS 小時內散熱減半、水溫回升 INSULATE_BUMP_C 度；每天一次，不花錢。 */
@@ -82,6 +88,8 @@ function creditRefusalHere(t: TankState): string | null {
   const owed = economy(t).heaterLoan ?? 0;
   if (owed > 0) return `還欠阿德 ${owed} 元，還清之前不能再賒`;
   if (workingHeater(t)) return '這缸的加熱棒是好的';
+  const pool = poolInto(t);
+  if (pool) return `錢不多，先把魚集中到${pool}，這缸等有錢再修`;
   const short = creditCost(t) - economy(t).coins;
   if (short <= 0) return '錢夠了，直接買一支就好';
   // §4.4.6：賣魚還湊得到就先賣，設備面板的按鈕跟任務卡同一個條件（#398 架構）
@@ -154,6 +162,47 @@ export function buyCheapHeater(t: TankState): HeaterSpec | null {
   if (!pick || !spend(t, pick.cost)) return null;
   installHeater(t, pick.spec);
   return pick.spec;
+}
+
+/** 錢不多先併缸：修一缸加熱棒後手上會不到這個數（mvp.md §4.4.6 g33 seed 3）。 */
+export const POOL_COINS_LEFT = 100;
+
+/** 這缸的魚加起來幾公分（跟 crowdingRatio 同一個算法）。 */
+const livingCm = (t: TankState) => crowdingRatio(t) * t.equipment.tank.volumeL;
+
+/** 修這缸的加熱棒：同款買得起就同款，不然買得起又撐得住的便宜那支；都買不起回 null。 */
+export function poolHeater(t: TankState): { spec: HeaterSpec; cost: number; same: boolean } | null {
+  const same = t.equipment.heater?.spec;
+  if (same && economy(t).coins >= price(`heater:${same.id}`)) return { spec: same, cost: price(`heater:${same.id}`), same: true };
+  const cheap = cheapHeater(t);
+  return cheap ? { spec: cheap.spec, cost: cheap.cost, same: false } : null;
+}
+
+/**
+ * 錢不多先併缸（mvp.md §4.4.6 g33 seed 3：買一支後剩 22 元、另一缸再賒一支，之後錢回不來）：
+ * 有魚的缸（兩缸以上）加熱棒都壞了、有一缸已經冷了，修一缸手上就剩不到 POOL_COINS_LEFT 元，而且全部的魚擠進那缸不超過 WARM_MOVE_CROWD：
+ * 只修那缸（放得下的缸裡挑最大的），魚都搬過去，另一缸先空著不賒。回傳要修的那缸；不適用回 null。
+ */
+export function poolTank(tanks: TankState[]): TankState | null {
+  const living = tanks.filter(hasLiving);
+  // 兩缸的加熱棒都壞了，至少一缸已經冷到要救急（另一缸可能還沒涼下來）
+  if (living.length < 2 || living.some(workingHeater) || !living.some(coldWithoutHeater)) return null;
+  const total = living.reduce((n, t) => n + livingCm(t), 0);
+  const fits = living.filter((t) => total <= WARM_MOVE_CROWD * t.equipment.tank.volumeL).sort((a, b) => b.equipment.tank.volumeL - a.equipment.tank.volumeL);
+  for (const t of fits) {
+    const fix = poolHeater(t);
+    if (fix) return economy(t).coins - fix.cost < POOL_COINS_LEFT ? t : null;
+  }
+  return null;
+}
+
+/** 這缸的魚該集中到別缸（那缸加熱棒是好的、放得下這缸全部的魚；會問賒帳就是錢不多）：回傳那缸的名字，不然 null。不賒第二支（g33 seed 3）。 */
+function poolInto(t: TankState): string | null {
+  if (!hasLiving(t)) return null;
+  const tanks = householdTanks(t);
+  const cm = livingCm(t);
+  const i = tanks.findIndex((x) => x !== t && workingHeater(x) && hasLiving(x) && cm <= warmRoom(x));
+  return i < 0 ? null : tankLabel(tanks, i);
 }
 
 /** 冬天搬魚救急時，暖缸最多塞到多擠（每公升 1 cm；擠幾天比冷死好，之後再分缸或賣）。 */
@@ -263,11 +312,15 @@ export function warmMoveRefusal(tanks: TankState[], from: number): string | null
   return `${name}已經滿了，搬不過去`;
 }
 
-/** 照 warmMove 把魚連袋子泡進暖缸、慢慢對水再放（會被吞的小魚直接放進育幼盒）；回傳搬到哪缸、搬了幾尾、幾尾進盒子（搬不了回 null）。 */
+/** 照 warmMove 把魚連袋子泡進暖缸、慢慢對水再放（暖缸原本的小魚和搬過去會被吞的小魚放進育幼盒）；回傳搬到哪缸、搬了幾尾、幾尾進盒子（搬不了回 null）。 */
 export function moveToWarmTank(tanks: TankState[], from: number): { to: number; count: number; boxed: number } | null {
   const plan = warmMove(tanks, from);
   if (!plan) return null;
   const dest = tanks[plan.to];
+  // 大魚搬進來之前，暖缸原本被牠們吞得下的小魚先放進育幼盒，放得下多少放多少，小的先（企劃 2026-10-26，g33：搬去的成魚把原本的小魚吃掉一半）
+  const mouth = Math.max(0, ...plan.fish.filter((f) => !isJuvenile(f)).map((f) => f.lengthCm * FISH_SPECIES[f.species].mouthRatio));
+  const resident = dest.fish.filter((f) => f.alive && !f.nursery && isJuvenile(f) && usesNursery(f.species) && f.lengthCm <= mouth).sort((a, b) => a.lengthCm - b.lengthCm);
+  for (const f of resident) if (!moveToNursery(dest, f.id)) break;
   let count = 0;
   for (const f of plan.fish) if (moveFish(tanks[from], dest, f.id, true)) count++;
   let boxed = 0;

@@ -52,7 +52,7 @@ describe('跟阿德賒加熱棒（mvp.md §4.4.6）', () => {
     expect(heaterCreditRefusal(t)).toBe('還欠阿德 350 元，還清之前不能再賒');
   });
 
-  it('還款：缸穩了、手上有 200 元以上才扣，每筆扣 3 成；手上少或有危機時先不扣（mvp.md §4.4.6 g33）', () => {
+  it('還款：缸穩了、手上有 250 元以上才扣，每筆扣 3 成；手上少或有危機時先不扣（mvp.md §4.4.6 g33）', () => {
     const t = cold();
     t.equipment.heater!.broken = false;
     t.water.tempC = 25;

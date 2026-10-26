@@ -104,6 +104,8 @@ export interface OrderBoard {
   earned: number;
   /** 上次檢查收入空檔保底是第幾個遊戲小時（每小時最多查一次，離線補算比較快）。 */
   gapCheckedHour?: number;
+  /** 上一張保底單是第幾個遊戲天掛的（危機過後又沒錢時，隔 RECOVERY_GAP_DAYS 天出一張，不管中間有沒有零星小收入）。 */
+  gapPostedDay?: number;
   /** 上次補單、撤交不出的單是第幾個遊戲小時（要算缸裡湊不湊得齊，每小時最多算一次；交單、撕單後清掉，下一次更新就補）。 */
   fillCheckedHour?: number;
 }
@@ -631,13 +633,29 @@ function replaceOrder(state: TankState, board: OrderBoard, ctx: OrderContext, ol
 
 /** 連續幾天沒有真的收入（賣魚、賣插枝、交單），訂單板就保證出一張現在交得出來的小單（polish-to-9.md §4「收入空檔」）。 */
 export const INCOME_GAP_DAYS = 6;
-/** 還欠阿德加熱棒錢、手上又低於這個數時，保底單隔 LOAN_GAP_DAYS 天就出（mvp.md §4.4.6 g33：危機過後錢回不來）。 */
-export const LOAN_GAP_COINS = 200;
-export const LOAN_GAP_DAYS = 3;
+/**
+ * 危機過後的保底（mvp.md §4.4.6 g33：危機過後錢回不來）：30 天內有過危機（設備壞、一天死 3 尾以上、生病）、手上又低於 RECOVERY_GAP_COINS 時，
+ * 保底單隔 RECOVERY_GAP_DAYS 天就出、一張最多收 GAP_RECOVERY_FRY 尾小魚。開局 RECOVERY_START_DAY 天內照 §4.4.5 原本的規則。
+ */
+export const RECOVERY_GAP_COINS = 200;
+export const RECOVERY_GAP_DAYS = 3;
+export const RECOVERY_WINDOW_DAYS = 30;
+export const RECOVERY_START_DAY = 30;
 
-/** 多久沒有真的收入就掛保底單。 */
-function incomeGapDays(e: Economy): number {
-  return (e.heaterLoan ?? 0) > 0 && e.coins < LOAN_GAP_COINS ? LOAN_GAP_DAYS : INCOME_GAP_DAYS;
+/** 現在是不是「危機過後、手上又少」（保底單出得快、收得多）。 */
+export function recoveringFromCrisis(e: Economy, today: number): boolean {
+  return today >= RECOVERY_START_DAY && e.coins < RECOVERY_GAP_COINS && e.crisisHours !== undefined && today - e.crisisHours / 24 <= RECOVERY_WINDOW_DAYS;
+}
+
+/**
+ * 今天該不該掛保底單：平常是連續 INCOME_GAP_DAYS 天沒真收入；危機過後手上又少（recoveringFromCrisis）時，
+ * 上一張保底單（或上一筆真收入）之後隔 RECOVERY_GAP_DAYS 天就出，賣幾尾魚的零星小錢不會把它往後推（g33）。
+ */
+function incomeGapDue(e: Economy, board: OrderBoard, today: number): boolean {
+  const last = e.lastEarnedDay ?? today;
+  if (today - last >= INCOME_GAP_DAYS) return true;
+  if (!recoveringFromCrisis(e, today)) return false;
+  return today - (board.gapPostedDay ?? last) >= RECOVERY_GAP_DAYS;
 }
 
 /** 這張單什麼時候下架（遊戲小時）：單上寫了要等幾天就照那個；一般 ORDER_EXPIRE_DAYS 天、小孔雀單 FRY_ORDER_EXPIRE_DAYS 天、保底單 INCOME_GAP_DAYS 天。 */
@@ -648,6 +666,8 @@ export function orderExpiresHours(o: ShopOrder): number {
 
 /** 保底單收的仔魚要出生滿幾天（剛生的魚苗店家不收，polish-to-9.md §4「第二次確認」）；大小不限。 */
 export const GAP_FRY_MIN_DAYS = 7;
+/** 危機過後手上又少時（recoveringFromCrisis），保底單最多收幾尾仔魚（平常 2 尾）。 */
+export const GAP_RECOVERY_FRY = 5;
 const GAP_FRY_MIN_CM = 0.5;
 /** 保底單的小螺：一張收 5 隻，每隻 8 元（害蟲小螺店裡不賣，照一般螺單的行情）。 */
 export const GAP_PEST_COUNT = 5;
@@ -666,7 +686,7 @@ function gapDeliverable(tanks: TankState[], o: ShopOrder): boolean {
  * 只收自己缸裡來的（polish-to-9.md §4）：
  * - 插枝只算缸裡水草現在剪得下來的（買來的水草都比修剪線小，剪得下來的一定是自己長的）。可以只要 1 株。
  * - 螺收害蟲小螺 5 隻（跟著水草搭便車、在缸裡繁殖的，至少留 2 隻種螺；螺還少時收 3～4 隻）或蘋果螺孵出來的小螺，不收店裡買的大螺。
- * - 仔魚只收自己繁殖、出生滿 7 天的，每尾 5～8 元（§4.4.1），最多 2 尾。
+ * - 仔魚只收自己繁殖、出生滿 7 天的，每尾 5～8 元（§4.4.1），最多 2 尾（危機過後又沒錢時 GAP_RECOVERY_FRY 尾）。
  * 每份的價錢不超過店售價。什麼都沒有就回傳 null。
  */
 export function incomeGapOrder(tanks: TankState[], board: OrderBoard): ShopOrder | null {
@@ -690,7 +710,9 @@ export function incomeGapOrder(tanks: TankState[], board: OrderBoard): ShopOrder
     }
   }
   const fry: ShopOrder = { ...base, kind: 'fry', species: 'guppy', minCm: GAP_FRY_MIN_CM, bornBy: now - GAP_FRY_MIN_DAYS * 24, count: 1 };
-  const fryCount = Math.min(2, orderSupply(tanks, fry));
+  // 危機過後又沒錢時收多一點（最多 GAP_RECOVERY_FRY 尾，一張約 30～40 元，跟一張小螺單差不多；g33：一張 2 尾 14 元幫不上忙）
+  const fryMax = recoveringFromCrisis(economy(tanks[0]), Math.floor(now / 24)) ? GAP_RECOVERY_FRY : 2;
+  const fryCount = Math.min(fryMax, orderSupply(tanks, fry));
   if (fryCount > 0) candidates.push({ ...fry, count: fryCount, unitPrice: 5 + Math.floor(r() * 4) });
   const ok = candidates.filter((o) => gapDeliverable(tanks, o));
   if (ok.length === 0) return null;
@@ -713,7 +735,7 @@ function ensureIncomeOrder(state: TankState, board: OrderBoard): void {
   const e = economy(state);
   const today = Math.floor(state.hours / 24);
   if (e.lastEarnedDay === undefined) e.lastEarnedDay = today;
-  if (today - e.lastEarnedDay < incomeGapDays(e)) return;
+  if (!incomeGapDue(e, board, today)) return;
   const current = board.orders.find((o) => o.gap);
   if (current && gapDeliverable(tanks, current)) return;
   board.orders = board.orders.filter((x) => !x.gap);
@@ -726,6 +748,7 @@ function ensureIncomeOrder(state: TankState, board: OrderBoard): void {
     board.orders = board.orders.filter((x) => x !== stale);
   }
   board.orders.push(o);
+  board.gapPostedDay = today;
 }
 
 /** 起步單掛幾天（§4.4.5：7～10 天）。 */

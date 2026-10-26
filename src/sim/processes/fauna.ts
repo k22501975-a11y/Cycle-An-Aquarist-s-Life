@@ -3,7 +3,7 @@ import { driftAcclimation, habitStress, phBeyondSurvival } from '../acclimation'
 import { freeAmmoniaFraction, temperatureFactor } from '../chemistry';
 import { DEFAULT_BREEDING_CONDITION, DEFAULT_NUTRITION, foodLots, foodQuality, nutritionFactor, pruneFood } from '../food';
 import { chance } from '../random';
-import { FISH_SPECIES, type FishSpecies } from '../species';
+import { FISH_SPECIES, isShrimpSpecies, type FishSpecies } from '../species';
 import { recordEvent, type Fish, type IchCause, type TankState } from '../state';
 import { diseaseStress, progressInfections, spreadInfections } from './disease';
 import { cycleMaturity } from './nitrogen';
@@ -248,6 +248,8 @@ function computeDamage(state: TankState, fish: Fish, sp: FishSpecies): Damage[] 
   if (sp.medicationSensitive) add(water.medication * 0.02, 'medication');
   // 除螺藥的銅對蝦是毒（螺也是軟體動物，蝦是甲殼類但一樣怕銅）
   if (sp.invertebrate) add((water.copper ?? 0) * 0.08, 'copper');
+  // 粗鹽（治白點的便宜做法）：蝦怕鹽
+  if (isShrimpSpecies(fish.species)) add((water.salt ?? 0) * 0.03, 'medication');
   if (fish.ich.stage === 'visible') add(0.004 * (1 - 0.5 * immunity(fish, sp)), 'ich');
   // 長期高壓力本身就會耗損身體。
   add((fish.stress - 0.7) * 0.01, 'chronic_stress');
@@ -381,7 +383,7 @@ export function updateFauna(state: TankState, dt: number): void {
 
   // 白點蟲游走期找不到宿主會死亡；高溫加速（28°C 以上漸增，30°C 約 3 倍）、藥物大幅加速。
   const heat = 1 + 2 * Math.min(1, Math.max(0, (water.tempC - 28) / 2));
-  const kill = 0.02 * tf * heat * (1 + 30 * water.medication);
+  const kill = 0.02 * tf * heat * (1 + 30 * water.medication) * saltKill(water.salt);
   water.ichPathogen *= Math.exp(-kill * dt);
   water.medication *= Math.exp(-0.01 * dt);
 
@@ -554,6 +556,10 @@ function settleCondition(fish: Fish, dt: number): void {
   }
 }
 
+/** 粗鹽讓游走期的白點蟲死得多快（倍數；30°C 加一份鹽約 7 天治好，藥是 4 天左右，mvp.md §4.4.6 g33）。 */
+export const SALT_ICH_KILL = 15;
+const saltKill = (salt = 0) => 1 + SALT_ICH_KILL * salt;
+
 /**
  * 白點病：游走期的蟲感染魚 → 潛伏（皮下）→ 出現白點 → 成熟脫落成為包囊，
  * 在底砂分裂後釋放大量新的游走期蟲。藥物只殺游走期（包在皮下或包囊裡的殺不到），
@@ -570,7 +576,7 @@ function updateIch(state: TankState, fish: Fish, sp: FishSpecies, cause: IchCaus
       // 沒有誘因時水裡的蟲上不了身
       if (!cause) break;
       // 水裡有藥時游走的蟲還沒找到魚就先被殺掉，跟下面殺蟲的速度同一個倍數（#384：不然白點掉光、包囊還在破，藥效中照樣再上身）
-      const risk = (0.03 * water.ichPathogen * Math.pow(1 - immunity(fish, sp), 2)) / (1 + 30 * water.medication);
+      const risk = (0.03 * water.ichPathogen * Math.pow(1 - immunity(fish, sp), 2)) / ((1 + 30 * water.medication) * saltKill(water.salt));
       if (chance(state.rng, risk, dt)) fish.ich = { stage: 'incubating', progress: 0, cause };
       break;
     }
