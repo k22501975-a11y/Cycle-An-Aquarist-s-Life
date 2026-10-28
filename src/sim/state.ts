@@ -65,6 +65,8 @@ export interface TankState {
   insulatedDay?: number;
   /** 30°C 加粗鹽治白點中（mvp.md §4.4.6 g33）：開始的遊戲小時和原本加熱棒設的溫度；白點斷根就自動調回去。 */
   saltTreat?: { hours: number; prevC: number };
+  /** 白點治好後的抵抗期到哪個遊戲小時（ICH_CALM_DAYS）：期間溫差、太擠不會再發；放進沒檢疫的新魚就取消。 */
+  ichCalmUntil?: number;
   /**
    * 養水期延長：還在養水、水裡有氨時又放店裡的魚，硝化菌長好以後還要多撐 leftH 小時才算養好
    * （design/polish-to-9.md §4 教學順序）。addedHours 是最近一次延長的時間，同一批魚只算一次。

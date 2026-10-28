@@ -194,6 +194,8 @@ export function addFish(state: TankState, species: FishSpeciesId, options: AddFi
   fish.lineage = fish.id;
   fish.generation = 0;
   fish.inbreeding = 0;
+  // 沒檢疫的新魚直接進缸：剛治好白點的抵抗期就不算了（檢疫盒那邊會還原）
+  delete state.ichCalmUntil;
   if (fish.sex === 'female' && sp.breeding) {
     const pregnant = options.pregnancy !== undefined || (options.pregnant ?? nextRandom(state.rng) < (STORE_PREGNANT_CHANCE[species] ?? 0));
     if (pregnant) {

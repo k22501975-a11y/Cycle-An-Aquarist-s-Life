@@ -1,6 +1,6 @@
 import { freshBigBrood } from './brood-water';
 import { hideGrace } from './choice-echo';
-import { economy, LOAN_PAUSE_COINS, price } from './economy';
+import { economy, FISH_PRICES, LOAN_PAUSE_COINS, PLANT_PRICES, price, reserveShort, reserveText } from './economy';
 import { raiseCashStep } from './raise-cash';
 import { canSalt, SALT_DAYS, saltDaysLeft, saltWorking } from './salt-cure';
 import { HUNGRY } from './readings';
@@ -16,7 +16,7 @@ import { HEATER_RAMP_C_PER_HOUR, heaterLiftC } from './processes/thermal';
 import { FISH_SPECIES, isShrimpSpecies } from './species';
 import { isJuvenile, type Fish, type TankState } from './state';
 import { fryHome, fryNeedHome, fryPrep } from './split';
-import { breedingTankRaised, displayTankHighPlants, purposeTanks } from './tank-purpose';
+import { breedingTankRaised, displayTankHighPlants, HIGH_LIGHT_PLANTS, purposeTanks } from './tank-purpose';
 
 /**
  * 任務卡「選育走到哪」那一行（choices.ts 的 breedingStep）。choices.ts 跟早上報告一起延後載入（開機必載的預算），
@@ -269,7 +269,7 @@ const FRY_EATEN_RECENT_HOURS = 48;
 
 /**
  * 只有一缸、育幼盒滿了、外面的小魚最近還在被吃，錢又夠買第二缸：馬上叫玩家去買（g35：之前停在「一天餵兩次」5 天）。
- * 錢不夠回 null（照原本的步驟）。
+ * 錢不夠（買完剩不到 BUY_RESERVE）回 null（照原本的步驟）。
  */
 function boxFullStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   if (tanks.length !== 1 || hiding(tanks)) return null;
@@ -277,7 +277,7 @@ function boxFullStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   if (!t.nurseryBox || nurseryFish(t).filter(isJuvenile).length < NURSERY_FRY_CAPACITY) return null;
   const exposed = t.fish.some((f) => f.alive && !f.nursery && (f.generation ?? 0) >= 1 && growthStage(f) === 'fry');
   const eaten = t.events.some((e) => e.type === 'fry_eaten' && t.hours - e.hours <= FRY_EATEN_RECENT_HOURS);
-  if (!exposed || !eaten || economy(t).coins < newTankCost(tanks, 'nano20')) return null;
+  if (!exposed || !eaten || reserveShort(economy(t).coins, newTankCost(tanks, 'nano20')) > 0) return null;
   return { text: '育幼盒滿了，小魚會被吃。買第二個缸給小魚住', target: 'shop_tank' };
 }
 
@@ -329,17 +329,19 @@ function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
       return ready ? { text: '有訂單交得出貨，去交貨', target: 'orders' } : { text: '賣一尾魚，或看看訂單板', target: 'sell' };
     }
     case 'second_tank': {
-      const need = newTankCost(tanks, 'nano20') - economy(home).coins;
+      // 買完要剩 BUY_RESERVE（polish-to-9.md §11）
+      const need = reserveShort(economy(home).coins, newTankCost(tanks, 'nano20'));
       if (need <= 0) return { text: '錢夠了，去買第二個缸', target: 'shop_tank' };
       // 存錢是背景目標（第一窩一出生就出，#305）：小魚還在等轉色時，下一步照舊叫玩家顧小魚
       const raise = GOALS.find((g) => g.id === 'raise5')!;
       if (!goalState(tanks).done.includes('raise5')) return stepFor(raise, tanks);
-      return { text: `再存 ${need} 魚幣買第二個缸`, target: 'orders' };
+      return { text: reserveText('第二個缸', need), target: 'orders' };
     }
     case 'cure':
       return anySick(tanks) ? sickStep(tanks) : { text: '每天測水，魚生病就治好牠', target: 'test' };
     case 'shrimp':
-      return living(tanks).some((f) => f.species === 'cherry_shrimp') ? { text: '顧好水質，等母蝦抱蛋', target: 'test' } : { text: '買幾隻米蝦，開個蝦缸', target: 'shop_fish' };
+      if (living(tanks).some((f) => f.species === 'cherry_shrimp')) return { text: '顧好水質，等母蝦抱蛋', target: 'test' };
+      return shopOrSave(tanks, '米蝦', 3 * FISH_PRICES.cherry_shrimp) ?? { text: '買幾隻米蝦，開個蝦缸', target: 'shop_fish' };
     case 'calm': {
       const g = goalState(tanks);
       const best = Math.max(0, ...tanks.map((t, i) => Math.floor((t.hours - (g.calmSince[i] ?? t.hours)) / 24)));
@@ -352,7 +354,9 @@ function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
       const display = purposeTanks(tanks, 'display');
       const lit = display.some((t) => t.equipment.light?.spec.id === 'planted');
       const at = (t: TankState | undefined) => (t ? { tank: tanks.indexOf(t) } : {});
-      if (!lit) return { text: '展示缸換上水草燈', target: 'shop_gear', ...at(display[0]) };
+      if (!lit) return shopOrSave(tanks, '水草燈', price('light:planted')) ?? { text: '展示缸換上水草燈', target: 'shop_gear', ...at(display[0]) };
+      const save = shopOrSave(tanks, '陽性草', Math.min(...HIGH_LIGHT_PLANTS.map((id) => PLANT_PRICES[id])));
+      if (save) return save;
       return { text: `展示缸種陽性草（${Math.min(PURPOSE_GOAL_COUNT.display, displayTankHighPlants(tanks))}/${PURPOSE_GOAL_COUNT.display}）`, target: 'shop_plants', ...at(display.find((t) => t.equipment.light?.spec.id === 'planted') ?? display[0]) };
     }
     case 'strain':
@@ -362,6 +366,12 @@ function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
     default:
       return { text: GENERIC_STEP, target: 'test' };
   }
+}
+
+/** 推薦去買 cost 元的東西、買完剩不到 BUY_RESERVE：改叫玩家先交單存錢，寫還差幾元（polish-to-9.md §11）；錢夠回 null。 */
+function shopOrSave(tanks: TankState[], what: string, cost: number): Omit<NextStep, 'goal'> | null {
+  const short = reserveShort(economy(tanks[0]).coins, cost);
+  return short > 0 ? { text: reserveText(what, short), target: 'orders' } : null;
 }
 
 /** 現在的下一步；目標全做完了回傳 null。 */
@@ -444,8 +454,8 @@ function fryPrepStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   return null;
 }
 
-/** 任務卡同一句停多久就開始輪播進度句（polish-to-9.md §8.2）。 */
-export const STALE_STEP_HOURS = 72;
+/** 任務卡同一句停多久就開始輪播進度句（polish-to-9.md §8.2；§11 改 48 小時，正常速度約 3.6 分鐘換句）。 */
+export const STALE_STEP_HOURS = 48;
 /** 輪播時每句停多久。 */
 const ROTATE_HOURS = 12;
 /** 「等著」的句子：輪播時穿插養小魚的進度句。 */

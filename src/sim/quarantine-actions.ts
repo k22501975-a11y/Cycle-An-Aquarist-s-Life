@@ -23,13 +23,15 @@ export function releaseQuarantine(state: TankState, ids?: number[]): number {
 
 /** 買魚放進檢疫盒（沒有檢疫盒就直接放主缸）。 */
 export function addFishToQuarantine(state: TankState, species: FishSpeciesId, options: AddFishOptions = {}): Fish {
-  // 魚放進檢疫盒，主缸的養水期不會因此延長（addFish 會延，這裡還原）
+  // 魚放進檢疫盒，主缸的養水期不會因此延長、白點抵抗期也不會被取消（addFish 會改，這裡還原）
   const delay = state.cycleDelay;
+  const calm = state.ichCalmUntil;
   const fish = addFish(state, species, options);
   const q = state.quarantine;
   if (!q) return fish;
   if (delay) state.cycleDelay = delay;
   else delete state.cycleDelay;
+  if (calm !== undefined) state.ichCalmUntil = calm;
   state.fish = state.fish.filter((f) => f !== fish);
   q.fish.push(fish);
   q.since[fish.id] = state.hours;

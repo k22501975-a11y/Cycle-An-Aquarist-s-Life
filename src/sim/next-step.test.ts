@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, bacteriaCapacity, ID_BLOCK, moveSoonToNursery, nurseryFish, buyPlant, buyTank, fulfillOrder, orderBoard, updateOrders, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, STALE_STEP_HOURS, NURSERY_FRY_CAPACITY, newTankCost, noteBellySeen, PICK_AFTER_BROOD_DAYS, setTankPurpose, showingMother, setBreedingStep, simulate, suggestedChange, GASP_O2, addAir, airPumpPrice, airPumpShort, breathless, OXYGEN_HARM_MG, FILTERS, LOW_O2_HOURS } from '.';
+import { addFish, bacteriaCapacity, ID_BLOCK, moveSoonToNursery, nurseryFish, buyPlant, buyTank, fulfillOrder, orderBoard, updateOrders, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, STALE_STEP_HOURS, NURSERY_FRY_CAPACITY, newTankCost, noteBellySeen, PICK_AFTER_BROOD_DAYS, setTankPurpose, showingMother, setBreedingStep, simulate, suggestedChange, GASP_O2, addAir, airPumpPrice, airPumpShort, breathless, OXYGEN_HARM_MG, FILTERS, LOW_O2_HOURS, BUY_RESERVE } from '.';
 import { breedingStep, choiceState } from './choices';
 
 describe('主畫面的下一步（U1）', () => {
@@ -108,8 +108,11 @@ describe('主畫面的下一步（U1）', () => {
 
     goalState([s]).done.push('protect_fry', 'raise5', 'sale');
     economy(s).coins = 0;
-    expect(nextStep([s])?.text).toMatch(/^再存 \d+ 魚幣/);
-    economy(s).coins = 99999;
+    expect(nextStep([s])?.text).toMatch(/^錢夠了再買第二個缸（還差 \d+ 元）$/);
+    // 剛好買得起、買完剩不到 500：還不推薦（polish-to-9.md §11）
+    economy(s).coins = newTankCost([s], 'nano20') + BUY_RESERVE - 1;
+    expect(nextStep([s])).toMatchObject({ text: '錢夠了再買第二個缸（還差 1 元）', target: 'orders' });
+    economy(s).coins += 1;
     expect(nextStep([s])).toMatchObject({ target: 'shop_tank' });
   });
 
@@ -130,8 +133,22 @@ describe('主畫面的下一步（U1）', () => {
   });
 });
 
+describe('推薦買東西，買完至少剩 500 元（polish-to-9.md §11）', () => {
+  it('水草燈 1,600 元：手上 2,099 寫還差幾元、帶去訂單板；2,100 才叫你去買', () => {
+    const tanks = [newGameState(1)];
+    economy(tanks[0]).coins = 99_999;
+    buyTank(tanks, 'std40');
+    goalState(tanks).done.push(...GOALS.map((x) => x.id).filter((id) => id !== 'display_tank'));
+    setTankPurpose(tanks[1], 'display');
+    economy(tanks[0]).coins = 1_600 + BUY_RESERVE - 1;
+    expect(nextStep(tanks)).toMatchObject({ goal: 'display_tank', text: '錢夠了再買水草燈（還差 1 元）', target: 'orders' });
+    economy(tanks[0]).coins += 1;
+    expect(nextStep(tanks)).toMatchObject({ goal: 'display_tank', text: '展示缸換上水草燈', target: 'shop_gear', tank: 1 });
+  });
+});
+
 describe('要玩家動手的同一句停太久（#434）', () => {
-  it('玩家一直沒買水草燈：3 天後跟其他目標的下一步輪流出現，原句還在、換了就重算', () => {
+  it('玩家一直沒買水草燈：2 天後跟其他目標的下一步輪流出現，原句還在、換了就重算', () => {
     const tanks = [newGameState(1)];
     economy(tanks[0]).coins = 99_999;
     buyTank(tanks, 'std40');
@@ -268,13 +285,13 @@ describe('「養大 5 條」卡超過 3 天（#258）', () => {
     };
     for (let i = 0; i < NURSERY_FRY_CAPACITY; i++) fry().nursery = true;
     fry();
-    economy(s).coins = newTankCost([s], 'nano20') - 1;
+    economy(s).coins = newTankCost([s], 'nano20') + BUY_RESERVE - 1;
     expect(nextStep([s])).toMatchObject({ goal: 'protect_fry', target: 'feed' });
-    // 錢夠就叫買，不用等小魚真的被吃（g37 #428：等到被吃才叫，已經來不及）
-    economy(s).coins = newTankCost([s], 'nano20');
+    // 錢夠（買完還剩 BUY_RESERVE，§11）就叫買，不用等小魚真的被吃（g37 #428：等到被吃才叫，已經來不及）
+    economy(s).coins = newTankCost([s], 'nano20') + BUY_RESERVE;
     expect(nextStep([s])).toMatchObject({ goal: 'protect_fry', text: '育幼盒滿了，小魚會被吃。買第二個缸給小魚住', target: 'shop_tank' });
     // 錢不夠：照原本的
-    economy(s).coins = newTankCost([s], 'nano20') - 1;
+    economy(s).coins = newTankCost([s], 'nano20') + BUY_RESERVE - 1;
     expect(nextStep([s])).toMatchObject({ target: 'feed' });
   });
 
@@ -292,7 +309,7 @@ describe('「養大 5 條」卡超過 3 天（#258）', () => {
     };
     for (let i = 0; i < NURSERY_FRY_CAPACITY; i++) fry().nursery = true;
     const out = Array.from({ length: 6 }, fry);
-    economy(s).coins = newTankCost([s], 'nano20');
+    economy(s).coins = newTankCost([s], 'nano20') + BUY_RESERVE;
     choiceState([s]).hide = { at: s.hours, ids: out.map((f) => f.id) };
     expect(nextStep([s])).toMatchObject({ goal: 'protect_fry', target: 'feed' });
     for (const f of out.slice(0, 3)) f.alive = false;

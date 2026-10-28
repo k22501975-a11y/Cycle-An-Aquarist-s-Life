@@ -298,6 +298,13 @@ export const LOAN_SHARE = 0.3;
 /** 手上（入帳後）低於這個數就先不扣還款：阿德說不急（g33）。 */
 export const LOAN_PAUSE_COINS = 250;
 
+/** 任務卡、選擇卡推薦買東西時，買完手上至少要剩這麼多（polish-to-9.md §11：g39 一買水草燈從 1,604 剩 2 元）。救急（藥、加熱棒、打氣機）不算。 */
+export const BUY_RESERVE = 500;
+/** 推薦買 cost 元的東西還差多少（買完要剩 BUY_RESERVE）；0 就是可以推薦。 */
+export const reserveShort = (coins: number, cost: number): number => Math.max(0, cost + BUY_RESERVE - coins);
+/** 錢不夠推薦時任務卡的說法。 */
+export const reserveText = (what: string, short: number): string => `錢夠了再買${what}（還差 ${short} 元）`;
+
 /** 這缸還沒穩：有活魚，而且有魚看得到病、加熱棒壞了或卡住、停電，或水溫超出魚的適溫（還款暫停的「有病、有危機」）。 */
 function unsettled(t: TankState): boolean {
   const living = t.fish.filter((f) => f.alive);

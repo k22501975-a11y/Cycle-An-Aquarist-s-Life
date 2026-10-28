@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, BACTERIA_SEED, BELLY_SHOWS, boxBlocked, buyQuarantine, createTank, economy, fryHome, fryNeedHome, fryPrep, newTankCost, isCycled, linkTanks, moveFryHome, NURSERY_FRY_CAPACITY, rescueFryToBox, simulate, FILTERS, FISH_SPECIES, HEATERS, LIGHTS, splitAdvice, splitGroup, splitTank, TANKS, type CreateTankOptions, type TankState } from './index';
+import { addFish, BACTERIA_SEED, BUY_RESERVE, BELLY_SHOWS, boxBlocked, buyQuarantine, createTank, economy, fryHome, fryNeedHome, fryPrep, newTankCost, isCycled, linkTanks, moveFryHome, NURSERY_FRY_CAPACITY, rescueFryToBox, simulate, FILTERS, FISH_SPECIES, HEATERS, LIGHTS, splitAdvice, splitGroup, splitTank, TANKS, type CreateTankOptions, type TankState } from './index';
 import { createFish } from './processes/population';
 
 const MATURE: CreateTankOptions = { tank: TANKS.std40, filter: FILTERS.hangOn, heater: { spec: HEATERS.h100, targetC: 25 }, light: { spec: LIGHTS.basic }, matureMedia: true };
@@ -155,9 +155,9 @@ describe('育幼盒幫不上忙時，小魚接下來去哪（g37 #428）', () =>
     expect(boxBlocked(main)).toBe(false);
   });
 
-  it('只有一缸：叫你買第二缸（錢夠不夠也說）；買了空缸先養水，分過濾材就算開始養', () => {
+  it('只有一缸：叫你買第二缸（錢夠不夠也說，買完要剩 BUY_RESERVE）；買了空缸先養水，分過濾材就算開始養', () => {
     const { main, tanks } = blocked();
-    economy(main).coins = newTankCost(tanks, 'nano20');
+    economy(main).coins = newTankCost(tanks, 'nano20') + BUY_RESERVE;
     expect(fryPrep(tanks, 0)).toEqual({ kind: 'buy', afford: true });
     economy(main).coins -= 1;
     expect(fryPrep(tanks, 0)).toEqual({ kind: 'buy', afford: false });

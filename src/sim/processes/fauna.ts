@@ -269,8 +269,12 @@ export function tempSwing24(state: TankState): number {
   return hi - lo;
 }
 
-/** 缸的環境有沒有白點病的誘因（溫差、太擠）；新魚帶進來的另外記在魚身上。 */
+/** 一缸白點治好（蟲死光、魚身上都沒了）之後幾天內不會再發；放進沒檢疫的新魚就不算（polish-to-9.md §11）。 */
+export const ICH_CALM_DAYS = 14;
+
+/** 缸的環境有沒有白點病的誘因（溫差、太擠）；新魚帶進來的另外記在魚身上。剛治好的缸撐過白點，有一段時間的抵抗力。 */
 export function ichTrigger(state: TankState, census: TankCensus = tankCensus(state)): IchCause | null {
+  if ((state.ichCalmUntil ?? -Infinity) > state.hours) return null;
   if (tempSwing24(state) >= ICH_SWING_C) return 'temp_swing';
   if (census.crowding > 1) return 'crowding';
   return null;
@@ -282,7 +286,10 @@ export function ichTrigger(state: TankState, census: TankCensus = tankCensus(sta
  */
 function ichCauseNow(state: TankState, living: Fish[], trigger: IchCause | null): IchCause | null {
   const { water } = state;
-  if (water.ichCause && water.ichPathogen + water.ichCysts < 0.01) delete water.ichCause;
+  if (water.ichCause && water.ichPathogen + water.ichCysts < 0.01) {
+    delete water.ichCause;
+    if (!living.some((f) => f.ich.stage !== 'none')) state.ichCalmUntil = state.hours + ICH_CALM_DAYS * 24;
+  }
   // 舊存檔的帶原魚沒記原因，當成新魚帶進來的
   const wave = living.find((f) => f.ich.stage !== 'none');
   if (wave) return wave.ich.cause ?? 'new_fish';
