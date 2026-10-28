@@ -277,6 +277,31 @@ describe('「養大 5 條」卡超過 3 天（#258）', () => {
     expect(nextStep([s])).toMatchObject({ target: 'feed' });
   });
 
+  it('C1 選了躲草：3 天內不叫買缸搬小魚，被吃到剩一半或過了 3 天才叫（polish-to-9.md §10.1）', () => {
+    const s = newGameState(1);
+    goalState([s]).done.push('cycled');
+    s.nurseryBox = true;
+    const fry = () => {
+      const f = addFish(s, 'guppy', {});
+      f.lengthCm = 0.8;
+      f.ageDays = 3;
+      f.generation = 1;
+      f.bornHours = s.hours - 72;
+      return f;
+    };
+    for (let i = 0; i < NURSERY_FRY_CAPACITY; i++) fry().nursery = true;
+    const out = Array.from({ length: 6 }, fry);
+    economy(s).coins = newTankCost([s], 'nano20');
+    choiceState([s]).hide = { at: s.hours, ids: out.map((f) => f.id) };
+    expect(nextStep([s])).toMatchObject({ goal: 'protect_fry', target: 'feed' });
+    for (const f of out.slice(0, 3)) f.alive = false;
+    expect(nextStep([s])).toMatchObject({ target: 'shop_tank' });
+    out[0].alive = true;
+    expect(nextStep([s])).toMatchObject({ target: 'feed' });
+    choiceState([s]).hide!.at -= 3 * 24;
+    expect(nextStep([s])).toMatchObject({ target: 'shop_tank' });
+  });
+
   it('第一窩「再幾天看得出公母」照選種日算，跟早上報告同一個數字；過了選種日就不說（g37）', () => {
     const s = newGameState(1);
     goalState([s]).done.push('cycled');

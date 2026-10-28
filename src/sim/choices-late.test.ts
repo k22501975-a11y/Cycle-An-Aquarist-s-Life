@@ -3,7 +3,7 @@ import { newGameState } from '../game/game';
 import { addFish, ADULT_SIZE, bacteriaCapacity, broodFactor, buyTank, CROWD_WARN, crowdingRatio, cross, DREAM_FISH, economy, FISH_SPECIES, linkTanks, orderBoard, setTankPurpose, type Fish, type GuppyGenome, type TankState } from './index';
 import { chooseOption, choiceState, CHOICE_RESHOW_DAYS, CROWD_FULL, CROWD_PREVIEW, REVEAL_CULL_DAYS, takeCrowdNotes, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, WARM_PREG_C, takeChoice, takeLineNotes, lineName, lineNameRefusal, LINE_NAME_SUGGESTED, takeReveal, takeSecondBrood, FINS_DAYS, COLOR_DAYS, SNAKE_DAYS, STABILITY_DAYS } from './choices';
 import { dreamRoute } from './dream';
-import { takeEchoes } from './choice-echo';
+import { dropTankEchoes, takeEchoes } from './choice-echo';
 import { newTankCost } from './household';
 import { reservedForPick } from './orders';
 
@@ -379,6 +379,7 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     expect(c10!.title).toBe('這尾比你留的種魚更好！');
     expect(c10!.owner).toMatch(/的孫代機率約 [\d.]+%，原本的.*約 [\d.]+%。$/);
     expect(c10!.options.map((o) => o.key)).toEqual(['swap', 'both', 'keep']);
+    expect(c10!.options[1].outcome).toMatch(/留種名額 3\/6/);
     expect(chooseOption(tanks, 'C10', 'both')).toBeNull();
     expect(brood.filter((f) => f.keeper).length).toBe(1);
     expect(mom.keeper).toBe(true);
@@ -394,10 +395,17 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     for (const f of brood) f.bornHours = s.hours - 14 * 24;
     brood[0].genome = { ...mom.genome!, albino: [1, 1], red: [1, 1], snakeX: [1, 1], gold: [0, 0], tuxedo: [0, 0] };
     expect(takeChoice(tanks)?.id).toBe('C10');
+    // 路線卡常駐孫代機率和開獎日（polish-to-9.md §10.4）；換了種魚當場變，早上報告寫回音
+    const before = dreamRoute(tanks).odds!;
+    expect(before.pct).toBe(st.better!.oldPct);
+    expect(before.day).toBeGreaterThan(Math.floor(s.hours / 24));
     expect(chooseOption(tanks, 'C10', 'swap')).toBeNull();
     expect(st.pair![0]).toBe(brood[0].id);
     expect(brood[0].keeper).toBe(true);
     expect(mom.keeper).toBeFalsy();
+    const after = dreamRoute(tanks).odds!;
+    expect(after.pct).toBeGreaterThan(before.pct);
+    expect(takeEchoes(tanks, st).map((e) => e.text)).toEqual([`換了種魚以後，孫代機率從 ${before.pct}% 變成 ${after.pct}%`]);
   });
 
   it('C10 留種名額滿了：換掉同性別離夢想魚最遠的那尾；不是那對的就當備用，計畫照走（strain-fixing.md §1）', () => {
@@ -938,7 +946,71 @@ describe('固定品系：C18 取名（穩定度 40%）和品系完成（75%）�
     expect(takeLineNotes(tanks)).toEqual([]);
   });
 
+  describe('又快生了（C9）的回音（polish-to-9.md §10.3）', () => {
+    /** 選了 choice 的那窩剛生了 n 尾（在主缸）。 */
+    function born(choice: string, n: number, cm = 0.7) {
+      const p = latePair();
+      const { s, st, storeMom, dad } = p;
+      Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard' });
+      st.secondBrood = { momId: storeMom.id, hours: s.hours - 1, prevKids: 0, choice };
+      st.broods = 1;
+      const rng = { seed: 3 };
+      const fry = Array.from({ length: n }, (_, i) => {
+        const sex = i % 2 === 0 ? 'male' : 'female';
+        const f = addFish(s, 'guppy', { ...calm, sex, pregnant: false });
+        f.genome = cross(rng, storeMom.genome!, dad.genome!, sex);
+        f.generation = 2;
+        f.motherId = storeMom.id;
+        f.bornHours = s.hours;
+        f.lengthCm = cm;
+        return f;
+      });
+      expect(takeSecondBrood(p.tanks)).not.toBeNull();
+      return { ...p, fry };
+    }
+
+    it('留著長大：隔天說這窩幾尾、缸裡幾尾、建議量幾 %；超過 80% 多說再一窩就住不下', () => {
+      const { tanks, s, st } = born('grow', 6);
+      expect(takeEchoes(tanks, st)).toEqual([]);
+      s.hours += 24;
+      const [line] = takeEchoes(tanks, st);
+      expect(line.label).toBe('留在繁殖缸長大');
+      expect(line.text).toMatch(/^這窩 6 尾留在.+，缸裡現在 \d+ 尾（建議量 \d+%）/);
+      expect(line.text.endsWith('再一窩就住不下了')).toBe(crowdingRatio(s) > 0.8);
+    });
+
+    it('挑備用種魚：隔天說挑了幾尾、其他幾尾留著長大', () => {
+      const { tanks, s, st } = born('keep', 6);
+      s.hours += 24;
+      expect(takeEchoes(tanks, st).map((e) => e.text)).toEqual([expect.stringMatching(/^挑了 \d 尾離夢想魚最近的當備用，其他的 \d 尾留著長大$/)]);
+    });
+
+    it('交小魚單：滿 7 天、板上有交得出的單就自動交，寫交了幾尾、多少錢', () => {
+      const { tanks, s, st, fry } = born('sell', 6, 1.3);
+      orderBoard(s).orders.push({ id: 991, kind: 'fry', species: 'guppy', minCm: 1.2, count: 4, unitPrice: 10, postedHours: s.hours });
+      s.hours += 6 * 24;
+      takeSecondBrood(tanks);
+      expect(takeEchoes(tanks, st)).toEqual([]);
+      s.hours += 24;
+      for (const f of fry) f.ageDays = 7;
+      const coins = economy(s).coins;
+      takeSecondBrood(tanks);
+      expect(takeEchoes(tanks, st).map((e) => e.text)).toEqual(['照你的設定交了 4 尾小魚，+40 元']);
+      expect(economy(s).coins).toBe(coins + 40);
+      expect(st.fryDeliver).toEqual([]);
+    });
+  });
+
   describe('住不下（C14）的回音和修正（polish-to-9.md §10.2）', () => {
+    it('收掉一缸：那缸的回音不出了，後面的缸往前移（架構 #438 🟡）', () => {
+      const s = { echoes: [0, 1, 2].map((tank) => ({ label: 'x', tank, due: 0, text: `t${tank}` })) };
+      dropTankEchoes(s, 1);
+      expect(s.echoes.map((e) => [e.tank, e.text])).toEqual([
+        [0, 't0'],
+        [1, 't2'],
+      ]);
+    });
+
     const crowd = (tanks: TankState[], s: TankState, over = CROWD_WARN + 0.1) => {
       const st = choiceState(tanks);
       Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard' });
