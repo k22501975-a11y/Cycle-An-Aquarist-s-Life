@@ -254,6 +254,8 @@ export class TankView {
   private plants = new Map<number, PlantView>();
   /** 蝦能爬的草（#273）：每格畫草時更新。 */
   private perches: Array<{ x: number; top: number }> = [];
+  /** 小魚能躲的草（§10.1）：前中後景的草都算，水平位置和葉子頂端的高度。 */
+  private covers: Array<{ x: number; top: number }> = [];
   private food: FoodParticle[] = [];
   /** 上次撒飼料過了幾秒（魚搶食的熱度）；-1 還沒撒過。 */
   private dropT = -1;
@@ -1858,7 +1860,7 @@ export class TankView {
     const inBox = all.filter((s) => boxed.has(s.id));
     const box = nurseryRect(this.waterBounds);
     if (this.poke && (this.poke.age += dt) > POKE_SECONDS) this.poke = null;
-    const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food, frenzy: this.food.length ? frenzyLevel(this.dropT) : 0, poke: this.poke ?? undefined, plants: state.plants.map((pl) => plantPlacement(pl).x * this.waterBounds.width), perches: this.perches };
+    const ctx = { bounds: this.waterBounds, scale: this.motionScale, food: this.food, frenzy: this.food.length ? frenzyLevel(this.dropT) : 0, poke: this.poke ?? undefined, plants: state.plants.map((pl) => plantPlacement(pl).x * this.waterBounds.width), perches: this.perches, cover: this.covers };
     this.gaspX = [];
     for (const fish of state.fish) {
       const view = this.fish.get(fish.id)!;
@@ -1878,7 +1880,10 @@ export class TankView {
       const uneasy = this.water.uneasy;
       const mood = spec && uneasy > 0.02 ? { ...spec, activity: spec.activity * (1 - 0.3 * uneasy) } : spec;
       if (view.born) this.stepBirth(view, dt);
-      updateSwimmer(swimmer, caged ? inBox : living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX, body, begging: hungerLook(fish.hunger).begging, mood }, ctx, dt, () => this.rand());
+      // 小魚（§10.1）：育幼盒裡擠成一團，主缸裡在草叢間游進游出（跟著親魚的不算）
+      const small = fish.alive && !isShrimpSpecies(fish.species) && follow === undefined && growthStage(fish) === 'fry';
+      const cover = small ? (caged ? ('huddle' as const) : ('plants' as const)) : undefined;
+      updateSwimmer(swimmer, caged ? inBox : living, { alive: fish.alive, hungry: fish.hunger > 0.15 && follow === undefined && nestX === undefined, symptoms, follow, guarding: isGuarding(fish), nestX, body, begging: hungerLook(fish.hunger).begging, mood, cover }, ctx, dt, () => this.rand());
       const gulping = gasp && swimmer.y < ctx.bounds.surface + body.halfH + 36 * this.motionScale;
       if (gulping) this.gaspX.push(swimmer.x);
 
@@ -2034,6 +2039,7 @@ export class TankView {
     }
     const t = state.hours;
     this.perches = [];
+    this.covers = [];
     for (const plant of state.plants) {
       let view = this.plants.get(plant.id);
       if (!view) {
@@ -2070,7 +2076,9 @@ export class TankView {
       view.holder.position.set(x, this.bounds.bottom + (14 + look.dy) * this.hs);
       view.holder.scale.set(place.flip ? -look.scale : look.scale, look.scale);
       // 蝦爬得到的高度：圖上面留了搖擺的空間，葉子大概到圖高的七成（後景的草被前景擋住，不爬）
-      if (place.layer !== 'back') this.perches.push({ x, top: view.holder.y - view.rig!.mesh.texture.height * look.scale * 0.7 });
+      const stem = { x, top: view.holder.y - view.rig!.mesh.texture.height * look.scale * 0.7 };
+      if (place.layer !== 'back') this.perches.push(stem);
+      this.covers.push(stem);
       // 水流造成的搖擺：根部不動、葉尖擺最多
       const tall = view.rig!.mesh.texture.height;
       // 過濾器開著水流比較強，靠近出水口的擺得最明顯（V2）
