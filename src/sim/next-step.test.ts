@@ -129,6 +129,49 @@ describe('主畫面的下一步（U1）', () => {
   });
 });
 
+describe('要玩家動手的同一句停太久（#434）', () => {
+  it('玩家一直沒買水草燈：3 天後跟其他目標的下一步輪流出現，原句還在、換了就重算', () => {
+    const tanks = [newGameState(1)];
+    economy(tanks[0]).coins = 99_999;
+    buyTank(tanks, 'std40');
+    const g = goalState(tanks);
+    g.done.push(...GOALS.map((x) => x.id).filter((id) => !['display_tank', 'strain', 'cure', 'calm'].includes(id)));
+    setTankPurpose(tanks[1], 'display');
+    const base = nextStep(tanks)!;
+    expect(base).toMatchObject({ goal: 'display_tank', text: '展示缸換上水草燈', target: 'shop_gear' });
+    const others = nextGoals(tanks, 4).slice(1);
+    expect(others.length).toBeGreaterThan(0);
+    for (const t of tanks) t.hours += STALE_STEP_HOURS - 1;
+    expect(nextStep(tanks)?.text).toBe(base.text);
+    const seen = new Set<string>();
+    for (let i = 0; i < 8; i++) {
+      for (const t of tanks) t.hours += 12;
+      const step = nextStep(tanks)!;
+      expect(step.goal).toBe('display_tank');
+      seen.add(step.text);
+    }
+    expect([...seen]).toContain(base.text);
+    expect(seen.size).toBeGreaterThan(1);
+    expect([...seen]).toContain('挑漂亮的公母配對留種');
+    // 買了水草燈：換句，重新算，不輪播
+    tanks[1].equipment.light = { spec: LIGHTS.planted, startHour: 10, photoperiodHours: 8 };
+    expect(nextStep(tanks)).toMatchObject({ target: 'shop_plants', text: `展示缸種陽性草（0/${PURPOSE_GOAL_COUNT.display}）` });
+  });
+
+  it('沒有其他目標可說：照原句', () => {
+    const tanks = [newGameState(1)];
+    economy(tanks[0]).coins = 99_999;
+    buyTank(tanks, 'std40');
+    goalState(tanks).done.push(...GOALS.map((x) => x.id).filter((id) => id !== 'display_tank'));
+    setTankPurpose(tanks[1], 'display');
+    const base = nextStep(tanks)!;
+    for (let i = 0; i < 10; i++) {
+      for (const t of tanks) t.hours += 12;
+      expect(nextStep(tanks)?.text).toBe(base.text);
+    }
+  });
+});
+
 describe('「養大 5 條」卡超過 3 天（#258）', () => {
   function stuck() {
     const s = newGameState(1);

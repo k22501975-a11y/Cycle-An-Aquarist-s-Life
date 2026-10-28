@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { QUEST_REWARD_MAX, QUEST_REWARD_TOTAL, addFish, addHardscape, addPlant, applySetup, buyQuarantine, checkGoals, goalState, GOALS, isCycled, powerOn, moveToQuarantine, recordEvent, economy, HARDSCAPE, createTank, feed, FILTERS, HEATERS, RECOMMENDED_SETUP, TANKS, useTestKit, waterChange } from '../sim';
+import { QUEST_REWARD_MAX, QUEST_REWARD_TOTAL, addFish, addHardscape, addPlant, applySetup, buyQuarantine, buyTank, linkTanks, checkGoals, goalState, GOALS, isCycled, powerOn, moveToQuarantine, recordEvent, economy, HARDSCAPE, createTank, feed, FILTERS, HEATERS, RECOMMENDED_SETUP, TANKS, useTestKit, waterChange } from '../sim';
 import { advanceQuest, currentQuest, cycleProgress, FIRST_PESTS_TIP, loadProgress, newProgress, overloadWarning, pairProgress, pendingTip, questShopTab, QUESTS, saveProgress, TEST_AMMONIA_LINE, TIPS } from './tutorial';
 
 function tank() {
@@ -177,6 +177,23 @@ describe('情境提示', () => {
     s.hours += 49;
     expect(pendingTip(newProgress(), s)?.id).not.toBe('fry_eaten');
     s.quarantine!.fish = [];
+    expect(pendingTip(newProgress(), s)?.id).toBe('fry_eaten');
+  });
+
+  it('小魚一鍵搬到別缸了，老闆不會說小魚都被吃掉（#432）', () => {
+    const s = tank();
+    economy(s).coins = 10_000;
+    const tanks = [s];
+    linkTanks(tanks);
+    addFish(s, 'guppy', { carriesIch: false, carries: [] });
+    recordEvent(s, { type: 'fry_born', count: 3 });
+    const t2 = buyTank(tanks, 'nano20')!;
+    const fry = addFish(t2, 'guppy', { carriesIch: false, carries: [] });
+    fry.generation = 1;
+    fry.lengthCm = 0.8;
+    s.hours += 49;
+    expect(pendingTip(newProgress(), s)?.id).not.toBe('fry_eaten');
+    fry.alive = false;
     expect(pendingTip(newProgress(), s)?.id).toBe('fry_eaten');
   });
 });

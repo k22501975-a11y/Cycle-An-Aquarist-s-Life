@@ -364,7 +364,7 @@ export function nextStep(tanks: TankState[]): NextStep | null {
   // 育幼盒空了、又有母魚快生：排在照顧句前面（g38：第一窩搬走後沒人叫，第二窩生在主缸被吃 3 尾）
   const box = soonMotherStep(tanks);
   if (box) return { goal: goal.id, ...box };
-  return { goal: goal.id, ...rotateStale(tanks, stepFor(goal, tanks)) };
+  return { goal: goal.id, ...rotateStale(tanks, stepFor(goal, tanks), goal) };
 }
 
 /** 育幼盒空著、有母魚懷孕 ≥ BOX_DUE（約剩 3 天，polish-to-9.md §9.1）：叫玩家把她放進去。盒裡還有小魚的照 #430（買第二缸或搬小魚）。 */
@@ -407,23 +407,38 @@ function fryPrepStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
 export const STALE_STEP_HOURS = 72;
 /** 輪播時每句停多久。 */
 const ROTATE_HOURS = 12;
-/** 只有「等著」的句子才輪播；要玩家動手的（交單、賣魚、下藥…）照原句。 */
+/** 「等著」的句子：輪播時穿插養小魚的進度句。 */
 const WAITING: ReadonlySet<NextTarget> = new Set(['feed', 'fastest', 'mother']);
 
 /**
- * 同一句停超過 STALE_STEP_HOURS：跟原句輪流出現跟目標有關的進度句（最大的那尾多大、育幼盒裡幾尾、最快的還差幾天轉色），
- * 玩家看得出事情在往前走（g35：「小魚還小，一天餵兩次」停了 8 分鐘）。原句換了就重新算。
+ * 同一句停超過 STALE_STEP_HOURS：跟原句輪流出現別的句子，原句換了就重新算。
+ * - 「等著」的句子（餵食、等轉色、等母魚生）：穿插跟目標有關的進度句（最大的那尾多大、育幼盒裡幾尾、最快的還差幾天轉色），
+ *   玩家看得出事情在往前走（g35：「小魚還小，一天餵兩次」停了 8 分鐘）。
+ * - 要玩家動手、但玩家一直沒做的句子（買水草燈、搬去繁殖缸…）：穿插其他還沒完成的目標的下一步，
+ *   不讓一句佔住任務卡幾十天，交單、配對這些也排得上（#434，g39：「展示缸換上水草燈」停了 60 天）。
  */
-function rotateStale(tanks: TankState[], step: Omit<NextStep, 'goal'>): Omit<NextStep, 'goal'> {
+function rotateStale(tanks: TankState[], step: Omit<NextStep, 'goal'>, goal: Goal): Omit<NextStep, 'goal'> {
   const e = economy(tanks[0]);
   const now = tanks[0].hours;
   if (e.stepSince?.text !== step.text) e.stepSince = { text: step.text, hours: now };
   const age = now - e.stepSince.hours;
-  if (!WAITING.has(step.target) || age < STALE_STEP_HOURS) return step;
-  const lines = progressLines(tanks);
+  if (age < STALE_STEP_HOURS) return step;
+  const others = WAITING.has(step.target) ? progressLines(tanks) : otherGoalSteps(tanks, goal);
+  const lines = others.filter((x, i) => x.text !== step.text && others.findIndex((y) => y.text === x.text) === i);
   if (lines.length === 0) return step;
   const all = [...lines, step];
   return all[Math.floor((age - STALE_STEP_HOURS) / ROTATE_HOURS) % all.length];
+}
+
+/** 輪播時最多穿插幾個其他目標的下一步。 */
+const OTHER_GOALS = 3;
+
+/** 其他還沒完成的目標的下一步（排在前面的先）。 */
+function otherGoalSteps(tanks: TankState[], goal: Goal): Array<Omit<NextStep, 'goal'>> {
+  return nextGoals(tanks, OTHER_GOALS + 1)
+    .filter((g) => g.id !== goal.id)
+    .slice(0, OTHER_GOALS)
+    .map((g) => stepFor(g, tanks));
 }
 
 /**

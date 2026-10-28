@@ -64,7 +64,7 @@ export interface ChoiceOption {
   recommended?: boolean;
   /** 現在不能選的原因（例如錢不夠）；畫面把這個選項灰掉。 */
   disabled?: string;
-  /** 錢不夠時還差幾元（polish-to-9.md §10.2）：畫面整個選項灰掉、寫「還差 N 元」，點不下去。 */
+  /** 錢不夠時還差幾元（polish-to-9.md §10.2）：跟 disabled 一起給，畫面寫「還差 N 元」。 */
   short?: number;
 }
 

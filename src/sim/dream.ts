@@ -68,6 +68,8 @@ export interface DreamRoute {
   bredName?: string;
   /** 最近一窩的穩定度 %（第 4 步用；還沒算過就沒有）。 */
   stability?: number;
+  /** 孫代出現夢想魚的機率 %（可有一位小數）和預計開獎的遊戲日（polish-to-9.md §10.4）；路線卡常駐顯示，沒有就不顯示。 */
+  odds?: { pct: number; day: number };
 }
 
 const STEP_TITLES: Record<DreamStepId, string> = {

@@ -1,5 +1,5 @@
 import type { KeyValueStore } from '../game/save';
-import { freeAmmonia, hasVisible, isCycled, observeSymptoms, tankStarted, sexVisible, type TankState } from '../sim';
+import { freeAmmonia, hasVisible, householdTanks, isCycled, observeSymptoms, tankStarted, sexVisible, type TankState } from '../sim';
 
 /**
  * 新手引導任務（GAME_DESIGN 定案）：水族館老闆一步步帶玩家開缸、放魚、餵食、換水、養水。
@@ -315,8 +315,9 @@ export const TIPS: Tip[] = [
     check: (s) => {
       const born = s.events.filter((e) => e.type === 'fry_born');
       const last = born[born.length - 1];
-      // 撈進檢疫盒救下來的也算還活著（#184）；育幼盒裡的本來就在 s.fish
-      return !!last && s.hours - last.hours > 48 && ![...s.fish, ...(s.quarantine?.fish ?? [])].some((f) => f.alive && (f.generation ?? 0) > 0);
+      // 撈進檢疫盒救下來的也算還活著（#184）；育幼盒裡的本來就在 s.fish；一鍵搬到別缸的也算（#432：搬去繁殖缸兩天後老闆說小魚都被吃了）
+      const bred = (t: TankState) => [...t.fish, ...(t.quarantine?.fish ?? [])].some((f) => f.alive && (f.generation ?? 0) > 0);
+      return !!last && s.hours - last.hours > 48 && !householdTanks(s).some(bred);
     },
   },
   {
