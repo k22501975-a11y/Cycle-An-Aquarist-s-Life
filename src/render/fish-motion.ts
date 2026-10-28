@@ -51,6 +51,8 @@ export interface Swimmer {
   peck?: boolean;
   /** 蝦爬上水草（#273）：x 草莖的位置、h 要爬多高、t 還要待幾秒、lift 現在離底沙多高（像素）。 */
   climb?: { x: number; h: number; t: number; lift: number };
+  /** 躲草的小魚（polish-to-9.md §10.1）：躲在第幾株草、這一趟還剩幾秒、現在是不是游出草叢、游出去往哪邊。 */
+  hideout?: { stem: number; t: number; out: boolean; side: number };
 }
 
 /** 蝦受驚彈開的時間（秒）。 */
@@ -69,6 +71,8 @@ export interface MotionContext {
   plants?: readonly number[];
   /** 蝦能爬的草（#273）：草莖的水平位置、葉子頂端的高度（像素）。 */
   perches?: ReadonlyArray<{ x: number; top: number }>;
+  /** 小魚能躲的草（polish-to-9.md §10.1）：跟 perches 一樣，但後景的草也算。 */
+  cover?: ReadonlyArray<{ x: number; top: number }>;
 }
 
 /** 蝦爬草的速度（相對走路速度）、平均多久想爬一次（秒）。 */
@@ -110,7 +114,16 @@ export interface FishCondition {
   body?: { halfLen: number; halfH: number };
   /** 個性（F6）：搶食快慢、活潑程度、愛不愛躲、會不會游來看手指。 */
   mood?: FishMood;
+  /**
+   * 小魚怎麼保護自己（polish-to-9.md §10.1）：plants 是主缸裡的小魚在草叢間游進游出，大魚靠近就鑽回草裡；
+   * huddle 是育幼盒裡的小魚擠成一團。
+   */
+  cover?: 'plants' | 'huddle';
 }
+
+/** 躲草的小魚：在草裡待幾秒、游出去幾秒（秒，下限加上隨機的範圍）。 */
+const HIDE_IN = [3.5, 5] as const;
+const HIDE_OUT = [1.2, 1.6] as const;
 
 /** 靠近母魚的外人（不是自己的小孩、不是蝦）。 */
 function intruderNear(mom: Swimmer, all: Swimmer[], radius: number): Swimmer | null {
@@ -307,6 +320,32 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
       ay += ((bounds.bottom - 30 * scale - s.y) / (bounds.bottom - bounds.surface)) * 3;
     }
   }
+  const covered = cond.cover === 'huddle' || (cond.cover === 'plants' && !!coverSteer(s, all, ctx, dt, rand));
+  if (cond.cover === 'huddle') {
+    // 育幼盒裡擠成一團：每尾在大家中間附近有自己的小位置，慢慢一起晃
+    let mx = 0, my = 0;
+    for (const o of all) {
+      mx += o.x;
+      my += o.y;
+    }
+    mx /= all.length;
+    my /= all.length;
+    const a = s.id * 2.399 + s.phase * 0.02;
+    const r = (3 + 7 * ((s.id * 0.618) % 1)) * scale;
+    ax = ax * 0.25 + ((mx + Math.cos(a) * r - s.x) / (10 * scale)) * 1.4;
+    ay = ((my + 4 * scale + Math.sin(a) * r * 0.6 - s.y) / (10 * scale)) * 1.4;
+    speed *= 0.55;
+  } else if (covered) {
+    const steer = s.hideout!;
+    const stem = coverStems(ctx)[steer.stem];
+    const floor = floorAt(bounds, stem.x);
+    // 草叢裡：貼著草莖下半段上下鑽；游出去：往旁邊、稍微高一點的開闊水裡
+    const tx = stem.x + (steer.out ? steer.side * (36 + 20 * ((s.id * 0.37) % 1)) : Math.sin(s.phase * 0.03 + s.id) * 7) * scale;
+    const ty = steer.out ? Math.max(stem.top, floor - 70 * scale) : floor - (8 + 0.5 * ((s.id * 0.618) % 1) * Math.max(10, (floor - stem.top) / scale - 8)) * scale;
+    ax = ax * 0.2 + ((tx - s.x) / (12 * scale)) * 1.6;
+    ay = ((ty - s.y) / (12 * scale)) * 1.6;
+    speed *= steer.out ? 1.1 : 0.6;
+  }
 
   // 群體：聚集、對齊、分離
   let sepX = 0, sepY = 0;
@@ -316,13 +355,14 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
     const dx = o.x - s.x, dy = o.y - s.y;
     const d2 = dx * dx + dy * dy;
     // 跟著媽媽的仔魚彼此靠得很近也沒關係
-    const minD = mom && (o.follow === s.follow || o === mom) ? 4 * scale : 18 * scale;
+    // 育幼盒裡擠成一團、草叢裡的小魚也可以靠得很近
+    const minD = (mom && (o.follow === s.follow || o === mom)) || covered ? 4 * scale : 18 * scale;
     if (d2 < minD * minD && d2 > 0.01) {
       ax -= (dx / Math.sqrt(d2)) * 1.2;
       ay -= (dy / Math.sqrt(d2)) * 1.2;
     }
     // 照身體大小留個人空間（#147）：前後約半個身長、上下一個身高，靠太近就推開，上下錯開為主
-    if (!mom && !p.crawler && !PROFILES[o.species].crawler && o.follow === undefined) {
+    if (!mom && !covered && !p.crawler && !PROFILES[o.species].crawler && o.follow === undefined) {
       const sep = personalSpace(s, o, scale);
       sepX += sep.x;
       sepY += sep.y;
@@ -337,7 +377,7 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
       cx += o.x; cy += o.y; avx += o.vx; avy += o.vy; n++;
     }
   }
-  if (n > 0 && p.cohesion > 0 && !sym.has('hiding') && cond.nestX === undefined) {
+  if (n > 0 && p.cohesion > 0 && !covered && !sym.has('hiding') && cond.nestX === undefined) {
     ax += ((cx / n - s.x) / (60 * scale)) * p.cohesion;
     ay += ((cy / n - s.y) / (60 * scale)) * p.cohesion * 0.6;
     ax += (avx / n / speed) * 0.5 * p.cohesion;
@@ -410,7 +450,7 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   let settle = false;
   let idling = false;
   const unwell = sym.has('hiding') || sym.has('gasping') || sym.has('lethargic') || sym.has('loss_of_balance');
-  const free = !chasing && !p.crawler && !mom && cond.nestX === undefined && !cond.guarding && !unwell && (cond.begging ?? 0) < 0.3;
+  const free = !chasing && !covered && !p.crawler && !mom && cond.nestX === undefined && !cond.guarding && !unwell && (cond.begging ?? 0) < 0.3;
   if (!free) s.idle = undefined;
   else {
     const scene = { surface: bounds.surface, bottom: bounds.bottom, width: bounds.width, scale, plants: ctx.plants ?? [], floorAt: (x: number) => floorAt(bounds, x) };
@@ -480,6 +520,48 @@ export function updateSwimmer(s: Swimmer, all: Swimmer[], cond: FishCondition, c
   if (!p.crawler && Math.abs(s.y - wantY) > 1e-6 && Math.sign(s.vy) === Math.sign(wantY - s.y)) s.vy = 0;
   // 病懨懨的魚尾巴也擺得慢
   s.phase += dt * (4 + v / (8 * scale)) * (sym.has('lethargic') || sym.has('loss_of_balance') ? 0.5 : 1) * (settle && s.idle?.kind === 'rest' ? 0.35 : 1);
+}
+
+/** 小魚能躲的草：畫面給的草（有頂端高度）；沒有的話用水草的位置，當成約 60 px 高。 */
+function coverStems(ctx: MotionContext): ReadonlyArray<{ x: number; top: number }> {
+  const known = ctx.cover ?? ctx.perches;
+  if (known?.length) return known;
+  return (ctx.plants ?? []).map((x) => ({ x, top: floorAt(ctx.bounds, x) - 60 * ctx.scale }));
+}
+
+/**
+ * 躲草的小魚這一格怎麼走（polish-to-9.md §10.1）：在一株草裡待幾秒、游出去晃一下再鑽回來，偶爾換一株；
+ * 身體比自己大很多的魚游近時馬上鑽回最近的草。缸裡沒有草就回 null（照一般的游法）。
+ */
+export function coverSteer(s: Swimmer, all: Swimmer[], ctx: MotionContext, dt: number, rand: () => number): Swimmer['hideout'] | null {
+  const stems = coverStems(ctx);
+  if (stems.length === 0) {
+    s.hideout = undefined;
+    return null;
+  }
+  const near = (x: number) => stems.reduce((b, q, i) => (Math.abs(q.x - x) < Math.abs(stems[b].x - x) ? i : b), 0);
+  let h = s.hideout;
+  if (!h || h.stem >= stems.length) h = s.hideout = { stem: near(s.x), t: HIDE_IN[0] + rand() * HIDE_IN[1], out: false, side: 1 };
+  const me = s.size?.halfLen ?? 4 * ctx.scale;
+  const danger = all.some((o) => o !== s && !PROFILES[o.species].crawler && (o.size?.halfLen ?? 0) > me * 1.8 && Math.hypot(o.x - s.x, o.y - s.y) < 55 * ctx.scale);
+  if (danger && h.out) {
+    // 大魚靠過來：鑽回最近的草
+    h.out = false;
+    h.stem = near(s.x);
+    h.t = HIDE_IN[0] + rand() * HIDE_IN[1];
+  } else if ((h.t -= dt) <= 0) {
+    if (h.out) {
+      // 回草叢：多半回同一株，有時換旁邊那株
+      h.out = false;
+      if (stems.length > 1 && rand() < 0.35) h.stem = near(s.x + h.side * 40 * ctx.scale);
+      h.t = HIDE_IN[0] + rand() * HIDE_IN[1];
+    } else if (!danger) {
+      h.out = true;
+      h.side = rand() < 0.5 ? -1 : 1;
+      h.t = HIDE_OUT[0] + rand() * HIDE_OUT[1];
+    }
+  }
+  return h;
 }
 
 /**
