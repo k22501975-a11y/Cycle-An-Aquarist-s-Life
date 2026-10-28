@@ -107,6 +107,8 @@ export interface ReportItem {
   reveal?: Reveal;
   /** kind 'second_brood' 的比較卡資料：這窩幾尾、第一窩還有幾尾、挑了幾尾備用、C9 選了什麼。 */
   secondBrood?: { momId: number; count: number; prevKids: number; kept: number; choice: string };
+  /** 選擇的回音（polish-to-9.md §10.0）：玩家當初選的那個選項的 label，畫面在這行前面放「你選了：…」；text 直接寫結果。 */
+  echo?: string;
 }
 
 /** 開獎卡的資料（midgame.md §6.1）：每尾小魚的基因預告。 */

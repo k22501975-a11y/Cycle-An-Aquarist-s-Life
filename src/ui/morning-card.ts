@@ -151,6 +151,16 @@ export function morningLine(report: MorningReport): string {
  * 死亡那條的「下次：…」先收起來，點「怎麼避免」才展開（報告卡一眼看得完，想知道再看）。
  * 展開那一下不算點整條（整條是帶去處理）。
  */
+/** 回音的小圖示：一圈一圈的漣漪（你丟下的選擇，現在傳回來了）。 */
+const ECHO_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2.6" fill="currentColor"/><path d="M7.5 7.5a6.4 6.4 0 0 0 0 9M16.5 7.5a6.4 6.4 0 0 1 0 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4.4 4.6a10.4 10.4 0 0 0 0 14.8M19.6 4.6a10.4 10.4 0 0 1 0 14.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.55"/></svg>';
+
+/** 選擇的回音（polish-to-9.md §10.0）：那行上面一個小標「你選了：躲草」，下面是結果。 */
+export function echoTag(choice: string): HTMLElement {
+  const icon = h('i.morning-echo-icon');
+  icon.innerHTML = ECHO_SVG;
+  return h('span.morning-echo', {}, icon, '你選了：', h('b', {}, choice));
+}
+
 function reportText(text: string): HTMLElement {
   const at = text.indexOf('下次：');
   if (at < 0) return h('span.morning-text', {}, ...boldNumbers(text));
@@ -282,7 +292,11 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
       h(`span.morning-pic${img ? '' : '.glyph-only'}`, {}, img, groupGlyph(group, img ? 'morning-glyph.corner' : 'morning-glyph'), item.count && item.count > 1 ? h('b.morning-count', {}, `×${item.count}`) : null),
       // 長得像誰（G2）：文字下面多爸媽和小魚並排的比較圖
       // 特徵跟誰的已經畫成小標，文字只留到冒號前（「小魚看得出像誰了！長大後比較像爸爸」）
-      item.lookalike ? h('span.morning-body', {}, reportText(item.text.includes('：') ? item.text.slice(0, item.text.lastIndexOf('：')) : item.text), lookalikeVisual(item.lookalike)) : reportText(item.text),
+      item.lookalike
+        ? h('span.morning-body', {}, reportText(item.text.includes('：') ? item.text.slice(0, item.text.lastIndexOf('：')) : item.text), lookalikeVisual(item.lookalike))
+        : item.echo
+          ? h('span.morning-body.echo', {}, echoTag(item.echo), reportText(item.text))
+          : reportText(item.text),
       item.action ? h('span.morning-go', {}, item.goLabel ? `· ${item.goLabel}` : ACTION_LABEL[item.action], ' ›') : null,
     );
   };
