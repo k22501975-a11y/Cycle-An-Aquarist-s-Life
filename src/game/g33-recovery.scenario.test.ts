@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buyCheapHeater, doseIchMedication, economy, emergencySale, feed, fulfillOrder, insulateTank, installHeater, moveToWarmTank, needsMedicine, orderBoard, orderRefusal, pinchMg, price, recordEvent, removeDeadFish, sellFish, simulate, spend, takeHeaterCredit, unplugHeater, waterChange, type TankState } from '../sim';
+import { addAir, buyCheapHeater, doseIchMedication, economy, emergencySale, feed, fulfillOrder, insulateTank, installHeater, moveToWarmTank, needsMedicine, orderBoard, orderRefusal, pinchMg, price, recordEvent, removeDeadFish, sellFish, simulate, spend, suggestedChange, takeHeaterCredit, unplugHeater, waterChange, type TankState } from '../sim';
 import { saltIchCure, saltRefusal } from '../sim/salt-treat';
 import { guideStep } from '../ui/status';
 import { midgamePlayerTanks } from './midgame-player';
@@ -29,6 +29,11 @@ function follow(tanks: TankState[]): boolean {
       return !!buyCheapHeater(t);
     case 'remove_dead':
       return tanks.reduce((n, x) => n + removeDeadFish(x), 0) > 0;
+    case 'water_change':
+      suggestedChange(t);
+      return true;
+    case 'add_air':
+      return addAir(t);
     case 'equipment': {
       const heater = t.equipment.heater;
       if (!heater?.broken) return false;

@@ -3,6 +3,7 @@ import { economy, LOAN_PAUSE_COINS, price } from './economy';
 import { raiseCashStep } from './raise-cash';
 import { canSalt, SALT_DAYS, saltDaysLeft, saltWorking } from './salt-cure';
 import { HUNGRY } from './readings';
+import { breathless, oxygenFix } from './oxygen';
 import { CALM_DAYS, GOALS, goalState, nextGoals, PURPOSE_GOAL_COUNT, raisedCount, type Goal } from './goals';
 import { COLORING_AT, daysToLength, daysUntilSexVisible, growthStage, maxLengthCm, PICK_AFTER_BROOD_DAYS, sexVisible } from './growth';
 import { ID_BLOCK, newTankCost, tankLabel } from './household';
@@ -56,7 +57,9 @@ export type NextTarget =
   | 'buy_heater' // 冬天錢不夠換同款（#404）：買一支撐得住的便宜加熱棒裝上
   | 'move_fry' // 小魚在這缸會被吃、另一缸養好水了（#425）：一鍵把小魚搬過去
   | 'cycle_tank' // 小魚要搬家、新缸還沒養水（#428）：打開「新缸要怎麼養水？」
-  | 'nursery_soon'; // 育幼盒空著、母魚快生了（polish-to-9.md §9.1）：點一下就把她放進去
+  | 'nursery_soon' // 育幼盒空著、母魚快生了（polish-to-9.md §9.1）：點一下就把她放進去
+  | 'water_change' // 缺氧又沒打氣可加：切到那缸、打開換水
+  | 'add_air'; // 缺氧：打開打氣機，沒有就買一台裝上（oxygen.ts）
 
 export interface NextStep {
   /** 對應的目標 id。 */
@@ -364,6 +367,10 @@ function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
 export function nextStep(tanks: TankState[]): NextStep | null {
   const [goal] = nextGoals(tanks, 1);
   if (!goal || !tanks[0]) return null;
+  // 魚在水面喘氣：缺氧幾天就會整缸死（strain-fixing 種子 5：53 尾小魚搬進 20L 缸，溶氧 1.5 撐了 9 天沒人說）。
+  // 只有真的在傷魚才出卡（只是浮頭的早上報告先說，不搶任務卡）；排在治病前面：治白點要調高水溫，氧更少
+  const gasp = gaspStep(tanks);
+  if (gasp) return { goal: goal.id, ...gasp };
   // 生病不等人：不管現在是哪個目標，先叫玩家治療（體驗第 15 輪 #291：白點 5 天，下一步還在說母魚倒數）
   if (anySick(tanks)) return { goal: goal.id, ...sickStep(tanks) };
   // 小魚在被吃、別缸已經能收：先搬（g36 #425：第二缸養好水 5 天都空著，小魚被吃 17 尾）
@@ -374,6 +381,18 @@ export function nextStep(tanks: TankState[]): NextStep | null {
   const box = soonMotherStep(tanks);
   if (box) return { goal: goal.id, ...box };
   return { goal: goal.id, ...rotateStale(tanks, stepFor(goal, tanks), goal) };
+}
+
+/** 有缸缺氧到傷魚（小魚也算，oxygen.ts）：打氣機關著就打開、買得起就加一台，不然先換水。 */
+function gaspStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
+  // 先挑最缺的那缸
+  const worst = tanks.map((t, tank) => ({ tank, b: breathless(t) })).filter((x) => x.b?.harm).sort((a, b) => a.b!.o2 - b.b!.o2)[0];
+  if (!worst) return null;
+  const { tank } = worst;
+  const where = tanks.length > 1 ? tankLabel(tanks, tank) : '缸裡';
+  const fix = oxygenFix(tanks[tank]);
+  if (fix === 'water') return { text: `${where}的魚在水面喘氣，水裡缺氧，先換水`, target: 'water_change', tank };
+  return { text: `${where}缺氧，魚在水面喘氣，${fix === 'air_on' ? '打開打氣機' : '加一台打氣機'}`, target: 'add_air', tank };
 }
 
 /** 育幼盒空著、有母魚懷孕 ≥ BOX_DUE（約剩 3 天，polish-to-9.md §9.1）：叫玩家把她放進去。盒裡還有小魚的照 #430（買第二缸或搬小魚）。 */

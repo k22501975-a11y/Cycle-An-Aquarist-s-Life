@@ -1,3 +1,4 @@
+import { addAir, airPumpPrice, moveAirRisk } from './oxygen';
 import { DREAM_FISH, DREAM_MALE, LINE_FIXED_PCT, LINE_NAME_MAX, LINE_NAME_PCT, stabilityPct } from './dream';
 import { addFish, setHeaterTarget } from './actions';
 import { waterChange } from './maintenance-actions';
@@ -1066,6 +1067,18 @@ function crowdMove(tanks: TankState[], s: Readonly<ChoiceState>, tank: number): 
   return out.length > 0 ? { fish: out, to } : null;
 }
 
+/**
+ * 「搬一些」的說明：那缸沒打氣、搬過去的小魚又多時寫明會缺氧，買得起就順便加一台打氣機（chooseOption 照做），買不起寫還差多少（選項照樣點得下去）。
+ */
+function moveOutcome(tanks: TankState[], move: { fish: Fish[]; to: number }): string {
+  const base = `${move.fish.length} 尾大一點的搬過去，留種的不動`;
+  const risk = moveAirRisk(tanks[move.to], move.fish);
+  if (!risk) return base;
+  const name = tankLabel(tanks, move.to);
+  if (risk.short === 0) return `${base}；${name}沒打氣，小魚多容易缺氧，先${tanks[move.to].equipment.airPump ? '打開打氣機' : `加一台打氣機（${airPumpPrice()} 元）`}再搬`;
+  return `${base}；${name}沒打氣，小魚多容易缺氧（打氣機還差 ${risk.short} 元，搬過去要多換水）`;
+}
+
 /** 在水面喘氣的魚（溶氧不夠時看得到，小小魚不算）。 */
 function gasping(t: TankState): number {
   if (t.water.o2 >= 4) return 0;
@@ -1566,7 +1579,7 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
           // 已經連賣兩次：推薦以後自動賣（留種的不賣），不用每次跳卡
           ...(sell ? [{ key: 'sell', label: '賣一批', outcome: sell, recommended: recSell && !autoOk }] : []),
           ...(move
-            ? [{ key: 'move', label: `搬一些到${tankLabel(tanks, move.to)}`, outcome: `${move.fish.length} 尾大一點的搬過去，留種的不動`, recommended: recMove }]
+            ? [{ key: 'move', label: `搬一些到${tankLabel(tanks, move.to)}`, outcome: moveOutcome(tanks, move), recommended: recMove }]
             : coldOther >= 0
               ? [{ key: 'move', label: `搬一些到${tankLabel(tanks, coldOther)}`, outcome: '加熱棒壞了，水太冷', recommended: false, disabled: `${tankLabel(tanks, coldOther)}太冷了，先把加熱棒弄好` }]
               : []),
@@ -2828,6 +2841,8 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
       } else if (key === 'move') {
         const m = i < 0 ? null : crowdMove(tanks, s, i);
         if (!m) return '別缸也沒有空位了';
+        // 那缸沒打氣、小魚又多：買得起就先加一台打氣機（選項上寫了）
+        if (moveAirRisk(tanks[m.to], m.fish)?.short === 0) addAir(tanks[m.to]);
         for (const f of m.fish) moveFish(tanks[i], tanks[m.to], f.id);
         addEcho(s, { label: `搬一些到${tankLabel(tanks, m.to)}`, tank: i, due: now, text: `搬了 ${m.fish.length} 尾到${tankLabel(tanks, m.to)}，那缸現在 ${crowdPct(tanks[m.to])}%，${tankLabel(tanks, i)}剩 ${crowdPct(tanks[i])}%` });
       } else if (key === 'water') {

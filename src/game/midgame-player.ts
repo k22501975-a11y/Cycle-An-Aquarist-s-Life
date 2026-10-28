@@ -1,5 +1,5 @@
 import { newGameState } from './game';
-import { addFish, buyFeeder, DAILY_CATEGORY, dailyTasks, eligibleDaily, goalDaily, goalRelated, crowdingRatio, takeStoreFemales, addHardscape, buyPlant, buyTank, checkGoals, claimDaily, doseIchMedication, DREAM_FISH, economy, FISH_SPECIES, feed, fulfillOrder, HARDSCAPE, ICH_MED_WORKING, ichHeatC, linkTanks, moveDueToNursery, orderBoard, orderSupply, PINCH_MEALS, setHeaterTarget, setTankPurpose, splitTank, transferMedia, step, TICK_HOURS, updateDaily, useTestKit, waterChange, type TankState } from '../sim';
+import { addAir, addFish, buyFeeder, DAILY_CATEGORY, dailyTasks, eligibleDaily, goalDaily, goalRelated, crowdingRatio, takeStoreFemales, addHardscape, buyPlant, buyTank, checkGoals, claimDaily, doseIchMedication, DREAM_FISH, economy, FISH_SPECIES, feed, fulfillOrder, HARDSCAPE, ICH_MED_WORKING, ichHeatC, linkTanks, moveDueToNursery, orderBoard, orderSupply, PINCH_MEALS, setHeaterTarget, setTankPurpose, splitTank, transferMedia, step, suggestedChange, TICK_HOURS, updateDaily, useTestKit, waterChange, nextStep, type TankState } from '../sim';
 import { breederIds, chooseOption, choiceState, tradeCheck, type ChoiceCard, type ChoiceId } from '../sim/choices';
 import { advanceQuest, currentQuest, newProgress } from '../ui/tutorial';
 import { morningLine } from '../ui/morning-card';
@@ -160,6 +160,10 @@ function run(seed: number, days: number, opts: { neglectCrowd?: boolean; onDay?:
       const r = useTestKit(t);
       if ((t === s && currentQuest(p)?.id === 'water') || r.ammonia > 0 || r.nitrite > 0) waterChange(t, 0.3);
     }
+    // 照任務卡處理缺氧：換水點下去打開換水面板，照預設（建議的量、新水對好溫度）換
+    const next = nextStep(tanks);
+    if (next?.target === 'water_change') suggestedChange(tanks[next.tank ?? 0]);
+    if (next?.target === 'add_air') addAir(tanks[next.tank ?? 0]);
     act();
     if (currentQuest(p)?.id === 'scape') addHardscape(s, HARDSCAPE.lava);
     act();

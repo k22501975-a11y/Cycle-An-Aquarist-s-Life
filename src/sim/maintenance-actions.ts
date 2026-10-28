@@ -4,8 +4,18 @@ import { roomTemperature } from './processes/thermal';
 import type { FilterSpec, SubstrateSpec } from './equipment';
 import { noteAct, type TankState } from './state';
 import { fillUp, type WaterChangeOptions } from './actions';
+import { suggestedWaterChange } from './readings-advice';
 
 // 換水、換底沙、洗濾材、換過濾器：只有延後載入的面板用得到，跟原檔分開，不進開機必載（docs/performance-budget.md）。
+/**
+ * 照建議換水：換建議的量、新水對好溫度。一鍵換水、換水面板的預設、照任務卡換水都是這個（回傳換了幾成）。
+ */
+export function suggestedChange(state: TankState): number {
+  const fraction = suggestedWaterChange(state);
+  waterChange(state, fraction, { tempC: state.water.tempC });
+  return fraction;
+}
+
 /**
  * 換水：用自來水（已除氯）取代 fraction 比例的缸水。
  * 會稀釋氨、亞硝酸鹽、硝酸鹽與藥物，補回 KH；新水溫度與缸水差太多會讓魚緊迫。

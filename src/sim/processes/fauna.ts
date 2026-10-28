@@ -18,6 +18,10 @@ const FECES_PER_MG_FOOD = 0.25;
  * 一天兩次「一小撮」（0.85 份）停在約 0.4（吃飽），一天一次約 0.62（有點餓）；完全不餵約 8 天到 0.8（見 ADULT_FAST）。
  */
 export const DAYS_TO_STARVING = 6;
+/** 溶氧低於這個（mg/L）魚開始緊迫。 */
+export const OXYGEN_STRESS_MG = 4;
+/** 溶氧低於這個（mg/L）開始傷魚（缺氧死）。 */
+export const OXYGEN_HARM_MG = 2;
 /** 飢餓值超過 0.3 後，每多 0.1 代謝慢 20%，最慢到原本的 15%。 */
 export const HUNGER_SLOWDOWN = 2;
 export const MIN_METABOLISM = 0.15;
@@ -161,7 +165,7 @@ export function computeStressors(state: TankState, fish: Fish, census: TankCensu
     nitrite: Math.max(0, water.no2 - 0.2) * sensitivity,
     nitrate: Math.max(0, water.no3 - 50) / 100,
     // 鬥魚會到水面吸空氣，缺氧影響小很多
-    oxygen: (Math.max(0, 4 - water.o2) / 2) * (sp.airBreather ? 0.2 : 1),
+    oxygen: (Math.max(0, OXYGEN_STRESS_MG - water.o2) / 2) * (sp.airBreather ? 0.2 : 1),
     co2: Math.max(0, water.co2 - 30) / 15,
     // 斷食第一週沒影響，體力開始消耗後壓力才慢慢上來
     hunger: Math.min(0.6, starvation(state, fish) * 0.5),
@@ -218,7 +222,7 @@ function computeDamage(state: TankState, fish: Fish, sp: FishSpecies): Damage[] 
   };
   add((freeAmmonia(state) - 0.04 - ammoniaAllowance(state, fish)) * 0.3 * sensitivity, 'ammonia');
   add((water.no2 - 1) * 0.004 * sensitivity, 'nitrite');
-  add((2 - water.o2) * 0.05 * (sp.airBreather ? 0.15 : 1), 'oxygen');
+  add((OXYGEN_HARM_MG - water.o2) * 0.05 * (sp.airBreather ? 0.15 : 1), 'oxygen');
   add((water.co2 - 45) * 0.004, 'co2');
   add(phBeyondSurvival(state, fish) * 0.01, 'ph');
   const tempOut = Math.max(0, sp.tempLethal.min - water.tempC, water.tempC - sp.tempLethal.max);

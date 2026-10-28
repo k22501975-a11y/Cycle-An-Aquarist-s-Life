@@ -1,5 +1,5 @@
 import { crisisText, type Crisis } from '../game/crisis';
-import { BLOOM_NOTE, boxBlocked, fryHome, fryNeedHome, fryPrep, newTankCost, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
+import { airPumpPrice, breathless, oxygenFix, BLOOM_NOTE, boxBlocked, fryHome, fryNeedHome, fryPrep, newTankCost, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
 import { takeEchoes } from '../sim/choice-echo';
 import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, breederIds, breederName, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
@@ -36,12 +36,14 @@ export type ReportAction =
   | 'move_fry' // 小魚在被吃、別缸養好水了：一鍵搬過去（#425）
   | 'cycle_tank' // 小魚要搬家、新缸還沒養水：打開「新缸要怎麼養水？」（#428；tank 是新缸）
   | 'buy_tank' // 住不下（C14）選了再買一缸：直接打開 20L 套缸的購買確認（polish-to-9.md §10.2）
-  | 'buy_big'; // 住不下（C14）選了換大缸：直接打開 90L 套缸的購買確認
+  | 'buy_big' // 住不下（C14）選了換大缸：直接打開 90L 套缸的購買確認
+  | 'add_air'; // 缺氧：打開打氣機，沒有就買一台裝上（oxygen.ts）
 
 export type ReportKind =
   | 'crisis'
   | 'death'
   | 'wiped' // 魚都死光了（#377）
+  | 'oxygen' // 缺氧，魚在水面喘氣（oxygen.ts）
   | 'loan' // 還阿德加熱棒的錢（#397）
   | 'birth'
   | 'eaten'
@@ -397,6 +399,16 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     if (!ammoniaCrisis && living.length > 0 && ammonia >= MEASURED_PROBLEM_LEVEL && snap.ammonia < MEASURED_PROBLEM_LEVEL)
       // 換三成讀數掉不下來的話（第 1 天讀 0.25 時）叫玩家換一半，換完再測看得到變化（#237）
       push({ kind: 'ammonia', tone: 'warn', text: `氨 ${ammonia}，水開始髒了，${suggestedWaterChange(t) === BIG_WATER_CHANGE ? '換一半的水' : '換三成水'}`, action: 'water_change' });
+    // 缺氧（oxygen.ts）：浮頭累積半天就先說（黃，不出任務卡）；低到開始傷魚是紅的、排最前面，任務卡也會叫
+    const gasp = breathless(t);
+    if (gasp) {
+      const fix = oxygenFix(t);
+      const air = fix === 'air_on' ? '打開打氣機' : fix === 'buy_air' ? `加一台打氣機（${airPumpPrice()} 元）` : '';
+      const o2 = gasp.o2.toFixed(1);
+      const action = fix === 'water' ? 'water_change' : 'add_air';
+      if (gasp.harm) push({ kind: 'oxygen', tone: 'bad', text: `溶氧只剩 ${o2}，魚開始缺氧受傷，${air || '先換水'}`, action, standing: true });
+      else push({ kind: 'oxygen', tone: 'warn', text: `魚在水面喘氣，溶氧 ${o2}，${air ? `可以${air}或換水` : '先換水'}`, action });
+    }
     // 水草長了一點（睡前就種著的那幾株，合計長了 1% 以上才寫；沒照光的晚上不會長）
     let plantsBefore = 0;
     let plantsNow = 0;

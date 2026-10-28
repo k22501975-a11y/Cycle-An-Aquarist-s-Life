@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, ADULT_SIZE, bacteriaCapacity, broodFactor, buyTank, CROWD_WARN, crowdingRatio, cross, DREAM_FISH, economy, FISH_SPECIES, linkTanks, orderBoard, setTankPurpose, type Fish, type GuppyGenome, type TankState } from './index';
+import { addFish, airPumpPrice, ADULT_SIZE, bacteriaCapacity, broodFactor, buyTank, CROWD_WARN, crowdingRatio, cross, DREAM_FISH, economy, FISH_SPECIES, linkTanks, orderBoard, setTankPurpose, type Fish, type GuppyGenome, type TankState } from './index';
 import { chooseOption, choiceState, CHOICE_RESHOW_DAYS, CROWD_FULL, CROWD_PREVIEW, REVEAL_CULL_DAYS, takeCrowdNotes, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, WARM_PREG_C, takeChoice, takeLineNotes, lineName, lineNameRefusal, LINE_NAME_SUGGESTED, takeReveal, takeSecondBrood, FINS_DAYS, COLOR_DAYS, SNAKE_DAYS, STABILITY_DAYS } from './choices';
 import { dreamRoute } from './dream';
 import { dropTankEchoes, takeEchoes } from './choice-echo';
@@ -600,6 +600,35 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     expect(move?.recommended).toBeFalsy();
     expect(move?.disabled).toMatch(/太冷了，先把加熱棒弄好$/);
     expect(chooseOption(tanks, 'C14', 'move')).not.toBeNull();
+  });
+
+  it('C14 搬一些：搬去的缸沒打氣、搬過去的小魚又多，寫明容易缺氧；買得起就順便加打氣機，買不起寫還差多少、照樣點得下去', () => {
+    const setup = (coins: number) => {
+      const { tanks, s, st } = latePair();
+      Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard' });
+      orderBoard(s).orders = [];
+      tanks[1].equipment.airPump = null;
+      // 大魚都是留種的（不搬），搬的只有小魚；搬去的缸沒有會吃小魚的大魚
+      for (const f of s.fish) f.keeper = true;
+      tanks[1].fish = [];
+      delete tanks[1].purpose;
+      while (crowdingRatio(s) < CROWD_FULL + 0.1) Object.assign(addFish(s, 'guppy', { ...calm, pregnant: false }), { lengthCm: 1.2, ageDays: 20 });
+      economy(s).coins = coins;
+      return { tanks, s };
+    };
+    const rich = setup(5000);
+    const card = takeChoice(rich.tanks)!;
+    expect(card.id).toBe('C14');
+    const move = card.options.find((o) => o.key === 'move')!;
+    expect(move.outcome).toMatch(/沒打氣，小魚多容易缺氧，先加一台打氣機（\d+ 元）再搬$/);
+    expect(chooseOption(rich.tanks, 'C14', 'move')).toBeNull();
+    expect(rich.tanks[1].equipment.airPump?.on).toBe(true);
+    const poor = setup(airPumpPrice() - 30);
+    const outcome = takeChoice(poor.tanks)!.options.find((o) => o.key === 'move')!;
+    expect(outcome.outcome).toMatch(/沒打氣，小魚多容易缺氧（打氣機還差 30 元，搬過去要多換水）$/);
+    expect(outcome.disabled).toBeUndefined();
+    expect(chooseOption(poor.tanks, 'C14', 'move')).toBeNull();
+    expect(poor.tanks[1].equipment.airPump).toBeNull();
   });
 
   it('C14 超過建議量、除了先多換水什麼都選不了（擠的是小小魚、錢也不夠）：不出卡（daily-loop.md §4）', () => {
