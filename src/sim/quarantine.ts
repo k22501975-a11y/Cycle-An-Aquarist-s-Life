@@ -86,6 +86,7 @@ export function updateQuarantine(state: TankState, dt: number): void {
       fish.pregnancy += (dt / 24 / breeding.gestationDays) * Math.sqrt(tf);
       if (fish.pregnancy >= 1) {
         fish.pregnancy = 0;
+        delete fish.dreamBrood;
         const fry = giveBirth(state, fish, state.fish.length + q.fish.length);
         state.fish = state.fish.filter((f) => !fry.includes(f));
         for (const f of fry) {

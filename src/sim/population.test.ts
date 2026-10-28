@@ -12,7 +12,9 @@ import {
   FILTERS,
   FISH_SPECIES,
   HEATERS,
+  DENSE_COVER,
   hidingFactor,
+  plantCover,
   isJuvenile,
   LIGHTS,
   normalizeState,
@@ -120,6 +122,31 @@ describe('混養：吃仔魚、吃仔蝦', () => {
     runDays(planted, 14);
     expect(young(bare, 'guppy')).toBeLessThan(25);
     expect(young(planted, 'guppy')).toBeGreaterThan(young(bare, 'guppy') + 5);
+  });
+
+  it('水草覆蓋 ≥ 60% 時，小魚被吃的機率再減半（polish-to-9.md §12.2）', () => {
+    let sparse = 0;
+    let dense = 0;
+    for (const seed of [121, 122, 123, 124]) {
+      const base = createTank({ ...MATURE, seed });
+      addAdults(base, 'guppy', 4);
+      addYoung(base, 'guppy', 40);
+      const a = structuredClone(base);
+      const b = structuredClone(base);
+      // 一個停在 50% 左右，一個剛過 60%：不加減半，躲藏係數只差一成多
+      addPlant(a, 'moss', 12.5);
+      addPlant(b, 'moss', 20);
+      expect(plantCover(a)).toBeLessThan(DENSE_COVER - 0.05);
+      expect(plantCover(b)).toBeGreaterThanOrEqual(DENSE_COVER);
+      expect(plantCover(b)).toBeLessThan(DENSE_COVER + 0.1);
+      runDays(a, 3);
+      runDays(b, 3);
+      expect(plantCover(a)).toBeLessThan(DENSE_COVER);
+      sparse += 40 - young(a, 'guppy');
+      dense += 40 - young(b, 'guppy');
+    }
+    expect(sparse).toBeGreaterThan(10);
+    expect(dense).toBeLessThanOrEqual(sparse * 0.6);
   });
 
   it('檢疫盒當產卵盒：快生的母魚放進去，小魚生在盒裡不會被吃，而且照常長大', () => {

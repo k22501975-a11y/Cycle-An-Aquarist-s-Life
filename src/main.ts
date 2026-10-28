@@ -1915,6 +1915,11 @@ async function start(): Promise<void> {
       case 'shop_fish':
         openShop('fish');
         break;
+      case 'shop_plants':
+        // 被吃的是哪一缸就先切過去，種的草才會種在那缸（polish-to-9.md §12.2）
+        game.switchTo(item.tank);
+        openShop('plants');
+        break;
       case 'buy_feeder':
         offerFeeder(item.tank);
         break;

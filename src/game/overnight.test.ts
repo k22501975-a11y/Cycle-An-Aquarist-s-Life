@@ -85,18 +85,22 @@ describe('「過一晚」（first-10-minutes.md F2）', () => {
     expect(report.items[0]).toMatchObject({ kind: 'crisis', action: 'remove_dead' });
   });
 
-  it('晚上有小魚被吃：報告寫被吃了幾尾、不寫平安，點了去檢疫盒（#176）', () => {
-    const game = new Game(cycledTank());
-    const before = snapshot(game.tanks);
-    game.act((st) => {
-      recordEvent(st, { type: 'fry_eaten', cause: 'guppy', count: 3 });
-      recordEvent(st, { type: 'fry_eaten', cause: 'guppy', count: 2 });
-    });
-    const report = morningReport(before, game.tanks, 12, null);
-    const item = report.items.find((x) => x.kind === 'eaten');
-    expect(item?.text).toContain('昨晚有 5 尾小魚');
-    expect(item?.action).toBe('fry_box');
-    expect(report.items.some((x) => x.kind === 'quiet')).toBe(false);
+  it('晚上有小魚被吃：報告寫被吃了幾尾、不寫平安；草不夠密點了去種水草，夠密了點了去檢疫盒（#176、polish-to-9.md §12.2）', () => {
+    for (const [moss, action] of [[0, 'shop_plants'], [20, 'fry_box']] as const) {
+      const tank = cycledTank();
+      if (moss) addPlant(tank, 'moss', moss);
+      const game = new Game(tank);
+      const before = snapshot(game.tanks);
+      game.act((st) => {
+        recordEvent(st, { type: 'fry_eaten', cause: 'guppy', count: 3 });
+        recordEvent(st, { type: 'fry_eaten', cause: 'guppy', count: 2 });
+      });
+      const report = morningReport(before, game.tanks, 12, null);
+      const item = report.items.find((x) => x.kind === 'eaten');
+      expect(item?.text).toContain('昨晚有 5 尾小魚');
+      expect(item?.action).toBe(action);
+      expect(report.items.some((x) => x.kind === 'quiet')).toBe(false);
+    }
   });
 
   it('好幾條魚出現白點：合成一行「3 條魚有白點」並寫出原因（polish-to-9.md G3）', () => {
