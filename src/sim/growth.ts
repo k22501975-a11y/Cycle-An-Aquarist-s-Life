@@ -147,11 +147,26 @@ export function waterGh(state: TankState): number {
   return state.water.gh ?? state.environment.tap.gh ?? 6;
 }
 
+/** 育幼盒塞滿 30 尾時，盒裡的小魚擠，長得慢一點（polish-to-9.md §10.1：成長 −15%；盒裡越少影響越小）。 */
+export const NURSERY_GROWTH = 0.85;
+/** 在有草的缸裡躲的小魚有空間、有草上的微生物吃，長得快一點（+10%，草要有一半密度才全拿）。 */
+export const HIDE_GROWTH = 0.1;
+
+/**
+ * 仔魚住哪裡的成長係數：育幼盒 0.85～1（boxFill 是盒子滿了幾成）、草缸裡最多 1.1；過了仔魚期、蝦都是 1。
+ * hiding 是 hidingFactor（0～maxHiding）。
+ */
+export function fryRoomFactor(fish: Fish, hiding: number, maxHiding: number, boxFill: number): number {
+  if (isShrimp(fish) || growthStage(fish) !== 'fry') return 1;
+  if (fish.nursery) return 1 - (1 - NURSERY_GROWTH) * Math.min(1, boxFill);
+  return 1 + HIDE_GROWTH * Math.min(1, hiding / (maxHiding / 2));
+}
+
 /**
  * 長一小時：體長以 von Bertalanffy 曲線趨近自己的頂。
- * tf 是溫度係數，crowding 是缸的擁擠度（crowdingRatio）。
+ * tf 是溫度係數，crowding 是缸的擁擠度（crowdingRatio），room 是小魚住哪裡的係數（fryRoomFactor）。
  */
-export function growFish(state: TankState, fish: Fish, tf: number, crowding: number, dt: number): void {
+export function growFish(state: TankState, fish: Fish, tf: number, crowding: number, dt: number, room = 1): void {
   const sp = FISH_SPECIES[fish.species];
   const f = growthFactors(state, fish, crowding);
   const stage = growthStage(fish);
@@ -163,7 +178,7 @@ export function growFish(state: TankState, fish: Fish, tf: number, crowding: num
   const max = maxLengthCm(fish);
   if (fish.lengthCm >= max) return;
   const k = Math.log(10) / (sp.daysToAdult * 24);
-  const gain = k * tf * f.food * f.water * f.space * (fish.growthRate ?? 1) * (max - fish.lengthCm - (fish.pendingCm ?? 0)) * dt;
+  const gain = k * tf * f.food * f.water * f.space * (fish.growthRate ?? 1) * room * (max - fish.lengthCm - (fish.pendingCm ?? 0)) * dt;
   if (!isShrimp(fish)) {
     fish.lengthCm += Math.max(0, gain);
     return;

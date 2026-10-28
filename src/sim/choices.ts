@@ -14,7 +14,7 @@ import { crowdingRatio } from './processes/fauna';
 import { isCycled } from './processes/nitrogen';
 import { sizeRatio } from './processes/population';
 import { CROWD_WARN, cyclingTank } from './split';
-import { addEcho, crowdPct, type Echo } from './choice-echo';
+import { addEcho, BROOD_SUMMARY_DAYS, crowdPct, HIDE_ECHO_DAYS, type Echo } from './choice-echo';
 import { tooSmallForTank } from './quarantine';
 import { addBottledBacteria, mediaAvailable, transferMedia } from './gifts';
 import { guppyTraits } from './lookalike';
@@ -208,6 +208,8 @@ export interface ChoiceState {
   crowdNext?: number;
   /** 選擇的回音（polish-to-9.md §10.0）：還沒出的那幾行，早上報告用 takeEchoes 取。 */
   echoes?: Echo[];
+  /** C1 選了躲草：什麼時候選的、那窩小魚是哪幾尾（任務卡 3 天內不叫玩家搬小魚，choice-echo.ts hideGrace）。 */
+  hide?: { at: number; ids: number[] };
   /** 離線回來的擠缸行：每缸上次說的是第幾個遊戲天（同一缸一天最多說一次）。 */
   awayNoted?: Record<number, number>;
   /** C14 連續選「賣一批」幾次（兩次之後多一個「以後太擠就自動賣」）。 */
@@ -1190,8 +1192,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
         title: '第一窩小魚出生了！要怎麼保護？',
         owner: boxed ? '小魚生在育幼盒裡。要養在盒裡等長大，還是放出去躲草、把盒子空出來？' : '小魚一出生，大魚就會追著吃。要撈進育幼盒，還是讓牠們自己躲在草裡？',
         options: [
-          { key: 'box', label: boxed ? '養在育幼盒' : '撈進育幼盒', outcome: '幾乎都活得下來，長到 1.6 cm 自己放出來', recommended: true },
-          { key: 'hide', label: boxed ? '放出去躲草' : '留在主缸躲草', outcome: '盒子空出來給下一胎，但會被吃掉一部分；草越密活越多' },
+          { key: 'box', label: boxed ? '養在育幼盒' : '撈進育幼盒', outcome: '一尾都不會被吃，但盒子擠，長得慢一點（最多 30 尾）；長到 1.6 cm 自己放出來', recommended: true },
+          { key: 'hide', label: boxed ? '放出去躲草' : '留在主缸躲草', outcome: '有空間又有草上的微生物吃，長得快一點；但每晚會被吃掉幾尾，草越密活越多' },
         ],
       };
     }
@@ -2509,6 +2511,20 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
         const fry = t.fish.filter((f) => f.alive && bred(f) && growthStage(f) === 'fry');
         if (key === 'box' && t.nurseryBox) rescueFryToNursery(t, fry.filter((f) => !f.nursery));
         if (key === 'hide') releaseNursery(t, fry.filter((f) => f.nursery).map((f) => f.id));
+      }
+      // 回音（polish-to-9.md §10.1）：盒子第 1 天、躲草第 1、3、7 天，第一窩第 14 天總結
+      const brood = located(tanks).filter(({ fish }) => bred(fish) && growthStage(fish) === 'fry');
+      if (brood.length > 0) {
+        const now = tanks[0].hours;
+        const label = cardFor('C1', tanks, s)?.options.find((o) => o.key === key)?.label ?? key;
+        const ids = brood.map(({ fish }) => fish.id);
+        const tank = brood[0].tank;
+        if (key === 'box') addEcho(s, { label, tank, due: now + 24, kind: 'box', ids });
+        if (key === 'hide') {
+          addEcho(s, { label, tank, due: now + HIDE_ECHO_DAYS[0] * 24, kind: 'hide', ids, prev: ids.length, since: now, step: 0 });
+          s.hide = { at: now, ids };
+        }
+        addEcho(s, { label, tank, due: (s.firstBrood ?? now) + BROOD_SUMMARY_DAYS * 24, kind: 'brood', ids });
       }
       break;
     }

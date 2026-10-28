@@ -3,7 +3,7 @@ import { newGameState } from '../game/game';
 import { addFish, ADULT_SIZE, bacteriaCapacity, broodFactor, buyTank, CROWD_WARN, crowdingRatio, cross, DREAM_FISH, economy, FISH_SPECIES, linkTanks, orderBoard, setTankPurpose, type Fish, type GuppyGenome, type TankState } from './index';
 import { chooseOption, choiceState, CHOICE_RESHOW_DAYS, CROWD_FULL, CROWD_PREVIEW, REVEAL_CULL_DAYS, takeCrowdNotes, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, WARM_PREG_C, takeChoice, takeLineNotes, lineName, lineNameRefusal, LINE_NAME_SUGGESTED, takeReveal, takeSecondBrood, FINS_DAYS, COLOR_DAYS, SNAKE_DAYS, STABILITY_DAYS } from './choices';
 import { dreamRoute } from './dream';
-import { takeEchoes } from './choice-echo';
+import { dropTankEchoes, takeEchoes } from './choice-echo';
 import { newTankCost } from './household';
 import { reservedForPick } from './orders';
 
@@ -939,6 +939,15 @@ describe('固定品系：C18 取名（穩定度 40%）和品系完成（75%）�
   });
 
   describe('住不下（C14）的回音和修正（polish-to-9.md §10.2）', () => {
+    it('收掉一缸：那缸的回音不出了，後面的缸往前移（架構 #438 🟡）', () => {
+      const s = { echoes: [0, 1, 2].map((tank) => ({ label: 'x', tank, due: 0, text: `t${tank}` })) };
+      dropTankEchoes(s, 1);
+      expect(s.echoes.map((e) => [e.tank, e.text])).toEqual([
+        [0, 't0'],
+        [1, 't2'],
+      ]);
+    });
+
     const crowd = (tanks: TankState[], s: TankState, over = CROWD_WARN + 0.1) => {
       const st = choiceState(tanks);
       Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard' });

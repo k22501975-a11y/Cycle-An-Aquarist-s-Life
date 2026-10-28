@@ -1,3 +1,4 @@
+import { dropTankEchoes } from './choice-echo';
 import { economy, spend } from './economy';
 import { LIGHTS } from './equipment';
 import { tankLock, unlockHint } from './goals';
@@ -21,6 +22,7 @@ export function removeTank(tanks: TankState[], index: number): number {
   const id = t.equipment.tank.id as TankSizeId;
   const refund = Math.round((TANK_SETS[id]?.tankPrice ?? 0) * TANK_RESALE_SHARE);
   tanks.splice(index, 1);
+  dropTankEchoes(economy(tanks[0]).choices, index);
   economy(tanks[0]).coins += refund;
   linkTanks(tanks);
   return refund;
