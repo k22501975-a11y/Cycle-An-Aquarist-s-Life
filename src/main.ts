@@ -492,7 +492,12 @@ async function start(): Promise<void> {
 
   const view = new TankView(app, {
     // 點到魚、螺、水草：沒有音效，手機上給一下短震動（G1）
-    onSelectFish: (id) => (id !== null && audio.buzz('tap'), select(id)),
+    onSelectFish: (id) => {
+      if (id !== null) audio.buzz('tap');
+      // 懷著夢想窩的母魚（polish-to-9.md §12.1）：點她直接打開夢想魚的路線卡
+      if (id !== null && game.state.fish.find((f) => f.id === id)?.dreamBrood) return void sheet.open('夢想魚', () => dreamCard(sim.dreamRoute(game.tanks)));
+      select(id);
+    },
     // 在缸裡點到螺：打開螺的面板（每日小事「找到螺點一下」也就做完了）
     onTapSnail: () => (audio.buzz('tap'), panelSheet('螺', (p) => p.snailPanel(ctx))),
     onSelectPlant: (id) => {
@@ -1845,6 +1850,11 @@ async function start(): Promise<void> {
     const t = game.tanks[item.tank] ?? game.state;
     const fish = item.subjectId !== undefined ? t.fish.find((f) => f.id === item.subjectId) : undefined;
     if (item.kind === 'birth') return `${import.meta.env.BASE_URL}art/${fryArt(fish?.species ?? 'guppy')}`;
+    // 開獎倒數（polish-to-9.md §12.1）：懷著夢想窩那尾母魚的照片，卡片自己放大到肚子
+    if (item.countdown) {
+      const mom = t.fish.find((f) => f.id === item.countdown!.momId);
+      return mom?.alive ? view.portrait(mom) : null;
+    }
     if (item.kind === 'snails') return `${import.meta.env.BASE_URL}art/snail/snail-bladder.webp`;
     // G8：缸裡真的發生的事配那條魚（懷孕的母魚、追母魚的公魚、長大的小魚）
     if (fish && fish.alive && (['grown', 'disease', 'fish_relaxed', 'belly', 'courtship', 'fry_grew', 'lookalike'] as ReportItem['kind'][]).includes(item.kind)) return view.portrait(fish);
