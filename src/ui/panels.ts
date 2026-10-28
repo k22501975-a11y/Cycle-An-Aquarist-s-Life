@@ -52,6 +52,13 @@ export interface PanelContext {
   useMall?: (item: MallItemId, apply: () => boolean, refusal: () => string | null) => Promise<string | null>;
 }
 
+/** 「我的水缸」、螺的面板在另一個包（tanks-panel.ts）：網頁版離線載不到就提示一聲，回 null。 */
+const tanksUi = (toasts: Toasts) =>
+  import('./tanks-panel').catch(() => {
+    toasts.show('載入失敗，連上網路後重新整理再試一次', 'warn');
+    return null;
+  });
+
 /** 沒有復原機制時（例如測試）就直接做並顯示通知。 */
 function doUndoable(ctx: Pick<PanelContext, 'toasts' | 'undoable'>, run: () => void, text: string, tone: 'warn' | 'info' = 'info'): void {
   if (ctx.undoable) ctx.undoable(run, text, tone);
@@ -578,7 +585,7 @@ export function splitPanel(ctx: PanelContext, suggested: SplitPlan): Node {
       ...(plan === 'by_size' && group.length > 0 ? [nurseryOption(group)].filter((x): x is NonNullable<typeof x> => x !== null) : []),
       ...(plan === 'by_size' && state.quarantine && group.length > 0 ? [boxOption(group.length)] : []),
       others.length === 0
-        ? h('div.stack', {}, h('p.hint', {}, plan === 'by_size' ? '沒有別的缸。仔魚先放育幼盒或檢疫盒，長大了自己回主缸；魚太多再加一缸，或把一部分賣掉。' : '沒有別的缸。先加一缸（大缸比較穩，但設備要夠），或把一部分賣掉、送朋友。'), button('去加一缸', () => void import('./tanks-panel').then((m) => sheet.open('我的水缸', () => m.tanksPanel(ctx)))))
+        ? h('div.stack', {}, h('p.hint', {}, plan === 'by_size' ? '沒有別的缸。仔魚先放育幼盒或檢疫盒，長大了自己回主缸；魚太多再加一缸，或把一部分賣掉。' : '沒有別的缸。先加一缸（大缸比較穩，但設備要夠），或把一部分賣掉、送朋友。'), button('去加一缸', () => void tanksUi(toasts).then((m) => m && sheet.open('我的水缸', () => m.tanksPanel(ctx)))))
         : h(
             'div.row.wrap',
             {},
@@ -1617,7 +1624,7 @@ export function maintenancePanel(ctx: PanelContext): Node {
     h('h3', {}, '換水'),
     row('ui/icon-waterchange.webp', h('div.item-main', {}, h('b', {}, '自己調換水量'), h('div.hint', {}, '工具列的「換水」照建議的量一鍵換；要換多換少在這裡調')), button('調整', () => sheet.open('換水', () => waterChangePanel({ game, sheet, toasts, undoable })))),
     h('h3', {}, '螺'),
-    row('snail/snail-bladder.webp', h('div.item-main', {}, h('b', {}, s.snails ? `大螺 ${s.snails.snails.filter((x) => x.alive).length} 隻、小螺約 ${pestCount(s)} 隻` : '螺'), h('div.hint', {}, '卵塊、陷阱、手撈、除螺藥')), button('管理', () => void import('./tanks-panel').then((m) => sheet.open('螺', () => m.snailPanel({ game, sheet, toasts, undoable }))))),
+    row('snail/snail-bladder.webp', h('div.item-main', {}, h('b', {}, s.snails ? `大螺 ${s.snails.snails.filter((x) => x.alive).length} 隻、小螺約 ${pestCount(s)} 隻` : '螺'), h('div.hint', {}, '卵塊、陷阱、手撈、除螺藥')), button('管理', () => void tanksUi(toasts).then((m) => m && sheet.open('螺', () => m.snailPanel({ game, sheet, toasts, undoable }))))),
     h('h3', {}, '室溫與水位'),
     h(
       'div.item.has-pic',

@@ -14,7 +14,7 @@ import { crowdingRatio } from './processes/fauna';
 import { isCycled } from './processes/nitrogen';
 import { sizeRatio } from './processes/population';
 import { CROWD_WARN, cyclingTank } from './split';
-import { addEcho, crowdPct, type Echo } from './choice-echo';
+import { addEcho, BROOD_SUMMARY_DAYS, crowdPct, HIDE_ECHO_DAYS, type Echo } from './choice-echo';
 import { tooSmallForTank } from './quarantine';
 import { addBottledBacteria, mediaAvailable, transferMedia } from './gifts';
 import { guppyTraits } from './lookalike';
@@ -208,6 +208,12 @@ export interface ChoiceState {
   crowdNext?: number;
   /** 選擇的回音（polish-to-9.md §10.0）：還沒出的那幾行，早上報告用 takeEchoes 取。 */
   echoes?: Echo[];
+  /** 路線卡的孫代機率 % 和預計開獎日（updateOdds）；key 是那對的「母:公」id，換了才重算機率。 */
+  odds?: { key: string; pct: number; day: number };
+  /** C9 選了交小魚單、還沒交的窩（deliverBroodFry）。 */
+  fryDeliver?: Array<{ ids: number[]; born: number; tank: number }>;
+  /** C1 選了躲草：什麼時候選的、那窩小魚是哪幾尾（任務卡 3 天內不叫玩家搬小魚，choice-echo.ts hideGrace）。 */
+  hide?: { at: number; ids: number[] };
   /** 離線回來的擠缸行：每缸上次說的是第幾個遊戲天（同一缸一天最多說一次）。 */
   awayNoted?: Record<number, number>;
   /** C14 連續選「賣一批」幾次（兩次之後多一個「以後太擠就自動賣」）。 */
@@ -379,6 +385,36 @@ function pairFish(tanks: TankState[], s: Readonly<ChoiceState>): { mom: Fish; da
   const all = located(tanks);
   const [m, d] = s.pair.map((id) => all.find(({ fish }) => fish.id === id));
   return m && d ? { mom: m.fish, dad: d.fish, tank: m.tank } : null;
+}
+
+/**
+ * 留種那對配上之後幾天開獎（那窩生下來）：wait 天後配上（約 2 天）＋懷孕；懷孕照推薦（C13 孕期調高水溫，#335）
+ * 先照現在的水溫、問過 C13 之後照調高的水溫算。
+ */
+function revealInDays(t: TankState, mom: Fish, wait: number): number {
+  const sp = FISH_SPECIES[mom.species].breeding!;
+  const warmC = t.equipment.heater ? Math.max(t.water.tempC, warmTarget(t)) : t.water.tempC;
+  const gest = (f: number, c: number) => (f * sp.gestationDays) / Math.sqrt(temperatureFactor(c));
+  return Math.round(wait + 2 + gest(PREG_ASK[0], t.water.tempC) + gest(1 - PREG_ASK[0], warmC));
+}
+
+/**
+ * 夢想魚路線卡常駐的孫代機率和預計開獎日（polish-to-9.md §10.4），記在 ChoiceState.odds 給 dreamRoute 讀。
+ * 留種那對還在、還沒開獎才有；機率只在那對換了才重算（模擬很多窩，不便宜）。每天早上和每次選完都叫一次。
+ */
+function updateOdds(tanks: TankState[], s: ChoiceState): void {
+  const p = pairFish(tanks, s);
+  if (!p?.mom.genome || !p.dad.genome || s.reveal?.done) {
+    delete s.odds;
+    return;
+  }
+  const key = `${p.mom.id}:${p.dad.id}`;
+  const pct = s.odds?.key === key ? s.odds.pct : pairDream(p.mom.genome, p.dad.genome);
+  const t = tanks[p.tank];
+  const plan = s.planDone ? 'standard' : (s.plan ?? 'standard');
+  // 已經懷上就照肚子算；還沒就照長大、配上、懷孕算
+  const days = p.mom.pregnancy > 0 ? (daysToBirth(t, p.mom) ?? 0) : revealInDays(t, p.mom, Math.max(planMatureDays(t, p.mom, plan), planMatureDays(t, p.dad, plan)));
+  s.odds = { key, pct, day: dayOf(tanks[0].hours + Math.max(0, days) * 24) };
 }
 
 /** 留種那對的公魚不在了、母魚還懷著牠的：只有母魚（dad 只帶 id）。 */
@@ -1355,7 +1391,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       const nu = all.find(({ fish }) => fish.id === b.fishId);
       const old = all.find(({ fish }) => fish.id === b.oldId);
       if (!nu || !old) return null;
-      const room = all.filter(({ fish }) => fish.keeper).length < MAX_KEEPERS;
+      const keepers = all.filter(({ fish }) => fish.keeper).length;
+      const room = keepers < MAX_KEEPERS;
       // 留種名額滿了（strain-fixing.md §1）：換掉同性別、離夢想魚最遠的那尾留種；換掉的是那對的，新的這尾接手當爸爸或媽媽
       const worst = room ? null : worstKeeper(tanks, s, nu.fish);
       if (!room && !worst) return null;
@@ -1367,7 +1404,7 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
         options: room
           ? [
               { key: 'swap', label: '換成這尾', outcome: `${nu.fish.sex === 'male' ? '牠當爸爸' : '牠當媽媽'}，原本的不再留種` },
-              { key: 'both', label: '兩尾都留', outcome: '多一尾種魚，原本的計畫照走，萬一出事還有備用', recommended: true },
+              { key: 'both', label: '兩尾都留', outcome: `多一尾種魚（留種名額 ${keepers + 1}/${MAX_KEEPERS}），原本的計畫照走，萬一出事還有備用`, recommended: true },
               { key: 'keep', label: '維持原本的', outcome: '照原本的計畫' },
             ]
           : [
@@ -1426,9 +1463,7 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       const sp = FISH_SPECIES[p.mom.species].breeding!;
       const born = Math.round(wait + 2 + sp.gestationDays / Math.sqrt(temperatureFactor(t.water.tempC)));
       // 照推薦（C13 孕期調高水溫，#335）：懷上之後問 C13，之後照調高的水溫算
-      const warmC = t.equipment.heater ? Math.max(t.water.tempC, warmTarget(t)) : t.water.tempC;
-      const gest = (f: number, c: number) => (f * sp.gestationDays) / Math.sqrt(temperatureFactor(c));
-      const reveal = Math.round(wait + 2 + gest(PREG_ASK[0], t.water.tempC) + gest(1 - PREG_ASK[0], warmC));
+      const reveal = revealInDays(t, p.mom, wait);
       return {
         id,
         tank: p.tank,
@@ -1747,6 +1782,7 @@ export interface SecondBroodNews {
  */
 export function takeSecondBrood(tanks: TankState[]): SecondBroodNews | null {
   const s = choiceState(tanks);
+  deliverBroodFry(tanks, s);
   const sb = s.secondBrood;
   if (!sb) return null;
   const fryOf = (b: { momId: number; hours: number }) => located(tanks).filter(({ fish }) => fish.motherId === b.momId && (fish.bornHours ?? -Infinity) >= b.hours);
@@ -1792,11 +1828,52 @@ export function takeSecondBrood(tanks: TankState[]): SecondBroodNews | null {
       kept++;
     }
   }
+  broodEcho(tanks, s, choice, fry, kept);
   const mom = located(tanks).find(({ fish }) => fish.id === b.momId)?.fish;
   const who = mom ? callName(mom) : '母魚';
   const then = choice === 'sell' ? '長到能交就照訂單交。' : choice === 'keep' ? (full && kept === 0 ? `留種名額滿了（最多 ${MAX_KEEPERS} 尾），先取消幾尾才挑得了。` : kept > 0 ? `挑了 ${kept} 尾離夢想魚最近的當備用種魚。` : '這窩還挑不到能留的，先讓牠們長大。') : '整窩留著長大。';
   const what = again ? `又生了 ${fry.length} 尾（之前的還有 ${b.prevKids} 尾）` : `的第二窩生了 ${fry.length} 尾（第一窩現在還有 ${b.prevKids} 尾）`;
   return { momId: b.momId, count: fry.length, prevKids: b.prevKids, kept, choice, text: `${who}${what}。${then}` };
+}
+
+/** C9 選了交小魚單：小魚滿幾天就自動交（polish-to-9.md §10.3），等不到交得出的單最多等幾天。 */
+export const FRY_DELIVER_DAYS = 7;
+export const FRY_DELIVER_GIVE_UP_DAYS = 21;
+/** C9 三個選項在回音前面寫的名字。 */
+const BROOD_ECHO_LABELS: Record<string, string> = { grow: '留在繁殖缸長大', sell: '交小魚單', keep: '挑備用種魚' };
+
+/** C9 那窩生了：記下回音（polish-to-9.md §10.3）。交小魚單的記下來，滿 FRY_DELIVER_DAYS 天由 deliverBroodFry 交。 */
+function broodEcho(tanks: TankState[], s: ChoiceState, choice: string, fry: Array<{ fish: Fish; tank: number }>, kept: number): void {
+  if (fry.length === 0) return;
+  const now = tanks[0].hours;
+  const tank = fry[0].tank;
+  const ids = fry.map(({ fish }) => fish.id);
+  const label = BROOD_ECHO_LABELS[choice] ?? choice;
+  if (choice === 'grow') addEcho(s, { label, tank, due: now + 24, kind: 'grow', ids });
+  if (choice === 'keep' && kept > 0) addEcho(s, { label, tank, due: now + 24, text: `挑了 ${kept} 尾離夢想魚最近的當備用，其他的 ${fry.length - kept} 尾留著長大` });
+  if (choice === 'sell') (s.fryDeliver ??= []).push({ ids, born: now, tank });
+}
+
+/**
+ * C9 選了交小魚單的窩：滿 FRY_DELIVER_DAYS 天起，訂單板上有交得出這窩小魚的單就照設定自動交，寫一行回音；
+ * 等了 FRY_DELIVER_GIVE_UP_DAYS 天還交不出去就不等了（小魚照常長大）。
+ */
+function deliverBroodFry(tanks: TankState[], s: ChoiceState): void {
+  if (!s.fryDeliver?.length) return;
+  const now = tanks[0].hours;
+  s.fryDeliver = s.fryDeliver.filter((d) => {
+    if (now - d.born < FRY_DELIVER_DAYS * 24) return true;
+    const mine = new Set(d.ids);
+    const o = orderBoard(tanks[0]).orders.find((x) => !x.preview && (x.kind === 'fry' || x.kind === 'fish') && tanks.some((t) => matchingFish(t, x).some((f) => mine.has(f.id))) && !orderRefusal(tanks, x.id));
+    if (o) {
+      const coins = fulfillOrder(tanks, o.id);
+      if (coins > 0) {
+        addEcho(s, { label: BROOD_ECHO_LABELS.sell, tank: d.tank, due: now, text: `照你的設定交了 ${o.count} 尾小魚，+${coins} 元` });
+        return false;
+      }
+    }
+    return now - d.born < FRY_DELIVER_GIVE_UP_DAYS * 24;
+  });
 }
 
 /** 開獎卡（midgame.md §6.1 C15）：每尾小魚帶不帶白子、蛇紋（含隱性），和老闆那句話。 */
@@ -2460,6 +2537,7 @@ export function takeChoice(tanks: TankState[]): ChoiceCard | null {
   settleImplicit(tanks, s);
   endGrowPlan(tanks, s);
   lateHousekeeping(tanks, s);
+  updateOdds(tanks, s);
   const now = tanks[0].hours;
   // 同一個遊戲天最多一張（#316）：同一天又過一晚、或別的地方再拿一次，都不再出第二張
   const today = Math.floor(now / 24);
@@ -2509,6 +2587,20 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
         const fry = t.fish.filter((f) => f.alive && bred(f) && growthStage(f) === 'fry');
         if (key === 'box' && t.nurseryBox) rescueFryToNursery(t, fry.filter((f) => !f.nursery));
         if (key === 'hide') releaseNursery(t, fry.filter((f) => f.nursery).map((f) => f.id));
+      }
+      // 回音（polish-to-9.md §10.1）：盒子第 1 天、躲草第 1、3、7 天，第一窩第 14 天總結
+      const brood = located(tanks).filter(({ fish }) => bred(fish) && growthStage(fish) === 'fry');
+      if (brood.length > 0) {
+        const now = tanks[0].hours;
+        const label = cardFor('C1', tanks, s)?.options.find((o) => o.key === key)?.label ?? key;
+        const ids = brood.map(({ fish }) => fish.id);
+        const tank = brood[0].tank;
+        if (key === 'box') addEcho(s, { label, tank, due: now + 24, kind: 'box', ids });
+        if (key === 'hide') {
+          addEcho(s, { label, tank, due: now + HIDE_ECHO_DAYS[0] * 24, kind: 'hide', ids, prev: ids.length, since: now, step: 0 });
+          s.hide = { at: now, ids };
+        }
+        addEcho(s, { label, tank, due: (s.firstBrood ?? now) + BROOD_SUMMARY_DAYS * 24, kind: 'brood', ids });
       }
       break;
     }
@@ -2822,6 +2914,10 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
     }
   }
   s.picked[id] = key;
+  const before = s.odds?.pct;
+  updateOdds(tanks, s);
+  // C10 換了種魚：路線卡的機率當場變，隔天早上報告寫一行回音（polish-to-9.md §10.4）
+  if (id === 'C10' && before !== undefined && s.odds && s.odds.pct !== before) addEcho(s, { label: '換成這尾', tank: pairFish(tanks, s)?.tank ?? 0, due: tanks[0].hours, text: `換了種魚以後，孫代機率從 ${before}% 變成 ${s.odds.pct}%` });
   // 每一窩都問的卡：選了就不用等隔幾天，下一窩（下一尾）到了就問
   if (id === 'C9' || id === 'C10' || id === 'C13') delete s.shown[id];
   return null;

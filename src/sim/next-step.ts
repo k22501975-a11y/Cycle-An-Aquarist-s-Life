@@ -1,3 +1,4 @@
+import { hideGrace } from './choice-echo';
 import { economy, LOAN_PAUSE_COINS, price } from './economy';
 import { raiseCashStep } from './raise-cash';
 import { canSalt, SALT_DAYS, saltDaysLeft, saltWorking } from './salt-cure';
@@ -243,8 +244,12 @@ export function fastestColoring(tanks: TankState[]): { tank: number; fish: Fish;
   return best;
 }
 
+/** C1 選了躲草、還在讓小魚自己躲的那 3 天（choice-echo.ts hideGrace）。 */
+const hiding = (tanks: TankState[]) => hideGrace(tanks, economy(tanks[0]).choices);
+
 /** 「養大 5 條」卡超過 3 天：主缸小魚最近被吃就叫玩家撈進育幼盒，不然說最快那尾還差幾天。 */
 function raiseStuckStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
+  if (hiding(tanks)) return null;
   const since = goalState(tanks).raised?.[1];
   const now = tanks[0].hours;
   if (since === undefined || now - since <= RAISE_STUCK_HOURS) return null;
@@ -263,7 +268,7 @@ const FRY_EATEN_RECENT_HOURS = 48;
  * 錢不夠回 null（照原本的步驟）。
  */
 function boxFullStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
-  if (tanks.length !== 1) return null;
+  if (tanks.length !== 1 || hiding(tanks)) return null;
   const t = tanks[0];
   if (!t.nurseryBox || nurseryFish(t).filter(isJuvenile).length < NURSERY_FRY_CAPACITY) return null;
   const exposed = t.fish.some((f) => f.alive && !f.nursery && (f.generation ?? 0) >= 1 && growthStage(f) === 'fry');
@@ -362,7 +367,8 @@ export function nextStep(tanks: TankState[]): NextStep | null {
   // 生病不等人：不管現在是哪個目標，先叫玩家治療（體驗第 15 輪 #291：白點 5 天，下一步還在說母魚倒數）
   if (anySick(tanks)) return { goal: goal.id, ...sickStep(tanks) };
   // 小魚在被吃、別缸已經能收：先搬（g36 #425：第二缸養好水 5 天都空著，小魚被吃 17 尾）
-  const fry = fryMoveStep(tanks) ?? fryPrepStep(tanks);
+  // C1 選了躲草：3 天內不叫玩家搬小魚、買缸，被吃到剩一半才叫（polish-to-9.md §10.1）
+  const fry = hiding(tanks) ? null : (fryMoveStep(tanks) ?? fryPrepStep(tanks));
   if (fry) return { goal: goal.id, ...fry };
   // 育幼盒空了、又有母魚快生：排在照顧句前面（g38：第一窩搬走後沒人叫，第二窩生在主缸被吃 3 尾）
   const box = soonMotherStep(tanks);
