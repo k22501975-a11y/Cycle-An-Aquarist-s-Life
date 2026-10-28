@@ -151,10 +151,6 @@ export function morningLine(report: MorningReport): string {
   return report.items.some((i) => i.tone === 'warn') ? '有件事要留意一下。' : '安靜的一晚。';
 }
 
-/**
- * 死亡那條的「下次：…」先收起來，點「怎麼避免」才展開（報告卡一眼看得完，想知道再看）。
- * 展開那一下不算點整條（整條是帶去處理）。
- */
 /** 回音的小圖示：一圈一圈的漣漪（你丟下的選擇，現在傳回來了）。 */
 const ECHO_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2.6" fill="currentColor"/><path d="M7.5 7.5a6.4 6.4 0 0 0 0 9M16.5 7.5a6.4 6.4 0 0 1 0 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4.4 4.6a10.4 10.4 0 0 0 0 14.8M19.6 4.6a10.4 10.4 0 0 1 0 14.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.55"/></svg>';
 
@@ -165,6 +161,10 @@ export function echoTag(choice: string): HTMLElement {
   return h('span.morning-echo', {}, icon, '你選了：', h('b', {}, choice));
 }
 
+/**
+ * 死亡那條的「下次：…」先收起來，點「怎麼避免」才展開（報告卡一眼看得完，想知道再看）。
+ * 展開那一下不算點整條（整條是帶去處理）。
+ */
 function reportText(text: string): HTMLElement {
   const at = text.indexOf('下次：');
   if (at < 0) return h('span.morning-text', {}, ...boldNumbers(text));
