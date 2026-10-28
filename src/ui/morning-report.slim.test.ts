@@ -56,13 +56,19 @@ describe('早上報告瘦身（daily-loop.md §2）', () => {
     expect(first.marks).toEqual([]);
   });
 
-  it('選擇的回音排在目標進度後面，擠不下就收進鈴鐺（polish-to-9.md §10.5）', () => {
+  it('第一行回音排在壞消息後面、目標進度前面，其他回音排在目標後面，擠不下就收進鈴鐺（#452）', () => {
     const echo = item('echo', 'info', '賣了 11 尾，+220 元，主缸現在 62%', { echo: '賣一批' });
-    const r = slimReport(report([echo, item('belly', 'good', '母魚的肚子圓起來了'), item('breeding', 'good', '留種的那對還要 10 天')]));
-    expect(r.lines.map((l) => l.kind)).toEqual(['belly', 'breeding', 'echo']);
-    const full = slimReport(report([echo, item('hungry', 'warn', '魚餓了'), item('belly', 'good', '母魚的肚子圓起來了'), item('breeding', 'good', '留種的那對還要 10 天')]));
-    expect(full.lines).not.toContain(echo);
-    expect(full.rest).toContain(echo);
+    const echo2 = item('echo', 'info', '換了種魚以後，孫代機率從 29.6% 變成 49.6%', { echo: '換成這尾' });
+    const r = slimReport(report([item('belly', 'good', '母魚的肚子圓起來了'), item('breeding', 'good', '留種的那對還要 10 天'), echo]));
+    expect(r.lines.map((l) => l.kind)).toEqual(['echo', 'belly', 'breeding']);
+    // g40 第 46 天：被吃 1 行 + 目標 2 行，回音之前被擠掉
+    const day46 = slimReport(report([item('eaten', 'bad', '昨晚有 1 尾小魚被大魚吃掉了'), item('belly', 'good', '母魚的肚子圓起來了'), item('breeding', 'good', '留種的那對還要 10 天'), echo, echo2]));
+    expect(day46.lines.map((l) => l.text)).toEqual(['昨晚有 1 尾小魚被大魚吃掉了', echo.text, '母魚的肚子圓起來了']);
+    expect(day46.rest).toContain(echo2);
+    // 壞消息就有 3 行：回音收進鈴鐺（隔天早上再出，見 choices-late.test.ts）
+    const bad = slimReport(report([echo, item('hungry', 'warn', '魚餓了'), item('disease', 'warn', '3 條魚有白點'), item('eaten', 'bad', '小魚被吃了')]));
+    expect(bad.lines).not.toContain(echo);
+    expect(bad.rest).toContain(echo);
   });
 
   it('住不下（C14）選了再買一缸、換大缸：直接打開購買確認（polish-to-9.md §10.2）', () => {

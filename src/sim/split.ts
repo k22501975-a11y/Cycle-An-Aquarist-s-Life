@@ -1,4 +1,5 @@
 import { economy, reserveShort } from './economy';
+import { hideGrace } from './choice-echo';
 import { growthStage, sexVisible } from './growth';
 import { moveFish, newTankCost } from './household';
 import { crowdingRatio } from './processes/fauna';
@@ -61,7 +62,10 @@ export function splitAdvice(state: TankState): SplitAdvice[] {
   const hasYoung = living.some(young);
   if (crowd > 1) out.push({ reason: 'crowded', tone: 'bad', text: `缸裡太擠了（${living.length} 條），缺氧、氨升高，最弱的會先死：分缸、賣掉一些或換大缸`, plan: hasYoung ? 'by_size' : 'half' });
   else if (crowd > CROWD_WARN) out.push({ reason: 'crowded', tone: 'warn', text: `魚快養滿了（${living.length} 條），該分缸或賣掉一些了`, plan: hasYoung ? 'by_size' : 'half' });
-  const prey = preyAtRisk(living);
+  // 選了躲草（C1）的 3 天內，那窩小魚先不叫玩家撈（polish-to-9.md §10.0、#452）：被吃到剩一半才提醒
+  const choices = economy(state).choices;
+  const hiding = hideGrace([state], choices) ? new Set(choices!.hide!.ids) : null;
+  const prey = preyAtRisk(living).filter((f) => !hiding?.has(f.id));
   if (prey.length > 0) out.push({ reason: 'fry_with_adults', tone: prey.length >= 5 ? 'bad' : 'warn', text: `成魚會吃小魚：把 ${prey.length} 條仔魚撈到${state.nurseryBox ? '育幼盒' : state.quarantine ? '檢疫盒' : '育幼盒（商店 150 元）'}或別缸`, plan: 'by_size' });
   const pairs = youngPairs(living);
   if (pairs.males.length > 0 && pairs.females.length > 0 && pairs.males.some((m) => (m.generation ?? 0) > 0))
@@ -77,7 +81,10 @@ export function splitGroup(state: TankState, plan: SplitPlan): Fish[] {
   const living = state.fish.filter((f) => f.alive && f.listing === undefined && !f.nursery && !pair.includes(f.id));
   if (plan === 'by_size') {
     // 先移會被吃的那些；沒有掠食者時就移所有還沒長大的
-    const prey = preyAtRisk(living);
+    // 選了躲草（C1）的 3 天內，那窩小魚先不叫玩家撈（polish-to-9.md §10.0、#452）：被吃到剩一半才提醒
+  const choices = economy(state).choices;
+  const hiding = hideGrace([state], choices) ? new Set(choices!.hide!.ids) : null;
+  const prey = preyAtRisk(living).filter((f) => !hiding?.has(f.id));
     return prey.length > 0 ? prey : living.filter((f) => isJuvenile(f));
   }
   if (plan === 'by_sex') return youngPairs(living).males;

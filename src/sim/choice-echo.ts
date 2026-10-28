@@ -31,6 +31,8 @@ export interface Echo {
   prev?: number;
   /** hide：這次是 HIDE_ECHO_DAYS 的第幾個。 */
   step?: number;
+  /** 早上報告擠不下、延後過幾次（ui/morning-report.ts ECHO_RETRIES）。 */
+  retry?: number;
 }
 
 /** 早上報告一行回音。 */
@@ -38,6 +40,7 @@ export interface EchoLine {
   tank: number;
   label: string;
   text: string;
+  retry?: number;
 }
 
 /** 公母分開後每週回報幾次（之後就不說了）。 */
@@ -101,7 +104,7 @@ export function takeEchoes(tanks: TankState[], s: { echoes?: Echo[] }, name: (f:
       continue;
     }
     const tankName = tankLabel(tanks, e.tank);
-    if (e.text) out.push({ tank: e.tank, label: e.label, text: e.text });
+    if (e.text) out.push({ tank: e.tank, label: e.label, text: e.text, ...(e.retry ? { retry: e.retry } : {}) });
     else if (e.kind === 'water') {
       const ammonia = Math.round(t.water.tan * 100) / 100;
       out.push({ tank: e.tank, label: e.label, text: crowdingRatio(t) >= 1 ? `多換水撐了 3 天，魚還是太多，水又髒回來了（氨 ${ammonia}）` : `多換水撐了 3 天，${tankName}現在 ${crowdPct(t)}%，不擠了` });
@@ -119,9 +122,11 @@ export function takeEchoes(tanks: TankState[], s: { echoes?: Echo[] }, name: (f:
     } else if (e.kind === 'hide') {
       const step = e.step ?? 0;
       const left = aliveOf(tanks, e.ids ?? []).length;
-      const lost = Math.max(0, (e.prev ?? left) - left);
-      const when = step === 0 ? '昨晚' : `這 ${HIDE_ECHO_DAYS[step] - HIDE_ECHO_DAYS[step - 1]} 天`;
-      const text = left === 0 ? `${when}躲草的小魚少了 ${lost} 尾，一尾都不剩了` : lost === 0 ? `${when}躲草的小魚一尾都沒少，還有 ${left} 尾` : `${when}躲草的小魚少了 ${lost} 尾，還有 ${left} 尾`;
+      // 寫「躲草第 N 天」和從選的那天算起一共少了幾尾（#452：寫「這 2 天」，前一行沒看到就對不上）
+      const day = Math.max(1, Math.round((now - (e.since ?? now)) / 24));
+      const lost = Math.max(0, (e.ids?.length ?? left) - left);
+      const who = day === 1 ? '昨晚躲草的小魚' : `躲草第 ${day} 天：小魚`;
+      const text = left === 0 ? `${who}一尾都不剩了（少了 ${lost} 尾）` : lost === 0 ? `${who}一尾都沒少，還有 ${left} 尾` : `${who}${day === 1 ? '' : '一共'}少了 ${lost} 尾，還有 ${left} 尾`;
       out.push({ tank: e.tank, label: e.label, text });
       const next = HIDE_ECHO_DAYS[step + 1];
       if (left > 0 && next !== undefined) keep.push({ ...e, due: (e.since ?? now) + next * 24, prev: left, step: step + 1 });
