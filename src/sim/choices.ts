@@ -14,6 +14,7 @@ import { crowdingRatio } from './processes/fauna';
 import { isCycled } from './processes/nitrogen';
 import { sizeRatio } from './processes/population';
 import { CROWD_WARN, cyclingTank } from './split';
+import { addEcho, crowdPct, type Echo } from './choice-echo';
 import { tooSmallForTank } from './quarantine';
 import { addBottledBacteria, mediaAvailable, transferMedia } from './gifts';
 import { guppyTraits } from './lookalike';
@@ -63,6 +64,8 @@ export interface ChoiceOption {
   recommended?: boolean;
   /** 現在不能選的原因（例如錢不夠）；畫面把這個選項灰掉。 */
   disabled?: string;
+  /** 錢不夠時還差幾元（polish-to-9.md §10.2）：畫面整個選項灰掉、寫「還差 N 元」，點不下去。 */
+  short?: number;
 }
 
 /** 選種卡（C2）上的一尾魚。 */
@@ -203,6 +206,8 @@ export interface ChoiceState {
   warmPlan?: { momIds: number[]; tank: number; prevC: number };
   /** C14（midgame.md §7）：下次可以再問的時間（先多換水、隔幾天再問）。 */
   crowdNext?: number;
+  /** 選擇的回音（polish-to-9.md §10.0）：還沒出的那幾行，早上報告用 takeEchoes 取。 */
+  echoes?: Echo[];
   /** 離線回來的擠缸行：每缸上次說的是第幾個遊戲天（同一缸一天最多說一次）。 */
   awayNoted?: Record<number, number>;
   /** C14 連續選「賣一批」幾次（兩次之後多一個「以後太擠就自動賣」）。 */
@@ -975,6 +980,11 @@ function crowdedTank(tanks: TankState[], s?: Readonly<ChoiceState>): number {
 }
 
 /** 公母分開：這缸要搬走的公魚（看得出公母、不是留種的或指定的爸爸、不在育幼盒；只算那缸放得下的）和搬去哪缸；沒有別缸回 -1。 */
+/** 公母分開沒有缸可以搬公魚時的原因：只有在真的只有一缸時才說「只有一缸」（g39：有展示缸還寫只有一缸）。 */
+function noSplitTank(tanks: TankState[]): string {
+  return tanks.length === 1 ? '只有一缸，先買第二缸' : '別缸也分開了或太冷，先再買一缸';
+}
+
 function crowdMales(tanks: TankState[], s: Readonly<ChoiceState>, tank: number): { fish: Fish[]; to: number } {
   const sires = sireIds(s);
   const fish = tanks[tank].fish.filter((f) => f.alive && !f.nursery && f.sex === 'male' && !isShrimpSpecies(f.species) && usesNursery(f.species) && growthStage(f) !== 'fry' && !f.keeper && !sires.includes(f.id));
@@ -1507,6 +1517,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       const recBig = rec === 'big';
       const ammonia = Math.round(t.water.tan * 100) / 100;
       const gasp = gasping(t);
+      // 錢不夠：灰掉、寫還差幾元（polish-to-9.md §10.2，畫面看 short）
+      const refusal = (why: string | null, cost: number) => (!why ? {} : why === '錢不夠' ? { disabled: why, short: cost - economy(home).coins } : { disabled: why });
       const card: ChoiceCard = {
         id,
         tank: i,
@@ -1514,7 +1526,7 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
         owner: full ? `氨 ${ammonia}${gasp > 0 ? `，有 ${gasp} 尾魚在水面喘氣` : '，魚都擠在一起'}。再不處理會開始死魚。` : '魚太擠，水質會變差，也容易生病。',
         options: [
           ...(males.fish.length > 0 && !s.crowdSplit?.includes(i)
-            ? [{ key: 'split', label: '公母分開，先別生了', outcome: `把 ${males.fish.length} 尾公魚搬到${males.to >= 0 ? tankLabel(tanks, males.to) : '另一缸'}，留種那對不動`, recommended: recSplit, ...(males.to < 0 ? { disabled: '只有一缸，先買第二缸' } : {}) }]
+            ? [{ key: 'split', label: '公母分開，先別生了', outcome: `把 ${males.fish.length} 尾公魚搬到${males.to >= 0 ? tankLabel(tanks, males.to) : '另一缸'}，留種那對不動`, recommended: recSplit, ...(males.to < 0 ? { disabled: noSplitTank(tanks) } : {}) }]
             : []),
           // 已經連賣兩次：推薦以後自動賣（留種的不賣），不用每次跳卡
           ...(sell ? [{ key: 'sell', label: '賣一批', outcome: sell, recommended: recSell && !autoOk }] : []),
@@ -1524,8 +1536,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
               ? [{ key: 'move', label: `搬一些到${tankLabel(tanks, coldOther)}`, outcome: '加熱棒壞了，水太冷', recommended: false, disabled: `${tankLabel(tanks, coldOther)}太冷了，先把加熱棒弄好` }]
               : []),
           ...(autoOk ? [{ key: 'auto', label: '以後太擠就自動賣給阿德', outcome: `留種的不賣；這次先${o ? `交${sell}` : `賣 ${batch.length} 尾`}`, recommended: recSell }] : []),
-          { key: 'tank', label: tanks.length === 2 ? '買第三缸' : '再買一缸', outcome: `20L 套缸 ${tankCost} 元`, recommended: recTank, ...(noTank ? { disabled: noTank } : {}) },
-          ...(big ? [{ key: 'big', label: '換大缸', outcome: `90L，${newTankCost(tanks, 'std90')} 元`, recommended: recBig, ...(noBig ? { disabled: noBig } : {}) }] : []),
+          { key: 'tank', label: tanks.length === 2 ? '買第三缸' : '再買一缸', outcome: `20L 套缸 ${tankCost} 元`, recommended: recTank, ...refusal(noTank, tankCost) },
+          ...(big ? [{ key: 'big', label: '換大缸', outcome: `90L，${newTankCost(tanks, 'std90')} 元`, recommended: recBig, ...refusal(noBig, newTankCost(tanks, 'std90')) }] : []),
           // 先多換水只是撐著：永遠不標推薦（daily-loop.md §4）
           { key: 'water', label: '先多換水撐幾天', outcome: full ? '換三成水，撐 2 天' : `換三成水，${CROWD_WATER_DAYS} 天後再看` },
         ],
@@ -2690,13 +2702,21 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
     case 'C14': {
       // 再買一缸、換大缸：畫面帶去買缸（這裡只記下來）
       const i = crowdedTank(tanks, s);
+      const now = tanks[0].hours;
       if (key === 'sell' || key === 'auto') {
         const o = i >= 0 && crowdingRatio(tanks[i]) >= CROWD_FULL ? null : bestSellOrder(tanks);
+        const before = economy(tanks[0]).coins;
+        let n = 0;
         if (o) {
           if (!fulfillOrder(tanks, o.id)) return orderRefusal(tanks, o.id) ?? '現在交不出這張單';
-        } else if (i < 0 || sellCrowd(tanks, i).n === 0) return '現在沒有可以賣的魚';
+          n = o.count;
+        } else {
+          n = i < 0 ? 0 : sellCrowd(tanks, i).n;
+          if (n === 0) return '現在沒有可以賣的魚';
+        }
         s.crowdSells = (s.crowdSells ?? 0) + 1;
         if (key === 'auto') s.crowdAuto = true;
+        if (i >= 0) addEcho(s, { label: key === 'auto' ? '以後太擠就自動賣給阿德' : '賣一批', tank: i, due: now, text: `賣了 ${n} 尾，+${economy(tanks[0]).coins - before} 元，${tankLabel(tanks, i)}現在 ${crowdPct(tanks[i])}%` });
         break;
       }
       // 先多換水只是撐著，不算換了做法（連賣兩次照樣問要不要自動賣）
@@ -2704,18 +2724,30 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
       if (key === 'split') {
         if (i < 0) return '現在沒有太擠的缸';
         const m = crowdMales(tanks, s, i);
-        if (m.to < 0) return '只有一缸，先買第二缸';
+        if (m.to < 0) return noSplitTank(tanks);
         for (const f of m.fish) moveFish(tanks[i], tanks[m.to], f.id);
         (s.crowdSplit ??= []).push(i);
+        // 已經懷著的還是會生：照實說
+        const name = tankLabel(tanks, i);
+        const moms = tanks[i].fish.filter((f) => f.alive && f.sex === 'female' && f.pregnancy > 0).length;
+        const label = '公母分開，先別生了';
+        addEcho(s, { label, tank: i, due: now, text: `公母分開了，${m.fish.length} 尾公魚搬到${tankLabel(tanks, m.to)}，${moms > 0 ? `${name}還有 ${moms} 尾母魚懷著，生完就不會再有新的小魚` : `${name}這週不會再有新的小魚`}` });
+        addEcho(s, { label, tank: i, due: now + 7 * 24, kind: 'split', since: now });
       } else if (key === 'move') {
         const m = i < 0 ? null : crowdMove(tanks, s, i);
         if (!m) return '別缸也沒有空位了';
         for (const f of m.fish) moveFish(tanks[i], tanks[m.to], f.id);
+        addEcho(s, { label: `搬一些到${tankLabel(tanks, m.to)}`, tank: i, due: now, text: `搬了 ${m.fish.length} 尾到${tankLabel(tanks, m.to)}，那缸現在 ${crowdPct(tanks[m.to])}%，${tankLabel(tanks, i)}剩 ${crowdPct(tanks[i])}%` });
       } else if (key === 'water') {
         if (i >= 0) waterChange(tanks[i], CROWD_WATER);
         const full = i >= 0 && crowdingRatio(tanks[i]) >= CROWD_FULL;
         s.crowdNext = tanks[0].hours + (full ? CROWD_FULL_REASK_DAYS : CROWD_WATER_DAYS) * 24;
-      } else if (key !== 'tank' && key !== 'big') return '沒有這個選項';
+        if (i >= 0) addEcho(s, { label: '先多換水撐幾天', tank: i, due: now + CROWD_WATER_DAYS * 24, kind: 'water' });
+      } else if (key === 'tank' || key === 'big') {
+        // 錢不夠、缸位滿了：點不下去（g39：「換大缸 錢不夠」點了，同一張卡又跳一次）
+        const why = buyTankRefusal(tanks, key === 'tank' ? 'nano20' : 'std90');
+        if (why) return why;
+      } else return '沒有這個選項';
       break;
     }
     case 'C18': {

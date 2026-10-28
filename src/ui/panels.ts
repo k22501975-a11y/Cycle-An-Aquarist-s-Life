@@ -1909,36 +1909,7 @@ export function tanksPanel(ctx: PanelContext): Node {
     );
   });
   const slot = slotPrice(game.tanks.length);
-  const offers = (Object.keys(TANK_SETS) as TankSizeId[]).map((id) => {
-    const set = TANK_SETS[id];
-    const cost = newTankCost(game.tanks, id);
-    const refusal = buyTankRefusal(game.tanks, id);
-    const lock = tankLock(game.tanks, id);
-    const buy = () => {
-      if (refusal) {
-        toasts.show(refusal === '錢不夠' ? `錢不夠：要 ${cost} 元，現在有 ${coins} 元` : refusal, 'warn');
-        return;
-      }
-      const tank = game.actAll((tanks) => buyTank(tanks, id));
-      if (!tank) return;
-      ctx.sound?.('buy');
-      game.switchTo(game.tanks.indexOf(tank));
-      toasts.show(`架好了新的${set.tank.name}（${yuan(cost)}）。新缸要先養水，硝化菌長起來才能放魚`);
-      // 第二缸起（G4）：先問這缸拿來做什麼，可以跳過。早上的選擇卡（C3）已經選過的就照那個，不再問一次（#316）
-      const planned = game.tanks.length === 2 ? choiceState(game.tanks).picked.C3 : undefined;
-      if (planned === 'breeding' || planned === 'display') applyPurpose(ctx, planned);
-      else sheet.open('這缸拿來做什麼？', () => tankPurposePanel(ctx));
-    };
-    return shopCard({
-      art: 'gear/tank-empty.webp',
-      name: set.tank.name,
-      price: cost,
-      chips: [`${set.tank.volumeL}L`, set.filter.name.replace(/（.*）/, ''), set.heater.name, slot > 0 ? '含缸架' : ''].filter(Boolean),
-      note: lock ? '🔒 ' + unlockHint(lock) : undefined,
-      actions: [button('買', buy, refusal ? '' : 'primary')],
-      cls: lock ? '.locked' : '',
-    });
-  });
+  const offers = (Object.keys(TANK_SETS) as TankSizeId[]).map((id) => tankSetCard(ctx, id, '買'));
   return h(
     'div.stack',
     {},
@@ -1952,6 +1923,48 @@ export function tanksPanel(ctx: PanelContext): Node {
       `原本的櫃子放得下 2 缸，之後每多一缸要加一層缸架${slot > 0 ? `（這次 ${yuan(slot)}）` : ''}；房間最多 6 缸。`,
     ]),
   );
+}
+
+/** 買一組套缸：錢不夠、缸位滿了跳原因；買到了切過去、問這缸拿來做什麼。 */
+function buyTankSet(ctx: PanelContext, id: TankSizeId): void {
+  const { game, sheet, toasts } = ctx;
+  const cost = newTankCost(game.tanks, id);
+  const refusal = buyTankRefusal(game.tanks, id);
+  if (refusal) {
+    toasts.show(refusal === '錢不夠' ? `錢不夠：要 ${cost} 元，現在有 ${economy(game.state).coins} 元` : refusal, 'warn');
+    return;
+  }
+  const tank = game.actAll((tanks) => buyTank(tanks, id));
+  if (!tank) return;
+  ctx.sound?.('buy');
+  game.switchTo(game.tanks.indexOf(tank));
+  toasts.show(`架好了新的${TANK_SETS[id].tank.name}（${yuan(cost)}）。新缸要先養水，硝化菌長起來才能放魚`);
+  // 第二缸起（G4）：先問這缸拿來做什麼，可以跳過。早上的選擇卡（C3）已經選過的就照那個，不再問一次（#316）
+  const planned = game.tanks.length === 2 ? choiceState(game.tanks).picked.C3 : undefined;
+  if (planned === 'breeding' || planned === 'display') applyPurpose(ctx, planned);
+  else sheet.open('這缸拿來做什麼？', () => tankPurposePanel(ctx));
+}
+
+/** 一組套缸的商品卡（我的水缸、住不下卡的購買確認共用）。 */
+function tankSetCard(ctx: PanelContext, id: TankSizeId, label: string, extra: Node[] = []): Node {
+  const { game } = ctx;
+  const set = TANK_SETS[id];
+  const slot = slotPrice(game.tanks.length);
+  const lock = tankLock(game.tanks, id);
+  return shopCard({
+    art: 'gear/tank-empty.webp',
+    name: set.tank.name,
+    price: newTankCost(game.tanks, id),
+    chips: [`${set.tank.volumeL}L`, set.filter.name.replace(/（.*）/, ''), set.heater.name, slot > 0 ? '含缸架' : ''].filter(Boolean),
+    note: lock ? '🔒 ' + unlockHint(lock) : undefined,
+    actions: [button(label, () => buyTankSet(ctx, id), buyTankRefusal(game.tanks, id) ? '' : 'primary'), ...extra],
+    cls: lock ? '.locked' : '',
+  });
+}
+
+/** 住不下卡（C14）選了再買一缸／換大缸：直接打開那組套缸的購買確認，按「買下架好」才扣錢（polish-to-9.md §10.2，同自動餵食器）。 */
+export function tankOffer(ctx: PanelContext, id: TankSizeId): Node {
+  return h('div.stack.tank-offer', {}, tankSetCard(ctx, id, '買下架好', [h('button.btn.ghost', { onclick: () => ctx.sheet.close() }, '先不要')]));
 }
 
 const PEST_ORDER: PestKind[] = ['bladder', 'ramshorn', 'mts'];

@@ -1884,6 +1884,10 @@ async function start(): Promise<void> {
       case 'buy_feeder':
         offerFeeder(item.tank);
         break;
+      case 'buy_tank':
+      case 'buy_big':
+        panelSheet('買缸', (p) => p.tankOffer(ctx, item.action === 'buy_big' ? 'std90' : 'nano20'));
+        break;
       case 'insulate':
       case 'heater_credit':
       case 'move_warm':
