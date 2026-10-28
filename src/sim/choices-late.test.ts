@@ -383,6 +383,8 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     expect(chooseOption(tanks, 'C10', 'both')).toBeNull();
     expect(brood.filter((f) => f.keeper).length).toBe(1);
     expect(mom.keeper).toBe(true);
+    // 選了就有回音（#452）：兩尾都留也要說名額和機率
+    expect(takeEchoes(tanks, st).map((e) => e.text)).toEqual([expect.stringMatching(/^兩尾都留了，留種名額 3\/6，孫代機率(是|從) [\d.]+%/)]);
     // 同一窩另一尾一樣好：不再問
     s.hours += 4 * 24;
     expect(takeChoice(tanks)?.id).not.toBe('C10');
@@ -685,6 +687,15 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     expect(full).toMatchObject({ full: true });
     expect(full.text).toMatch(/太擠了，魚擠到水面喘氣。$/);
     expect(s.crowdNotices).toBe(2);
+  });
+
+  it('大窩生在小缸的當天只說「今天、明天各換三成水」，同缸另一尾快生的預告留到隔天（#452）', () => {
+    const { tanks, s } = latePair();
+    const other = addFish(s, 'guppy', { ...calm, sex: 'female', pregnant: false });
+    other.pregnancy = 0.9;
+    const warned = () => takeCrowdNotes(tanks).filter((n) => n.tank === 0 && /生完氨會升高/.test(n.text)).map((n) => n.text);
+    for (let i = 0; i < 24; i++) Object.assign(addFish(s, 'guppy', { ...calm, pregnant: false }), { generation: 1, bornHours: s.hours - 2, lengthCm: 0.6 });
+    expect(warned()).toEqual([expect.stringMatching(/^一窩 24 尾生在 40L 的.+，生完氨會升高，今天、明天各換三成水。$/)]);
   });
 
   it(`開獎版 C10（C16）：開獎後 ${REVEAL_CULL_DAYS} 天，留 4～6 尾候選（公母都有），其他賣給阿德（midgame.md §7.3）`, () => {
@@ -1040,9 +1051,27 @@ describe('固定品系：C18 取名（穩定度 40%）和品系完成（75%）�
       takeSecondBrood(tanks);
       expect(takeEchoes(tanks, st).map((e) => e.text)).toEqual(['照你的設定交了 4 尾小魚，+40 元']);
       expect(economy(s).coins).toBe(coins + 40);
+      expect(other.every((f) => s.fish.includes(f))).toBe(true);
+      // 這窩還剩 2 尾：之後有交得出的單照樣交，回音寫這窩一共交了多少（#452：只交第一張，卡上估的整窩金額對不上）
+      expect(st.fryDeliver).toHaveLength(1);
+      orderBoard(s).orders.push({ id: 992, kind: 'fry', species: 'guppy', minCm: 1.2, count: 2, unitPrice: 12, postedHours: s.hours });
+      s.hours += 24;
+      takeSecondBrood(tanks);
+      expect(takeEchoes(tanks, st).map((e) => e.text)).toEqual(['照你的設定又交了 2 尾，+24 元（這窩一共交了 6 尾、64 元）']);
       expect(st.fryDeliver).toEqual([]);
       expect(other.every((f) => s.fish.includes(f))).toBe(true);
     });
+
+    it('交小魚單：一直交不出去，從上次交貨算起等 21 天就不等了', () => {
+      const { tanks, s, st } = born('sell', 6, 1.3);
+      s.hours += 7 * 24;
+      takeSecondBrood(tanks);
+      expect(st.fryDeliver).toHaveLength(1);
+      s.hours += 14 * 24;
+      takeSecondBrood(tanks);
+      expect(st.fryDeliver).toEqual([]);
+    });
+
   });
 
   describe('住不下（C14）的回音和修正（polish-to-9.md §10.2）', () => {

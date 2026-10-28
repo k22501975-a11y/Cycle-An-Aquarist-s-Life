@@ -1,6 +1,6 @@
 import { crisisText, type Crisis } from '../game/crisis';
 import { airPumpPrice, breathless, oxygenFix, BLOOM_NOTE, boxBlocked, fryHome, fryNeedHome, fryPrep, newTankCost, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
-import { takeEchoes } from '../sim/choice-echo';
+import { addEcho, takeEchoes } from '../sim/choice-echo';
 import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, callName, breederIds, breederName, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 import { cheapHeaterStep, crisisTodos, lingering, warmMoveStep, wipedOut } from './status';
@@ -104,6 +104,8 @@ export interface ReportItem {
   lookalike?: LookalikeCard;
   /** 選擇的回音（polish-to-9.md §10.0）：玩家當初選的那個選項，畫面在那行前面寫「你選了：…」；text 直接寫結果。 */
   echo?: string;
+  /** 回音已經因為報告擠不下延後過幾次（#452，見 ECHO_RETRIES）。 */
+  echoRetry?: number;
   /** kind 'choice' 的選擇卡（sim/choices.ts）：選項和選種、配對的資料。 */
   choice?: ChoiceCard;
   /** C9 自動照上次的那一行（midgame.md §6.5）：點了展開這張卡改設定。 */
@@ -582,7 +584,8 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   const progress = crisis ? null : breedingProgress(tanks);
   if (progress) items.push({ kind: 'breeding', tank: 0, tone: 'good', text: progress });
   // 選擇的回音（polish-to-9.md §10.0）
-  for (const e of takeEchoes(tanks, choiceState(tanks), callName)) items.push({ kind: 'echo', tank: e.tank, tone: 'info', text: e.text, echo: e.label });
+  const choices = choiceState(tanks);
+  for (const e of takeEchoes(tanks, choices, callName)) items.push({ kind: 'echo', tank: e.tank, tone: 'info', text: e.text, echo: e.label, ...(e.retry ? { echoRetry: e.retry } : {}) });
   // 安靜的一晚（沒好事、沒壞事、也沒要留意的）：帶一句缸裡的小變化（#258）
   if (!crisis && !progress && tanks[0] && before.tanks[0] && items.every((i) => i.tone === 'info')) {
     const text = quietObservation(tanks[0], tanks[0], before.tanks[0]);
@@ -591,9 +594,17 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   if (items.length === 0) items.push({ kind: 'quiet', tank: 0, tone: 'info', text: quietText(tanks) });
   items.sort((a, b) => kindRank(a) - kindRank(b) || TONE_ORDER[a.tone] - TONE_ORDER[b.tone] || (a.kind === 'fish_relaxed' ? 1 : 0) - (b.kind === 'fish_relaxed' ? 1 : 0));
   const day = Math.floor(tanks[0].hours / 24) + 1;
-  return { title: crisis ? '半夜出狀況了' : `早安，第 ${day} 天`, hours: sleptHours, stopped: !!crisis, items };
+  const report: MorningReport = { title: crisis ? '半夜出狀況了' : `早安，第 ${day} 天`, hours: sleptHours, stopped: !!crisis, items };
+  // 擠不進 3 行的回音隔天早上再出（#452：選完 3 天內一定要看得到，polish-to-9.md §10.0）
+  const shown = new Set(slimReport(report).lines);
+  for (const i of items) {
+    if (i.kind === 'echo' && !shown.has(i) && (i.echoRetry ?? 0) < ECHO_RETRIES) addEcho(choices, { label: i.echo!, tank: i.tank, due: tanks[0].hours, text: i.text, retry: (i.echoRetry ?? 0) + 1 });
+  }
+  return report;
 }
 
+/** 回音擠不進報告最多再延後幾個早上（選完 3 天內一定出，polish-to-9.md §10.0）。 */
+export const ECHO_RETRIES = 2;
 /** 早上報告一次最多幾行重點（daily-loop.md §2），選擇卡另外一行。 */
 export const REPORT_LINES = 3;
 /** 選擇卡在報告上只寫這一行，點了才打開（tutorial-lines.md §13）。 */
@@ -636,15 +647,16 @@ const GOAL_KINDS: ReadonlySet<ReportKind> = new Set(['cycle', 'cycled', 'belly',
  */
 export const isPinned = (i: ReportItem): boolean => !!i.starving || !!i.standing || i.kind === 'crisis' || i.kind === 'death' || i.kind === 'equipment';
 /** 報告上的順序：半夜的危機、開獎 → 要處理的壞消息 → 目標的進度 → 好消息 → 其他。 */
-function lineRank(i: ReportItem): number {
+function lineRank(i: ReportItem, lead = false): number {
   // 魚都死光了（#382）排在所有危機前面：先說從哪裡重新開始
   if (i.kind === 'wiped') return -2;
   // 危機（#375）和消瘦（midgame.md §7.9）永遠排第一行
   if (isPinned(i)) return -1;
   if (i.kind === 'crisis') return 0;
   if (i.kind === 'reveal' || i.kind === 'countdown') return 1;
-  // 回音排在目標進度後面（polish-to-9.md §10.5）：放不下就收進鈴鐺
-  if (i.kind === 'echo') return 3.5;
+  // 回音（polish-to-9.md §10.5）：第一行回音排在壞消息後面、目標進度前面（#452：排在目標後面幾乎天天被擠掉），
+  // 其他的排在目標後面，放不下就收進鈴鐺、隔天再出
+  if (i.kind === 'echo') return lead ? 2.5 : 3.5;
   if (isBadNews(i) || i.tone === 'warn') return 2;
   if (GOAL_KINDS.has(i.kind)) return 3;
   if (i.tone === 'good') return 4;
@@ -676,7 +688,9 @@ export function slimReport(report: MorningReport): SlimReport {
   const rest = report.items.filter((i) => i !== decision);
   const marks = rest.map(markOf).filter((m): m is TankMark => !!m);
   const main = rest.filter((i) => !isMinor(i));
-  const ranked = main.map((item, at) => ({ item, at })).sort((a, b) => lineRank(a.item) - lineRank(b.item) || a.at - b.at).map((x) => x.item);
+  const lead = main.find((i) => i.kind === 'echo');
+  const rank = (i: ReportItem) => lineRank(i, i === lead);
+  const ranked = main.map((item, at) => ({ item, at })).sort((a, b) => rank(a.item) - rank(b.item) || a.at - b.at).map((x) => x.item);
   // 危機和消瘦那幾行不佔 3 行的名額（#375、midgame.md §7.9）
   const pinned = ranked.filter(isPinned);
   // 開獎倒數（polish-to-9.md §12.1）接在危機後面當開頭，也不佔 3 行的名額

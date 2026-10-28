@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, CROWD_WARN, crowdingRatio, FISH_SPECIES, bacteriaCapacity, MAX_KEEPERS, maxLengthCm, buyTank, setTankPurpose, cross, DREAM_FISH, economy, linkTanks, matchingFish, orderBoard, orderSupply, reservedForPick, suggestPurpose, type ShopOrder, type TankState } from './index';
+import { addFish, CROWD_WARN, crowdingRatio, FISH_SPECIES, bacteriaCapacity, MAX_KEEPERS, maxLengthCm, buyTank, setTankPurpose, cross, DREAM_FISH, economy, linkTanks, matchingFish, orderBoard, orderSupply, reservedForPick, splitAdvice, suggestPurpose, type ShopOrder, type TankState } from './index';
 import { BROOD_SUMMARY_DAYS, takeEchoes } from './choice-echo';
 import { buyNurseryBox } from './nursery';
 import { BACKUP_MAX, MAIN_KEEP_FISH, hasDreamGenes, orderDreamNote, tradeCheck, SECOND_BROOD_KEEP, SECOND_BROOD_SHOWS, takeSecondBrood, breedingProgress, chooseOption, CHOICE_RESHOW_DAYS, choiceState, dreamChance, FAST_TEMP_C, grandDreamChance, PICK_AFTER_BROOD_DAYS, takeChoice, takeMilestones, nextMilestone, TANK_AFTER_BROOD_DAYS } from './choices';
@@ -48,21 +48,26 @@ describe('中期的選擇點（design/midgame.md）', () => {
   });
 
   describe('C1 的取捨和回音（polish-to-9.md §10.1）', () => {
-    it('躲草：第 1、3、7 天各說少了幾尾、還有幾尾；剩一半以上的 3 天內任務卡先不叫搬', () => {
+    it('躲草：第 1、3、7 天各說（從選的那天算）一共少了幾尾、還有幾尾；剩一半以上的 3 天內任務卡先不叫搬', () => {
       const { s, tanks, kids } = withBrood(6, 10);
       for (const k of kids) k.lengthCm = 0.7;
       expect(takeChoice(tanks)?.id).toBe('C1');
       expect(chooseOption(tanks, 'C1', 'hide')).toBeNull();
       const st = choiceState(tanks);
       expect(takeEchoes(tanks, st)).toEqual([]);
+      // 3 天內通知也不叫玩家把這窩撈去育幼盒（#452：g40 照通知撈了，選了躲草卻變成放盒子）
+      const fryAdvice = () => splitAdvice(s).some((a) => a.reason === 'fry_with_adults');
+      expect(fryAdvice()).toBe(false);
       s.hours += 24;
       kids[0].alive = kids[1].alive = false;
+      expect(fryAdvice()).toBe(false);
       expect(takeEchoes(tanks, st).map((e) => e.text)).toEqual(['昨晚躲草的小魚少了 2 尾，還有 4 尾']);
       s.hours += 48;
-      expect(takeEchoes(tanks, st).map((e) => e.text)).toEqual(['這 2 天躲草的小魚一尾都沒少，還有 4 尾']);
+      expect(fryAdvice()).toBe(true);
+      expect(takeEchoes(tanks, st).map((e) => e.text)).toEqual(['躲草第 3 天：小魚一共少了 2 尾，還有 4 尾']);
       s.hours += 4 * 24;
       kids[2].alive = false;
-      expect(takeEchoes(tanks, st).map((e) => e.text)).toEqual(['這 4 天躲草的小魚少了 1 尾，還有 3 尾']);
+      expect(takeEchoes(tanks, st).map((e) => e.text)).toEqual(['躲草第 7 天：小魚一共少了 3 尾，還有 3 尾']);
       s.hours += 24;
       expect(takeEchoes(tanks, st)).toEqual([]);
     });
@@ -276,7 +281,8 @@ describe('中期的選擇點（design/midgame.md）', () => {
     expect(c9?.id).toBe('C9');
     expect(c9!.title).toBe('第二窩快生了，要怎麼辦？');
     expect(c9!.options.map((o) => o.key)).toEqual(['grow', 'sell', 'keep']);
-    expect(c9!.options.find((o) => o.key === 'sell')!.outcome).toMatch(/約 \d+ 元/);
+    // 卡上寫小魚一尾多少、養到中魚整窩最多多少（#452：只寫整窩的大數字，交了小魚單回音金額對不上）
+    expect(c9!.options.find((o) => o.key === 'sell')!.outcome).toMatch(/^長到能交就照訂單一批一批交，小魚一尾約 \d+ 元，養到中魚最多整窩約 \d+ 元/);
     expect(chooseOption(tanks, 'C9', 'keep')).toBeNull();
     expect(st.secondBrood).toMatchObject({ momId: mom.id, prevKids: 4 });
     // 還沒生：沒有報告
