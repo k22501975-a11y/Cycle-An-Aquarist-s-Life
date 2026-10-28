@@ -344,9 +344,12 @@ function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
     case 'breeding_tank':
       return { text: `小魚搬去繁殖缸養大（${Math.min(PURPOSE_GOAL_COUNT.breeding, breedingTankRaised(tanks))}/${PURPOSE_GOAL_COUNT.breeding}）`, target: 'shop_tank' };
     case 'display_tank': {
-      const lit = purposeTanks(tanks, 'display').some((t) => t.equipment.light?.spec.id === 'planted');
-      if (!lit) return { text: '展示缸換上水草燈', target: 'shop_gear' };
-      return { text: `展示缸種陽性草（${Math.min(PURPOSE_GOAL_COUNT.display, displayTankHighPlants(tanks))}/${PURPOSE_GOAL_COUNT.display}）`, target: 'shop_plants' };
+      // 帶上展示缸是哪一缸：點了先切過去再開商店，水草燈、陽性草才會放進展示缸（#441）
+      const display = purposeTanks(tanks, 'display');
+      const lit = display.some((t) => t.equipment.light?.spec.id === 'planted');
+      const at = (t: TankState | undefined) => (t ? { tank: tanks.indexOf(t) } : {});
+      if (!lit) return { text: '展示缸換上水草燈', target: 'shop_gear', ...at(display[0]) };
+      return { text: `展示缸種陽性草（${Math.min(PURPOSE_GOAL_COUNT.display, displayTankHighPlants(tanks))}/${PURPOSE_GOAL_COUNT.display}）`, target: 'shop_plants', ...at(display.find((t) => t.equipment.light?.spec.id === 'planted') ?? display[0]) };
     }
     case 'strain':
     case 'fins':
