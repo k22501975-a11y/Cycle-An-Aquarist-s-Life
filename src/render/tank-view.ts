@@ -23,6 +23,7 @@ import { clampPan, fitCamera, maxSpan, zoomAt, type Camera } from './camera';
 import { type QualitySpec, qualitySpec } from './quality';
 import { causticsTexture, MOCKUP_PX_PER_CM, paintBackdrop, paintDriftwood, paintFront, paintPlant, paintVignette, rayTexture } from './scenery';
 import type { GlApplication } from './gl-app';
+import { bellyScaleY, drawGravidSpot, HEAVY_ACTIVITY, HEAVY_HIDE, pregnancyStage, type PregnancyStage } from './pregnancy-look';
 
 interface FoodParticle extends Pellet {
   s: Sprite;
@@ -99,6 +100,10 @@ function tubeLabelTexture(text: string): Texture {
   return canvasTexture(canvas, false, scale);
 }
 const CUTTING_SECONDS = 2.6;
+/** 躲草的小魚鑽出草叢時閃一下的秒數（§12.2）。 */
+const FRY_FLASH = 0.45;
+/** 懷著夢想窩的母魚最遠游到哪個景深（0 最遠、1 最近）：不退到造景後面。 */
+const DREAM_Z = 0.6;
 
 interface FishView {
   swimmer: Swimmer;
@@ -110,6 +115,11 @@ interface FishView {
   glow: Sprite;
   spots: Graphics;
   eggs: Graphics;
+  /** 懷孕母魚的胎斑（§12.1），bellyDrawn 是畫上去的是第幾段（-1 還沒畫）。 */
+  belly: Graphics;
+  bellyDrawn: number;
+  /** 躲草的小魚從草裡鑽出來時閃一下（§12.2）：還剩幾秒。 */
+  flashT: number;
   /** 留種魚頭上的小緞帶（midgame.md C2）；不是留種就沒有。 */
   ribbon: Graphics | null;
   ichDrawn: boolean;
@@ -1638,6 +1648,7 @@ export class TankView {
     glow.visible = false;
     const spots = new Graphics();
     const eggs = new Graphics();
+    const belly = new Graphics();
     holder.addChild(glow);
     const crawler = isShrimpSpecies(fish.species);
     const z = crawler ? 0.7 + this.rand() * 0.3 : this.rand();
@@ -1650,6 +1661,9 @@ export class TankView {
       glow,
       spots,
       eggs,
+      belly,
+      bellyDrawn: -1,
+      flashT: 0,
       ribbon: null,
       ichDrawn: false,
       eggsDrawn: false,
@@ -1706,8 +1720,8 @@ export class TankView {
   /** 這條魚現在的外觀：用哪張圖、補畫哪些鰭。key 一樣畫出來就一樣。 */
   private rigSpec(fish: Fish) {
     const form = this.formOf(fish);
-    // 魚懷孕後期肚子才看得出來；蝦一抱卵就看得到。
-    const gravid = form === 'female' && fish.pregnancy > (isShrimpSpecies(fish.species) ? 0 : 0.5);
+    // 魚懷孕到第 2 段（§12.1，≥ 0.7）才換成大肚子的圖；蝦一抱卵就看得到。
+    const gravid = form === 'female' && (isShrimpSpecies(fish.species) ? fish.pregnancy > 0 : pregnancyStage(fish.pregnancy) >= 2);
     // 公孔雀魚照基因上色：雜交出來的組合也有自己的花色
     // 母孔雀魚的尾巴帶品系色（白子紅眼），身體一樣是素的灰金色
     const guppyGenome = fish.species === 'guppy' && fish.genome ? phenotype(fish.genome) : null;
@@ -1718,8 +1732,10 @@ export class TankView {
     const stage = growthStage(fish);
     const fins = fish.species === 'guppy' && form !== 'juvenile' && fish.genome && stage !== 'coloring' ? finTraitsOf(fish, painted) : null;
     const finKey = fins ? `${+fins.dumboArt}${+!!fins.traits.swallow}${+!!fins.traits.ribbon}${+!!fins.traits.dumbo}${+!!fins.traits.bigC}${fins.traits.sword ?? 0}${+!!fins.traits.halfmoon}` : '';
-    const key = `${fish.species}:${form}:${gravid}:${painted ?? ''}:${finKey}`;
-    return { form, gravid, painted, fins, key, look: appearance(fish.species, form, lookVariant(fish), gravid) };
+    // 孔雀魚母魚的胎斑分段（§12.1）：換段時肖像要重烘
+    const belly = bellyStageOf(fish);
+    const key = `${fish.species}:${form}:${gravid}:${painted ?? ''}:${finKey}:${belly}`;
+    return { form, gravid, painted, fins, key, belly, look: appearance(fish.species, form, lookVariant(fish), gravid) };
   }
 
   /**
@@ -1734,7 +1750,13 @@ export class TankView {
     if (!tex || !spec.painted) return null;
     const rig = new PaintedRig(spec.painted, tex, spec.look);
     if (spec.fins) drawFinOverlay(rig, spec.fins, this.app.renderer);
+    if (spec.belly > 0) {
+      const g = new Graphics();
+      drawGravidSpot(g, rig.art, spec.belly);
+      rig.addChild(g);
+    }
     rig.scale.x = -1;
+    rig.scale.y = bellyScaleY(spec.belly);
     const wrap = new Container();
     wrap.addChild(rig);
     let url: string | null = null;
@@ -1758,11 +1780,13 @@ export class TankView {
     // 卵和白點圖層每次換外觀都沿用：先從舊圖層拿出來，不然會跟著被銷毀，之後再畫到就當掉
     view.eggs.removeFromParent();
     view.spots.removeFromParent();
+    view.belly.removeFromParent();
     view.rig?.destroy({ children: true });
     const tex = paintedTexture(painted);
     view.rig = tex && painted ? new PaintedRig(painted, tex, look) : new FishRig(fish.species, look);
     view.tone = '';
     view.rig.addChildAt(view.eggs, 0);
+    view.rig.addChild(view.belly);
     view.rig.addChild(view.spots);
     if (fins) drawFinOverlay(view.rig, fins, this.app.renderer);
     // 腳的圖層是舊外觀的子圖層，上面已經一起銷毀了
@@ -1774,6 +1798,7 @@ export class TankView {
     view.holder.addChild(view.rig);
     view.ichDrawn = false;
     view.eggsDrawn = false;
+    view.bellyDrawn = -1;
   }
 
   /** 蝦：兩支小螯輪流夾底沙、抱蛋母蝦搧腹足、走路時步足擺、受驚時身體一縮。 */
@@ -1878,7 +1903,10 @@ export class TankView {
       const spec = isShrimpSpecies(fish.species) ? undefined : personalitySpec(fish);
       // 水不舒服（氨、亞硝）：游得慢一點、鰭收一點；只是表現，不算症狀
       const uneasy = this.water.uneasy;
-      const mood = spec && uneasy > 0.02 ? { ...spec, activity: spec.activity * (1 - 0.3 * uneasy) } : spec;
+      const calm = spec && uneasy > 0.02 ? { ...spec, activity: spec.activity * (1 - 0.3 * uneasy) } : spec;
+      // 快生的母魚（§12.1 第 3 段）：游得慢、常停在水草邊
+      const heavy = bellyStageOf(fish) === 3;
+      const mood = calm && heavy ? { ...calm, activity: calm.activity * HEAVY_ACTIVITY, hide: Math.max(calm.hide, HEAVY_HIDE) } : calm;
       if (view.born) this.stepBirth(view, dt);
       // 小魚（§10.1）：育幼盒裡擠成一團，主缸裡在草叢間游進游出（跟著親魚的不算）
       const small = fish.alive && !isShrimpSpecies(fish.species) && follow === undefined && growthStage(fish) === 'fry';
@@ -1892,9 +1920,18 @@ export class TankView {
         view.zTarget = view.z = 1;
       }
       // 景深：魚慢慢在前後之間游動；遠的小一點、模糊偏藍，畫在造景後面。
-      if (!isShrimpSpecies(fish.species) && fish.alive && !caged) {
+      const hid = swimmer.hideout;
+      if (hid && fish.alive && !caged) {
+        // 躲草的小魚（§12.2）：鑽進草裡就退到草的後面，只從葉縫露出一半；鑽出來時到前面、閃一下
+        const wasOut = view.zTarget > 0.5;
+        view.zTarget = hid.out ? 0.85 : 0.08;
+        if (hid.out && !wasOut) view.flashT = FRY_FLASH;
+        view.z += (view.zTarget - view.z) * Math.min(1, dt * 3);
+      } else if (!isShrimpSpecies(fish.species) && fish.alive && !caged) {
         // 愛炫耀的常游到前面來展示（F6）
         if (this.rand() < dt * 0.04) view.zTarget = mood && mood.display > 0.5 ? 0.55 + this.rand() * 0.45 : this.rand();
+        // 懷著夢想窩的母魚（§12.1）待在前面，光暈和肚子看得清楚、點得到
+        if (fish.dreamBrood) view.zTarget = Math.max(view.zTarget, DREAM_Z);
         view.z += (view.zTarget - view.z) * Math.min(1, dt * 0.25);
       }
       const back = view.back ? view.z < BACK_LEAVE : view.z < BACK_ENTER;
@@ -1925,7 +1962,7 @@ export class TankView {
         view.deathT = -1;
         // 生病的樣子：越虛弱顏色越淡、消瘦變扁、癢的時候突然側身蹭一下
         const sick = sickLook(symptoms, fish.health, this.time, fish.id);
-        rig.scale.y = k * turn.sy * sick.thin * hungerLook(fish.hunger).thin * (1 - 0.55 * sick.flash);
+        rig.scale.y = k * turn.sy * sick.thin * hungerLook(fish.hunger).thin * (1 - 0.55 * sick.flash) * bellyScaleY(bellyStageOf(fish));
         rig.alpha = rig.look.alpha;
         const pose = turnPose(view.turn.f, view.turn.v);
         rig.setDim(sick.dim ?? (pose.shade > 0.05 ? mix(0xffffff, 0x8f9ea8, 0.5 * pose.shade) : null));
@@ -1986,6 +2023,12 @@ export class TankView {
         } else view.rig.filters = [];
       }
       view.mouth = fish.alive ? { x: swimmer.x + dir * len * 0.25, y: swimmer.y, reach: Math.max(10, len * 0.55) } : null;
+      // 懷孕母魚的胎斑（§12.1）：換段才重畫
+      const belly = bellyStageOf(fish);
+      if (belly !== view.bellyDrawn) {
+        drawGravidSpot(view.belly, rig.art, belly);
+        view.bellyDrawn = belly;
+      }
       const spotted = fish.alive && symptoms.includes('white_spots');
       if (spotted !== view.ichDrawn) {
         drawIchSpots(view.spots, rig, spotted ? 12 : 0);
@@ -2016,14 +2059,24 @@ export class TankView {
       // 選取的魚：身後一圈柔和的金色光暈
       const selected = this.selectedFish === fish.id;
       const spot = selected ? 0 : this.spotLevel('fish', fish.id);
-      view.glow.visible = selected || spot > 0.01;
-      rig.setRim(selected ? 0xffe9b0 : spot > 0.01 ? 0xfff1c8 : null, selected ? 0.75 + 0.25 * Math.sin(this.time * 3) : spot, this.quality.softGlow);
+      // 夢想窩的母魚（§12.1）：一圈很淡、慢慢呼吸的光暈
+      const dream = fish.alive && !!fish.dreamBrood && !selected && spot <= 0.01;
+      // 躲草的小魚鑽出來：白色輪廓閃一下
+      view.flashT = Math.max(0, view.flashT - dt);
+      const flash = view.flashT / FRY_FLASH;
+      view.glow.visible = selected || spot > 0.01 || dream;
+      const breath = 0.5 + 0.5 * Math.sin(this.time * 1.6 + fish.id);
+      rig.setRim(
+        selected ? 0xffe9b0 : spot > 0.01 ? 0xfff1c8 : flash > 0.01 ? 0xffffff : dream ? 0xfff0c0 : null,
+        selected ? 0.75 + 0.25 * Math.sin(this.time * 3) : spot > 0.01 ? spot : flash > 0.01 ? flash * 0.8 : 0.22 + 0.12 * breath,
+        this.quality.softGlow,
+      );
       if (view.glow.visible) {
-        const r = this.lengthPx(fish) * depth * (selected ? 1.5 : 2);
+        const r = this.lengthPx(fish) * depth * (selected ? 1.5 : dream ? 1.7 : 2);
         view.glow.width = r;
         view.glow.height = r * 0.75;
-        view.glow.tint = 0xffe2a0;
-        view.glow.alpha = selected ? 0.55 + 0.15 * Math.sin(this.time * 3) : 0.95 * spot;
+        view.glow.tint = dream ? 0xfff0c0 : 0xffe2a0;
+        view.glow.alpha = selected ? 0.55 + 0.15 * Math.sin(this.time * 3) : dream ? 0.38 + 0.16 * breath : 0.95 * spot;
       }
     }
   }
@@ -2327,4 +2380,9 @@ function keeperRibbonGraphic(): Graphics {
   g.circle(0, -1, 2.9).stroke({ color: 0xfff4cf, width: 0.6, alpha: 0.75 });
   g.circle(-1.4, -2.4, 1.1).fill({ color: 0xffffff, alpha: 0.6 });
   return g;
+}
+
+/** 這尾魚的胎斑要畫第幾段（§12.1）：只有活著、懷孕的孔雀魚母魚。 */
+function bellyStageOf(fish: Fish): PregnancyStage {
+  return fish.alive && fish.species === 'guppy' && fish.sex === 'female' && !isJuvenile(fish) ? pregnancyStage(fish.pregnancy) : 0;
 }
