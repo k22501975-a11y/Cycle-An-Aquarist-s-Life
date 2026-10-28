@@ -79,13 +79,16 @@ export function nurseryRefusal(state: TankState, fish: Fish): string | null {
   return null;
 }
 
-/** 懷孕到這裡就算快生了：育幼盒空著時任務卡叫玩家先放進去（polish-to-9.md §9.1，g38：第一窩搬走、盒子空了沒人叫，第二窩生在主缸被吃）。 */
-export const SOON_PREGNANCY = 0.7;
+/**
+ * 懷孕到這裡（約剩 3 天）就該放進育幼盒：現實也是這時候才放，放太早母魚會緊迫。
+ * C15 選「等快生再放」和任務卡「育幼盒空了，把快生的母魚放進去」（polish-to-9.md §9.1，g38）都用這個。
+ */
+export const BOX_DUE = 0.88;
 
-/** 懷孕 ≥ SOON_PREGNANCY、現在就放得進育幼盒（盒子空著）的母魚，最快生的那尾；沒有回傳 null。 */
+/** 懷孕 ≥ BOX_DUE、現在就放得進育幼盒（盒子空著）的母魚，最快生的那尾；沒有回傳 null。 */
 export function soonMother(state: TankState): Fish | null {
   if (!state.nurseryBox) return null;
-  const moms = state.fish.filter((f) => f.alive && !f.nursery && f.sex === 'female' && !isJuvenile(f) && f.pregnancy >= SOON_PREGNANCY && usesNursery(f.species) && f.listing === undefined && !nurseryRefusal(state, f));
+  const moms = state.fish.filter((f) => f.alive && !f.nursery && f.sex === 'female' && !isJuvenile(f) && f.pregnancy >= BOX_DUE && usesNursery(f.species) && f.listing === undefined && !nurseryRefusal(state, f));
   return moms.sort((a, b) => b.pregnancy - a.pregnancy)[0] ?? null;
 }
 

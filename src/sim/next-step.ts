@@ -367,7 +367,7 @@ export function nextStep(tanks: TankState[]): NextStep | null {
   return { goal: goal.id, ...rotateStale(tanks, stepFor(goal, tanks)) };
 }
 
-/** 育幼盒空著、有母魚懷孕 ≥ SOON_PREGNANCY（polish-to-9.md §9.1）：叫玩家把她放進去。盒裡還有小魚的照 #430（買第二缸或搬小魚）。 */
+/** 育幼盒空著、有母魚懷孕 ≥ BOX_DUE（約剩 3 天，polish-to-9.md §9.1）：叫玩家把她放進去。盒裡還有小魚的照 #430（買第二缸或搬小魚）。 */
 function soonMotherStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   for (let tank = 0; tank < tanks.length; tank++) {
     const mom = soonMother(tanks[tank]);

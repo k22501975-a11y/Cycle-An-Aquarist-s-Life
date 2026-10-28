@@ -17,7 +17,7 @@ import { CROWD_WARN, cyclingTank } from './split';
 import { tooSmallForTank } from './quarantine';
 import { addBottledBacteria, mediaAvailable, transferMedia } from './gifts';
 import { guppyTraits } from './lookalike';
-import { BELLY_DARK, BELLY_SHOWS, buyNurseryBox, daysToBirth, DUE_PREGNANCY, moveToNursery, nurseryRefusal, releaseNursery, rescueFryToNursery, usesNursery } from './nursery';
+import { BELLY_DARK, BELLY_SHOWS, BOX_DUE, buyNurseryBox, daysToBirth, DUE_PREGNANCY, moveToNursery, nurseryRefusal, releaseNursery, rescueFryToNursery, usesNursery } from './nursery';
 import { fulfillOrder } from './order-actions';
 import { matchingFish, orderBoard, orderRefusal, orderSupply, orderTitle, type ShopOrder } from './orders';
 import { previewPair, typicalStoreGenome, type PreviewKid } from './pair-preview';
@@ -779,8 +779,8 @@ const C11_BEFORE_PAIR = 5;
 const PREG_ASK = [0.07, 0.4] as const;
 /** C15：夢想魚配方那窩懷孕過半就問什麼時候移到產房（midgame.md §6.4）。 */
 export const REVEAL_SHOWS = 0.5;
-/** C15 選等快生再放育幼盒：懷孕到多少就放進去（約剩 3 天；每天早上看一次，太晚會來不及）。 */
-export const BOX_DUE = 0.88;
+/** C15 選等快生再放育幼盒：懷孕到多少就放進去（約剩 3 天；每天早上看一次，太晚會來不及）。跟任務卡同一個門檻，定義在 nursery.ts。 */
+export { BOX_DUE };
 /** 懷孕後段的里程碑（midgame.md §6.4）：胎斑變大變黑、看得到小魚的眼睛。 */
 export const BELLY_MILESTONES = [
   { key: 'dark', at: 0.7 },

@@ -282,15 +282,15 @@ describe('「養大 5 條」卡超過 3 天（#258）', () => {
     expect(nextStep([s])?.target).toBe('treat');
   });
 
-  it('育幼盒空了、母魚快生（懷孕 ≥ 0.7）：任務卡叫你放進去，排在照顧句前面；盒裡還有小魚或還早就不叫（polish-to-9.md §9.1，g38）', () => {
+  it('育幼盒空了、母魚快生（懷孕 ≥ BOX_DUE 0.88，約剩 3 天）：任務卡叫你放進去，排在照顧句前面；盒裡還有小魚或還早就不叫（polish-to-9.md §9.1，g38）', () => {
     const s = newGameState(1);
     goalState([s]).done.push('cycled', 'protect_fry');
     s.nurseryBox = true;
     const mom = addFish(s, 'guppy', { sex: 'female' });
     mom.ageDays = 120;
-    mom.pregnancy = 0.6;
+    mom.pregnancy = 0.85;
     expect(nextStep([s])?.target).not.toBe('nursery_soon');
-    mom.pregnancy = 0.75;
+    mom.pregnancy = 0.9;
     expect(nextStep([s])).toMatchObject({ text: `育幼盒空了，把快生的孔雀魚母魚 #${mom.id % ID_BLOCK} 放進去`, target: 'nursery_soon', tank: 0 });
     // 盒裡還有小魚：她放進去會吃牠們，不叫（照 #430 叫買缸或搬小魚）
     const fry = addFish(s, 'guppy', {});
