@@ -1226,8 +1226,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
         title: '第一窩小魚出生了！要怎麼保護？',
         owner: boxed ? '小魚生在育幼盒裡。要養在盒裡等長大，還是放出去躲草、把盒子空出來？' : '小魚一出生，大魚就會追著吃。要撈進育幼盒，還是讓牠們自己躲在草裡？',
         options: [
-          { key: 'box', label: boxed ? '養在育幼盒' : '撈進育幼盒', outcome: '一尾都不會被吃，但盒子擠，長得慢一點（最多 30 尾）；長到 1.6 cm 自己放出來', recommended: true },
-          { key: 'hide', label: boxed ? '放出去躲草' : '留在主缸躲草', outcome: '有空間又有草上的微生物吃，長得快一點；但每晚會被吃掉幾尾，草越密活越多' },
+          { key: 'box', label: boxed ? '養在育幼盒' : '撈進育幼盒', outcome: '幾乎都活得下來，長到 1.6 cm 自己放出來', recommended: true },
+          { key: 'hide', label: boxed ? '放出去躲草' : '留在主缸躲草', outcome: '盒子空出來給下一胎，但會被吃掉一部分；草越密活越多' },
         ],
       };
     }

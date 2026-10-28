@@ -4,11 +4,11 @@ import { chance, nextRandom } from '../random';
 import { FISH_SPECIES, type FishSpeciesId } from '../species';
 import { isJuvenile, recordEvent, type Fish, type TankState } from '../state';
 import { crowdingRatio, lifeFraction } from './fauna';
-import { fryRoomFactor, growFish } from '../growth';
+import { growFish } from '../growth';
 import { tankHabit } from '../acclimation';
 import { guardedPredationFactor, isParentalSpawner } from '../parental';
 import { bettaAggression } from '../betta';
-import { NURSERY_FRY_CAPACITY, nurseryBirth } from '../nursery';
+import { nurseryBirth } from '../nursery';
 import { noteBrood } from '../lookalike';
 import { childInbreeding, cross, matingSuccess, type GuppyGenome } from '../genetics';
 
@@ -79,15 +79,14 @@ export function updatePopulation(state: TankState, dt: number): void {
   const tf = temperatureFactor(state.water.tempC);
 
   const crowding = crowdingRatio(state);
-  const hiding = hidingFactor(state);
-  const boxFill = living.filter((f) => f.nursery && isJuvenile(f)).length / NURSERY_FRY_CAPACITY;
   for (const fish of living) {
-    growFish(state, fish, tf, crowding, dt, fryRoomFactor(fish, hiding, MAX_HIDING, boxFill));
+    growFish(state, fish, tf, crowding, dt);
     if (!fish.alive) continue;
     // 鰭在壓力不大時慢慢長回來（約一兩週）。
     if (fish.finDamage > 0) fish.finDamage = Math.max(0, fish.finDamage - (0.06 / 24) * (1 - fish.stress) * dt);
   }
 
+  const hiding = hidingFactor(state);
   // 育幼盒裡的魚隔著網子：大魚吃不到、不會咬鰭，盒裡的母魚也吃不到外面的小魚（nursery.ts）
   const open = living.filter((f) => !f.nursery);
   const eaten = predation(state, open, hiding, dt);

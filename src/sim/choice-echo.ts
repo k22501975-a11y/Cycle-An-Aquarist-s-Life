@@ -108,7 +108,7 @@ export function takeEchoes(tanks: TankState[], s: { echoes?: Echo[] }): EchoLine
     } else if (e.kind === 'box') {
       const left = aliveOf(tanks, e.ids ?? []);
       const inBox = left.filter((f) => f.nursery).length;
-      if (inBox > 0) out.push({ tank: e.tank, label: e.label, text: `盒裡${left.length === e.ids?.length ? ` ${inBox} 尾都在` : `還有 ${inBox} 尾`}，有點擠，長得慢一點` });
+      if (inBox > 0) out.push({ tank: e.tank, label: e.label, text: left.length === e.ids?.length ? `盒裡 ${inBox} 尾都在，一尾都沒被吃` : `盒裡還有 ${inBox} 尾` });
     } else if (e.kind === 'hide') {
       const step = e.step ?? 0;
       const left = aliveOf(tanks, e.ids ?? []).length;
