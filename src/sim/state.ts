@@ -30,6 +30,12 @@ export interface TankState {
   crowdNotices?: number;
   /** 最後一次超過建議量（擁擠度 > 1）的遊戲小時：離線回來看有沒有擠過。 */
   crowdOverHours?: number;
+  /** 最近浮頭了幾小時（oxygen.ts，每遊戲小時看一次：浮頭 +1、沒有 −1，最少 0）；沒有就是 0。 */
+  lowO2Hours?: number;
+  /** 最近溶氧低到傷魚幾小時（同上，低於 OXYGEN_HARM_MG +1、沒有 −1）。 */
+  o2HarmHours?: number;
+  /** 上次看溶氧的遊戲小時。 */
+  o2CheckedHour?: number;
   /** 超過建議量時今天擠死了幾尾（沒接上全家錢包的單缸用；有錢包記在 economy，全家一天最多 2 尾）。 */
   crowdDeaths?: { day: number; n: number };
   rng: RngState;

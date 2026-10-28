@@ -1,5 +1,5 @@
 import type { KeyValueStore } from '../game/save';
-import { freeAmmonia, hasVisible, householdTanks, isCycled, observeSymptoms, tankStarted, sexVisible, type TankState } from '../sim';
+import { freeAmmonia, GASP_O2, hasVisible, householdTanks, isCycled, observeSymptoms, tankStarted, sexVisible, type TankState } from '../sim';
 
 /**
  * 新手引導任務（GAME_DESIGN 定案）：水族館老闆一步步帶玩家開缸、放魚、餵食、換水、養水。
@@ -224,7 +224,7 @@ export function overloadWarning(s: TankState, adding: number): string | null {
 
 /** 水質真的讓魚喘（缺氧、氨、CO₂），不是鰓吸蟲。門檻跟 observeSymptoms 的喘氣一致。 */
 function waterChoking(s: TankState): boolean {
-  return s.water.o2 < 3.5 || freeAmmonia(s) > 0.05 || s.water.co2 > 35;
+  return s.water.o2 < GASP_O2 || freeAmmonia(s) > 0.05 || s.water.co2 > 35;
 }
 
 export interface Tip {

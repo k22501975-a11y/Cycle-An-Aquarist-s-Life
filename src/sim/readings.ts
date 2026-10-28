@@ -69,6 +69,9 @@ export type Symptom =
   | 'gill_flare'
   | 'begging';
 
+/** 溶氧低於這個（mg/L）魚就會浮到水面喘氣，看得出來缺氧。 */
+export const GASP_O2 = 3.5;
+
 /**
  * 玩家能「看到」的症狀。分成早期行為異常、中期外觀變化、晚期瀕死，
  * 玩家要從症狀反推原因（設計文件 5.6）。
@@ -81,7 +84,7 @@ export function observeSymptoms(state: TankState, fish: Fish): Symptom[] {
   if (fish.stress > 0.5) out.push('clamped_fins');
   if (fish.stress > 0.6) out.push('not_eating');
   // 鰓吸蟲也會浮頭喘氣，很容易誤以為是缺氧
-  if (w.o2 < 3.5 || freeAmmonia(state) > 0.05 || w.co2 > 35 || hasVisible(fish, 'flukes')) out.push('gasping');
+  if (w.o2 < GASP_O2 || freeAmmonia(state) > 0.05 || w.co2 > 35 || hasVisible(fish, 'flukes')) out.push('gasping');
   if ((fish.ich.stage === 'incubating' && fish.ich.progress > 0.5) || freeAmmonia(state) > 0.03) out.push('flashing');
   if (fish.ich.stage === 'visible') out.push('white_spots');
   if (fish.health < 0.5) out.push('lethargic');

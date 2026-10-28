@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
-import { addFish, bacteriaCapacity, ID_BLOCK, moveSoonToNursery, nurseryFish, buyPlant, buyTank, fulfillOrder, orderBoard, updateOrders, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, STALE_STEP_HOURS, NURSERY_FRY_CAPACITY, newTankCost, noteBellySeen, PICK_AFTER_BROOD_DAYS, setTankPurpose, showingMother, setBreedingStep, simulate } from '.';
+import { addFish, bacteriaCapacity, ID_BLOCK, moveSoonToNursery, nurseryFish, buyPlant, buyTank, fulfillOrder, orderBoard, updateOrders, checkGoals, economy, fastestColoring, GENERIC_STEP, GOALS, goalState, LIGHTS, nextGoals, nextStep, PURPOSE_GOAL_COUNT, RAISE_STUCK_HOURS, STALE_STEP_HOURS, NURSERY_FRY_CAPACITY, newTankCost, noteBellySeen, PICK_AFTER_BROOD_DAYS, setTankPurpose, showingMother, setBreedingStep, simulate, suggestedChange, GASP_O2, addAir, airPumpPrice, breathless, OXYGEN_HARM_MG, FILTERS, LOW_O2_HOURS } from '.';
 import { breedingStep, choiceState } from './choices';
 
 describe('主畫面的下一步（U1）', () => {
@@ -370,4 +370,85 @@ describe('「養大 5 條」卡超過 3 天（#258）', () => {
     expect(nurseryFish(s).map((f) => f.id)).toEqual([mom.id]);
     expect(nextStep([s])?.target).not.toBe('nursery_soon');
   });
+});
+
+describe('缺氧（strain-fixing 種子 5：53 尾小魚搬進 20L 缸，缺氧 9 天沒人說）', () => {
+  const brood = (n: number) => {
+    const s = newGameState(1);
+    for (let i = 0; i < n; i++) Object.assign(addFish(s, 'guppy', { pregnant: false }), { generation: 1, bornHours: s.hours - 2, lengthCm: 0.6 });
+    return s;
+  };
+
+  it('照建議換水（一鍵換水、換水面板預設、劇本照卡都用 suggestedChange）：新水對好溫度，換建議的量', () => {
+    const s = newGameState(1);
+    s.water.tempC = 28;
+    s.environment.roomTempC = 18;
+    s.water.o2 = 2;
+    expect(suggestedChange(s)).toBe(0.3);
+    expect(s.water.tempC).toBeCloseTo(28, 5);
+    expect(s.water.o2).toBeGreaterThan(2);
+  });
+
+  it('只是浮頭（累積 LOW_O2_HOURS）早上報告說、不出任務卡；最近傷到魚才出：買得起叫加打氣機、打氣關著叫打開、錢不夠先換水', () => {
+    const s = brood(3);
+    s.water.o2 = GASP_O2 + 0.5;
+    expect(breathless(s)).toBeNull();
+    s.water.o2 = GASP_O2 - 0.5;
+    s.lowO2Hours = LOW_O2_HOURS - 1;
+    expect(breathless(s)).toBeNull();
+    s.lowO2Hours = LOW_O2_HOURS;
+    expect(breathless(s)).toMatchObject({ harm: false });
+    expect(nextStep([s])?.target).not.toBe('add_air');
+    expect(nextStep([s])?.target).not.toBe('water_change');
+    s.o2HarmHours = 1;
+    economy(s).coins = airPumpPrice();
+    expect(nextStep([s])).toMatchObject({ text: '缸裡缺氧，魚在水面喘氣，加一台打氣機', target: 'add_air', tank: 0 });
+    expect(addAir(s)).toBe(true);
+    expect(economy(s).coins).toBe(0);
+    expect(s.equipment.airPump?.on).toBe(true);
+    s.equipment.airPump!.on = false;
+    expect(nextStep([s])).toMatchObject({ text: '缸裡缺氧，魚在水面喘氣，打開打氣機', target: 'add_air' });
+    expect(addAir(s)).toBe(true);
+    expect(addAir(s)).toBe(false);
+    s.equipment.airPump = null;
+    expect(nextStep([s])).toMatchObject({ text: '缸裡的魚在水面喘氣，水裡缺氧，先換水', target: 'water_change' });
+    expect(addAir(s)).toBe(false);
+  });
+
+  it('傷到魚的缺氧排在治病前面（治白點要調高水溫，氧更少）；只是浮頭時先治病', () => {
+    const s = brood(3);
+    economy(s).coins = 0;
+    const sick = s.fish[s.fish.length - 1];
+    sick.ich = { stage: 'visible', progress: 0.5, cause: 'temp_swing' };
+    s.water.o2 = OXYGEN_HARM_MG + 0.5;
+    s.lowO2Hours = LOW_O2_HOURS;
+    // 錢不夠買藥：治病那步是先賣魚湊錢
+    expect(nextStep([s])?.target).toBe('sell');
+    s.o2HarmHours = 2;
+    expect(nextStep([s])?.target).toBe('water_change');
+  });
+
+  it('缺氧的缸：加了打氣，6 小時內溶氧回到浮頭以上；不加的回不來（種子 5 的缸：20L、海綿過濾、53 尾小魚）', () => {
+    const tank = () => {
+      const s = newGameState(1);
+      s.equipment.tank = { ...s.equipment.tank, id: 'nano20', volumeL: 20, surfaceCm2: 900 };
+      s.equipment.filter = { ...s.equipment.filter!, spec: FILTERS.sponge };
+      for (let i = 0; i < 53; i++) Object.assign(addFish(s, 'guppy', { pregnant: false }), { generation: 1, lengthCm: 1.3 });
+      s.water.organicMg = 800;
+      s.water.o2 = 1.5;
+      economy(s).coins = 1000;
+      return s;
+    };
+    const plain = tank();
+    const aired = tank();
+    addAir(aired);
+    simulate(plain, 6);
+    simulate(aired, 6);
+    // 每小時記一次從什麼時候開始浮頭；加了打氣回來就清掉
+    expect(plain.lowO2Hours).toBeGreaterThanOrEqual(5);
+    expect(aired.lowO2Hours ?? 0).toBeLessThan(plain.lowO2Hours!);
+    expect(aired.water.o2).toBeGreaterThan(GASP_O2);
+    expect(aired.water.o2 - plain.water.o2).toBeGreaterThan(1);
+  });
+
 });

@@ -1342,6 +1342,18 @@ async function start(): Promise<void> {
         toasts.show(`阿德：「老客人先拿去，有錢再還。」裝上了${game.state.equipment.heater?.spec.name ?? '加熱棒'}，欠 ${owed} 元，之後每筆收入扣一半來還`);
         return;
       }
+      case 'water_change':
+        if (tank !== undefined) game.switchTo(tank);
+        return panelSheet('換水', (p) => p.waterChangePanel(ctx));
+      case 'add_air': {
+        // 缺氧（oxygen.ts）：打開打氣機，沒有就買一台裝上
+        if (tank !== undefined) game.switchTo(tank);
+        const had = !!game.state.equipment.airPump;
+        if (!game.act((st) => sim.addAir(st))) return toasts.show('現在加不了打氣機', 'warn');
+        audio.play('quest', false);
+        toasts.show(had ? '打開打氣機了，水面動起來，氧氣會慢慢回來' : `花 ${sim.airPumpPrice()} 元裝上打氣機，水面動起來，氧氣會慢慢回來`);
+        return;
+      }
       case 'buy_heater': {
         // 冬天錢不夠換同款（#404）：買一支撐得住的便宜加熱棒裝上
         if (tank !== undefined) game.switchTo(tank);
@@ -1901,6 +1913,7 @@ async function start(): Promise<void> {
       case 'buy_heater':
       case 'move_fry':
       case 'cycle_tank':
+      case 'add_air':
         guide.goNext?.(item.action, item.tank);
         break;
       case 'fish':

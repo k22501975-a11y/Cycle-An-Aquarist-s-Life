@@ -490,6 +490,8 @@ const NEXT_GLOW: Record<NextTarget, QuestTarget | null> = {
   move_fry: null,
   cycle_tank: null,
   nursery_soon: null,
+  water_change: 'water',
+  add_air: null,
 };
 
 function goalDoneText(g: Goal): string {

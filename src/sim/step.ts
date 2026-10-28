@@ -18,6 +18,7 @@ import { trackArrivals } from './arrivals';
 import { settleTurbidity } from './aquascape';
 import { updateSaltCure } from './salt-cure';
 import { TEMP_LOG_HOURS, type TankState } from './state';
+import { trackOxygen } from './oxygen';
 
 export const TICK_HOURS = TICK_GAME_SECONDS / 3600;
 
@@ -31,6 +32,7 @@ export function step(state: TankState, dtHours: number = TICK_HOURS): void {
   updateNitrogen(state, dtHours);
   updatePlants(state, dtHours);
   updateGases(state, dtHours);
+  trackOxygen(state);
   updateFeeders(state, dtHours);
   updateFauna(state, dtHours);
   updateSaltCure(state);
