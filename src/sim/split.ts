@@ -126,13 +126,16 @@ export function fryNeedHome(state: TankState): boolean {
   return boxBlocked(state);
 }
 
-/** 收得了小魚的缸：開好缸、硝化菌長好，而且沒有吞得下小魚的成魚。沒有回傳 null。 */
+/** 收得了小魚的缸：開好缸、硝化菌長好，而且沒有吞得下小魚的成魚；有繁殖缸收得了就先放那裡（#449）。沒有回傳 null。 */
 export function fryHome(tanks: TankState[], from: number): number | null {
-  const at = tanks.findIndex(
-    (t, i) => i !== from && !needsSetup(t) && isCycled(t) && !t.fish.some((f) => f.alive && !isJuvenile(f) && FISH_SPECIES[f.species].mouthRatio > 0),
-  );
+  const ok = (t: TankState, i: number) => i !== from && !needsSetup(t) && isCycled(t) && !t.fish.some((f) => f.alive && !isJuvenile(f) && FISH_SPECIES[f.species].mouthRatio > 0);
+  const breeding = tanks.findIndex((t, i) => t.purpose === 'breeding' && ok(t, i));
+  const at = breeding >= 0 ? breeding : tanks.findIndex(ok);
   return at >= 0 ? at : null;
 }
+
+/** 這缸能一鍵搬走的小魚（moveFryHome 搬的那些：還沒長大、沒掛在市場上、沒有在護幼）。 */
+export const movableFry = (t: TankState): Fish[] => t.fish.filter((f) => f.alive && isJuvenile(f) && f.listing === undefined && f.guardian === undefined);
 
 /**
  * 一鍵把小魚搬進新缸（g36 #425：買了第二缸卻沒人叫你搬，前 15 天被吃 17 尾）：主缸外面和育幼盒裡還沒長大的魚
@@ -142,7 +145,7 @@ export function moveFryHome(tanks: TankState[], from: number): { to: number; cou
   const to = fryHome(tanks, from);
   if (to === null) return null;
   const src = tanks[from];
-  const fry = src.fish.filter((f) => f.alive && isJuvenile(f) && f.listing === undefined && f.guardian === undefined);
+  const fry = movableFry(src);
   let count = 0;
   let shrimp = 0;
   for (const f of fry)

@@ -1663,7 +1663,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       const opts = linePairs(tanks, s);
       if (!opts) return null;
       const coins = economy(home).coins;
-      const rec = recommendedPair(opts, coins);
+      const rec = recommendedPair(opts, coins, !!s.lineNamed?.done);
+      const nextGen = (o: LinePair) => Math.max(fishGen(o.mom, s.line?.broods ?? []), fishGen(o.dad, s.line?.broods ?? [])) + 1;
       return {
         id,
         tank: opts.tank,
@@ -1672,7 +1673,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
         options: opts.pairs.map((o) => ({
           key: o.key,
           label: o.key === 'sib' ? '兄妹配' : o.key === 'back' ? (o.dad?.id === s.pair?.[1] ? '女兒配爸爸' : '兒子配媽媽') : `配店裡的新魚（${o.buy!.price} 元）`,
-          outcome: o.key === 'new' ? `這一代約 ${o.pct}%，血統新、尾鰭不變差` : `${o.key === 'sib' ? '下一代夢想魚' : ''}約 ${o.pct}%，尾鰭約 −${finDrop(o.inbreeding)}`,
+          // 配新魚不會讓品系重來：代數接著算，只是這一代夢想魚少一點（#449 架構）
+          outcome: o.key === 'new' ? `品系接著算第 ${nextGen(o)} 代，這一代約 ${o.pct}%，血統新、尾鰭不變差` : `${o.key === 'sib' ? '下一代夢想魚' : ''}約 ${o.pct}%，尾鰭約 −${finDrop(o.inbreeding)}`,
           recommended: o === rec,
           ...(o.buy && coins < o.buy.price ? { disabled: `錢不夠：要 ${o.buy.price} 元` } : {}),
         })),
@@ -2531,12 +2533,18 @@ function linePairs(tanks: TankState[], s: Readonly<ChoiceState>, anySex = false)
   return pairs.length >= 2 ? { pairs, cands, tank } : null;
 }
 
-/** C17 推薦：近交係數 < INBREEDING_LIMIT 推保得住 X 蛇紋、比例最高的那組，到了改推配新魚（買完剩不到 BUY_RESERVE 就照比例）。 */
-function recommendedPair(o: { pairs: LinePair[] }, coins: number): LinePair {
+/**
+ * C17 推薦：近交係數 < INBREEDING_LIMIT 推保得住 X 蛇紋、比例最高的那組，到了改推配新魚（買完剩不到 BUY_RESERVE 就照比例）。
+ * 品系還沒完成、自家配這一代就到 LINE_FIXED_PCT：先配完這一代，不推換血（#449：種子 6 自家配 100%、推了配新魚只剩 50%，第 360 天前完成不了）；
+ * 完成以後一律推配新魚（企劃 strain-fixing.md §11）。
+ */
+function recommendedPair(o: { pairs: LinePair[] }, coins: number, done: boolean): LinePair {
   // 先保住 X 蛇紋（不然穩定度卡在一半），比例差不多的挑尾鰭好的
   const near = pickPair(o.pairs.filter((x) => x.key !== 'new'));
   const fresh = o.pairs.find((x) => x.key === 'new');
-  if (fresh && (!near || near.inbreeding >= INBREEDING_LIMIT) && reserveShort(coins, fresh.buy!.price) === 0) return fresh;
+  const finishing = !done && !!near && near.pct >= LINE_FIXED_PCT;
+  // 品系完成後的下一代一律推換血，把尾鰭拉回來（strain-fixing.md §11）
+  if (fresh && !finishing && (done || !near || near.inbreeding >= INBREEDING_LIMIT) && reserveShort(coins, fresh.buy!.price) === 0) return fresh;
   return near ?? o.pairs[0];
 }
 

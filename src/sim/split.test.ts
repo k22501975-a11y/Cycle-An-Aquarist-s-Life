@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, BACTERIA_SEED, BUY_RESERVE, BELLY_SHOWS, boxBlocked, buyQuarantine, createTank, economy, fryHome, fryNeedHome, fryPrep, newTankCost, isCycled, linkTanks, moveFryHome, NURSERY_FRY_CAPACITY, rescueFryToBox, simulate, FILTERS, FISH_SPECIES, HEATERS, LIGHTS, splitAdvice, splitGroup, splitTank, TANKS, type CreateTankOptions, type TankState } from './index';
+import { addFish, BACTERIA_SEED, BUY_RESERVE, BELLY_SHOWS, boxBlocked, buyQuarantine, createTank, economy, fryHome, fryNeedHome, fryPrep, newTankCost, isCycled, linkTanks, moveFryHome, NURSERY_FRY_CAPACITY, rescueFryToBox, simulate, FILTERS, FISH_SPECIES, HEATERS, LIGHTS, splitAdvice, splitGroup, splitTank, TANKS, nextStep, goalState, GOALS, setTankPurpose, breedingTankRaised, PURPOSE_GOAL_COUNT, type CreateTankOptions, type TankState } from './index';
 import { createFish } from './processes/population';
 
 const MATURE: CreateTankOptions = { tank: TANKS.std40, filter: FILTERS.hangOn, heater: { spec: HEATERS.h100, targetC: 25 }, light: { spec: LIGHTS.basic }, matureMedia: true };
@@ -175,5 +175,48 @@ describe('育幼盒幫不上忙時，小魚接下來去哪（g37 #428）', () =>
     brood(main, 2, 0.6);
     main.fish.slice(-2).forEach((f) => (f.listing = 1));
     expect(fryNeedHome(main)).toBe(false);
+  });
+});
+
+describe('繁殖缸目標：任務卡一鍵搬小魚、進度不會被搬走倒退（g39c #449）', () => {
+  function home() {
+    const main = createTank({ ...MATURE, seed: 4 });
+    addFish(main, 'guppy', { sex: 'female' });
+    addFish(main, 'guppy', { sex: 'male' });
+    const spare = createTank({ ...MATURE, tank: TANKS.nano20, seed: 5 });
+    const breeder = createTank({ ...MATURE, tank: TANKS.nano20, seed: 6 });
+    const tanks = [main, spare, breeder];
+    linkTanks(tanks);
+    setTankPurpose(breeder, 'breeding');
+    goalState(tanks).done.push(...GOALS.map((x) => x.id).filter((id) => id !== 'breeding_tank'));
+    return { main, breeder, tanks };
+  }
+
+  it('別缸有小魚：任務卡叫你一鍵搬去繁殖缸（不是別的空缸）；搬完等轉色；沒小魚就等下一窩', () => {
+    const { main, breeder, tanks } = home();
+    expect(nextStep(tanks)).toMatchObject({ goal: 'breeding_tank', target: 'mother', text: `等下一窩，生了搬去繁殖缸（0/${PURPOSE_GOAL_COUNT.breeding}）` });
+    // 大一點的幼魚：大魚吞不下（不算被吃的危險，#425 的「把小魚搬過去」不會出），但還是要搬去繁殖缸才算目標
+    brood(main, 4, FISH_SPECIES.guppy.adultLengthCm * 0.45);
+    expect(fryNeedHome(main)).toBe(false);
+    expect(fryHome(tanks, 0)).toBe(2);
+    expect(nextStep(tanks)).toMatchObject({ target: 'move_fry', tank: 0, text: `把 4 尾小魚搬去繁殖缸養大（0/${PURPOSE_GOAL_COUNT.breeding}）` });
+    expect(moveFryHome(tanks, 0)).toMatchObject({ to: 2, count: 4 });
+    expect(breeder.fish).toHaveLength(4);
+    expect(nextStep(tanks)).toMatchObject({ target: 'fastest', text: `繁殖缸的小魚養到轉色（0/${PURPOSE_GOAL_COUNT.breeding}）` });
+  });
+
+  it('在繁殖缸轉色過的照累計算：住不下時搬走、賣掉也不扣', () => {
+    const { main, breeder, tanks } = home();
+    brood(breeder, 3, FISH_SPECIES.guppy.adultLengthCm * 0.65);
+    expect(breedingTankRaised(tanks)).toBe(3);
+    for (const t of tanks) simulate(t, 1);
+    expect(breedingTankRaised(tanks)).toBe(3);
+    // 推薦的「搬一些」把大的搬回主缸
+    for (const f of [...breeder.fish]) main.fish.push(...breeder.fish.splice(breeder.fish.indexOf(f), 1));
+    expect(breedingTankRaised(tanks)).toBe(3);
+    // 主缸轉色的不算繁殖缸的
+    brood(main, 2, FISH_SPECIES.guppy.adultLengthCm * 0.65);
+    for (const t of tanks) simulate(t, 1);
+    expect(breedingTankRaised(tanks)).toBe(3);
   });
 });

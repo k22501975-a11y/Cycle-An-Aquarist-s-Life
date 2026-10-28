@@ -334,6 +334,8 @@ export interface Fish {
   keeper?: boolean;
   /** 已經算進「養到轉色」的累計（自己繁殖的長到轉色期時記一次，之後交單、賣掉、死掉都不扣，#303）。 */
   raisedSeen?: boolean;
+  /** 已經算進繁殖缸「養大」的累計（在繁殖缸裡轉色時記一次，#449）。 */
+  breedingSeen?: boolean;
 }
 
 export interface Plant {

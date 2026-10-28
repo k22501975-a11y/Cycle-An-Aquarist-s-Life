@@ -124,6 +124,8 @@ export interface Economy {
   raisedGone?: number;
   /** 自己繁殖、長到轉色期過的魚累計幾尾（交單、賣掉、死掉都不扣，#303）。 */
   raisedEver?: number;
+  /** 在繁殖缸裡長到轉色期過的自家魚累計幾尾（搬走、賣掉、交單都不扣，#449）。 */
+  breedingRaisedEver?: number;
   /** 中期選擇點 C1～C5 出過、選過什麼（choices.ts，design/midgame.md）。 */
   choices?: ChoiceState;
   /** 已經領過獎勵的新手任務（任務進度存在裝置上，換裝置、匯入存檔重跑教學也不能再領）。 */
@@ -509,13 +511,24 @@ const COLORED = new Set(['coloring', 'subadult', 'adult', 'old']);
 
 /** 每個 tick：自己繁殖的魚（不含蝦）第一次長到轉色期，記進「養到轉色」的累計（#303）。 */
 export function trackRaised(state: TankState): void {
+  const breeding = state.purpose === 'breeding';
   for (const f of [...state.fish, ...(state.quarantine?.fish ?? [])]) {
-    if (f.raisedSeen || !f.alive || (f.generation ?? 0) < 1 || isShrimpSpecies(f.species) || !COLORED.has(growthStage(f))) continue;
-    f.raisedSeen = true;
+    if (!raisedBred(f) || (f.raisedSeen && (!breeding || f.breedingSeen))) continue;
     const e = economy(state);
-    e.raisedEver = (e.raisedEver ?? 0) + 1;
+    if (!f.raisedSeen) {
+      f.raisedSeen = true;
+      e.raisedEver = (e.raisedEver ?? 0) + 1;
+    }
+    // 繁殖缸的目標也記累計：住不下時推薦把大一點的搬走、賣掉，進度不會倒退（g39c #449）
+    if (breeding && !f.breedingSeen && state.fish.includes(f)) {
+      f.breedingSeen = true;
+      e.breedingRaisedEver = (e.breedingRaisedEver ?? 0) + 1;
+    }
   }
 }
+
+/** 自己繁殖（不含蝦）、活著、長到轉色期以後。 */
+export const raisedBred = (f: Fish): boolean => f.alive && (f.generation ?? 0) >= 1 && !isShrimpSpecies(f.species) && COLORED.has(growthStage(f));
 
 /** 手上這種插枝有幾株是寶箱來的（不會比手上的多）。 */
 export function chestCuttingsOf(state: TankState, species: PlantSpeciesId): number {
