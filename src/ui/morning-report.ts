@@ -1,5 +1,6 @@
 import { crisisText, type Crisis } from '../game/crisis';
 import { BLOOM_NOTE, boxBlocked, fryHome, fryNeedHome, fryPrep, newTankCost, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
+import { takeEchoes } from '../sim/choice-echo';
 import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, breederIds, breederName, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 import { cheapHeaterStep, crisisTodos, lingering, warmMoveStep, wipedOut } from './status';
@@ -33,7 +34,9 @@ export type ReportAction =
   | 'move_warm' // 冬天加熱棒弄不到：冷缸的魚搬去有加熱棒的缸（#400）
   | 'buy_heater' // 冬天錢不夠換同款：買撐得住的便宜加熱棒（#404）
   | 'move_fry' // 小魚在被吃、別缸養好水了：一鍵搬過去（#425）
-  | 'cycle_tank'; // 小魚要搬家、新缸還沒養水：打開「新缸要怎麼養水？」（#428；tank 是新缸）
+  | 'cycle_tank' // 小魚要搬家、新缸還沒養水：打開「新缸要怎麼養水？」（#428；tank 是新缸）
+  | 'buy_tank' // 住不下（C14）選了再買一缸：直接打開 20L 套缸的購買確認（polish-to-9.md §10.2）
+  | 'buy_big'; // 住不下（C14）選了換大缸：直接打開 90L 套缸的購買確認
 
 export type ReportKind =
   | 'crisis'
@@ -72,6 +75,7 @@ export type ReportKind =
   | 'crowd' // 擠缸（midgame.md §7.1）：快生的那窩會住不下的預告、超過建議量、自動賣／自動搬公魚
   | 'line' // 固定品系（design/strain-fixing.md）：蛇紋出來、每窩的穩定度
   | 'observe' // 平淡早上的小觀察（morning-observe.ts）
+  | 'echo' // 選擇的回音（polish-to-9.md §10.0）：選完 3 天內寫出那個選擇的結果
   | 'quiet';
 
 export interface ReportItem {
@@ -95,6 +99,8 @@ export interface ReportItem {
   plantId?: number;
   /** kind 'lookalike' 的比較卡資料：爸爸、媽媽、小魚的外觀和每個特徵跟誰的。 */
   lookalike?: LookalikeCard;
+  /** 選擇的回音（polish-to-9.md §10.0）：玩家當初選的那個選項，畫面在那行前面寫「你選了：…」；text 直接寫結果。 */
+  echo?: string;
   /** kind 'choice' 的選擇卡（sim/choices.ts）：選項和選種、配對的資料。 */
   choice?: ChoiceCard;
   /** C9 自動照上次的那一行（midgame.md §6.5）：點了展開這張卡改設定。 */
@@ -107,8 +113,6 @@ export interface ReportItem {
   reveal?: Reveal;
   /** kind 'second_brood' 的比較卡資料：這窩幾尾、第一窩還有幾尾、挑了幾尾備用、C9 選了什麼。 */
   secondBrood?: { momId: number; count: number; prevKids: number; kept: number; choice: string };
-  /** 選擇的回音（polish-to-9.md §10.0）：玩家當初選的那個選項的 label，畫面在這行前面放「你選了：…」；text 直接寫結果。 */
-  echo?: string;
 }
 
 /** 開獎卡的資料（midgame.md §6.1）：每尾小魚的基因預告。 */
@@ -561,6 +565,8 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   // 選育進度（midgame.md §2）：有第一窩或留種的魚就每天一行，取代一般的小觀察
   const progress = crisis ? null : breedingProgress(tanks);
   if (progress) items.push({ kind: 'breeding', tank: 0, tone: 'good', text: progress });
+  // 選擇的回音（polish-to-9.md §10.0）
+  for (const e of takeEchoes(tanks, choiceState(tanks))) items.push({ kind: 'echo', tank: e.tank, tone: 'info', text: e.text, echo: e.label });
   // 安靜的一晚（沒好事、沒壞事、也沒要留意的）：帶一句缸裡的小變化（#258）
   if (!crisis && !progress && tanks[0] && before.tanks[0] && items.every((i) => i.tone === 'info')) {
     const text = quietObservation(tanks[0], tanks[0], before.tanks[0]);
@@ -621,6 +627,8 @@ function lineRank(i: ReportItem): number {
   if (isPinned(i)) return -1;
   if (i.kind === 'crisis') return 0;
   if (i.kind === 'reveal') return 1;
+  // 回音排在目標進度後面（polish-to-9.md §10.5）：放不下就收進鈴鐺
+  if (i.kind === 'echo') return 3.5;
   if (isBadNews(i) || i.tone === 'warn') return 2;
   if (GOAL_KINDS.has(i.kind)) return 3;
   if (i.tone === 'good') return 4;
@@ -686,8 +694,8 @@ const CHOICE_FOLLOW: Partial<Record<ChoiceCard['id'], ReportAction>> = { C1: 'fr
 /** 選了這個選項，要不要帶玩家去做（C1 選留在主缸、C3 都要去買缸）。 */
 export function choiceFollowUp(card: ChoiceCard, key: string): ReportAction | undefined {
   if (card.id === 'C1') return key === 'box' ? 'fry_box' : undefined;
-  // C14 缸快滿了：再買一缸、換大缸都帶去買缸
-  if (card.id === 'C14') return key === 'tank' || key === 'big' ? 'shop_tank' : undefined;
+  // C14 缸快滿了：再買一缸、換大缸直接打開那個缸的購買確認（polish-to-9.md §10.2）
+  if (card.id === 'C14') return key === 'tank' ? 'buy_tank' : key === 'big' ? 'buy_big' : undefined;
   return CHOICE_FOLLOW[card.id];
 }
 

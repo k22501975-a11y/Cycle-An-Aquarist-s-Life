@@ -3,6 +3,8 @@ import { newGameState } from '../game/game';
 import { addFish, ADULT_SIZE, bacteriaCapacity, broodFactor, buyTank, CROWD_WARN, crowdingRatio, cross, DREAM_FISH, economy, FISH_SPECIES, linkTanks, orderBoard, setTankPurpose, type Fish, type GuppyGenome, type TankState } from './index';
 import { chooseOption, choiceState, CHOICE_RESHOW_DAYS, CROWD_FULL, CROWD_PREVIEW, REVEAL_CULL_DAYS, takeCrowdNotes, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, WARM_PREG_C, takeChoice, takeLineNotes, lineName, lineNameRefusal, LINE_NAME_SUGGESTED, takeReveal, takeSecondBrood, FINS_DAYS, COLOR_DAYS, SNAKE_DAYS, STABILITY_DAYS } from './choices';
 import { dreamRoute } from './dream';
+import { takeEchoes } from './choice-echo';
+import { newTankCost } from './household';
 import { reservedForPick } from './orders';
 
 const calm = { carriesIch: false, carries: [] };
@@ -935,5 +937,85 @@ describe('固定品系：C18 取名（穩定度 40%）和品系完成（75%）�
     expect(st.lineNamed!.done).toMatchObject({ stability: 88 });
     expect(takeLineNotes(tanks)).toEqual([]);
   });
-});
 
+  describe('住不下（C14）的回音和修正（polish-to-9.md §10.2）', () => {
+    const crowd = (tanks: TankState[], s: TankState, over = CROWD_WARN + 0.1) => {
+      const st = choiceState(tanks);
+      Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard' });
+      orderBoard(s).orders = [];
+      while (crowdingRatio(s) < over) addFish(s, 'guppy', { ...calm, sex: 'male', pregnant: false });
+      return st;
+    };
+
+    it('賣一批：隔天早上寫賣了幾尾、多少錢、缸現在幾 %，只出一次', () => {
+      const { tanks, s } = latePair();
+      const st = crowd(tanks, s);
+      expect(takeChoice(tanks)?.id).toBe('C14');
+      const coins = economy(s).coins;
+      expect(chooseOption(tanks, 'C14', 'sell')).toBeNull();
+      const lines = takeEchoes(tanks, st);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatchObject({ tank: 0, label: '賣一批' });
+      const [, n, plus, pct] = lines[0].text.match(/^賣了 (\d+) 尾，\+(\d+) 元，.+現在 (\d+)%$/)!;
+      expect(Number(n)).toBeGreaterThan(0);
+      expect(Number(plus)).toBe(economy(s).coins - coins);
+      expect(Number(pct)).toBe(Math.round(crowdingRatio(s) * 100));
+      expect(takeEchoes(tanks, st)).toEqual([]);
+    });
+
+    it('公母分開：當天寫搬了幾尾公魚，之後每週寫這缸和別缸各生了幾窩', () => {
+      const { tanks, s } = latePair();
+      const st = choiceState(tanks);
+      Object.assign(st.picked, { C11: 'together', C12: 'one', C13: 'standard' });
+      orderBoard(s).orders = [];
+      addFish(s, 'guppy', { ...calm, sex: 'male', pregnant: false });
+      while (crowdingRatio(s) < CROWD_WARN + 0.05) {
+        const f = addFish(s, 'guppy', { ...calm, pregnant: false });
+        f.lengthCm = 1.4;
+        f.ageDays = 3;
+      }
+      expect(takeChoice(tanks)?.options.find((o) => o.recommended)?.key).toBe('split');
+      expect(chooseOption(tanks, 'C14', 'split')).toBeNull();
+      const first = takeEchoes(tanks, st);
+      expect(first).toHaveLength(1);
+      expect(first[0].label).toBe('公母分開，先別生了');
+      expect(first[0].text).toMatch(/^公母分開了，\d+ 尾公魚搬到.+，.+(這週不會再有新的小魚|生完就不會再有新的小魚)$/);
+      for (const t of tanks) t.hours += 7 * 24;
+      const week = takeEchoes(tanks, st);
+      expect(week).toHaveLength(1);
+      expect(week[0].text).toMatch(/^.+這週 \d+ 窩，別缸 \d+ 窩$/);
+    });
+
+    it('先多換水：3 天後才寫撐了 3 天的結果，還是太擠就寫氨', () => {
+      const { tanks, s } = latePair();
+      const st = crowd(tanks, s, CROWD_FULL + 0.1);
+      expect(chooseOption(tanks, 'C14', 'water')).toBeNull();
+      expect(takeEchoes(tanks, st)).toEqual([]);
+      for (const t of tanks) t.hours += 3 * 24;
+      const lines = takeEchoes(tanks, st);
+      expect(lines).toEqual([{ tank: 0, label: '先多換水撐幾天', text: expect.stringMatching(/^多換水撐了 3 天，魚還是太多，水又髒回來了（氨 [\d.]+）$/) }]);
+    });
+
+    it('錢不夠買缸：選項灰掉、寫還差幾元，點了不算選（g39：點了同一張卡又跳一次）', () => {
+      const { tanks, s } = latePair();
+      crowd(tanks, s, CROWD_FULL + 0.1);
+      economy(s).coins = 100;
+      const card = takeChoice(tanks);
+      expect(card?.id).toBe('C14');
+      const tank = card!.options.find((o) => o.key === 'tank')!;
+      expect(tank).toMatchObject({ disabled: '錢不夠', short: newTankCost(tanks, 'nano20') - 100 });
+      expect(chooseOption(tanks, 'C14', 'tank')).toBe('錢不夠');
+      expect(choiceState(tanks).picked.C14).toBeUndefined();
+    });
+
+    it('有兩缸、另一缸也選過公母分開：公母分開反灰，但不寫「只有一缸」', () => {
+      const { tanks, s, t2 } = latePair();
+      const st = crowd(tanks, s, CROWD_FULL + 0.1);
+      st.crowdSplit = [1];
+      expect(tanks.indexOf(t2)).toBe(1);
+      const split = takeChoice(tanks)?.options.find((o) => o.key === 'split');
+      expect(split?.disabled).toBeDefined();
+      expect(split?.disabled).not.toMatch(/只有一缸/);
+    });
+  });
+});

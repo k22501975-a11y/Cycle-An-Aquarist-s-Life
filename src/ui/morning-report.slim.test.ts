@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChoiceCard } from '../sim/choices';
-import { lineGroup, REPORT_LINES, slimReport, type MorningReport, type ReportItem } from './morning-report';
+import { choiceFollowUp, lineGroup, REPORT_LINES, slimReport, type MorningReport, type ReportItem } from './morning-report';
 
 const item = (kind: ReportItem['kind'], tone: ReportItem['tone'], text: string, more: Partial<ReportItem> = {}): ReportItem => ({ kind, tone, text, tank: 0, ...more });
 const report = (items: ReportItem[]): MorningReport => ({ title: '早安，第 20 天', hours: 12, stopped: false, items });
@@ -54,5 +54,21 @@ describe('早上報告瘦身（daily-loop.md §2）', () => {
     const first = slimReport(report([item('snails', 'info', '缸壁上出現第一隻小螺，應該是跟著水草混進來的', { count: 1 })]));
     expect(first.lines.map((i) => i.kind)).toEqual(['snails']);
     expect(first.marks).toEqual([]);
+  });
+
+  it('選擇的回音排在目標進度後面，擠不下就收進鈴鐺（polish-to-9.md §10.5）', () => {
+    const echo = item('echo', 'info', '賣了 11 尾，+220 元，主缸現在 62%', { echo: '賣一批' });
+    const r = slimReport(report([echo, item('belly', 'good', '母魚的肚子圓起來了'), item('breeding', 'good', '留種的那對還要 10 天')]));
+    expect(r.lines.map((l) => l.kind)).toEqual(['belly', 'breeding', 'echo']);
+    const full = slimReport(report([echo, item('hungry', 'warn', '魚餓了'), item('belly', 'good', '母魚的肚子圓起來了'), item('breeding', 'good', '留種的那對還要 10 天')]));
+    expect(full.lines).not.toContain(echo);
+    expect(full.rest).toContain(echo);
+  });
+
+  it('住不下（C14）選了再買一缸、換大缸：直接打開購買確認（polish-to-9.md §10.2）', () => {
+    const c14 = card('C14');
+    expect(choiceFollowUp(c14, 'tank')).toBe('buy_tank');
+    expect(choiceFollowUp(c14, 'big')).toBe('buy_big');
+    expect(choiceFollowUp(c14, 'water')).toBeUndefined();
   });
 });
