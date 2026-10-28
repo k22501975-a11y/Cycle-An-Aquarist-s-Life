@@ -4,6 +4,7 @@ import { breedingStep } from '../sim/choices';
 import { setBreedingStep } from '../sim/next-step';
 
 export * from './panels';
+export * from './tanks-panel';
 export { recordsPanel } from './records';
 export { ordersPanel } from './orders-panel';
 export { ScapeBar } from './scape-bar';
