@@ -17,7 +17,7 @@ test('育幼盒空了、母魚快生：任務卡說把她放進去，點了就�
     game.actAll((tanks) => {
       const s = tanks[0];
       s.nurseryBox = true;
-      const mom = Object.assign(sim.addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'female' }), { ageDays: 120, pregnancy: 0.75 });
+      const mom = Object.assign(sim.addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'female' }), { ageDays: 120, pregnancy: 0.9 });
       id = mom.id;
     });
     return id;
