@@ -2,7 +2,7 @@ import { expect, openGame, test } from './fixtures';
 
 type Board = { orders: Array<{ preview?: boolean; kind: string }>; fillCheckedHour?: number; lastChangeHours?: number };
 type Tank = { snails?: { snails: unknown[]; pests: Record<string, number>; clutches: unknown[]; appleYoung: number; neriteEggs: number }; economy: { coins: number } };
-type Cycle = { cycle: { sim: { orderBoard: (s: Tank) => Board; updateOrders: (s: Tank) => void }; game: { state: Tank; clock: { timeScale: number }; act: (f: (s: Tank) => void) => void } } };
+type Cycle = { cycle: { toasts: { inbox: { text: string }[] }; sim: { orderBoard: (s: Tank) => Board; updateOrders: (s: Tank) => void }; game: { state: Tank; clock: { timeScale: number }; act: (f: (s: Tank) => void) => void } } };
 
 /** 打開訂單板（不常用的工具收在「更多」裡）。 */
 async function openOrders(page: import('@playwright/test').Page): Promise<void> {
@@ -55,7 +55,9 @@ test('開局訂單板：起步單、預告卡、空格；起步單交掉馬上�
   const deliver = sheet.locator('.order-card:not(.preview) button', { hasText: '交貨' });
   await expect(deliver).toHaveCount(1);
   await deliver.dispatchEvent('click');
-  await expect(page.locator('.toast').filter({ hasText: '店家馬上補了一張新的單' })).toHaveCount(1);
+  // 看通知匣而不是畫面上那一格：剛好同時冒出來、一樣要緊的通知會把它換掉，畫面上就等不到
+  const refilled = () => page.evaluate(() => (window as unknown as Cycle).cycle.toasts.inbox.some((n) => n.text.includes('店家馬上補了一張新的單')));
+  await expect.poll(refilled).toBe(true);
   expect(await page.evaluate(() => (window as unknown as Cycle).cycle.game.state.economy.coins)).toBeGreaterThan(coins);
   // 重畫後：新的起步單補上了，預告卡還在
   await expect(sheet.locator('.order-card:not(.preview)')).toHaveCount(1);

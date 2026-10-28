@@ -11,6 +11,7 @@ import {
   linkTanks,
   moveDueToNursery,
   moveFryHome,
+  moveSoonToNursery,
   newTankCost,
   nextStep,
   rescueFryToNursery,
@@ -134,6 +135,55 @@ describe('盒裡還有小魚、母魚又懷孕了：提早叫你買第二缸、�
     const followed = eatenSecondBrood(seed, true);
     const ignored = eatenSecondBrood(seed, false);
     expect(followed).toBeLessThanOrEqual(3);
+    expect(ignored).toBeGreaterThan(followed);
+  });
+});
+
+/**
+ * g38 A 局的情境（polish-to-9.md §9.1）：第一窩已經搬到養好水的繁殖缸，育幼盒空了；另一尾母魚又懷孕（0.7，約 8 天後生）。
+ * 只照任務卡做的玩家（不點早上報告、不自己開育幼盒）：叫放進盒子就放、叫搬小魚就搬。驗收：前 15 天被吃 ≤ 1 尾（g38 A 局 3 尾）。
+ */
+function emptyBox(seed: number) {
+  const s = newGameState(seed);
+  const tanks = [s];
+  linkTanks(tanks);
+  goalState(tanks).done.push('cycled');
+  s.bacteria.aob = s.bacteria.nob = bacteriaCapacity(s);
+  addFish(s, 'guppy', { ...calm, sex: 'male' });
+  addFish(s, 'guppy', { ...calm, sex: 'female', pregnant: false });
+  addFish(s, 'guppy', { ...calm, sex: 'female' }).pregnancy = 0.7;
+  s.nurseryBox = true;
+  economy(s).coins = newTankCost(tanks, 'nano20') + 600;
+  const t2 = buyTank(tanks, 'nano20')!;
+  setTankPurpose(t2, 'breeding');
+  t2.bacteria.aob = t2.bacteria.nob = bacteriaCapacity(t2);
+  for (let i = 0; i < 20; i++) {
+    const f = addFish(t2, 'guppy', calm);
+    Object.assign(f, { lengthCm: 0.9, ageDays: 6, generation: 1, bornHours: t2.hours - 144, pregnancy: 0 });
+  }
+  return { s, tanks };
+}
+
+function eatenEmptyBox(seed: number, follow: boolean, days = 15): number {
+  const { tanks } = emptyBox(seed);
+  for (let h = 0; h < days * 24; h += CHECK_HOURS) {
+    const step = nextStep(tanks);
+    if (follow && step?.tank !== undefined) {
+      if (step.target === 'nursery_soon') moveSoonToNursery(tanks[step.tank]);
+      else if (step.target === 'move_fry') moveFryHome(tanks, step.tank);
+    }
+    if (h % 12 === 0) for (const t of tanks) if (alive(t).length > 0) feed(t, (meal(t) * PINCH_MEALS) / 2);
+    for (const t of tanks) simulate(t, CHECK_HOURS);
+  }
+  return tanks.reduce((n, t) => n + t.events.filter((e) => e.type === 'fry_eaten').reduce((m, e) => m + (e.count ?? 0), 0), 0);
+}
+
+describe('育幼盒空了、母魚又快生：任務卡叫你把她放進去（g38，polish-to-9.md §9.1）', () => {
+  // 本機：照任務卡 0 尾（種子 1～6），不照做 16／21／8／16／12／10 尾
+  it.each([1, 2, 3, 4, 5, 6])('種子 %i：只照任務卡做，15 天被吃 ≤ 1 尾；不照做的會被吃更多', (seed) => {
+    const followed = eatenEmptyBox(seed, true);
+    const ignored = eatenEmptyBox(seed, false);
+    expect(followed).toBeLessThanOrEqual(1);
     expect(ignored).toBeGreaterThan(followed);
   });
 });

@@ -4,8 +4,8 @@ import { canSalt, SALT_DAYS, saltDaysLeft, saltWorking } from './salt-cure';
 import { HUNGRY } from './readings';
 import { CALM_DAYS, GOALS, goalState, nextGoals, PURPOSE_GOAL_COUNT, raisedCount, type Goal } from './goals';
 import { COLORING_AT, daysToLength, daysUntilSexVisible, growthStage, maxLengthCm, PICK_AFTER_BROOD_DAYS, sexVisible } from './growth';
-import { newTankCost, tankLabel } from './household';
-import { BELLY_SHOWS, daysToBirth, dueMothers, NURSERY_FRY_CAPACITY, nurseryFish } from './nursery';
+import { ID_BLOCK, newTankCost, tankLabel } from './household';
+import { BELLY_SHOWS, daysToBirth, dueMothers, NURSERY_FRY_CAPACITY, nurseryFish, soonMother } from './nursery';
 import { orderBoard, orderSupply } from './orders';
 import { temperatureFactor } from './chemistry';
 import { hasVisible } from './processes/disease';
@@ -54,7 +54,8 @@ export type NextTarget =
   | 'move_warm' // 冬天加熱棒弄不到（#400）：冷缸的魚連袋子泡進有加熱棒的缸、慢慢對水再放
   | 'buy_heater' // 冬天錢不夠換同款（#404）：買一支撐得住的便宜加熱棒裝上
   | 'move_fry' // 小魚在這缸會被吃、另一缸養好水了（#425）：一鍵把小魚搬過去
-  | 'cycle_tank'; // 小魚要搬家、新缸還沒養水（#428）：打開「新缸要怎麼養水？」
+  | 'cycle_tank' // 小魚要搬家、新缸還沒養水（#428）：打開「新缸要怎麼養水？」
+  | 'nursery_soon'; // 育幼盒空著、母魚快生了（polish-to-9.md §9.1）：點一下就把她放進去
 
 export interface NextStep {
   /** 對應的目標 id。 */
@@ -360,7 +361,19 @@ export function nextStep(tanks: TankState[]): NextStep | null {
   // 小魚在被吃、別缸已經能收：先搬（g36 #425：第二缸養好水 5 天都空著，小魚被吃 17 尾）
   const fry = fryMoveStep(tanks) ?? fryPrepStep(tanks);
   if (fry) return { goal: goal.id, ...fry };
+  // 育幼盒空了、又有母魚快生：排在照顧句前面（g38：第一窩搬走後沒人叫，第二窩生在主缸被吃 3 尾）
+  const box = soonMotherStep(tanks);
+  if (box) return { goal: goal.id, ...box };
   return { goal: goal.id, ...rotateStale(tanks, stepFor(goal, tanks)) };
+}
+
+/** 育幼盒空著、有母魚懷孕 ≥ SOON_PREGNANCY（polish-to-9.md §9.1）：叫玩家把她放進去。盒裡還有小魚的照 #430（買第二缸或搬小魚）。 */
+function soonMotherStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
+  for (let tank = 0; tank < tanks.length; tank++) {
+    const mom = soonMother(tanks[tank]);
+    if (mom) return { text: `育幼盒空了，把快生的${FISH_SPECIES[mom.species].name}母魚 #${mom.id % ID_BLOCK} 放進去`, target: 'nursery_soon', tank };
+  }
+  return null;
 }
 
 /** 有缸的小魚需要搬家，而且另一缸養好水、沒有會吃小魚的成魚：叫玩家把小魚搬過去。 */

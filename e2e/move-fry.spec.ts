@@ -1,6 +1,6 @@
 import { expect, openGame, test } from './fixtures';
 
-type Fish = { lengthCm: number; ageDays: number; generation?: number; alive: boolean };
+type Fish = { lengthCm: number; ageDays: number; generation?: number; alive: boolean; pregnancy: number };
 type Tank = { fish: Fish[]; bacteria: { aob: number; nob: number } };
 type Sim = {
   addFish: (s: Tank, species: string, o: object) => Fish;
@@ -8,7 +8,7 @@ type Sim = {
   bacteriaCapacity: (s: Tank) => number;
   economy: (s: Tank) => { coins: number };
 };
-type Cycle = { cycle: { sim: Sim; game: { clock: { timeScale: number }; active: number; tanks: Tank[]; actAll: (f: (tanks: Tank[]) => void) => void } } };
+type Cycle = { cycle: { sim: Sim; toasts: { inbox: { text: string }[] }; game: { clock: { timeScale: number }; active: number; tanks: Tank[]; actAll: (f: (tanks: Tank[]) => void) => void } } };
 
 /** g36 #425：第二缸養好水了、主缸小魚會被吃：任務卡叫你搬小魚，點一下就搬進新缸、切過去看牠們。 */
 test('第二缸養好水：任務卡說把小魚搬過去，點了就搬好', async ({ page }) => {
@@ -21,7 +21,7 @@ test('第二缸養好水：任務卡說把小魚搬過去，點了就搬好', as
     game.actAll((tanks) => {
       const s = tanks[0];
       sim.addFish(s, 'guppy', { carriesIch: false, carries: [], sex: 'male', pregnant: false });
-      for (let i = 0; i < 3; i++) Object.assign(sim.addFish(s, 'guppy', { carriesIch: false, carries: [] }), { lengthCm: 0.7, ageDays: 2, generation: 1 });
+      for (let i = 0; i < 3; i++) Object.assign(sim.addFish(s, 'guppy', { carriesIch: false, carries: [] }), { lengthCm: 0.7, ageDays: 2, generation: 1, pregnancy: 0 });
       sim.economy(s).coins = 5000;
       const t2 = sim.buyTank(tanks, 'nano20')!;
       t2.bacteria.aob = t2.bacteria.nob = sim.bacteriaCapacity(t2);
@@ -30,7 +30,9 @@ test('第二缸養好水：任務卡說把小魚搬過去，點了就搬好', as
   const pill = page.locator('.quest-pill', { hasText: '第 2 缸養好水了，把小魚搬過去' });
   await expect(pill).toBeVisible();
   await pill.dispatchEvent('click');
-  await expect(page.locator('.toast', { hasText: '3 尾小魚慢慢對水，搬進第 2 缸了' })).toBeVisible();
+  // 看通知匣而不是畫面上那一格：剛好同時冒出來、一樣要緊的通知會把它換掉，畫面上就等不到（本機 10 次紅 2 次）
+  const moved = () => page.evaluate(() => (window as unknown as Cycle).cycle.toasts.inbox.some((n) => n.text.includes('3 尾小魚慢慢對水，搬進第 2 缸了')));
+  await expect.poll(moved).toBe(true);
   const after = await page.evaluate(() => {
     const { game } = (window as unknown as Cycle).cycle;
     return { active: game.active, fry: game.tanks[1].fish.filter((f) => f.alive && f.generation === 1).length };
