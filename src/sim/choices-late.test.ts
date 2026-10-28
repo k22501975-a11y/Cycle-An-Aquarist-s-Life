@@ -677,7 +677,8 @@ describe('第 36～80 天的選擇點（midgame.md §6，#326）', () => {
     mom.pregnancy = 0.8;
     const first = takeCrowdNotes(tanks).filter((n) => n.tank === 0);
     expect(first).toHaveLength(1);
-    expect(first[0].text).toMatch(/現在 \d+ 尾，.+快生了，生完大約 \d+ 尾，會住不太下。$/);
+    // 這窩大（≥ 每公升 0.5 尾）：大窩換水的提醒併在同一行（polish-to-9.md §10.1 補充）
+    expect(first[0].text).toMatch(/現在 \d+ 尾，.+快生了，生完大約 \d+ 尾，會住不太下；只有 40L，生完氨會升高，生產那幾天要多換水。$/);
     expect(takeCrowdNotes(tanks).filter((n) => n.tank === 0)).toHaveLength(0);
     while (crowdingRatio(s) < CROWD_FULL + 0.05) addFish(s, 'guppy', { ...calm, sex: 'male', pregnant: false });
     const full = takeCrowdNotes(tanks).find((n) => n.tank === 0)!;
@@ -1022,21 +1023,29 @@ describe('固定品系：C18 取名（穩定度 40%）和品系完成（75%）�
       expect(takeEchoes(tanks, st)).toEqual([]);
       s.hours += 24;
       for (const f of fry) f.ageDays = 7;
+      // 別窩、比較小（會先被挑）的自家小魚不能被交掉（#440 架構審查）
+      const other = Array.from({ length: 4 }, () => Object.assign(addFish(s, 'guppy', { ...calm, pregnant: false }), { generation: 1, lengthCm: 1.21, ageDays: 7 }));
       const coins = economy(s).coins;
       takeSecondBrood(tanks);
       expect(takeEchoes(tanks, st).map((e) => e.text)).toEqual(['照你的設定交了 4 尾小魚，+40 元']);
       expect(economy(s).coins).toBe(coins + 40);
       expect(st.fryDeliver).toEqual([]);
+      expect(other.every((f) => s.fish.includes(f))).toBe(true);
     });
   });
 
   describe('住不下（C14）的回音和修正（polish-to-9.md §10.2）', () => {
-    it('收掉一缸：那缸的回音不出了，後面的缸往前移（架構 #438 🟡）', () => {
-      const s = { echoes: [0, 1, 2].map((tank) => ({ label: 'x', tank, due: 0, text: `t${tank}` })) };
+    it('收掉一缸：那缸的回音和自動交單不做了，後面的缸往前移（架構 #438、#440 🟡）', () => {
+      const s = { echoes: [0, 1, 2].map((tank) => ({ label: 'x', tank, due: 0, text: `t${tank}` })), fryDeliver: [0, 1, 2].map((tank) => ({ ids: [tank], born: 0, tank })) };
       dropTankEchoes(s, 1);
       expect(s.echoes.map((e) => [e.tank, e.text])).toEqual([
         [0, 't0'],
         [1, 't2'],
+      ]);
+      // 第二窩自動交小魚單也跟著移（#440 架構審查）
+      expect(s.fryDeliver.map((d) => [d.tank, d.ids[0]])).toEqual([
+        [0, 0],
+        [1, 2],
       ]);
     });
 

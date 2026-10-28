@@ -160,7 +160,7 @@ function run(seed: number, days: number, opts: { neglectCrowd?: boolean; onDay?:
       const r = useTestKit(t);
       if ((t === s && currentQuest(p)?.id === 'water') || r.ammonia > 0 || r.nitrite > 0) waterChange(t, 0.3);
     }
-    // 照任務卡處理缺氧：換水點下去打開換水面板，照預設（建議的量、新水對好溫度）換
+    // 照任務卡處理缺氧、大窩生在小缸：換水點下去打開換水面板，照預設（建議的量、新水對好溫度）換
     const next = nextStep(tanks);
     if (next?.target === 'water_change') suggestedChange(tanks[next.tank ?? 0]);
     if (next?.target === 'add_air') addAir(tanks[next.tank ?? 0]);

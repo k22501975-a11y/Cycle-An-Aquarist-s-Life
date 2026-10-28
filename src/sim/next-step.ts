@@ -1,3 +1,4 @@
+import { freshBigBrood } from './brood-water';
 import { hideGrace } from './choice-echo';
 import { economy, LOAN_PAUSE_COINS, price } from './economy';
 import { raiseCashStep } from './raise-cash';
@@ -58,7 +59,7 @@ export type NextTarget =
   | 'move_fry' // 小魚在這缸會被吃、另一缸養好水了（#425）：一鍵把小魚搬過去
   | 'cycle_tank' // 小魚要搬家、新缸還沒養水（#428）：打開「新缸要怎麼養水？」
   | 'nursery_soon' // 育幼盒空著、母魚快生了（polish-to-9.md §9.1）：點一下就把她放進去
-  | 'water_change' // 缺氧又沒打氣可加：切到那缸、打開換水
+  | 'water_change' // 缺氧又沒打氣可加、大窩生在小缸（polish-to-9.md §10 補充）：切到那缸、打開換水
   | 'add_air'; // 缺氧：打開打氣機，沒有就買一台裝上（oxygen.ts）
 
 export interface NextStep {
@@ -373,6 +374,9 @@ export function nextStep(tanks: TankState[]): NextStep | null {
   if (gasp) return { goal: goal.id, ...gasp };
   // 生病不等人：不管現在是哪個目標，先叫玩家治療（體驗第 15 輪 #291：白點 5 天，下一步還在說母魚倒數）
   if (anySick(tanks)) return { goal: goal.id, ...sickStep(tanks) };
+  // 大窩生在小缸：生的那兩天每天換三成水，不然 KH 吃光、氨一晚就衝上去（polish-to-9.md §10 補充）
+  const water = broodWaterStep(tanks);
+  if (water) return { goal: goal.id, ...water };
   // 小魚在被吃、別缸已經能收：先搬（g36 #425：第二缸養好水 5 天都空著，小魚被吃 17 尾）
   // C1 選了躲草：3 天內不叫玩家搬小魚、買缸，被吃到剩一半才叫（polish-to-9.md §10.1）
   const fry = hiding(tanks) ? null : (fryMoveStep(tanks) ?? fryPrepStep(tanks));
@@ -386,13 +390,22 @@ export function nextStep(tanks: TankState[]): NextStep | null {
 /** 有缸缺氧到傷魚（小魚也算，oxygen.ts）：打氣機關著就打開、買得起就加一台，不然先換水。 */
 function gaspStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   // 先挑最缺的那缸
-  const worst = tanks.map((t, tank) => ({ tank, b: breathless(t) })).filter((x) => x.b?.harm).sort((a, b) => a.b!.o2 - b.b!.o2)[0];
+  const worst = tanks.map((t, tank) => ({ tank, b: breathless(t) })).filter((x) => x.b?.harm && !x.b.recovering).sort((a, b) => a.b!.o2 - b.b!.o2)[0];
   if (!worst) return null;
   const { tank } = worst;
   const where = tanks.length > 1 ? tankLabel(tanks, tank) : '缸裡';
   const fix = oxygenFix(tanks[tank]);
   if (fix === 'water') return { text: `${where}的魚在水面喘氣，水裡缺氧，先換水`, target: 'water_change', tank };
   return { text: `${where}缺氧，魚在水面喘氣，${fix === 'air_on' ? '打開打氣機' : '加一台打氣機'}`, target: 'add_air', tank };
+}
+
+/** 大窩生在小缸、今天還沒換水：生的當天說「明天換三成水」，隔天說「今天換三成水」。 */
+function broodWaterStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
+  for (let tank = 0; tank < tanks.length; tank++) {
+    const b = freshBigBrood(tanks[tank]);
+    if (b) return { text: `一窩 ${b.n} 尾生在 ${b.liters}L 的缸，${b.today ? '明天' : '今天'}換三成水`, target: 'water_change', tank };
+  }
+  return null;
 }
 
 /** 育幼盒空著、有母魚懷孕 ≥ BOX_DUE（約剩 3 天，polish-to-9.md §9.1）：叫玩家把她放進去。盒裡還有小魚的照 #430（買第二缸或搬小魚）。 */

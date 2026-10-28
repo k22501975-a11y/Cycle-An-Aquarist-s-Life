@@ -1,6 +1,7 @@
 import { tankLabel } from './household';
 import { crowdingRatio } from './processes/fauna';
-import type { Fish, TankState } from './state';
+import { BOX_DUE, usesNursery } from './nursery';
+import { isJuvenile, type Fish, type TankState } from './state';
 
 /**
  * 選擇的回音（polish-to-9.md §10.0）：每張選擇卡選完 3 個遊戲天內，早上報告出一行帶數字的結果；
@@ -18,8 +19,9 @@ export interface Echo {
   /**
    * water：多換水撐了 3 天的結果；split：公母分開後每週那缸生了幾窩（weekly 是第幾週）。
    * box、hide：第一窩放育幼盒、躲草之後還剩幾尾；brood：第一窩第 14 天的總結；grow：C9 那窩留在缸裡，缸現在多擠。
+   * busy：第一窩還佔著育幼盒時，又有母魚快生了（每天早上看一次，說過一次或盒子空了就不再看）。
    */
-  kind?: 'water' | 'split' | 'box' | 'hide' | 'brood' | 'grow';
+  kind?: 'water' | 'split' | 'box' | 'hide' | 'brood' | 'grow' | 'busy';
   weekly?: number;
   /** split：從什麼時候開始算；hide：選的時間（遊戲小時）。 */
   since?: number;
@@ -72,17 +74,22 @@ export function addEcho(s: { echoes?: Echo[] }, echo: Echo): void {
   (s.echoes ??= []).push(echo);
 }
 
-/** 收掉第 index 缸（removeTank）：那缸的回音不出了，後面的缸往前移一格。 */
-export function dropTankEchoes(s: { echoes?: Echo[] } | undefined, index: number): void {
-  if (!s?.echoes) return;
-  s.echoes = s.echoes.filter((e) => e.tank !== index).map((e) => (e.tank > index ? { ...e, tank: e.tank - 1 } : e));
+/** 收掉第 index 缸（removeTank）：那缸的回音和小魚自動交單不做了，後面的缸往前移一格。 */
+export function dropTankEchoes(s: { echoes?: Echo[]; fryDeliver?: Array<{ tank: number }> } | undefined, index: number): void {
+  const shift = <T extends { tank: number }>(xs: T[]): T[] => xs.filter((e) => e.tank !== index).map((e) => (e.tank > index ? { ...e, tank: e.tank - 1 } : e));
+  if (s?.echoes) s.echoes = shift(s.echoes);
+  if (s?.fryDeliver) s.fryDeliver = shift(s.fryDeliver);
 }
 
 /** 這段時間（since～現在）這缸生了幾窩。 */
 const broodsSince = (t: TankState, since: number) => t.events.filter((e) => e.type === 'fry_born' && e.hours >= since).length;
 
-/** 取出到期的回音（早上報告呼叫一次）。週期的會排下一次。 */
-export function takeEchoes(tanks: TankState[], s: { echoes?: Echo[] }): EchoLine[] {
+/** 這缸放得進育幼盒、懷孕到 BOX_DUE（約剩 3 天）、還在盒子外面的母魚，最快生的那尾。 */
+const dueMother = (t: TankState): Fish | undefined =>
+  t.fish.filter((f) => f.alive && !f.nursery && f.sex === 'female' && !isJuvenile(f) && f.pregnancy >= BOX_DUE && usesNursery(f.species)).sort((a, b) => b.pregnancy - a.pregnancy)[0];
+
+/** 取出到期的回音（早上報告呼叫一次）。週期的會排下一次。name 是母魚在句子裡的叫法。 */
+export function takeEchoes(tanks: TankState[], s: { echoes?: Echo[] }, name: (f: Fish) => string = () => '母魚'): EchoLine[] {
   const now = tanks[0]?.hours ?? 0;
   const out: EchoLine[] = [];
   const keep: Echo[] = [];
@@ -93,16 +100,16 @@ export function takeEchoes(tanks: TankState[], s: { echoes?: Echo[] }): EchoLine
       keep.push(e);
       continue;
     }
-    const name = tankLabel(tanks, e.tank);
+    const tankName = tankLabel(tanks, e.tank);
     if (e.text) out.push({ tank: e.tank, label: e.label, text: e.text });
     else if (e.kind === 'water') {
       const ammonia = Math.round(t.water.tan * 100) / 100;
-      out.push({ tank: e.tank, label: e.label, text: crowdingRatio(t) >= 1 ? `多換水撐了 3 天，魚還是太多，水又髒回來了（氨 ${ammonia}）` : `多換水撐了 3 天，${name}現在 ${crowdPct(t)}%，不擠了` });
+      out.push({ tank: e.tank, label: e.label, text: crowdingRatio(t) >= 1 ? `多換水撐了 3 天，魚還是太多，水又髒回來了（氨 ${ammonia}）` : `多換水撐了 3 天，${tankName}現在 ${crowdPct(t)}%，不擠了` });
     } else if (e.kind === 'split') {
       const since = e.since ?? now - 7 * 24;
       const here = broodsSince(t, since);
       const other = tanks.reduce((n, x, i) => (i === e.tank ? n : n + broodsSince(x, since)), 0);
-      out.push({ tank: e.tank, label: e.label, text: `${name}這週 ${here} 窩${tanks.length > 1 ? `，別缸 ${other} 窩` : ''}` });
+      out.push({ tank: e.tank, label: e.label, text: `${tankName}這週 ${here} 窩${tanks.length > 1 ? `，別缸 ${other} 窩` : ''}` });
       const week = (e.weekly ?? 0) + 1;
       if (week < SPLIT_ECHO_WEEKS) keep.push({ ...e, due: now + 7 * 24, since: now, weekly: week, text: undefined });
     } else if (e.kind === 'box') {
@@ -121,7 +128,13 @@ export function takeEchoes(tanks: TankState[], s: { echoes?: Echo[] }): EchoLine
     } else if (e.kind === 'grow') {
       const left = aliveOf(tanks, e.ids ?? []).length;
       const pct = crowdPct(t);
-      if (left > 0) out.push({ tank: e.tank, label: e.label, text: `這窩 ${left} 尾留在${name}，缸裡現在 ${t.fish.filter((f) => f.alive).length} 尾（建議量 ${pct}%）${pct > CROWD_ALMOST * 100 ? '，再一窩就住不下了' : ''}` });
+      if (left > 0) out.push({ tank: e.tank, label: e.label, text: `這窩 ${left} 尾留在${tankName}，缸裡現在 ${t.fish.filter((f) => f.alive).length} 尾（建議量 ${pct}%）${pct > CROWD_ALMOST * 100 ? '，再一窩就住不下了' : ''}` });
+    } else if (e.kind === 'busy') {
+      // polish-to-9.md §10.1（選 b）：育幼盒的代價是會被佔住。第一窩還在盒裡、下一尾又快生了，說一次
+      if (!aliveOf(tanks, e.ids ?? []).some((f) => f.nursery)) continue;
+      const mom = dueMother(t);
+      if (mom) out.push({ tank: e.tank, label: e.label, text: `盒子被第一窩佔著，${name(mom)}快生了也沒地方放` });
+      else keep.push({ ...e, due: now + 24 });
     } else if (e.kind === 'brood') {
       const left = aliveOf(tanks, e.ids ?? []);
       const big = left.reduce((m, f) => Math.max(m, f.lengthCm), 0);
