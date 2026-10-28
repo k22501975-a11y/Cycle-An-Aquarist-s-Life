@@ -494,9 +494,10 @@ async function start(): Promise<void> {
     // 點到魚、螺、水草：沒有音效，手機上給一下短震動（G1）
     onSelectFish: (id) => {
       if (id !== null) audio.buzz('tap');
-      // 懷著夢想窩的母魚（polish-to-9.md §12.1）：點她直接打開夢想魚的路線卡
-      if (id !== null && game.state.fish.find((f) => f.id === id)?.dreamBrood) return void sheet.open('夢想魚', () => dreamCard(sim.dreamRoute(game.tanks)));
+      // 照常選取（每日小事、看過肚子都要算到）
       select(id);
+      // 懷著夢想窩的母魚（polish-to-9.md §12.1）：點她再直接打開夢想魚的路線卡
+      if (id !== null && game.state.fish.find((f) => f.id === id)?.dreamBrood) sheet.open('夢想魚', () => dreamCard(sim.dreamRoute(game.tanks)));
     },
     // 在缸裡點到螺：打開螺的面板（每日小事「找到螺點一下」也就做完了）
     onTapSnail: () => (audio.buzz('tap'), panelSheet('螺', (p) => p.snailPanel(ctx))),
