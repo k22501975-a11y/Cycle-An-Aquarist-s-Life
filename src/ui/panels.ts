@@ -1156,7 +1156,10 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     content = sellContent(ctx);
   }
   const banner = h('div.shop-banner', {}, h('b', {}, '阿德水族館'), wallet);
-  return h('div.stack.shop-stack', {}, banner, tabs, content);
+  // 有兩缸以上：買的魚、草、設備都放進現在看的這缸，寫出是哪一缸（#441：水草燈裝錯缸）
+  const here = game.tanks.indexOf(game.state);
+  const target = tab !== 'sell' && game.tanks.length > 1 && here >= 0 ? h('p.hint.shop-for', {}, '買的東西放進：', h('b', {}, tankLabel(game.tanks, here))) : null;
+  return h('div.stack.shop-stack', {}, banner, tabs, target, content);
 }
 
 /** 賣給水族店：只收健康的成魚、滿 7 天的小魚和插枝，價錢是店價的三成，每天有次數上限。 */
