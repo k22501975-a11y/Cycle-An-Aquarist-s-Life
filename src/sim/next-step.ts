@@ -399,11 +399,11 @@ function gaspStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   return { text: `${where}缺氧，魚在水面喘氣，${fix === 'air_on' ? '打開打氣機' : '加一台打氣機'}`, target: 'add_air', tank };
 }
 
-/** 大窩生在小缸、今天還沒換水：生的當天說「明天換三成水」，隔天說「今天換三成水」。 */
+/** 大窩生在小缸、今天還沒換水：生的當天說「今天先換三成水」，隔天說「今天再換三成水」（點下去就是現在換）。 */
 function broodWaterStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   for (let tank = 0; tank < tanks.length; tank++) {
     const b = freshBigBrood(tanks[tank]);
-    if (b) return { text: `一窩 ${b.n} 尾生在 ${b.liters}L 的缸，${b.today ? '明天' : '今天'}換三成水`, target: 'water_change', tank };
+    if (b) return { text: `一窩 ${b.n} 尾生在 ${b.liters}L 的缸，今天${b.today ? '先' : '再'}換三成水`, target: 'water_change', tank };
   }
   return null;
 }
