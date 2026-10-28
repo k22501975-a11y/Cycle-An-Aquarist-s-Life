@@ -390,12 +390,12 @@ describe('大窩換水、缺氧（polish-to-9.md §10 補充；strain-fixing 種
     expect(s.water.o2).toBeGreaterThan(2);
   });
 
-  it('一窩 ≥ 每公升 0.5 尾：生的當天說明天換三成水，隔天說今天換，換過的那天就不說；小窩不說', () => {
+  it('一窩 ≥ 每公升 0.5 尾：生的當天說今天先換三成水，隔天說今天再換，換過的那天就不說；小窩不說', () => {
     expect(nextStep([brood(19)])?.target).not.toBe('water_change');
     const s = brood(20);
-    expect(nextStep([s])).toMatchObject({ text: '一窩 20 尾生在 40L 的缸，明天換三成水', target: 'water_change', tank: 0 });
+    expect(nextStep([s])).toMatchObject({ text: '一窩 20 尾生在 40L 的缸，今天先換三成水', target: 'water_change', tank: 0 });
     s.hours += 24;
-    expect(nextStep([s])).toMatchObject({ text: '一窩 20 尾生在 40L 的缸，今天換三成水', target: 'water_change' });
+    expect(nextStep([s])).toMatchObject({ text: '一窩 20 尾生在 40L 的缸，今天再換三成水', target: 'water_change' });
     suggestedChange(s);
     expect(nextStep([s])?.target).not.toBe('water_change');
     s.hours += 48;

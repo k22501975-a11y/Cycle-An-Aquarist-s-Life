@@ -2022,7 +2022,7 @@ export function takeCrowdNotes(tanks: TankState[], cardTank?: number): Array<{ t
     const mom = t.fish.find((f) => f.alive && f.sex === 'female' && f.pregnancy >= 0.7);
     if (mom && due > 0 && bigBrood(t, due) && noteBigBrood(s, mom)) out.push({ tank: i, text: `${callName(mom)}快生了，${name}只有 ${t.equipment.tank.volumeL}L，生完氨會升高，生產那幾天要多換水。` });
     const born = freshBigBrood(t);
-    if (born?.today) out.push({ tank: i, text: `一窩 ${born.n} 尾生在 ${born.liters}L 的${name}，生完氨會升高，明天換三成水。` });
+    if (born?.today) out.push({ tank: i, text: `一窩 ${born.n} 尾生在 ${born.liters}L 的${name}，生完氨會升高，今天、明天各換三成水。` });
   });
   // 生完了（懷孕歸零）的母魚，下一胎再預告
   if (s.bigBroodWarned) s.bigBroodWarned = s.bigBroodWarned.filter((id) => located(tanks).some(({ fish }) => fish.id === id && fish.pregnancy >= 0.7));
