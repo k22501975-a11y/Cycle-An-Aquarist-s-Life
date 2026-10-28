@@ -19,6 +19,17 @@ export default tseslint.config(
       'prefer-const': 'error',
       // 介面文字常用全形空白排版
       'no-irregular-whitespace': ['error', { skipStrings: true, skipTemplates: true }],
+      // 這幾個一引入就會連帶打包用不到的大段程式（docs/performance-budget.md §3）
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            { name: 'pixi.js', importNames: ['Assets'], message: '素材圖用 render/painted.ts 的 loadTexture；Assets 會連帶打包點陣字、SVG、影片載入器（約 20 KB gzip）。' },
+            { name: 'pixi.js', importNames: ['Application', 'autoDetectRenderer'], message: '用 render/gl-app.ts 的 GlApplication；這兩個會連帶打包 WebGPU、Canvas 渲染器（約 22 KB gzip）。' },
+            { name: 'pixi.js', importNames: ['Text', 'BitmapText', 'HTMLText'], message: '文字用 Canvas 畫成貼圖（render/tank-view.ts 試管小字）；Pixi 的文字排版約 8 KB gzip。' },
+          ],
+        },
+      ],
     },
   },
   {
