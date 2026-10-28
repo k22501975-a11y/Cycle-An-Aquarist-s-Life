@@ -119,5 +119,7 @@ export function dreamRoute(tanks: TankState[]): DreamRoute {
     achieved,
     bredName: own,
     stability,
+    // 留種那對的孫代機率和開獎日（sim/choices.ts updateOdds 每天早上和選完記下來）
+    odds: e.choices?.odds && { pct: e.choices.odds.pct, day: e.choices.odds.day },
   };
 }

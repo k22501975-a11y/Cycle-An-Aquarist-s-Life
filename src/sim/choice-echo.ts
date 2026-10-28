@@ -17,13 +17,13 @@ export interface Echo {
   text?: string;
   /**
    * water：多換水撐了 3 天的結果；split：公母分開後每週那缸生了幾窩（weekly 是第幾週）。
-   * box、hide：第一窩放育幼盒、躲草之後還剩幾尾；brood：第一窩第 14 天的總結。
+   * box、hide：第一窩放育幼盒、躲草之後還剩幾尾；brood：第一窩第 14 天的總結；grow：C9 那窩留在缸裡，缸現在多擠。
    */
-  kind?: 'water' | 'split' | 'box' | 'hide' | 'brood';
+  kind?: 'water' | 'split' | 'box' | 'hide' | 'brood' | 'grow';
   weekly?: number;
   /** split：從什麼時候開始算；hide：選的時間（遊戲小時）。 */
   since?: number;
-  /** box、hide、brood：那窩小魚是哪幾尾。 */
+  /** box、hide、brood、grow：那窩小魚是哪幾尾。 */
   ids?: number[];
   /** hide：上一次回音時還有幾尾。 */
   prev?: number;
@@ -40,6 +40,9 @@ export interface EchoLine {
 
 /** 公母分開後每週回報幾次（之後就不說了）。 */
 export const SPLIT_ECHO_WEEKS = 4;
+
+/** 缸裡超過建議量的幾成，C9 回音就多說「再一窩就住不下了」。 */
+export const CROWD_ALMOST = 0.8;
 
 /** 躲草的回音在選完後第幾天出（polish-to-9.md §10.1）。 */
 export const HIDE_ECHO_DAYS = [1, 3, 7];
@@ -115,6 +118,10 @@ export function takeEchoes(tanks: TankState[], s: { echoes?: Echo[] }): EchoLine
       out.push({ tank: e.tank, label: e.label, text });
       const next = HIDE_ECHO_DAYS[step + 1];
       if (left > 0 && next !== undefined) keep.push({ ...e, due: (e.since ?? now) + next * 24, prev: left, step: step + 1 });
+    } else if (e.kind === 'grow') {
+      const left = aliveOf(tanks, e.ids ?? []).length;
+      const pct = crowdPct(t);
+      if (left > 0) out.push({ tank: e.tank, label: e.label, text: `這窩 ${left} 尾留在${name}，缸裡現在 ${t.fish.filter((f) => f.alive).length} 尾（建議量 ${pct}%）${pct > CROWD_ALMOST * 100 ? '，再一窩就住不下了' : ''}` });
     } else if (e.kind === 'brood') {
       const left = aliveOf(tanks, e.ids ?? []);
       const big = left.reduce((m, f) => Math.max(m, f.lengthCm), 0);
