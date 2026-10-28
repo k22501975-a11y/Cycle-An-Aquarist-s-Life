@@ -1157,6 +1157,33 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 .pp-kid.dream { border-color: var(--gold-bright); box-shadow: 0 0 16px rgba(246, 216, 145, 0.45); }
 .pp-dream-badge { position: absolute; top: -8px; right: -6px; padding: 2px 8px; border-radius: 999px; background: var(--gold-bright); color: var(--deep); font-size: 11px; font-weight: 700; }
 .dream-strip-label small { color: var(--muted); margin-right: 4px; }
+/* 孫代機率和開獎日（polish-to-9.md §10.4）：路線卡上常駐，機率變了跳數字、浮出「舊 → 新」 */
+.dream-odds { position: relative; display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; white-space: nowrap; }
+.dream-pct { font-size: 15px; color: var(--gold-bright); font-variant-numeric: tabular-nums; }
+.dream-odds small { font-size: 10px; color: var(--muted); }
+.dream-odds.jump .dream-pct { animation: dream-pop 0.9s ease-out; }
+.dream-odds.jump.up .dream-pct, .dream-odds.jump.up small { color: #9fe3a6; }
+.dream-odds.jump.down .dream-pct, .dream-odds.jump.down small { color: #f3b09a; }
+.dream-odds.jump small { font-weight: 700; }
+@keyframes dream-pop { 30% { transform: scale(1.35); } }
+.dream-card-odds { font-size: 13px; color: var(--text); }
+.dream-card-odds b { color: var(--gold-bright); font-size: 15px; }
+@media (prefers-reduced-motion: reduce) { .dream-odds.jump .dream-pct { animation: none; } }
+
+/* 錢不夠的選項（polish-to-9.md §10.2）：整張灰掉、點不下去，底下寫「還差 N 元」 */
+.bc-opt:disabled { cursor: not-allowed; background: rgba(34, 40, 44, 0.75); border-color: rgba(255, 255, 255, 0.12); box-shadow: none; }
+.bc-opt:disabled .bc-opt-art { filter: grayscale(1) brightness(0.7); }
+.bc-opt:disabled b { color: var(--muted); }
+.bc-short { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 4px; border-radius: 999px; background: rgba(232, 120, 90, 0.16); border: 1px solid rgba(232, 120, 90, 0.5); color: #f6bba6 !important; font-weight: 700; }
+.bc-short img { width: 16px; height: 16px; filter: grayscale(0.6); }
+.choice-check.short small { color: #f6bba6; font-weight: 700; }
+
+/* 選擇的回音（polish-to-9.md §10.0）：結果上面一個「你選了：…」的小標 */
+.morning-body.echo { gap: 2px; }
+.morning-echo { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; padding: 1px 8px 1px 4px; border-radius: 999px; font-size: 11px; color: #9fd8e0; background: rgba(90, 180, 205, 0.14); border: 1px solid rgba(90, 180, 205, 0.35); }
+.morning-echo b { color: #d6f3f7; font-weight: 700; }
+.morning-echo-icon { display: inline-flex; width: 14px; height: 14px; }
+.morning-echo-icon svg { width: 100%; height: 100%; }
 
 /* 第二缸用途（G4）：推薦的那張亮一點 */
 .purpose-card.picked { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(227, 189, 109, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35); }

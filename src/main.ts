@@ -1463,11 +1463,15 @@ async function start(): Promise<void> {
   const dreamHolder = h('div.dream-holder');
   stage.append(dreamHolder);
   const dreamChanged = memo();
+  // 上一次的孫代機率：變了就在路線卡上跳數字（polish-to-9.md §10.4）
+  let dreamPct: number | undefined;
   const renderDream = () => {
     const hide = sim.needsSetup(game.tanks[0]) || view.settingUp;
     const route = hide ? null : sim.dreamRoute(game.tanks);
     if (!dreamChanged(JSON.stringify(route))) return;
-    dreamHolder.replaceChildren(...(route ? [dreamStrip(route, () => sheet.open('夢想魚', () => dreamCard(sim.dreamRoute(game.tanks))))] : []));
+    const from = dreamPct;
+    dreamPct = route?.odds?.pct ?? dreamPct;
+    dreamHolder.replaceChildren(...(route ? [dreamStrip(route, () => sheet.open('夢想魚', () => dreamCard(sim.dreamRoute(game.tanks))), from)] : []));
     requestAnimationFrame(() => measure());
   };
   const dailyChanged = memo();

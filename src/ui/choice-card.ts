@@ -26,7 +26,7 @@ export function choiceVisual(card: ChoiceCard, choose: ChoosePick, lookup: FishL
   void import('./breeding-cards')
     .then((bc) => fill(bc, card, box, pick, lookup, (name) => choose('name', [], name)))
     // 載不到卡片（離線更新到一半之類）：退回一排文字按鈕，照樣選得了
-    .catch(() => box.append(h('div.bc-opts', {}, ...card.options.map((o) => h(`button.btn.small${o.recommended ? '.primary' : ''}`, { type: 'button', onclick: () => pick(o.key) }, o.label)))))
+    .catch(() => box.append(h('div.bc-opts', {}, ...card.options.map((o) => h(`button.btn.small${o.recommended ? '.primary' : ''}`, { type: 'button', disabled: !!o.disabled, onclick: () => pick(o.key) }, o.label)))))
     .then(() => box.append(...(card.note ? [h('p.choice-note', {}, card.note)] : []), msg));
   return box;
 }
@@ -94,7 +94,7 @@ function checkCard(card: ChoiceCard, pick: (key: string) => void): HTMLElement {
   const row = (key: string) => {
     const o = card.options.find((x) => x.key === key)!;
     const btn = h(
-      `button.choice-check${on.has(key) ? '.on' : ''}`,
+      `button.choice-check${on.has(key) ? '.on' : ''}${o.short ? '.short' : ''}`,
       {
         type: 'button',
         disabled: !!o.disabled,
@@ -107,7 +107,7 @@ function checkCard(card: ChoiceCard, pick: (key: string) => void): HTMLElement {
         },
       },
       h('span.choice-check-box', { 'aria-hidden': 'true' }),
-      h('span.choice-check-text', {}, h('b', {}, o.label), h('small', {}, o.disabled ?? o.outcome)),
+      h('span.choice-check-text', {}, h('b', {}, o.label), h('small', {}, o.short ? `還差 ${o.short.toLocaleString('zh-TW')} 元` : (o.disabled ?? o.outcome))),
     );
     return btn;
   };

@@ -81,6 +81,8 @@ export interface ChoiceOption {
   recommended?: boolean;
   /** 現在不能選的原因（錢不夠之類）：按鈕灰掉、小字改寫這個。 */
   disabled?: string;
+  /** 錢不夠時還差幾元：小字換成金幣加「還差 N 元」。 */
+  short?: number;
 }
 
 // ── 小零件 ──────────────────────────────────────────────
@@ -333,17 +335,22 @@ export function choiceCard(title: string, options: ChoiceOption[], onChoose: (ke
       {},
       ...options.map((o) =>
         h(
-          `button.bc-opt${o.recommended ? '.rec' : ''}`,
-          // 不能選的（例如錢不夠）：灰掉，小字寫原因
+          `button.bc-opt${o.recommended && !o.disabled ? '.rec' : ''}${o.short ? '.short' : ''}`,
+          // 不能選的（例如錢不夠）：灰掉，小字寫原因；錢不夠寫「還差 N 元」（polish-to-9.md §10.2）
           { type: 'button', disabled: !!o.disabled, onclick: () => onChoose(o.key) },
-          o.recommended ? h('span.bc-best', {}, '推薦') : null,
+          o.recommended && !o.disabled ? h('span.bc-best', {}, '推薦') : null,
           art[o.key] ? h('img.bc-opt-art', { src: ART + art[o.key], alt: '', draggable: 'false' }) : null,
           h('b', {}, o.label),
-          h('small', {}, o.disabled ?? o.outcome),
+          o.short ? shortNote(o.short) : h('small', {}, o.disabled ?? o.outcome),
         ),
       ),
     ),
   );
+}
+
+/** 錢不夠的選項底下那行：金幣加「還差 N 元」。 */
+export function shortNote(short: number): HTMLElement {
+  return h('small.bc-short', {}, h('img', { src: `${ART}ui/coin.webp`, alt: '', draggable: 'false' }), `還差 ${short.toLocaleString('zh-TW')} 元`);
 }
 
 /** 選項的圖（public/art/ 底下）：C1 育幼盒／躲水草，C3 繁殖缸／展示缸，C11 分開／一起養。 */
