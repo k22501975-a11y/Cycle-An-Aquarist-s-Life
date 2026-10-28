@@ -78,3 +78,19 @@ describe('早上報告瘦身（daily-loop.md §2）', () => {
     expect(choiceFollowUp(c14, 'water')).toBeUndefined();
   });
 });
+
+describe('開獎倒數（polish-to-9.md §12.1）', () => {
+  it('倒數那行排在開頭（危機後面），不佔 3 行的名額', () => {
+    const r = report([
+      item('hungry', 'warn', '2 尾魚餓到開始消瘦'),
+      item('belly', 'good', '母魚的肚子圓起來了'),
+      item('courtship', 'good', '配對成功了'),
+      item('algae', 'warn', '玻璃上的藻變多了'),
+      item('countdown', 'good', '肚子方方的，看得到小魚的眼睛了', { countdown: { days: 3, momId: 7 } }),
+      item('death', 'bad', '一尾魚死了', { subjectId: 2 }),
+    ]);
+    const lines = slimReport(r).lines;
+    expect(lines.map((i) => i.kind).slice(0, 2)).toEqual(['death', 'countdown']);
+    expect(lines.filter((i) => i.kind !== 'death' && i.kind !== 'countdown')).toHaveLength(REPORT_LINES);
+  });
+});

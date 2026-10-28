@@ -78,6 +78,7 @@ export type ReportKind =
   | 'line' // 固定品系（design/strain-fixing.md）：蛇紋出來、每窩的穩定度
   | 'observe' // 平淡早上的小觀察（morning-observe.ts）
   | 'echo' // 選擇的回音（polish-to-9.md §10.0）：選完 3 天內寫出那個選擇的結果
+  | 'countdown' // 夢想窩開獎前 3 天（polish-to-9.md §12.1）：報告開頭「開獎倒數 n 天」加母魚肚子特寫
   | 'quiet';
 
 export interface ReportItem {
@@ -117,6 +118,8 @@ export interface ReportItem {
   reveal?: Reveal;
   /** kind 'second_brood' 的比較卡資料：這窩幾尾、第一窩還有幾尾、挑了幾尾備用、C9 選了什麼。 */
   secondBrood?: { momId: number; count: number; prevKids: number; kept: number; choice: string };
+  /** kind 'countdown'（polish-to-9.md §12.1）：還有幾天開獎、懷著夢想窩的那尾母魚；畫面放大數字和她肚子的特寫。 */
+  countdown?: { days: number; momId: number };
 }
 
 /** 開獎卡的資料（midgame.md §6.1）：每尾小魚的基因預告。 */
@@ -650,7 +653,7 @@ function lineRank(i: ReportItem, lead = false): number {
   // 危機（#375）和消瘦（midgame.md §7.9）永遠排第一行
   if (isPinned(i)) return -1;
   if (i.kind === 'crisis') return 0;
-  if (i.kind === 'reveal') return 1;
+  if (i.kind === 'reveal' || i.kind === 'countdown') return 1;
   // 回音（polish-to-9.md §10.5）：第一行回音排在壞消息後面、目標進度前面（#452：排在目標後面幾乎天天被擠掉），
   // 其他的排在目標後面，放不下就收進鈴鐺、隔天再出
   if (i.kind === 'echo') return lead ? 2.5 : 3.5;
@@ -690,7 +693,9 @@ export function slimReport(report: MorningReport): SlimReport {
   const ranked = main.map((item, at) => ({ item, at })).sort((a, b) => rank(a.item) - rank(b.item) || a.at - b.at).map((x) => x.item);
   // 危機和消瘦那幾行不佔 3 行的名額（#375、midgame.md §7.9）
   const pinned = ranked.filter(isPinned);
-  let lines = [...pinned, ...ranked.filter((i) => !isPinned(i)).slice(0, REPORT_LINES)];
+  // 開獎倒數（polish-to-9.md §12.1）接在危機後面當開頭，也不佔 3 行的名額
+  const countdown = ranked.filter((i) => i.countdown && !isPinned(i));
+  let lines = [...pinned, ...countdown, ...ranked.filter((i) => !isPinned(i) && !countdown.includes(i)).slice(0, REPORT_LINES)];
   // 安靜的早上：一行就好，有小觀察就放小觀察
   if (lines.length === 0 && !decision) lines = [rest.find((i) => i.kind === 'observe' || i.kind === 'quiet') ?? rest.find((i) => i.kind === 'fish_relaxed') ?? { kind: 'quiet', tank: 0, tone: 'info', text: '昨晚很平靜' }];
   const shown = new Set(lines);

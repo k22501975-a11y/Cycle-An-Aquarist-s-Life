@@ -81,10 +81,7 @@ export function splitGroup(state: TankState, plan: SplitPlan): Fish[] {
   const living = state.fish.filter((f) => f.alive && f.listing === undefined && !f.nursery && !pair.includes(f.id));
   if (plan === 'by_size') {
     // 先移會被吃的那些；沒有掠食者時就移所有還沒長大的
-    // 選了躲草（C1）的 3 天內，那窩小魚先不叫玩家撈（polish-to-9.md §10.0、#452）：被吃到剩一半才提醒
-  const choices = economy(state).choices;
-  const hiding = hideGrace([state], choices) ? new Set(choices!.hide!.ids) : null;
-  const prey = preyAtRisk(living).filter((f) => !hiding?.has(f.id));
+    const prey = preyAtRisk(living);
     return prey.length > 0 ? prey : living.filter((f) => isJuvenile(f));
   }
   if (plan === 'by_sex') return youngPairs(living).males;

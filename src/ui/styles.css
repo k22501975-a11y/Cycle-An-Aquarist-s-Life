@@ -1189,6 +1189,14 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 .morning-echo-icon { display: inline-flex; width: 14px; height: 14px; }
 .morning-echo-icon svg { width: 100%; height: 100%; }
 
+/* 開獎倒數（polish-to-9.md §12.1）：圓框裡放大母魚的肚子（看得到胎斑），旁邊一個大數字 */
+.morning-item.countdown-item { border-left-color: var(--gold); gap: 12px; }
+.cd-close { position: relative; flex: 0 0 auto; width: 64px; height: 64px; border-radius: 50%; overflow: hidden; border: 2px solid var(--gold); background: radial-gradient(closest-side, rgba(255, 236, 180, 0.35), rgba(40, 90, 110, 0.6)); box-shadow: 0 0 12px rgba(255, 220, 140, 0.35); }
+/* 照片是頭朝右的整尾魚：放大到 240%，把胎斑（約在圖的 64%、74%）移到圓框正中間 */
+.cd-close img { position: absolute; left: 50%; top: 50%; width: 240%; height: auto; max-width: none; transform: translate(-64%, -72%); }
+.cd-title { color: var(--gold-bright); font-size: 15px; font-weight: 700; }
+.cd-num { font-size: 26px; line-height: 1; margin: 0 2px; }
+
 /* 第二缸用途（G4）：推薦的那張亮一點 */
 .purpose-card.picked { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(227, 189, 109, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35); }
 .purpose-card .card-note { color: var(--text); }

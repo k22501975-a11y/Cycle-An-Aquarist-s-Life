@@ -253,6 +253,20 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
     void import('./breeding-cards').then((bc) => pic.append(bc.lineDoneVisual(done.name, done.stability))).catch(() => pic.remove());
     return h(`div.morning-item.${item.tone}.line-done-item`, {}, h('span.morning-body', {}, pic, reportText(item.text)));
   };
+  // 開獎倒數（polish-to-9.md §12.1）：大數字＋懷著夢想窩那尾母魚的肚子特寫（照片放大、對準胎斑）
+  // 標題「開獎倒數 n 天」畫面自己寫；text 是同一句就不重複，另外寫了話（例如肚子的樣子）放在下面
+  const countdownRow = (item: ReportItem, c: NonNullable<ReportItem['countdown']>) => {
+    const photo = deps.picture?.(item);
+    const img = photo ? h('img', { src: photo, alt: '', draggable: 'false' }) : null;
+    img?.addEventListener('error', () => img.remove());
+    return h(
+      'button.morning-item.good.countdown-item',
+      { type: 'button', disabled: !item.action, onclick: item.action ? () => (close(), deps.go(item)) : undefined },
+      h('span.cd-close', {}, img),
+      h('span.morning-body', {}, h('span.cd-title', {}, '開獎倒數 ', h('b.cd-num', {}, String(c.days)), ' 天'), item.text && !item.text.startsWith('開獎倒數') ? reportText(item.text) : null),
+      item.action ? h('span.morning-go', {}, ACTION_LABEL[item.action], ' ›') : null,
+    );
+  };
   // C9 自動照上次的那一行（midgame.md §6.5）：點了展開 C9 的選項改設定（多「每次都問我」）
   const settingRow = (item: ReportItem, card: ChoiceCard) => {
     const box = h(`div.morning-item.${item.tone}.choice-item`, {});
@@ -277,6 +291,7 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
     if (item.broodSetting) return settingRow(item, item.broodSetting);
     // 選育進度（midgame.md §2）：緞帶開頭的一行，不是可以點的事
     if (item.reveal) return revealRow(item, item.reveal);
+    if (item.countdown) return countdownRow(item, item.countdown);
     if (item.milestone) return milestoneRow(item, item.milestone);
     if (item.lineDone) return lineDoneRow(item, item.lineDone);
     if (item.kind === 'breeding') return h(`div.morning-item.${item.tone}.breeding-item`, {}, h('div.bc-line', {}, keeperRibbon('bc-line-ribbon'), h('span.bc-line-text', {}, item.text)));
@@ -308,7 +323,7 @@ export function morningCard(report: MorningReport, deps: MorningCardDeps, close:
   };
   // 最多 3 行加一行「有一件事要你決定 ›」（daily-loop.md §2）：點了才換成選擇卡；取名那天排第一行
   const slim = slimReport(report);
-  const urgent = slim.lines.filter((i) => isPinned(i) || i.kind === 'reveal');
+  const urgent = slim.lines.filter((i) => isPinned(i) || i.kind === 'reveal' || !!i.countdown);
   const lines = slim.decision
     ? slim.decisionFirst
       ? [...urgent.map(row), choiceRow(slim.decision), ...slim.lines.filter((i) => !urgent.includes(i)).map(row)]
