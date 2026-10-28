@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { newGameState } from '../game/game';
 import { addFish, airPumpPrice, ADULT_SIZE, bacteriaCapacity, broodFactor, buyTank, CROWD_WARN, crowdingRatio, cross, DREAM_FISH, economy, FISH_SPECIES, linkTanks, orderBoard, setTankPurpose, type Fish, type GuppyGenome, type TankState } from './index';
 import { chooseOption, choiceState, CHOICE_RESHOW_DAYS, CROWD_FULL, CROWD_PREVIEW, REVEAL_CULL_DAYS, takeCrowdNotes, PAIR_PLAN_DAYS, REVEAL_SHOWS, BOX_DUE, takeBellyNotes, SECOND_BROOD_SHOWS, BROOD_AGAIN_SHOWS, BROOD_AGAIN_GAP_DAYS, WARM_PREG_C, takeChoice, takeLineNotes, lineName, lineNameRefusal, LINE_NAME_SUGGESTED, takeReveal, takeSecondBrood, FINS_DAYS, COLOR_DAYS, SNAKE_DAYS, STABILITY_DAYS } from './choices';
-import { dreamRoute } from './dream';
+import { dreamRoute, LINE_FIXED_PCT } from './dream';
 import { dropTankEchoes, takeEchoes } from './choice-echo';
 import { newTankCost } from './household';
 import { reservedForPick } from './orders';
@@ -856,7 +856,7 @@ describe('固定品系：C17 誰配誰、C19 引進新血（strain-fixing.md §2
     expect(c.options[0].outcome).toMatch(/^下一代夢想魚約 \d+%，尾鰭約 −11$/);
     expect(c.options[1].label).toMatch(/^(女兒配爸爸|兒子配媽媽)$/);
     expect(c.options[2].label).toMatch(/^配店裡的新魚（\d+ 元）$/);
-    expect(c.options[2].outcome).toMatch(/^這一代約 \d+%，血統新、尾鰭不變差$/);
+    expect(c.options[2].outcome).toMatch(/^品系接著算第 \d+ 代，這一代約 \d+%，血統新、尾鰭不變差$/);
     expect(chooseOption(tanks, 'C17', 'sib')).toBeNull();
     const [m, d] = st.pair!;
     expect(kids.map((k) => k.id)).toEqual(expect.arrayContaining([m, d]));
@@ -870,8 +870,19 @@ describe('固定品系：C17 誰配誰、C19 引進新血（strain-fixing.md §2
     expect(takeChoice(tanks)?.id).not.toBe('C17');
   });
 
-  it('C17：第三代（候選近交 0.44）改推配新魚，選了花錢買紅蛇王或全紅白子當另一半', () => {
+  it('C17：品系還沒完成、自家配這一代就到 75%：先配完，不推換血；新魚選項寫品系接著算第幾代（#449）', () => {
+    const { tanks } = lineSetup(0.4375);
+    const c = takeChoice(tanks)!;
+    expect(c.id).toBe('C17');
+    const near = c.options.find((o) => o.key !== 'new' && o.recommended)!;
+    expect(Number(near.outcome.match(/約 (\d+)%/)![1])).toBeGreaterThanOrEqual(LINE_FIXED_PCT);
+    expect(c.options.find((o) => o.key === 'new')!.recommended).toBe(false);
+    expect(c.options.find((o) => o.key === 'new')!.outcome).toMatch(/^品系接著算第 \d+ 代，/);
+  });
+
+  it('C17：品系完成以後，第三代（候選近交 0.44）改推配新魚，選了花錢買紅蛇王或全紅白子當另一半', () => {
     const { tanks, s, st, kids } = lineSetup(0.4375);
+    st.lineNamed = { name: '測試', hours: s.hours - 24, stability: 80, n: 10, k: 8, done: { hours: s.hours - 24, stability: 80 } };
     const c = takeChoice(tanks)!;
     expect(c.id).toBe('C17');
     expect(c.options.find((o) => o.recommended)!.key).toBe('new');

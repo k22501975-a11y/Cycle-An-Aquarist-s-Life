@@ -1,6 +1,5 @@
-import { PLANT_PRICES, price } from './economy';
-import { growthStage } from './growth';
-import { isShrimpSpecies, PLANT_SPECIES, type PlantSpeciesId } from './species';
+import { economy, PLANT_PRICES, price, raisedBred } from './economy';
+import { PLANT_SPECIES, type PlantSpeciesId } from './species';
 import type { TankState } from './state';
 
 /**
@@ -66,12 +65,13 @@ export function purposeTanks(tanks: TankState[], purpose: TankPurpose): TankStat
   return tanks.filter((t) => t.purpose === purpose);
 }
 
-/** 繁殖缸裡養大（長到轉色期）的自家小魚有幾尾。 */
+/**
+ * 在繁殖缸裡養大（長到轉色期）過的自家魚累計幾尾：之後搬走、賣掉、交單都不扣（g39c #449：住不下的推薦把轉色的大魚搬走，
+ * 進度從 5/10 倒回 3/10 停了 50 天）。整點才記，還沒記到的照現在缸裡的算。
+ */
 export function breedingTankRaised(tanks: TankState[]): number {
-  return purposeTanks(tanks, 'breeding').reduce(
-    (n, t) => n + t.fish.filter((f) => f.alive && (f.generation ?? 0) >= 1 && !isShrimpSpecies(f.species) && ['coloring', 'subadult', 'adult'].includes(growthStage(f))).length,
-    0,
-  );
+  const unseen = purposeTanks(tanks, 'breeding').reduce((n, t) => n + t.fish.filter((f) => !f.breedingSeen && raisedBred(f)).length, 0);
+  return (economy(tanks[0]).breedingRaisedEver ?? 0) + unseen;
 }
 
 /** 展示缸裡正在長的陽性草有幾株（一缸算最多的那缸）。 */

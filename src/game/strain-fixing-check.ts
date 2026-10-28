@@ -10,7 +10,7 @@ import { strainFacts, strainRun } from './strain-fixing-run';
  * 種子固定用 1～6，看比例（企劃 2026-10-24 §10：每次重挑種子看不出是真的變好還是挑到好種子）：
  * - 開獎那窩有白子紅蛇王（一鍵買的紅蛇王帶白子）≥ 5/6
  * - C18 取名（40%）≤ 第 200 天 ≥ 4/6；品系完成（75%）≤ 第 360 天 ≥ 4/6
- * - 尾鰭：第一代到最新一代少的分數，6 個種子的中位數 ≤ 15，每個種子 ≤ 20（§6 第 3 點）
+ * - 尾鰭：第一代到最新一代少的分數，6 個種子的中位數 ≤ 18（§11：C17 兩邊選項都寫出代價），每個種子 ≤ 20（§6 第 3 點）
  * - 節奏：第 80～200 天懷孕期間相鄰的卡或里程碑 ≤ 7 天、其他 ≤ 6 天 ≥ 5/6，而且每個種子都沒有超過 8 天的空檔
  * - 錢：第 260 天金幣 ≥ 第 120 天 − 這段買缸花的一半（缸算半價的資產，§9）≥ 5/6；第 120～260 天隨時 ≥ 300 每個種子都要
  * 每個種子都要：第二代穩定度比第一代高；種魚不餓死（midgame.md §7.9）；一天最多一張；擠缸死魚 ≤ 2 尾；
@@ -76,7 +76,7 @@ export function strainSeed(seed: number): void {
     expect(atLeast(all, 'paced'), sum).toBeGreaterThanOrEqual(5);
     expect(atLeast(all, 'coins'), sum).toBeGreaterThanOrEqual(5);
     const tails = all.map((r) => r.tailDrop).sort((a, b) => a - b);
-    expect((tails[2] + tails[3]) / 2, sum).toBeLessThanOrEqual(15);
+    expect((tails[2] + tails[3]) / 2, sum).toBeLessThanOrEqual(18);
   }
   expect(f.gen2, f.log).toBeGreaterThan(f.gen1);
   expect(f.doubleCards, f.log).toEqual([]);

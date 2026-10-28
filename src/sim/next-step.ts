@@ -15,7 +15,7 @@ import { hasVisible } from './processes/disease';
 import { HEATER_RAMP_C_PER_HOUR, heaterLiftC } from './processes/thermal';
 import { FISH_SPECIES, isShrimpSpecies } from './species';
 import { isJuvenile, type Fish, type TankState } from './state';
-import { fryHome, fryNeedHome, fryPrep } from './split';
+import { fryHome, fryNeedHome, fryPrep, movableFry } from './split';
 import { breedingTankRaised, displayTankHighPlants, HIGH_LIGHT_PLANTS, purposeTanks } from './tank-purpose';
 
 /**
@@ -304,6 +304,19 @@ function motherStep(tanks: TankState[]): Omit<NextStep, 'goal'> | null {
   return { text: `她大約 ${days} 天後生，先備好育幼盒`, target: 'nursery' };
 }
 
+/**
+ * 繁殖缸目標（g39c #449：以前點下去只打開「我的水缸」，沒有搬的按鈕）：別缸有小魚、繁殖缸收得了就一鍵搬過去；
+ * 繁殖缸裡已經有小魚就等牠們轉色；都沒有就等下一窩。
+ */
+function breedingTankStep(tanks: TankState[]): Omit<NextStep, 'goal'> {
+  const count = `（${Math.min(PURPOSE_GOAL_COUNT.breeding, breedingTankRaised(tanks))}/${PURPOSE_GOAL_COUNT.breeding}）`;
+  const breeding = (i: number | null) => i !== null && tanks[i].purpose === 'breeding';
+  const from = tanks.findIndex((t, i) => t.purpose !== 'breeding' && movableFry(t).length > 0 && breeding(fryHome(tanks, i)));
+  if (from >= 0) return { text: `把 ${movableFry(tanks[from]).length} 尾小魚搬去繁殖缸養大${count}`, target: 'move_fry', tank: from };
+  if (purposeTanks(tanks, 'breeding').some((t) => t.fish.some((f) => f.alive && isJuvenile(f) && (f.generation ?? 0) >= 1))) return { text: `繁殖缸的小魚養到轉色${count}`, target: 'fastest' };
+  return { text: `等下一窩，生了搬去繁殖缸${count}`, target: 'mother' };
+}
+
 /** 每個目標在現在的狀況下要做的事。 */
 function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
   const home = tanks[0];
@@ -348,7 +361,7 @@ function stepFor(goal: Goal, tanks: TankState[]): Omit<NextStep, 'goal'> {
       return { text: `每天測水，${CALM_DAYS} 天沒警告（${Math.min(best, CALM_DAYS)}/${CALM_DAYS}）`, target: 'test' };
     }
     case 'breeding_tank':
-      return { text: `小魚搬去繁殖缸養大（${Math.min(PURPOSE_GOAL_COUNT.breeding, breedingTankRaised(tanks))}/${PURPOSE_GOAL_COUNT.breeding}）`, target: 'shop_tank' };
+      return breedingTankStep(tanks);
     case 'display_tank': {
       // 帶上展示缸是哪一缸：點了先切過去再開商店，水草燈、陽性草才會放進展示缸（#441）
       const display = purposeTanks(tanks, 'display');
