@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, createTank, daysToBirth, DENSE_COVER, FILTERS, HEATERS, LIGHTS, plantCover, recordEvent, simulate, TANKS, type Fish, type TankState } from '../sim';
+import { addFish, addPlant, BOX_DUE, buyNurseryBox, createTank, daysToBirth, DENSE_COVER, FILTERS, HEATERS, LIGHTS, plantCover, recordEvent, simulate, TANKS, type Fish, type TankState } from '../sim';
 import { choiceState } from '../sim/choices';
 import { morningReport, slimReport, snapshot } from './morning-report';
 
@@ -29,6 +29,25 @@ describe('主缸小魚被吃：讓水草成為解法（polish-to-9.md §12.2）'
     const eaten = night(s, () => recordEvent(s, { type: 'fry_eaten', cause: 'guppy', count: 2 })).items.find((i) => i.kind === 'eaten')!;
     expect(eaten.text).toMatch(new RegExp(`^昨晚有 2 尾小魚.+。.+水草覆蓋 ${pct}%，再種密一點，小魚比較躲得住（莫絲、香菇草最好躲）$`));
     expect(eaten).toMatchObject({ action: 'shop_plants', goLabel: '種水草', tank: 0 });
+  });
+
+  it('建議的順序：快生的母魚、育幼盒空著就先叫玩家放盒子；盒子有小魚佔著才輪到種水草（§12.2 補充）', () => {
+    const s = tank();
+    addPlant(s, 'moss', 4);
+    buyNurseryBox(s);
+    const mom = s.fish.find((f) => f.sex === 'female')!;
+    mom.pregnancy = BOX_DUE + 0.02;
+    const eaten = () => night(s, () => recordEvent(s, { type: 'fry_eaten', cause: 'guppy', count: 2 })).items.find((i) => i.kind === 'eaten')!;
+    const first = eaten();
+    expect(first.text).toMatch(/快生了，育幼盒空著，先把她放進去，這一窩就一尾都不會被吃$/);
+    expect(first).toMatchObject({ action: 'nursery_soon', goLabel: '放進盒子', tank: 0 });
+    // 還沒到 0.88：太早放母魚會緊迫，照舊教種水草
+    mom.pregnancy = BOX_DUE - 0.1;
+    expect(eaten()).toMatchObject({ action: 'shop_plants' });
+    // 盒子裡有小魚佔著：放不進去，也是種水草
+    mom.pregnancy = BOX_DUE + 0.02;
+    s.fish.find((f) => f.generation === 1)!.nursery = true;
+    expect(eaten()).toMatchObject({ action: 'shop_plants' });
   });
 
   it('第一次種到夠密、昨晚小魚一尾都沒被吃：說一行，之後不再說', () => {

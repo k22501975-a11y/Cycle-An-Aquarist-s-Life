@@ -1,5 +1,5 @@
 import { crisisText, type Crisis } from '../game/crisis';
-import { DENSE_COVER, NURSERY_RELEASE_CM, plantCover, airPumpPrice, breathless, oxygenFix, BLOOM_NOTE, boxBlocked, fryHome, fryNeedHome, fryPrep, newTankCost, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
+import { DENSE_COVER, NURSERY_RELEASE_CM, plantCover, soonMother, airPumpPrice, breathless, oxygenFix, BLOOM_NOTE, boxBlocked, fryHome, fryNeedHome, fryPrep, newTankCost, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
 import { addEcho, takeEchoes } from '../sim/choice-echo';
 import { revealCountdown, takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, callName, breederIds, breederName, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
@@ -38,6 +38,7 @@ export type ReportAction =
   | 'buy_tank' // 住不下（C14）選了再買一缸：直接打開 20L 套缸的購買確認（polish-to-9.md §10.2）
   | 'buy_big' // 住不下（C14）選了換大缸：直接打開 90L 套缸的購買確認
   | 'add_air' // 缺氧：打開打氣機，沒有就買一台裝上（oxygen.ts）
+  | 'nursery_soon' // 快生（≥ 0.88）的母魚放進空著的育幼盒（小魚被吃那行的第一個建議，polish-to-9.md §12.2 補充）
   | 'shop_plants'; // 小魚被吃、水草不夠密：商店的水草頁（polish-to-9.md §12.2）
 
 export type ReportKind =
@@ -300,15 +301,18 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       // 還沒有缸收得了、可是有空的新缸沒養水（#428）：按鈕直接打開養水
       const prep = home === null ? fryPrep(tanks, index) : null;
       const cycle = prep?.kind === 'cycle' && !prep.started ? prep.tank : null;
-      // 沒有缸能馬上搬、草又不夠密：教玩家種密一點，按鈕打開水草（polish-to-9.md §12.2）
+      // 建議的順序（polish-to-9.md §12.2 補充）：快生的母魚放進空著的育幼盒（整窩保得住）→ 別缸能收就搬 →
+      // 草不夠密就種水草 → 另一缸先養水（要好幾天）→ 撈進育幼盒
+      const mom = shrimp ? null : soonMother(t);
       const cover = plantCover(t);
-      const plants = home === null && !shrimp && cover < DENSE_COVER ? { name: tankLabel(tanks, index), pct: Math.round(cover * 100) } : null;
+      const plants = !mom && home === null && !shrimp && cover < DENSE_COVER;
+      const advice = mom ? { box: callName(mom) } : plants ? { plants: tankLabel(tanks, index), pct: Math.round(cover * 100) } : null;
       push({
         kind: 'eaten',
         tone: 'warn',
-        text: `昨晚有 ${fryEatenText(t, eaten, shrimp, home === null ? null : tankLabel(tanks, home), tanks.length > 1, plants)}`,
-        action: home !== null ? 'move_fry' : plants ? 'shop_plants' : cycle !== null ? 'cycle_tank' : 'fry_box',
-        ...(plants ? { goLabel: '種水草' } : cycle !== null ? { tank: cycle } : {}),
+        text: `昨晚有 ${fryEatenText(t, eaten, shrimp, home === null ? null : tankLabel(tanks, home), tanks.length > 1, advice)}`,
+        action: mom ? 'nursery_soon' : home !== null ? 'move_fry' : plants ? 'shop_plants' : cycle !== null ? 'cycle_tank' : 'fry_box',
+        ...(mom ? { goLabel: '放進盒子' } : plants ? { goLabel: '種水草' } : cycle !== null ? { tank: cycle } : {}),
         count: eaten,
       });
     } else if (snap && !choiceState(tanks).denseNoted && plantCover(t) >= DENSE_COVER && t.fish.some((f) => f.alive && !f.nursery && isJuvenile(f) && !isShrimpSpecies(f.species) && f.lengthCm < NURSERY_RELEASE_CM)) {
