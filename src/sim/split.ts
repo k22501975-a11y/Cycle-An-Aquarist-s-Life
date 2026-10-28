@@ -1,4 +1,4 @@
-import { economy } from './economy';
+import { economy, reserveShort } from './economy';
 import { growthStage, sexVisible } from './growth';
 import { moveFish, newTankCost } from './household';
 import { crowdingRatio } from './processes/fauna';
@@ -170,7 +170,7 @@ export function cyclingTank(tanks: TankState[], not = 0): number {
 /**
  * 小魚要搬家、可是還沒有能收的缸時，下一步是什麼（g37 #428：第二缸買了 5 天都空著，沒人叫你養水）：
  * - cycle：有開好、沒魚、還沒養好水的缸，先養水（started：已經分過濾材或倒過菌液，等就好）
- * - buy：只有這一缸、育幼盒幫不上忙：買第二缸（afford：錢夠不夠）
+ * - buy：只有這一缸、育幼盒幫不上忙：買第二缸（afford：買完還剩 BUY_RESERVE，polish-to-9.md §11）
  * 有能收的缸（直接搬）、或不用搬，回傳 null。
  */
 export function fryPrep(tanks: TankState[], from: number): { kind: 'cycle'; tank: number; started: boolean } | { kind: 'buy'; afford: boolean } | null {
@@ -179,5 +179,5 @@ export function fryPrep(tanks: TankState[], from: number): { kind: 'cycle'; tank
   const fresh = cyclingTank(tanks, from);
   if (fresh >= 0) return { kind: 'cycle', tank: fresh, started: Math.min(tanks[fresh].bacteria.aob, tanks[fresh].bacteria.nob) >= CYCLING_STARTED };
   if (tanks.length !== 1 || !boxBlocked(t)) return null;
-  return { kind: 'buy', afford: economy(t).coins >= newTankCost(tanks, 'nano20') };
+  return { kind: 'buy', afford: reserveShort(economy(t).coins, newTankCost(tanks, 'nano20')) === 0 };
 }

@@ -13,7 +13,8 @@ import { strainFacts, strainRun } from './strain-fixing-run';
  * - 尾鰭：第一代到最新一代少的分數，6 個種子的中位數 ≤ 15，每個種子 ≤ 20（§6 第 3 點）
  * - 節奏：第 80～200 天懷孕期間相鄰的卡或里程碑 ≤ 7 天、其他 ≤ 6 天 ≥ 5/6，而且每個種子都沒有超過 8 天的空檔
  * - 錢：第 260 天金幣 ≥ 第 120 天 − 這段買缸花的一半（缸算半價的資產，§9）≥ 5/6；第 120～260 天隨時 ≥ 300 每個種子都要
- * 每個種子都要：第二代穩定度比第一代高；種魚不餓死（midgame.md §7.9）；一天最多一張；擠缸死魚 ≤ 2 尾。
+ * 每個種子都要：第二代穩定度比第一代高；種魚不餓死（midgame.md §7.9）；一天最多一張；擠缸死魚 ≤ 2 尾；
+ * 前 120 天白點 ≤ 2 波、照推薦買東西買完都剩 ≥ 500 元（polish-to-9.md §11）。
  * 比例要 6 個種子都跑完才算：每檔把結果記在這次測試的資料夾，最後跑完的那檔算（只跑一檔就只看那個種子）。
  * 注意：結果記在這台機器的暫存資料夾，以後 vitest 改用 --shard 分機器跑的話，6 份不會在同一台，比例就不會算，到時要改成同一台跑這 6 檔。
  */
@@ -91,4 +92,8 @@ export function strainSeed(seed: number): void {
   expect(f.breederStarved, f.log).toBe(0);
   expect(f.crowdDeaths, f.log).toBeLessThanOrEqual(2);
   expect(f.tailDrop, f.log).toBeLessThanOrEqual(20);
+  // polish-to-9.md §11：前 120 天白點最多 2 波；照推薦買東西，買完手上都還有 BUY_RESERVE
+  const early = run.nights.filter((n) => n.day <= 120);
+  expect(early.reduce((a, n) => a + n.ichNew, 0), f.log).toBeLessThanOrEqual(2);
+  expect(early.filter((n) => n.lowBuy !== undefined).map((n) => `${n.day}:${n.lowBuy}`), f.log).toEqual([]);
 }

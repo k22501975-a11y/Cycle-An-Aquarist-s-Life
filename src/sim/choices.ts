@@ -3,7 +3,7 @@ import { DREAM_FISH, DREAM_MALE, LINE_FIXED_PCT, LINE_NAME_MAX, LINE_NAME_PCT, s
 import { addFish, setHeaterTarget } from './actions';
 import { waterChange } from './maintenance-actions';
 import { temperatureFactor } from './chemistry';
-import { buybackRefusal, economy, FISH_PRICES, FRY_BAG, fishBuybackPrice, isFrySale, MAX_KEEPERS, PRICES, sellsLeftToday, spend } from './economy';
+import { buybackRefusal, economy, FISH_PRICES, FRY_BAG, fishBuybackPrice, isFrySale, MAX_KEEPERS, PRICES, reserveShort, sellsLeftToday, spend } from './economy';
 import { keeperRefusal, sellFish, setKeeper } from './economy-actions';
 import { broodFactor, FOOD_GRADES, nutritionFactor, type FoodGrade, type FoodKind } from './food';
 import { childInbreeding, cross, finWords, GUPPY_STRAIN_PRICES, lookIndex, matingSuccess, phenotype, strainName, type GuppyGenome, type GuppyPhenotype } from './genetics';
@@ -1288,7 +1288,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
     case 'C3': {
       if (s.firstBrood === undefined || tanks.length >= 2 || home.hours - s.firstBrood < TANK_AFTER_BROOD_DAYS * 24) return null;
       const cost = newTankCost(tanks, 'nano20');
-      if (economy(home).coins < cost) return null;
+      // 買完要剩 BUY_RESERVE 才問（polish-to-9.md §11）
+      if (reserveShort(economy(home).coins, cost) > 0) return null;
       return {
         id,
         tank: 0,
@@ -1374,6 +1375,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       const to = cyclingTank(tanks);
       if (to < 0) return null;
       const media = tanks.some((t, i) => i !== to && mediaAvailable(t) > 0);
+      // 菌液買完剩不到 BUY_RESERVE 就推自己等（polish-to-9.md §11）
+      const tight = reserveShort(economy(home).coins, BOTTLE_PRICE) > 0;
       return {
         id,
         tank: to,
@@ -1381,8 +1384,8 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
         owner: '新缸還沒有硝化菌，直接放魚會冒氨。',
         options: [
           ...(media ? [{ key: 'media', label: '分舊缸濾材', outcome: '約 2 天；主缸的菌會少一點，這幾天多測水', recommended: true }] : []),
-          { key: 'bottle', label: '硝化菌液', outcome: `${BOTTLE_PRICE} 元，約 3 天`, recommended: !media },
-          { key: 'wait', label: '自己等', outcome: '不花錢，3～7 天' },
+          { key: 'bottle', label: '硝化菌液', outcome: `${BOTTLE_PRICE} 元，約 3 天`, recommended: !media && !tight },
+          { key: 'wait', label: '自己等', outcome: '不花錢，3～7 天', recommended: !media && tight },
         ],
       };
     }
@@ -1572,8 +1575,11 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       // 推薦順序：停生 → 搬過去就不擠 → 賣一批就回到建議量以下 → 買缸、（超過建議量）換大缸 → 賣一點、搬一點 → 先多換水撐著
       // 買了缸手上還有 CROWD_TANK_RESERVE 才推買缸（不然先換水撐著）；超過建議量時第二、三缸不看錢，
       // 第四缸起一樣要留（後期一缸兩千多，賣魚很久賺不回來，strain-fixing.md §9）
-      const tankOk = !noTank && ((full && tanks.length < 3) || economy(home).coins - tankCost >= CROWD_TANK_RESERVE);
-      const rec = recSplit ? 'split' : moveEnough ? 'move' : sellEnough ? 'sell' : tankOk ? 'tank' : full && big && !noBig ? 'big' : sell ? 'sell' : move ? 'move' : 'water';
+      // 不看錢的那兩缸買完也要剩 BUY_RESERVE（polish-to-9.md §11）
+      const coinsNow = economy(home).coins;
+      const tankOk = !noTank && ((full && tanks.length < 3 && reserveShort(coinsNow, tankCost) === 0) || coinsNow - tankCost >= CROWD_TANK_RESERVE);
+      const bigOk = full && big && !noBig && reserveShort(coinsNow, newTankCost(tanks, 'std90')) === 0;
+      const rec = recSplit ? 'split' : moveEnough ? 'move' : sellEnough ? 'sell' : tankOk ? 'tank' : bigOk ? 'big' : sell ? 'sell' : move ? 'move' : 'water';
       // 還沒超過建議量、又只能先多換水（擠的是賣不了也搬不走的小小魚，錢也不夠買缸）：不出卡，早上報告那行擠缸提醒就夠了（#359）
       if (!full && rec === 'water') return null;
       const recSell = rec === 'sell';
@@ -1692,10 +1698,10 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
             key: 'new',
             label: `買一尾新魚進來配（${fresh.buy!.price} 元）`,
             outcome: '下一代夢想魚少一點，但品系會更健康',
-            recommended: coins >= fresh.buy!.price,
+            recommended: reserveShort(coins, fresh.buy!.price) === 0,
             ...(coins < fresh.buy!.price ? { disabled: `錢不夠：要 ${fresh.buy!.price} 元` } : {}),
           },
-          { key: 'keep', label: '繼續自己家配', outcome: '穩定得最快，尾鰭會越來越差', recommended: coins < fresh.buy!.price },
+          { key: 'keep', label: '繼續自己家配', outcome: '穩定得最快，尾鰭會越來越差', recommended: reserveShort(coins, fresh.buy!.price) > 0 },
         ],
         fish: opts.cands.map(({ fish, tank }) => pickFish(fish, tank)),
       };
@@ -1708,18 +1714,20 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       const breeding = tanks.findIndex((t) => t.purpose === 'breeding');
       // 沒有盒子要先買：價錢寫在選項上，點了才算同意花錢；錢不夠就不能選
       const poor = !box && economy(home).coins < price;
+      // 買得起、但買完剩不到 BUY_RESERVE：還是能選，只是不推薦（polish-to-9.md §11）
+      const tight = !box && reserveShort(economy(home).coins, price) > 0;
       return {
         id,
         tank: m.tank,
         title: '夢想魚的那窩過一半了！',
         owner: `這一窩裡可能有${DREAM_FISH.name}的寶寶。什麼時候把${callName(m.fish)}移到產房？`,
         options: [
-          { key: 'plants', label: breeding >= 0 ? '現在移去密草的繁殖缸' : '現在就留在缸裡躲草', outcome: '母魚適應得好，但小魚出生後一部分要躲', recommended: poor },
+          { key: 'plants', label: breeding >= 0 ? '現在移去密草的繁殖缸' : '現在就留在缸裡躲草', outcome: '母魚適應得好，但小魚出生後一部分要躲', recommended: tight },
           {
             key: 'box',
             label: box ? '等快生再放育幼盒' : `等快生再放育幼盒（買一個 ${price} 元）`,
             outcome: '保護最好，但移太晚母魚會緊迫',
-            recommended: !poor,
+            recommended: !tight,
             ...(poor ? { disabled: `錢不夠：育幼盒要 ${price} 元` } : {}),
           },
         ],
@@ -2523,12 +2531,12 @@ function linePairs(tanks: TankState[], s: Readonly<ChoiceState>, anySex = false)
   return pairs.length >= 2 ? { pairs, cands, tank } : null;
 }
 
-/** C17 推薦：近交係數 < INBREEDING_LIMIT 推保得住 X 蛇紋、比例最高的那組，到了改推配新魚（買不起就照比例）。 */
+/** C17 推薦：近交係數 < INBREEDING_LIMIT 推保得住 X 蛇紋、比例最高的那組，到了改推配新魚（買完剩不到 BUY_RESERVE 就照比例）。 */
 function recommendedPair(o: { pairs: LinePair[] }, coins: number): LinePair {
   // 先保住 X 蛇紋（不然穩定度卡在一半），比例差不多的挑尾鰭好的
   const near = pickPair(o.pairs.filter((x) => x.key !== 'new'));
   const fresh = o.pairs.find((x) => x.key === 'new');
-  if (fresh && (!near || near.inbreeding >= INBREEDING_LIMIT) && coins >= fresh.buy!.price) return fresh;
+  if (fresh && (!near || near.inbreeding >= INBREEDING_LIMIT) && reserveShort(coins, fresh.buy!.price) === 0) return fresh;
   return near ?? o.pairs[0];
 }
 
