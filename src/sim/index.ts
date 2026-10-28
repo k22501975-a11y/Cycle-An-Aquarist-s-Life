@@ -50,7 +50,7 @@ export { computeStressors, CROWD_DEATHS_PER_DAY, CROWD_NOTICES_BEFORE_DEATH, cro
 export { newTankAmmoniaRate, newTankSyndrome, SYNDROME_MG_PER_FISH, type NewTankSyndromeStatus } from './processes/new-tank';
 export { bacteriaCapacity, CYCLE_DELAY_PER_BATCH_H, cycleMaturity, CYCLED_BACTERIA, delayCycleForNewFish, isCycled } from './processes/nitrogen';
 export { currentPar } from './processes/plants';
-export { hidingFactor, MAX_FAUNA, sizeRatio } from './processes/population';
+export { DENSE_COVER, DENSE_COVER_FACTOR, hidingFactor, MAX_FAUNA, plantCover, sizeRatio } from './processes/population';
 export { breakHeater, HEATER_EXPOSED_LEVEL, HEATER_FAILURE_GAP_DAYS, heaterLiftC, heaterWarmup, INSULATED_LOSS_SHARE, lightHeatC, waterLevelL } from './processes/thermal';
 // mall.ts 不從這裡匯出：只有商城面板和設備面板用，從這裡匯出會被算進開機必載
 export * from './growth';

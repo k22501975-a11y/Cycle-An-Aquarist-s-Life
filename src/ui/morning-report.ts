@@ -1,7 +1,7 @@
 import { crisisText, type Crisis } from '../game/crisis';
-import { airPumpPrice, breathless, oxygenFix, BLOOM_NOTE, boxBlocked, fryHome, fryNeedHome, fryPrep, newTankCost, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
+import { DENSE_COVER, NURSERY_RELEASE_CM, plantCover, airPumpPrice, breathless, oxygenFix, BLOOM_NOTE, boxBlocked, fryHome, fryNeedHome, fryPrep, newTankCost, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
 import { addEcho, takeEchoes } from '../sim/choice-echo';
-import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, callName, breederIds, breederName, type ChoiceCard } from '../sim/choices';
+import { revealCountdown, takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, callName, breederIds, breederName, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 import { cheapHeaterStep, crisisTodos, lingering, warmMoveStep, wipedOut } from './status';
 import { quietObservation } from './morning-observe';
@@ -37,7 +37,8 @@ export type ReportAction =
   | 'cycle_tank' // 小魚要搬家、新缸還沒養水：打開「新缸要怎麼養水？」（#428；tank 是新缸）
   | 'buy_tank' // 住不下（C14）選了再買一缸：直接打開 20L 套缸的購買確認（polish-to-9.md §10.2）
   | 'buy_big' // 住不下（C14）選了換大缸：直接打開 90L 套缸的購買確認
-  | 'add_air'; // 缺氧：打開打氣機，沒有就買一台裝上（oxygen.ts）
+  | 'add_air' // 缺氧：打開打氣機，沒有就買一台裝上（oxygen.ts）
+  | 'shop_plants'; // 小魚被吃、水草不夠密：商店的水草頁（polish-to-9.md §12.2）
 
 export type ReportKind =
   | 'crisis'
@@ -299,14 +300,21 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       // 還沒有缸收得了、可是有空的新缸沒養水（#428）：按鈕直接打開養水
       const prep = home === null ? fryPrep(tanks, index) : null;
       const cycle = prep?.kind === 'cycle' && !prep.started ? prep.tank : null;
+      // 沒有缸能馬上搬、草又不夠密：教玩家種密一點，按鈕打開水草（polish-to-9.md §12.2）
+      const cover = plantCover(t);
+      const plants = home === null && !shrimp && cover < DENSE_COVER ? { name: tankLabel(tanks, index), pct: Math.round(cover * 100) } : null;
       push({
         kind: 'eaten',
         tone: 'warn',
-        text: `昨晚有 ${fryEatenText(t, eaten, shrimp, home === null ? null : tankLabel(tanks, home), tanks.length > 1)}`,
-        action: home !== null ? 'move_fry' : cycle !== null ? 'cycle_tank' : 'fry_box',
-        ...(cycle !== null ? { tank: cycle } : {}),
+        text: `昨晚有 ${fryEatenText(t, eaten, shrimp, home === null ? null : tankLabel(tanks, home), tanks.length > 1, plants)}`,
+        action: home !== null ? 'move_fry' : plants ? 'shop_plants' : cycle !== null ? 'cycle_tank' : 'fry_box',
+        ...(plants ? { goLabel: '種水草' } : cycle !== null ? { tank: cycle } : {}),
         count: eaten,
       });
+    } else if (snap && !choiceState(tanks).denseNoted && plantCover(t) >= DENSE_COVER && t.fish.some((f) => f.alive && !f.nursery && isJuvenile(f) && !isShrimpSpecies(f.species) && f.lengthCm < NURSERY_RELEASE_CM)) {
+      // 第一次種到夠密、昨晚有小魚在外面卻一尾都沒被吃：說一聲（polish-to-9.md §12.2）
+      choiceState(tanks).denseNoted = true;
+      push({ kind: 'echo', tone: 'good', text: '水草夠密了，昨晚沒有小魚被吃', echo: '種密水草' });
     }
     // 育幼盒（#187）：老闆送的、小魚長大自己回主缸
     // 品系那對快生了、照 C15 的選擇自動買了育幼盒（#362）：說一聲錢花到哪
@@ -583,6 +591,9 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   // 選育進度（midgame.md §2）：有第一窩或留種的魚就每天一行，取代一般的小觀察
   const progress = crisis ? null : breedingProgress(tanks);
   if (progress) items.push({ kind: 'breeding', tank: 0, tone: 'good', text: progress });
+  // 開獎倒數（polish-to-9.md §12.1）：夢想窩的母魚 3 天內要生，報告第一行倒數，點了看她
+  const countdown = crisis ? null : revealCountdown(tanks);
+  if (countdown) items.push({ kind: 'countdown', tank: countdown.tank, tone: 'good', text: `開獎倒數 ${countdown.days} 天`, action: 'fish', subjectId: countdown.momId, countdown: { days: countdown.days, momId: countdown.momId } });
   // 選擇的回音（polish-to-9.md §10.0）
   const choices = choiceState(tanks);
   for (const e of takeEchoes(tanks, choices, callName)) items.push({ kind: 'echo', tank: e.tank, tone: 'info', text: e.text, echo: e.label, ...(e.retry ? { echoRetry: e.retry } : {}) });

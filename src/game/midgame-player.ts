@@ -49,7 +49,7 @@ export interface MidgameNight {
   boughtFeeder: boolean;
   /** 這天的每日小事（daily-loop.md §8）：出題時有沒有目標題出得了、出了幾題目標題、幾題跟目標有關（目標題加寫明關係的照顧題）。 */
   daily: { goalDay: boolean; goal: number; related: number };
-  /** 這天早上新開始的白點（某缸從沒事變成有魚帶蟲或水裡還有上一波的蟲；同一波沒斷根又上身不重算）。 */
+  /** 這天早上新開始的白點（某缸從沒事變成有魚帶蟲或水裡還有上一波的蟲；同一波沒斷根又上身、帶蟲的魚被搬到別缸都不重算）。 */
   ichNew: number;
   /** 照推薦（選擇卡、報告的自動餵食器）買了東西、買完手上剩不到 BUY_RESERVE：剩多少（polish-to-9.md §11 要 0 次）。 */
   lowBuy?: number;
@@ -127,6 +127,8 @@ function run(seed: number, days: number, opts: { neglectCrowd?: boolean; onDay?:
   /** 治白點調高水溫之前加熱棒設幾度。 */
   const ichWarm = new Map<TankState, number>();
   const inIch = new Set<TankState>();
+  /** 昨天身上帶蟲的魚（ichNew 用）。 */
+  let hadIch = new Set<number>();
   for (let night = 1; night < days; night++) {
     updateDaily(tanks);
     const ok = new Set(eligibleDaily(tanks));
@@ -207,11 +209,15 @@ function run(seed: number, days: number, opts: { neglectCrowd?: boolean; onDay?:
     const coinsAfter = economy(s).coins;
     const lowBuy = coinsAfter < coinsBefore && coinsAfter < BUY_RESERVE ? coinsAfter : undefined;
     let ichNew = 0;
+    // 帶蟲的魚被搬到別缸（分缸、搬去新缸）是同一波跟著魚走，不算新的一波
+    const carriers = new Set(tanks.flatMap((t) => t.fish.filter((f) => f.alive && f.ich.stage !== 'none').map((f) => f.id)));
     for (const t of tanks) {
-      if (ichEpisode(t) && !inIch.has(t)) ichNew++;
+      const moved = t.fish.some((f) => f.alive && f.ich.stage !== 'none' && hadIch.has(f.id));
+      if (ichEpisode(t) && !inIch.has(t) && !moved) ichNew++;
       if (ichEpisode(t)) inIch.add(t);
       else inIch.delete(t);
     }
+    hadIch = carriers;
     const cs = choiceState(tanks);
     // 留種的母魚（開獎前就是那尾）懷孕期間的里程碑
     const dreamMom = cs.reveal?.momId ?? cs.pair?.[0];

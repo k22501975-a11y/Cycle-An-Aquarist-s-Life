@@ -215,6 +215,8 @@ export interface ChoiceState {
   /** 路線卡的孫代機率 % 和預計開獎日（updateOdds）；key 是那對的「母:公」id，換了才重算機率。 */
   odds?: { key: string; pct: number; day: number };
   /** C9 選了交小魚單、還沒交的窩（deliverBroodFry）。 */
+  /** 水草第一次種到夠密、那晚小魚一尾都沒被吃，早上報告說過了（polish-to-9.md §12.2）。 */
+  denseNoted?: boolean;
   fryDeliver?: Array<{ ids: number[]; born: number; tank: number; sold?: number; coins?: number; last?: number }>;
   /** C1 選了躲草：什麼時候選的、那窩小魚是哪幾尾（任務卡 3 天內不叫玩家搬小魚，choice-echo.ts hideGrace）。 */
   hide?: { at: number; ids: number[] };
@@ -2603,6 +2605,30 @@ function settleImplicit(tanks: TankState[], s: ChoiceState): void {
 }
 
 /**
+ * 夢想窩（polish-to-9.md §12.1）：留種那對的母魚懷著那尾公魚的、還沒開獎，標 dreamBrood（畫面畫光暈）；其他的清掉。
+ * 生的時候 population.ts 會清；這裡每天早上補標、換了種魚或開獎過了就清。
+ */
+function markDreamBrood(tanks: TankState[], s: Readonly<ChoiceState>): void {
+  const [momId, dadId] = s.pair ?? [];
+  for (const { fish } of located(tanks)) {
+    if (!s.reveal?.done && fish.id === momId && fish.pregnancy > 0 && fish.sire?.id === dadId) fish.dreamBrood = true;
+    else delete fish.dreamBrood;
+  }
+}
+
+/** 開獎前幾天早上報告第一行倒數（polish-to-9.md §12.1）。 */
+export const COUNTDOWN_DAYS = 3;
+
+/** 夢想窩的母魚還有幾天生（無條件進位）；只在 COUNTDOWN_DAYS 天內回傳，其他回 null。 */
+export function revealCountdown(tanks: TankState[]): { momId: number; tank: number; days: number } | null {
+  const m = located(tanks).find(({ fish }) => fish.alive && fish.dreamBrood);
+  const left = m && daysToBirth(tanks[m.tank], m.fish);
+  if (!m || !left) return null;
+  const days = Math.max(1, Math.ceil(left));
+  return days <= COUNTDOWN_DAYS ? { momId: m.fish.id, tank: m.tank, days } : null;
+}
+
+/**
  * 早上報告用：拿今天要出的那張卡並記下出現時間。一個早上最多一張：還沒出過的優先，
  * 出過沒選的隔 CHOICE_RESHOW_DAYS 天再出一次。C5 每張訂單只問一次。
  */
@@ -2613,6 +2639,7 @@ export function takeChoice(tanks: TankState[]): ChoiceCard | null {
   endGrowPlan(tanks, s);
   lateHousekeeping(tanks, s);
   updateOdds(tanks, s);
+  markDreamBrood(tanks, s);
   const now = tanks[0].hours;
   // 同一個遊戲天最多一張（#316）：同一天又過一晚、或別的地方再拿一次，都不再出第二張
   const today = Math.floor(now / 24);

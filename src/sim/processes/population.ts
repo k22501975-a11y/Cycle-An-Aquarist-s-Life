@@ -73,6 +73,12 @@ export function hidingFactor(state: TankState): number {
   return MAX_HIDING * (1 - Math.exp(-grams / state.equipment.tank.volumeL / 0.6));
 }
 
+/** 水草覆蓋率 0–1（早上報告寫 x%）：躲藏係數占上限的比例。 */
+export const plantCover = (state: TankState): number => hidingFactor(state) / MAX_HIDING;
+/** 覆蓋率到這裡算「夠密」，小魚被吃的機率再減半（polish-to-9.md §12.2）。 */
+export const DENSE_COVER = 0.6;
+export const DENSE_COVER_FACTOR = 0.5;
+
 export function updatePopulation(state: TankState, dt: number): void {
   const living = state.fish.filter((f) => f.alive);
   if (living.length === 0) return;
@@ -87,9 +93,11 @@ export function updatePopulation(state: TankState, dt: number): void {
   }
 
   const hiding = hidingFactor(state);
+  // 草夠密（覆蓋 ≥ 60%）的缸，小魚被吃的機率再減半（polish-to-9.md §12.2：種密了要明顯有用）
+  const dense = hiding >= DENSE_COVER * MAX_HIDING ? DENSE_COVER_FACTOR : 1;
   // 育幼盒裡的魚隔著網子：大魚吃不到、不會咬鰭，盒裡的母魚也吃不到外面的小魚（nursery.ts）
   const open = living.filter((f) => !f.nursery);
-  const eaten = predation(state, open, hiding, dt);
+  const eaten = predation(state, open, hiding, dt, dense);
   // 被吃掉的幼體直接從缸裡消失；記一筆事件（同一種一筆），早上報告和通知才知道（#176）
   if (eaten.size > 0) {
     state.fish = state.fish.filter((f) => !eaten.has(f));
@@ -108,7 +116,7 @@ export function updatePopulation(state: TankState, dt: number): void {
  * 成魚會吃嘴巴塞得下的仔魚、仔蝦。剛出生時最危險，長大到超過掠食者嘴巴就安全了。
  * 每隻幼體每小時的被吃機率 = 基礎值 × 掠食壓力 × 體型弱點 × 飢餓加成 × (1 − 躲藏係數)。
  */
-function predation(state: TankState, living: Fish[], hiding: number, dt: number): Set<Fish> {
+function predation(state: TankState, living: Fish[], hiding: number, dt: number, dense = 1): Set<Fish> {
   const eaten = new Set<Fish>();
   const predators = living.filter((f) => FISH_SPECIES[f.species].mouthRatio > 0 && !isJuvenile(f));
   if (predators.length === 0) return eaten;
@@ -131,7 +139,7 @@ function predation(state: TankState, living: Fish[], hiding: number, dt: number)
     const smallness = Math.min(1, Math.max(0, (limit - prey.lengthCm) / Math.max(0.01, limit - sp.birthLengthCm)));
     const hungerBonus = 1 + hunger / count;
     // 跟著媽媽的仔魚：靠近的魚會被趕走
-    const ratePerHour = (sp.juvenilePredationPerDay / 24) * pressure * smallness * hungerBonus * (1 - hiding) * guardedPredationFactor(state, prey);
+    const ratePerHour = (sp.juvenilePredationPerDay / 24) * pressure * smallness * hungerBonus * (1 - hiding) * dense * guardedPredationFactor(state, prey);
     if (chance(state.rng, ratePerHour, dt)) {
       eaten.add(prey);
       // 吃剩的碎屑變成有機廢物。
@@ -187,6 +195,7 @@ function breed(state: TankState, tf: number, dt: number): void {
       if (mother.pregnancy >= 1) {
         mother.pregnancy = 0;
         delete mother.bellySeen;
+        delete mother.dreamBrood;
         const fry = giveBirth(state, mother, living.length);
         if (mother.nursery) nurseryBirth(state, mother, fry);
       }
