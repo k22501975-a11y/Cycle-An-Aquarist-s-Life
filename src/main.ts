@@ -38,7 +38,7 @@ import { ICONS } from './ui/icons';
 import { DEATH_ADVICE, describeEvent, FIRST_PESTS_LINE, firstDeathOwnerLine, fishName, fishStrain, pluralEventText } from './ui/labels';
 import { mergeEventToasts, type EventToast } from './ui/notify-gate';
 import { personaChip } from './ui/persona';
-import { dreamCard, dreamStrip } from './ui/dream-card';
+import { dreamCard, dreamStrip, fitDreamStrip } from './ui/dream-card';
 import { openingHud, type OpeningHud } from './ui/opening-hud';
 import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
 import type { PanelContext, ShopTab } from './ui/panels';
@@ -1472,7 +1472,10 @@ async function start(): Promise<void> {
     const from = dreamPct;
     dreamPct = route?.odds?.pct ?? dreamPct;
     dreamHolder.replaceChildren(...(route ? [dreamStrip(route, () => sheet.open('夢想魚', () => dreamCard(sim.dreamRoute(game.tanks))), from)] : []));
-    requestAnimationFrame(() => measure());
+    requestAnimationFrame(() => {
+      fitDreamStrip(dreamHolder.firstElementChild);
+      measure();
+    });
   };
   const dailyChanged = memo();
   const claimDailyChest = () => {

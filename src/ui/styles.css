@@ -1158,14 +1158,18 @@ body:has(.sheet.full.open) .owner-tip, body:has(.sheet.full.open) .feed-bar { di
 .pp-dream-badge { position: absolute; top: -8px; right: -6px; padding: 2px 8px; border-radius: 999px; background: var(--gold-bright); color: var(--deep); font-size: 11px; font-weight: 700; }
 .dream-strip-label small { color: var(--muted); margin-right: 4px; }
 /* 孫代機率和開獎日（polish-to-9.md §10.4）：路線卡上常駐，機率變了跳數字、浮出「舊 → 新」 */
-.dream-odds { position: relative; display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; white-space: nowrap; }
-.dream-pct { font-size: 15px; color: var(--gold-bright); font-variant-numeric: tabular-nums; }
-.dream-odds small { font-size: 10px; color: var(--muted); }
+.dream-strip.has-odds .dream-odds { flex: 1 1 auto; }
+.dream-strip.has-odds > .dream-mini, .dream-strip.has-odds .dream-strip-dots { flex: none; }
+.dream-odds { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; line-height: 1.15; white-space: nowrap; }
+.dream-step { max-width: 100%; overflow: hidden; text-overflow: ellipsis; color: var(--gold-bright); font-size: 12px; }
+.dream-odds-line { display: block; max-width: 100%; overflow: hidden; font-size: 10px; color: var(--muted); }
+.dream-pct { display: inline-block; font-size: 12px; color: var(--gold-bright); font-variant-numeric: tabular-nums; }
+/* 卡片太窄：第二行只留「x%」 */
+.dream-odds-line.narrow .dream-odds-who, .dream-odds-line.narrow .dream-odds-day, .dream-odds.jump .dream-odds-day { display: none; }
 .dream-odds.jump .dream-pct { animation: dream-pop 0.9s ease-out; }
-.dream-odds.jump.up .dream-pct, .dream-odds.jump.up small { color: #9fe3a6; }
-.dream-odds.jump.down .dream-pct, .dream-odds.jump.down small { color: #f3b09a; }
-.dream-odds.jump small { font-weight: 700; }
-@keyframes dream-pop { 30% { transform: scale(1.35); } }
+.dream-odds.jump.up .dream-odds-line, .dream-odds.jump.up .dream-pct { color: #9fe3a6; font-weight: 700; }
+.dream-odds.jump.down .dream-odds-line, .dream-odds.jump.down .dream-pct { color: #f3b09a; font-weight: 700; }
+@keyframes dream-pop { 30% { transform: scale(1.3); } }
 .dream-card-odds { font-size: 13px; color: var(--text); }
 .dream-card-odds b { color: var(--gold-bright); font-size: 15px; }
 @media (prefers-reduced-motion: reduce) { .dream-odds.jump .dream-pct { animation: none; } }

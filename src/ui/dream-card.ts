@@ -30,48 +30,57 @@ function fixedLabel(route: DreamRoute): string {
 export const pctText = (p: number): string => `${Number.isInteger(p) ? p : p.toFixed(1)}%`;
 
 /**
- * 路線卡上常駐的機率和開獎日（polish-to-9.md §10.4）。from 是上一次的機率：跟這次不一樣就當場跳數字，
- * 旁邊浮出「29.6% → 49.6%」一下（選了換種魚之類的）。
+ * 有機率時路線卡寫兩行（polish-to-9.md §10.4）：第一行步驟名「3／4 第一尾自己選育的魚」，第二行小字「孫代 x%・約第 d 天開獎」。
+ * from 是上一次的機率：跟這次不一樣就當場跳數字，第二行先寫「29.6% → 49.6%」，過幾秒換回開獎日。
  */
-function oddsTag(odds: NonNullable<DreamRoute['odds']>, from?: number): HTMLElement {
+function oddsLines(step: string, odds: NonNullable<DreamRoute['odds']>, from?: number): HTMLElement {
   const num = h('b.dream-pct', {}, pctText(odds.pct));
-  const sub = `孫代・約第 ${odds.day} 天開獎`;
-  const note = h('small', {}, sub);
-  const tag = h('span.dream-odds', { title: `孫代出現${DREAM_FISH.name}的機率 ${pctText(odds.pct)}，預計開獎約第 ${odds.day} 天` }, num, note);
+  const was = h('span.dream-was', { hidden: true });
+  const line = h('small.dream-odds-line', {}, h('span.dream-odds-who', {}, '孫代 '), was, num, h('span.dream-odds-day', {}, `・約第 ${odds.day} 天開獎`));
+  const tag = h('span.dream-odds', { title: `孫代出現${DREAM_FISH.name}的機率 ${pctText(odds.pct)}，預計開獎約第 ${odds.day} 天` }, h('span.dream-step', {}, step), line);
   if (from === undefined || from === odds.pct) return tag;
-  // 小字先換成「舊 → 新」，過幾秒換回開獎日
   tag.classList.add('jump', odds.pct > from ? 'up' : 'down');
-  note.textContent = `${pctText(from)} → ${pctText(odds.pct)}`;
+  was.textContent = `${pctText(from)} → `;
+  was.hidden = false;
   window.setTimeout(() => {
     tag.classList.remove('jump');
-    note.textContent = sub;
+    was.hidden = true;
   }, 3000);
   // 數字從舊的數到新的（約 0.9 秒）；不想要動畫的玩家直接換成新數字
   if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
     const t0 = performance.now();
-    const step = (t: number) => {
+    const tick = (t: number) => {
       const k = Math.min(1, (t - t0) / 900);
       const v = from + (odds.pct - from) * (1 - (1 - k) ** 3);
       num.textContent = pctText(k < 1 ? Math.round(v * 10) / 10 : odds.pct);
-      if (k < 1) requestAnimationFrame(step);
+      if (k < 1) requestAnimationFrame(tick);
     };
     num.textContent = pctText(from);
-    requestAnimationFrame(step);
+    requestAnimationFrame(tick);
   }
   return tag;
 }
 
-/** 任務卡上方常駐的一條：剪影、每步一個點、現在在走的那步；有機率的話加上孫代機率和開獎日（from 是上一次的機率）。 */
+/** 任務卡上方常駐的一條：剪影、每步一個點、現在在走的那步；有機率的話寫兩行，步驟名加孫代機率和開獎日（from 是上一次的機率）。 */
 export function dreamStrip(route: DreamRoute, onclick: () => void, from?: number): HTMLButtonElement {
-  const cur = route.steps.find((s) => s.current);
+  const at = route.steps.findIndex((s) => s.current);
+  const cur = route.steps[at];
   const label = cur?.id === 'fixed' ? (route.achieved ? fixedLabel(route) : '再等牠冒出來') : cur ? cur.title : route.achieved ? `${DREAM_FISH.name}品系固定了！` : '再等牠冒出來';
   return h(
     `button.dream-strip.glass${route.odds ? '.has-odds' : ''}`,
     { onclick, title: '夢想魚：點開看怎麼選育' },
     dreamFishImg(route.achieved, 'dream-mini'),
     h('span.dream-strip-dots', {}, ...route.steps.map((s) => h(`i${s.done ? '.done' : ''}${s.current ? '.current' : ''}`))),
-    route.odds ? oddsTag(route.odds, from) : h('span.dream-strip-label', {}, h('small', {}, '夢想魚'), label),
+    route.odds ? oddsLines(at >= 0 ? `${at + 1}／${route.steps.length} ${label}` : label, route.odds, from) : h('span.dream-strip-label', {}, h('small', {}, '夢想魚'), label),
   );
+}
+
+/** 路線卡放上畫面後量一下：第二行塞不下就只留「x%」（步驟名一定留著）。 */
+export function fitDreamStrip(strip: Element | null): void {
+  const line = strip?.querySelector<HTMLElement>('.dream-odds-line');
+  if (!line) return;
+  line.classList.remove('narrow');
+  if (line.scrollWidth > line.clientWidth + 1) line.classList.add('narrow');
 }
 
 /** 歡迎時疊在老闆那句話下面的小卡（不另外跳對話框）。 */
