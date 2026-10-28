@@ -113,7 +113,7 @@ describe('主畫面的下一步（U1）', () => {
     expect(nextStep([s])).toMatchObject({ target: 'shop_tank' });
   });
 
-  it('第二缸的用途目標（G4）：繁殖缸叫你把小魚搬過去；展示缸先換水草燈再種陽性草', () => {
+  it('第二缸的用途目標（G4）：繁殖缸叫你把小魚搬過去；展示缸先換水草燈再種陽性草，帶上展示缸是哪一缸', () => {
     const tanks = [newGameState(1)];
     economy(tanks[0]).coins = 99_999;
     buyTank(tanks, 'std40');
@@ -123,9 +123,10 @@ describe('主畫面的下一步（U1）', () => {
     setTankPurpose(tanks[1], 'breeding');
     expect(nextStep(tanks)).toMatchObject({ goal: 'breeding_tank', target: 'shop_tank', text: `小魚搬去繁殖缸養大（0/${PURPOSE_GOAL_COUNT.breeding}）` });
     setTankPurpose(tanks[1], 'display');
-    expect(nextStep(tanks)).toMatchObject({ goal: 'display_tank', target: 'shop_gear' });
+    // 帶上展示缸是第幾缸：點了先切過去再開商店，水草燈不會裝到主缸（#441）
+    expect(nextStep(tanks)).toMatchObject({ goal: 'display_tank', target: 'shop_gear', tank: 1 });
     tanks[1].equipment.light = { spec: LIGHTS.planted, startHour: 10, photoperiodHours: 8 };
-    expect(nextStep(tanks)).toMatchObject({ goal: 'display_tank', target: 'shop_plants', text: `展示缸種陽性草（0/${PURPOSE_GOAL_COUNT.display}）` });
+    expect(nextStep(tanks)).toMatchObject({ goal: 'display_tank', target: 'shop_plants', tank: 1, text: `展示缸種陽性草（0/${PURPOSE_GOAL_COUNT.display}）` });
   });
 });
 

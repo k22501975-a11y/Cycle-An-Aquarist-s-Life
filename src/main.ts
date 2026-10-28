@@ -1269,11 +1269,15 @@ async function start(): Promise<void> {
         return ordersBtn.click();
       case 'sell':
         return openShop('sell');
+      // 買的東西放進現在看的那缸：任務卡指定哪一缸就先切過去（#441：展示缸的水草燈裝到主缸）
       case 'shop_fish':
+        if (tank !== undefined) game.switchTo(tank);
         return openShop('fish');
       case 'shop_gear':
+        if (tank !== undefined) game.switchTo(tank);
         return openShop('gear');
       case 'shop_plants':
+        if (tank !== undefined) game.switchTo(tank);
         return openShop('plants');
       case 'shop_tank':
         return panelSheet('我的水缸', (p) => p.tanksPanel(ctx));
