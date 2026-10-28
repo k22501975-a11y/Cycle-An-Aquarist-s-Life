@@ -1,5 +1,5 @@
 import { isShrimpSpecies, lookVariant, phenotype } from '../sim';
-import { Assets, BlurFilter, ColorMatrixFilter, Container, type DestroyOptions, Mesh, MeshPlane, Texture } from 'pixi.js';
+import { BlurFilter, ColorMatrixFilter, Container, type DestroyOptions, Mesh, MeshPlane, Texture } from 'pixi.js';
 import type { Fish, FishSpeciesId, GrowthStage, GuppyPhenotype, TankState } from '../sim';
 import type { FishForm } from './fish-art';
 import { canvasTexture, makeCanvas } from './paint';
@@ -271,6 +271,17 @@ function guppyMaleArt(f: Fish): string | null {
   return paintedKey('guppy', 'male', lookVariant(f), false);
 }
 
+/**
+ * 載一張圖成貼圖。不用 Pixi 的 Assets：它會連帶打包點陣字、SVG、影片、網頁字型的載入器（合計少約 20 KB gzip，
+ * docs/performance-budget.md §3），我們只載 webp。
+ */
+async function loadTexture(url: string): Promise<Texture> {
+  const img = new Image();
+  img.src = url;
+  await img.decode();
+  return Texture.from(img);
+}
+
 /** 已經試著載過的圖（成功或失敗都算，不重複載）。 */
 const attempted = new Set<string>();
 let version = 0;
@@ -286,7 +297,7 @@ export async function loadPaintedArt(only?: Set<string>, base = import.meta.env.
   await Promise.all(
     todo.map(async (a) => {
       try {
-        (a.scenery ? scenery : textures).set(a.key, await Assets.load<Texture>(`${base}art/${a.file}`));
+        (a.scenery ? scenery : textures).set(a.key, await loadTexture(`${base}art/${a.file}`));
         loaded++;
       } catch {
         // 留給程式繪製版
