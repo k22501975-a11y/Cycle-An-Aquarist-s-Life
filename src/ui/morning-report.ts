@@ -1,7 +1,7 @@
 import { crisisText, type Crisis } from '../game/crisis';
 import { airPumpPrice, breathless, oxygenFix, BLOOM_NOTE, boxBlocked, fryHome, fryNeedHome, fryPrep, newTankCost, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
 import { takeEchoes } from '../sim/choice-echo';
-import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, breederIds, breederName, type ChoiceCard } from '../sim/choices';
+import { takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, callName, breederIds, breederName, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
 import { cheapHeaterStep, crisisTodos, lingering, warmMoveStep, wipedOut } from './status';
 import { quietObservation } from './morning-observe';
@@ -401,7 +401,8 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       push({ kind: 'ammonia', tone: 'warn', text: `氨 ${ammonia}，水開始髒了，${suggestedWaterChange(t) === BIG_WATER_CHANGE ? '換一半的水' : '換三成水'}`, action: 'water_change' });
     // 缺氧（oxygen.ts）：浮頭累積半天就先說（黃，不出任務卡）；低到開始傷魚是紅的、排最前面，任務卡也會叫
     const gasp = breathless(t);
-    if (gasp) {
+    if (gasp?.recovering) push({ kind: 'oxygen', tone: 'info', text: `打氣機開了，溶氧 ${gasp.o2.toFixed(1)}，在回升` });
+    else if (gasp) {
       const fix = oxygenFix(t);
       const air = fix === 'air_on' ? '打開打氣機' : fix === 'buy_air' ? `加一台打氣機（${airPumpPrice()} 元）` : '';
       const o2 = gasp.o2.toFixed(1);
@@ -578,7 +579,7 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   const progress = crisis ? null : breedingProgress(tanks);
   if (progress) items.push({ kind: 'breeding', tank: 0, tone: 'good', text: progress });
   // 選擇的回音（polish-to-9.md §10.0）
-  for (const e of takeEchoes(tanks, choiceState(tanks))) items.push({ kind: 'echo', tank: e.tank, tone: 'info', text: e.text, echo: e.label });
+  for (const e of takeEchoes(tanks, choiceState(tanks), callName)) items.push({ kind: 'echo', tank: e.tank, tone: 'info', text: e.text, echo: e.label });
   // 安靜的一晚（沒好事、沒壞事、也沒要留意的）：帶一句缸裡的小變化（#258）
   if (!crisis && !progress && tanks[0] && before.tanks[0] && items.every((i) => i.tone === 'info')) {
     const text = quietObservation(tanks[0], tanks[0], before.tanks[0]);

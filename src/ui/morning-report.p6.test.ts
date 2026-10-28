@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Game, newGameState } from '../game/game';
-import { addFish, addPlant, BIG_WATER_CHANGE, createTank, feed, FILTERS, HEATERS, LIGHTS, measuredProblem, NORMAL_WATER_CHANGE, pinchMg, suggestedWaterChange, TANKS, type TankState } from '../sim';
+import { addFish, addPlant, AIR_PUMPS, OXYGEN_HARM_MG, BIG_WATER_CHANGE, createTank, feed, FILTERS, HEATERS, LIGHTS, measuredProblem, NORMAL_WATER_CHANGE, pinchMg, suggestedWaterChange, TANKS, type TankState } from '../sim';
 import { lineGroup, morningReport, REPORT_LINES, slimReport, snapshot } from './morning-report';
 import { breederName } from '../sim/choices';
 
@@ -183,5 +183,21 @@ describe('早上報告寫玩家自己做的事的結果（polish-to-9 §6 P6）'
     const r = reportAfter((t) => (t.water.tan = 0.25), s);
     expect(r.items.find((i) => i.kind === 'bloom')?.text).toContain('新缸常見的細菌白濁');
     expect(kinds(reportAfter((t) => (t.water.tan = 0.5), s))).not.toContain('bloom');
+  });
+
+  it('缺氧：傷到魚是紅的；打氣機開了、溶氧回到不傷魚就只說在回升，不再叫換水（#444 架構審查）', () => {
+    const harmed = reportAfter((x) => {
+      x.o2HarmHours = 3;
+      x.water.o2 = OXYGEN_HARM_MG - 0.5;
+      x.equipment.airPump = { spec: AIR_PUMPS.small, on: true };
+    }).items.find((i) => i.kind === 'oxygen');
+    expect(harmed).toMatchObject({ tone: 'bad', action: 'water_change' });
+    const back = reportAfter((x) => {
+      x.o2HarmHours = 3;
+      x.water.o2 = OXYGEN_HARM_MG + 0.5;
+      x.equipment.airPump = { spec: AIR_PUMPS.small, on: true };
+    }).items.find((i) => i.kind === 'oxygen');
+    expect(back).toMatchObject({ tone: 'info', text: '打氣機開了，溶氧 2.5，在回升' });
+    expect(back?.action).toBeUndefined();
   });
 });

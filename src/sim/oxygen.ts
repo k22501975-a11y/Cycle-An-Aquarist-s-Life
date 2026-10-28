@@ -43,19 +43,31 @@ export function trackOxygen(t: TankState): void {
  * 最近的缺氧（早上報告、任務卡用）：累積浮頭 LOW_O2_HOURS 以上（黃，早上報告提早說），或最近低到傷魚（紅，加任務卡）。
  * 剛換完水溶氧暫時回來也算，沒打氣幾小時又會掉回去，要等累積的時數退掉才不說。沒有回 null。
  */
-export function breathless(t: TankState): { o2: number; harm: boolean; hours: number } | null {
+export function breathless(t: TankState): { o2: number; harm: boolean; hours: number; recovering: boolean } | null {
   const hours = t.lowO2Hours ?? 0;
   const harm = (t.o2HarmHours ?? 0) > 0;
-  return harm || hours >= LOW_O2_HOURS ? { o2: t.water.o2, harm, hours } : null;
+  if (!harm && hours < LOW_O2_HOURS) return null;
+  // 打氣機開著、溶氧已經回到不傷魚：累積的時數還在退，但玩家該做的都做了，不再叫他做別的（#444 架構審查）
+  const recovering = !!t.equipment.airPump?.on && t.water.o2 >= OXYGEN_HARM_MG;
+  return { o2: t.water.o2, harm, hours, recovering };
 }
 /** 打氣機的價錢。 */
 export const airPumpPrice = () => price('air:small');
+
+/**
+ * 打氣機還差幾元（0 是買得起）。賒的加熱棒還沒還清的話先扣掉欠的：手上的錢要先還阿德，
+ * 不叫玩家把最後的錢拿去買打氣機（g33 種子 2：欠 280 元時花 250 買打氣機，剩 7 元撐不過白點）。
+ */
+export function airPumpShort(t: TankState): number {
+  const e = economy(t);
+  return Math.max(0, airPumpPrice() - (e.coins - (e.heaterLoan ?? 0)));
+}
 
 /** 缺氧怎麼救：打氣機關著就打開、沒有又買得起就買一台，不然先換水。 */
 export function oxygenFix(t: TankState): 'air_on' | 'buy_air' | 'water' {
   const pump = t.equipment.airPump;
   if (pump) return pump.on ? 'water' : 'air_on';
-  return economy(t).coins >= airPumpPrice() ? 'buy_air' : 'water';
+  return airPumpShort(t) === 0 ? 'buy_air' : 'water';
 }
 
 /** 打開或買一台打氣機裝上（任務卡、早上報告點下去）。都做不到回 false。 */
@@ -82,6 +94,6 @@ export function moveAirRisk(dest: TankState, fish: readonly Fish[]): { short: nu
   if (dest.equipment.airPump?.on) return null;
   const young = fish.filter(isJuvenile).length;
   if (young < dest.equipment.tank.volumeL * NO_AIR_FRY_PER_L) return null;
-  const short = dest.equipment.airPump ? 0 : Math.max(0, airPumpPrice() - economy(dest).coins);
+  const short = dest.equipment.airPump ? 0 : airPumpShort(dest);
   return { short };
 }

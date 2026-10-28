@@ -67,8 +67,8 @@ describe('中期的選擇點（design/midgame.md）', () => {
       expect(takeEchoes(tanks, st)).toEqual([]);
     });
 
-    it('育幼盒：第 1 天說都在；第 14 天總結還有幾尾、最大幾 cm', () => {
-      const { s, tanks, kids } = withBrood(6, 10);
+    it('育幼盒：第 1 天說都在；第一窩還佔著盒子、母魚又快生了說一次；第 14 天總結還有幾尾、最大幾 cm', () => {
+      const { s, tanks, kids, mom } = withBrood(6, 10);
       for (const k of kids) k.lengthCm = 0.7;
       economy(s).coins = 5000;
       buyNurseryBox(s);
@@ -78,6 +78,12 @@ describe('中期的選擇點（design/midgame.md）', () => {
       const st = choiceState(tanks);
       s.hours += 24;
       expect(takeEchoes(tanks, st).map((e) => e.text)).toEqual(['盒裡 6 尾都在，一尾都沒被吃']);
+      // 第一窩還在盒裡，母魚又快生了：說一次盒子被佔著（之後不再說）
+      mom.pregnancy = 0.9;
+      s.hours += 24;
+      expect(takeEchoes(tanks, st, () => '紅蛇王母魚').map((e) => e.text)).toEqual(['盒子被第一窩佔著，紅蛇王母魚快生了也沒地方放']);
+      s.hours += 24;
+      expect(takeEchoes(tanks, st)).toEqual([]);
       s.hours = st.firstBrood! + BROOD_SUMMARY_DAYS * 24;
       kids[0].lengthCm = 1.83;
       kids[5].alive = false;

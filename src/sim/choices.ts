@@ -15,6 +15,7 @@ import { crowdingRatio } from './processes/fauna';
 import { isCycled } from './processes/nitrogen';
 import { sizeRatio } from './processes/population';
 import { CROWD_WARN, cyclingTank } from './split';
+import { bigBrood, freshBigBrood } from './brood-water';
 import { addEcho, BROOD_SUMMARY_DAYS, crowdPct, HIDE_ECHO_DAYS, type Echo } from './choice-echo';
 import { tooSmallForTank } from './quarantine';
 import { addBottledBacteria, mediaAvailable, transferMedia } from './gifts';
@@ -209,6 +210,8 @@ export interface ChoiceState {
   crowdNext?: number;
   /** 選擇的回音（polish-to-9.md §10.0）：還沒出的那幾行，早上報告用 takeEchoes 取。 */
   echoes?: Echo[];
+  /** 這一胎已經預告過「大窩生在小缸」的母魚（polish-to-9.md §10 補充）；生完就拿掉。 */
+  bigBroodWarned?: number[];
   /** 路線卡的孫代機率 % 和預計開獎日（updateOdds）；key 是那對的「母:公」id，換了才重算機率。 */
   odds?: { key: string; pct: number; day: number };
   /** C9 選了交小魚單、還沒交的窩（deliverBroodFry）。 */
@@ -999,6 +1002,14 @@ function dueFry(t: TankState): number {
     .reduce((a, f) => a + Math.round(FISH_SPECIES[f.species].breeding!.broodMean * f.health), 0);
 }
 
+/** 這尾母魚這一胎還沒預告過大窩：記下來回 true（同一胎只說一次）。 */
+function noteBigBrood(s: ChoiceState, mom: Fish): boolean {
+  const warned = (s.bigBroodWarned ??= []);
+  if (warned.includes(mom.id)) return false;
+  warned.push(mom.id);
+  return true;
+}
+
 /** 算上快生的那窩（兩週後的大小）的擁擠度。 */
 const crowdSoon = (t: TankState) => crowdingRatio(t) + (dueFry(t) * FRY_SOON_CM) / t.equipment.tank.volumeL;
 
@@ -1149,14 +1160,20 @@ function revealKeep(tanks: TankState[], s: Readonly<ChoiceState>, brood: Array<{
   return { keep, looks, extra };
 }
 
-/** C9 的三個選項（第一次問的完整版）。 */
-function broodOptions(coins: number): ChoiceOption[] {
+/**
+ * C9 的三個選項（第一次問的完整版）。full：留種名額滿了，挑備用一尾都挑不走（polish-to-9.md §10 補充），
+ * 那個選項寫清楚整窩會留在缸裡。
+ */
+function broodOptions(coins: number, full = false): ChoiceOption[] {
   return [
     { key: 'grow', label: '留在繁殖缸長大', outcome: '整窩留著長大，之後再看要留哪幾尾' },
     { key: 'sell', label: '交小魚單', outcome: `長到能交就照訂單交，約 ${coins} 元；有夢想魚基因的也不再問` },
-    { key: 'keep', label: `挑 2～${SECOND_BROOD_KEEP} 尾當備用種魚`, outcome: '一生下來就挑離夢想魚最近的標留種，萬一種魚出事還有備用', recommended: true },
+    { key: 'keep', label: `挑 2～${SECOND_BROOD_KEEP} 尾當備用種魚`, outcome: full ? `留種名額滿了（最多 ${MAX_KEEPERS} 尾），挑不了，整窩會留在缸裡` : '一生下來就挑離夢想魚最近的標留種，萬一種魚出事還有備用', recommended: !full },
   ];
 }
+
+/** 留種名額滿了沒。 */
+const keepersFull = (tanks: TankState[]) => located(tanks).filter(({ fish }) => fish.keeper).length >= MAX_KEEPERS;
 
 /**
  * C10：一窩裡長到幼魚的有 ≥ 3 尾，裡面，有沒有比留種的那對更好的（同性別那尾換掉，孫代機率高 BETTER_BY 以上）。
@@ -1375,7 +1392,7 @@ function cardFor(id: ChoiceId, tanks: TankState[], s: ChoiceState, skipOrders: r
       const mom = group[0];
       if (!mom) return null;
       const coins = Math.round((FISH_SPECIES[mom.fish.species].breeding!.broodMean * mom.fish.health * 0.5 * JUVENILE_ORDER_PRICE) / 10) * 10;
-      const options = broodOptions(coins);
+      const options = broodOptions(coins, keepersFull(tanks));
       const last = s.picked.C9 && options.find((o) => o.key === s.picked.C9);
       if (last && (s.broods ?? 0) >= 1) {
         // 第二次之後（midgame.md §6.1）：一鍵照上次，或直接點另外兩個
@@ -1877,9 +1894,11 @@ function deliverBroodFry(tanks: TankState[], s: ChoiceState): void {
   s.fryDeliver = s.fryDeliver.filter((d) => {
     if (now - d.born < FRY_DELIVER_DAYS * 24) return true;
     const mine = new Set(d.ids);
-    const o = orderBoard(tanks[0]).orders.find((x) => !x.preview && (x.kind === 'fry' || x.kind === 'fish') && tanks.some((t) => matchingFish(t, x).some((f) => mine.has(f.id))) && !orderRefusal(tanks, x.id));
+    // 只交這窩的：別窩的小魚、沒標留種的成魚都當成要留著的（#440 架構審查）
+    const keep = tanks.flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])].filter((f) => !mine.has(f.id)).map((f) => f.id));
+    const o = orderBoard(tanks[0]).orders.find((x) => !x.preview && (x.kind === 'fry' || x.kind === 'fish') && tanks.some((t) => matchingFish(t, x, keep).length > 0) && !orderRefusal(tanks, x.id, keep));
     if (o) {
-      const coins = fulfillOrder(tanks, o.id);
+      const coins = fulfillOrder(tanks, o.id, keep);
       if (coins > 0) {
         addEcho(s, { label: BROOD_ECHO_LABELS.sell, tank: d.tank, due: now, text: `照你的設定交了 ${o.count} 尾小魚，+${coins} 元` });
         return false;
@@ -1991,9 +2010,22 @@ export function takeCrowdNotes(tanks: TankState[], cardTank?: number): Array<{ t
     seen.push(i);
     const mom = t.fish.find((f) => f.alive && f.sex === 'female' && f.pregnancy >= 0.7);
     const now = t.fish.filter((f) => f.alive).length;
-    out.push({ tank: i, text: `${tankLabel(tanks, i)}現在 ${now} 尾，${mom ? callName(mom) : '母魚'}快生了，生完大約 ${now + due} 尾，會住不太下。` });
+    // 大窩生在小缸的預告併成同一行（polish-to-9.md §10 補充）
+    const water = mom && bigBrood(t, due) && noteBigBrood(s, mom) ? `只有 ${t.equipment.tank.volumeL}L，生完氨會升高，生產那幾天要多換水` : '';
+    out.push({ tank: i, text: `${tankLabel(tanks, i)}現在 ${now} 尾，${mom ? callName(mom) : '母魚'}快生了，生完大約 ${now + due} 尾，會住不太下${water ? `；${water}` : ''}。` });
     t.crowdNotices = (t.crowdNotices ?? 0) + 1;
   });
+  // 大窩生在小缸（polish-to-9.md §10 補充）：生之前預告一次（沒有擠缸預告也說），生的當天再說一次
+  tanks.forEach((t, i) => {
+    const name = tankLabel(tanks, i);
+    const due = dueFry(t);
+    const mom = t.fish.find((f) => f.alive && f.sex === 'female' && f.pregnancy >= 0.7);
+    if (mom && due > 0 && bigBrood(t, due) && noteBigBrood(s, mom)) out.push({ tank: i, text: `${callName(mom)}快生了，${name}只有 ${t.equipment.tank.volumeL}L，生完氨會升高，生產那幾天要多換水。` });
+    const born = freshBigBrood(t);
+    if (born?.today) out.push({ tank: i, text: `一窩 ${born.n} 尾生在 ${born.liters}L 的${name}，生完氨會升高，明天換三成水。` });
+  });
+  // 生完了（懷孕歸零）的母魚，下一胎再預告
+  if (s.bigBroodWarned) s.bigBroodWarned = s.bigBroodWarned.filter((id) => located(tanks).some(({ fish }) => fish.id === id && fish.pregnancy >= 0.7));
   return out;
 }
 
@@ -2608,7 +2640,10 @@ export function chooseOption(tanks: TankState[], id: ChoiceId, key: string, pick
         const label = cardFor('C1', tanks, s)?.options.find((o) => o.key === key)?.label ?? key;
         const ids = brood.map(({ fish }) => fish.id);
         const tank = brood[0].tank;
-        if (key === 'box') addEcho(s, { label, tank, due: now + 24, kind: 'box', ids });
+        if (key === 'box') {
+          addEcho(s, { label, tank, due: now + 24, kind: 'box', ids });
+          addEcho(s, { label, tank, due: now + 24, kind: 'busy', ids });
+        }
         if (key === 'hide') {
           addEcho(s, { label, tank, due: now + HIDE_ECHO_DAYS[0] * 24, kind: 'hide', ids, prev: ids.length, since: now, step: 0 });
           s.hide = { at: now, ids };
@@ -2948,7 +2983,7 @@ export function cycleCard(tanks: TankState[]): ChoiceCard | null {
 }
 
 /** 魚的稱呼：品系加公母（例如「紅蛇王公魚」）。 */
-const callName = (f: Fish) => `${f.genome ? strainName(phenotype(f.genome)) : FISH_SPECIES[f.species].name}${f.sex === 'male' ? '公魚' : '母魚'}`;
+export const callName = (f: Fish) => `${f.genome ? strainName(phenotype(f.genome)) : FISH_SPECIES[f.species].name}${f.sex === 'male' ? '公魚' : '母魚'}`;
 
 /**
  * 早上報告的「選育進度」一行（midgame.md §2）：有第一窩或留種的魚就一定出，取代一般的小觀察，讓早上不再只是「安靜的一晚」。
