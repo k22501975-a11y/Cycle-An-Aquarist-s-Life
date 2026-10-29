@@ -26,6 +26,14 @@ export interface TankState {
   feedPlan?: { kind: FoodKind; grade: FoodGrade };
   /** 已模擬的遊戲小時數。 */
   hours: number;
+  /** 今天（遊戲日）開始時的水草覆蓋率：一天最多再多 COVER_DAY_MAX（polish-to-9.md §13.1）。 */
+  coverDay?: { day: number; cover: number };
+  /** 長太密（覆蓋 > 80%）累積了幾小時：每 7 天化掉一片老葉（polish-to-9.md §13.3）。 */
+  overgrownHours?: number;
+  /** 早上報告說過這缸長太密了（只說第一次，polish-to-9.md §13.3）。 */
+  overgrownNoted?: boolean;
+  /** 早上報告上次說「水草太密在搶氧」的時間（同一缸 7 天說一次，polish-to-9.md §13.5）。 */
+  denseO2NotedHours?: number;
   /** 擠缸提醒過幾次（早上報告的擠缸行、C14；擁擠度掉回 60% 以下歸零）：提醒過兩次才會擠死魚（midgame.md §7.1）。 */
   crowdNotices?: number;
   /** 最後一次超過建議量（擁擠度 > 1）的遊戲小時：離線回來看有沒有擠過。 */
@@ -98,6 +106,8 @@ export interface TankState {
   snails?: SnailState;
   /** 檢疫盒：買了才有。 */
   quarantine?: Quarantine | null;
+  /** 缸旁的收納箱（tub.ts，polish-to-9.md §13.7）：太擠時暫養小魚，長到能賣再撈出來；買了才有。 */
+  tub?: Tub;
   /** 掛了育幼盒（nursery.ts）：盒裡的魚在 fish 裡、帶 nursery 標記。 */
   nurseryBox?: boolean;
   /** 缸裡正在溶解的假期飼料錠，每顆還剩幾 mg（feeders.ts）。 */
@@ -109,6 +119,11 @@ export interface TankState {
  * 新魚先放這裡觀察，潛伏的病會在這裡發作，下藥也不會傷到主缸的硝化菌、水草和蝦。
  * 照顧簡化：每天自動餵、固定 26°C、不追蹤水質。
  */
+/** 收納箱（tub.ts）：附打氣和小加熱棒，只放小魚，不能種草也不能繁殖。 */
+export interface Tub {
+  fish: Fish[];
+}
+
 export interface Quarantine {
   fish: Fish[];
   /** 每條魚放進來的時間（遊戲小時），以魚的 id 為鍵。 */
@@ -350,6 +365,8 @@ export interface Plant {
   growthRate: number;
   /** 種在哪裡（造景編輯）；沒有就用預設位置。 */
   place?: Placement;
+  /** 小苗從什麼時候開始長（polish-to-9.md §13.1；修剪會往後挪）；沒有就是成株（舊存檔、測試直接放的草）。 */
+  plantedHours?: number;
 }
 
 export type SimEventType =
@@ -535,7 +552,7 @@ export function isJuvenile(fish: Fish): boolean {
  * 補上舊存檔缺少的欄位（新增欄位時在這裡給預設值），讓存檔版本不用每次都升級。
  */
 export function normalizeState(state: TankState): TankState {
-  for (const fish of [...state.fish, ...(state.quarantine?.fish ?? [])]) {
+  for (const fish of [...state.fish, ...(state.quarantine?.fish ?? []), ...(state.tub?.fish ?? [])]) {
     const sp = FISH_SPECIES[fish.species];
     fish.sex ??= fish.id % 2 === 0 ? 'female' : 'male';
     fish.lengthCm ??= sp.adultLengthCm;

@@ -34,6 +34,7 @@ export function fulfillOrder(tanks: TankState[], orderId: number, keep: readonly
       for (const f of give) noteRaisedGone(state, f);
       t.fish = t.fish.filter((f) => !give.has(f));
       if (t.quarantine) t.quarantine.fish = t.quarantine.fish.filter((f) => !give.has(f));
+      if (t.tub) t.tub.fish = t.tub.fish.filter((f) => !give.has(f));
     }
   }
   const coins = o.count * o.unitPrice;

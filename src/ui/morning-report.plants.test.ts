@@ -52,7 +52,7 @@ describe('主缸小魚被吃：讓水草成為解法（polish-to-9.md §12.2）'
 
   it('第一次種到夠密、昨晚小魚一尾都沒被吃：說一行，之後不再說', () => {
     const s = tank();
-    addPlant(s, 'moss', 20);
+    for (let i = 0; i < 3; i++) addPlant(s, 'moss', 20);
     expect(plantCover(s)).toBeGreaterThanOrEqual(DENSE_COVER);
     const echo = () => night(s).items.filter((i) => i.kind === 'echo').map((i) => i.text);
     expect(echo()).toEqual(['水草夠密了，昨晚沒有小魚被吃']);
@@ -109,5 +109,32 @@ describe('開獎倒數（polish-to-9.md §12.1）', () => {
     simulate(s, 2);
     expect(mom.pregnancy).toBeLessThan(0.5);
     expect(mom.dreamBrood).toBeUndefined();
+  });
+});
+
+describe('長太密（polish-to-9.md §13.3）', () => {
+  it('第一次超過 80%：說一次晚上氧氣會不夠，點了剪回約 65%；之後不再說', () => {
+    const s = tank();
+    for (let i = 0; i < 4; i++) addPlant(s, 'moss', 20);
+    const line = () => night(s).items.find((i) => i.kind === 'plant_dense');
+    expect(line()).toMatchObject({ tone: 'warn', text: '水草長太密了，晚上氧氣會不夠', action: 'trim_dense' });
+    expect(line()).toBeUndefined();
+  });
+});
+
+describe('只是水草太密在搶氧（polish-to-9.md §13.5）', () => {
+  it('沒擠缸、沒大窩：同一缸 7 天只說一次，叫玩家修剪', () => {
+    const s = tank();
+    for (let i = 0; i < 4; i++) addPlant(s, 'moss', 20);
+    s.overgrownNoted = true;
+    const o2 = () => {
+      s.lowO2Hours = 20;
+      s.water.o2 = 3;
+      return night(s).items.filter((i) => i.kind === 'oxygen');
+    };
+    expect(o2()).toMatchObject([{ tone: 'warn', action: 'trim_dense', text: '水草長太密，晚上搶氧，魚在水面喘氣（溶氧 3.0）' }]);
+    expect(o2()).toEqual([]);
+    s.hours += 6 * 24;
+    expect(o2()).toHaveLength(1);
   });
 });

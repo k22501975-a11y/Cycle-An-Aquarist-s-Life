@@ -4,10 +4,12 @@ import { buybackRefusal, canClaimStarterPack, chestCuttingsOf, countSale, econom
 
 // 賣魚、賣插枝、剪插枝、留種標記、領起步包、對帳：玩家在面板上按的動作，只有延後載入的面板用得到，跟原檔分開，不進開機必載（docs/performance-budget.md）。
 export function sellFish(state: TankState, fishId: number): number {
-  const fish = state.fish.find((f) => f.id === fishId);
+  // 收納箱裡的也能賣（tub.ts）
+  const fish = state.fish.find((f) => f.id === fishId) ?? state.tub?.fish.find((f) => f.id === fishId);
   if (!fish || buybackRefusal(fish, true) || !countSale(state, isFrySale(fish))) return 0;
   const coins = fishBuybackPrice(fish);
   state.fish = state.fish.filter((f) => f !== fish);
+  if (state.tub) state.tub.fish = state.tub.fish.filter((f) => f !== fish);
   const e = economy(state);
   e.coins += coins;
   // 一尾 2 元的小魚不算真收入（g33：擠缸自動賣小魚，保底單一直不出）

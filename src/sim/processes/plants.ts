@@ -3,6 +3,7 @@ import { PLANT_SPECIES, type PlantSpecies } from '../species';
 import { isLightOn, recordEvent, type Plant, type TankState } from '../state';
 import { substrateNutrientBoost } from './hardscape';
 import { plantLight } from '../aquascape';
+import { noteCoverDay, overgrown } from './population';
 
 /** 每 g 新長出的水草（濕重）吸收的氮（mg）。 */
 const NITROGEN_PER_G = 3;
@@ -11,6 +12,20 @@ const O2_PER_G = 110;
 const CO2_PER_G = 150;
 /** 水草低於此重量即死亡。 */
 const MIN_BIOMASS_G = 0.2;
+/** 長太密（覆蓋 > 80%）的缸，關燈時每小時多耗掉的溶氧（mg/L，polish-to-9.md §13.3）：晚上氧氣條多扣一小段。 */
+export const OVERGROWN_NIGHT_O2 = 0.1;
+/** 長太密每這麼久（遊戲小時）化掉一片老葉，氨小幅上升。 */
+export const OVERGROWN_MELT_HOURS = 7 * 24;
+export const OVERGROWN_MELT_TAN = 0.1;
+
+/** 長太密的代價（§13.3）：晚上搶氧，每 7 天一片老葉化掉（氨 +0.1）。不修剪不會出大事，只是小代價一直在。 */
+function overgrowthCost(state: TankState, dt: number): void {
+  if (!overgrown(state)) return;
+  if (!isLightOn(state)) state.water.o2 = Math.max(0, state.water.o2 - OVERGROWN_NIGHT_O2 * dt);
+  const before = state.overgrownHours ?? 0;
+  state.overgrownHours = before + dt;
+  if (Math.floor(state.overgrownHours / OVERGROWN_MELT_HOURS) > Math.floor(before / OVERGROWN_MELT_HOURS)) state.water.tan += OVERGROWN_MELT_TAN;
+}
 
 /** 目前照到水草的光照強度（PAR）。藻類越多，遮光越嚴重。 */
 export function currentPar(state: TankState): number {
@@ -53,6 +68,8 @@ export function updatePlants(state: TankState, dt: number): void {
   const volume = state.equipment.tank.volumeL;
   const par = currentPar(state);
   let vigor = 0;
+  noteCoverDay(state);
+  overgrowthCost(state, dt);
 
   for (const plant of state.plants) {
     const sp = PLANT_SPECIES[plant.species];

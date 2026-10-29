@@ -4,6 +4,7 @@ import { doDailyTask, everythingTank, richTank } from '../game/daily-player';
 import {
   waterTaskTank,
   addHardscape,
+  addPlant,
   BIG_CHEST_DAYS,
   BIG_CHEST_PLANTS,
   CHEST_CAP_DAY,
@@ -255,6 +256,8 @@ describe('每日小事題庫（polish-to-9.md U6）', () => {
       if (['goalOrders', 'goalCrowded', 'goalMove'].includes(id)) while (crowdingRatio(s) < CROWD_WARN) addFish(s, 'guppy', { carriesIch: false, carries: [], pregnant: false });
       // 看哪一缸最擠、搬到別缸：要有第二缸
       if (id === 'goalCrowded' || id === 'goalMove') tanks.push(richTank());
+      // 長太密的缸（polish-to-9.md §13.3）
+      if (id === 'trimDense') for (let i = 0; i < 4; i++) addPlant(s, 'moss', 20);
       expect(eligibleDaily(tanks), id).toContain(id);
       updateDaily(tanks);
       const subjectId = goalDaily(tanks).find((g) => g.id === id)?.subjectId;

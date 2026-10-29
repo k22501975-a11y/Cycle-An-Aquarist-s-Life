@@ -10,6 +10,7 @@ import { updatePopulation } from './processes/population';
 import { updateTemperature } from './processes/thermal';
 import { updateWaste } from './processes/waste';
 import { updateQuarantine } from './quarantine';
+import { updateTub } from './tub';
 import { updateNursery } from './nursery';
 import { updateSnails } from './snails';
 import { updateParental } from './parental';
@@ -40,6 +41,7 @@ export function step(state: TankState, dtHours: number = TICK_HOURS): void {
   updateParental(state, dtHours);
   updateSnails(state, dtHours);
   updateQuarantine(state, dtHours);
+  updateTub(state, dtHours);
   updateNursery(state);
   updateEconomy(state, dtHours);
   trackArrivals(state);

@@ -834,6 +834,16 @@ async function start(): Promise<void> {
   const sleepBtn = h('button.sleep-btn', { 'aria-label': '過一晚', title: '過一晚：跳到明天早上 8 點，看昨晚發生了什麼', onclick: () => goNight() }, icon(ICONS.moon), h('span.sleep-label', {}, '過一晚'));
   // 商店開在任務要買的那一頁（買水草的任務就直接是水草）
   const openShop = (tab?: ShopTab, focus?: ShopFocus) => panelSheet('商店', (p) => p.shopPanel(ctx, tab ?? guide.shopTab ?? 'fish', focus));
+  // 長太密的缸剪回約 65%（polish-to-9.md §13.3）：剪下的變成插枝，可以賣給阿德或種到別缸
+  const trimDense = (tank?: number) => {
+    const at = tank ?? game.tanks.findIndex((t) => sim.overgrown(t));
+    if (at < 0) return toasts.show('水草沒有長太密，不用剪');
+    game.switchTo(at);
+    const r = game.act((st) => sim.trimToCover(st));
+    if (!r) return toasts.show('水草沒有長太密，不用剪');
+    audio.play('quest', false);
+    toasts.show(`水草剪回 ${Math.round(r.to * 100)}%，${r.cuttings > 0 ? `剪下 ${r.cuttings} 段插枝，可以賣給阿德或種到別缸` : '晚上不會再搶氧了'}`);
+  };
   const coinsValue = h('b');
   const coinsBtn = h('button.coins', { 'aria-label': '錢包', title: '錢包：點一下打開商店', onclick: () => openShop() }, h('i.coin'), coinsValue);
   // 拿到錢時金幣飛進錢包（F8）
@@ -1607,6 +1617,7 @@ async function start(): Promise<void> {
         else openShop('gear');
       },
       trim: () => panelSheet('修剪水草', (p) => p.trimListPanel(ctx)),
+      trimDense: () => trimDense(),
       cuttings: () => openShop('plants'),
       clutch: snailsIn((t) => (t.snails?.clutches.length ?? 0) > 0),
       pests: snailsIn((t) => sim.pestCount(t) > 0),
@@ -1928,6 +1939,14 @@ async function start(): Promise<void> {
         game.switchTo(item.tank);
         withPanels((p) => p.putSoonInNursery(ctx));
         break;
+      case 'trim_dense':
+        trimDense(item.tank);
+        break;
+      case 'sell_tub': {
+        const r = game.actAll((tanks) => sim.sellTub(tanks, item.tank));
+        toasts.show(r.n > 0 ? `收納箱撈出 ${r.n} 尾賣給阿德，+${r.coins} 元` : '今天賣不了了，明天再賣');
+        break;
+      }
       case 'shop_plants':
         // 被吃的是哪一缸就先切過去，種的草才會種在那缸（polish-to-9.md §12.2）；莫絲、香菇草排前面（g41 #458）
         game.switchTo(item.tank);

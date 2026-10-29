@@ -3,11 +3,11 @@ import { farmHabit, releaseShock } from './acclimation';
 import { delayCycleForNewFish } from './processes/nitrogen';
 import { infect, STORE_DISEASE_CHANCE } from './processes/disease';
 import { lookIndex, phenotype, storeGenome, type FinTrait } from './genetics';
-import { createFish } from './processes/population';
+import { createFish, MATURE_DAYS, plantCover, plantMaturity, rawPlantCover, SEEDLING_COVER } from './processes/population';
 import { roomTemperature } from './processes/thermal';
 import { addFood, DEFAULT_FOOD, type FoodGrade, type FoodKind } from './food';
 import { nextRandom } from './random';
-import { economy } from './economy';
+import { addCuttings, economy } from './economy';
 import { plantHitchhikers } from './snails';
 import { FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId, type PlantSpeciesId } from './species';
 import type { HardscapeSpec, HeaterSpec } from './equipment';
@@ -236,15 +236,16 @@ export function removeDeadFish(state: TankState): number {
   return before - state.fish.length;
 }
 
-export function addPlant(state: TankState, species: PlantSpeciesId, biomassG = PLANT_SPECIES[species].cuttingMassG * 2): Plant {
-  const plant: Plant = { id: state.nextId++, species, biomassG, leafAlgae: 0, growthRate: 0 };
+export function addPlant(state: TankState, species: PlantSpeciesId, biomassG = PLANT_SPECIES[species].cuttingMassG * 2, seedling = false): Plant {
+  const plant: Plant = { id: state.nextId++, species, biomassG, leafAlgae: 0, growthRate: 0, ...(seedling ? { plantedHours: state.hours } : {}) };
   state.plants.push(plant);
   return plant;
 }
 
 /** 在店裡買一株水草種下：可能夾帶扁卷螺（整個存檔第一次買必定，次數記在共用錢包；見 plantHitchhikers）。不含付錢。 */
 export function buyPlant(state: TankState, species: PlantSpeciesId): Plant {
-  const plant = addPlant(state, species);
+  // 店裡買的是小苗：慢慢長到成株才蓋得滿（polish-to-9.md §13.1）
+  const plant = addPlant(state, species, undefined, true);
   const e = economy(state);
   const first = (e.plantBuys ?? 0) === 0;
   e.plantBuys = (e.plantBuys ?? 0) + 1;
@@ -265,6 +266,38 @@ export function trimPlant(state: TankState, plantId: number): number {
   plant.biomassG -= cuttings * sp.cuttingMassG;
   if (cuttings > 0) state.lastTrimHours = state.hours;
   return cuttings;
+}
+
+/** 長太密的缸修剪一次剪回多少覆蓋率（polish-to-9.md §13.3）。 */
+export const TRIM_TO_COVER = 0.65;
+
+/**
+ * 長太密的缸剪回約 65%（polish-to-9.md §13.3）：每株照比例剪短（長到哪裡往回退，之後慢慢長回來），
+ * 剪下的變成插枝（賣給阿德或補到別缸）。覆蓋沒超過 to 回傳 null。
+ */
+export function trimToCover(state: TankState, to = TRIM_TO_COVER): { cuttings: number; from: number; to: number } | null {
+  const from = plantCover(state);
+  const raw = rawPlantCover(state);
+  if (from <= to || raw <= 0) return null;
+  const k = to / raw;
+  const fast = state.equipment.light?.spec.id === 'planted' ? 1 : 2;
+  let cuttings = 0;
+  for (const p of state.plants) {
+    const sp = PLANT_SPECIES[p.species];
+    const ref = sp.cuttingMassG * 2;
+    const grown = Math.min(p.biomassG / ref, plantMaturity(state, p), 1) * k;
+    // 剪短：成熟度退回 grown，葉子留夠蓋住這麼多
+    p.plantedHours = state.hours - ((grown - SEEDLING_COVER) / (1 - SEEDLING_COVER)) * MATURE_DAYS * 24 * fast;
+    const keep = Math.max(ref * grown, p.biomassG * k);
+    const n = Math.floor((p.biomassG - keep) / sp.cuttingMassG);
+    if (n > 0) addCuttings(state, p.species, n);
+    cuttings += Math.max(0, n);
+    p.biomassG = keep;
+  }
+  // 剪完那天的上限也跟著降，不會剪完馬上又長回去
+  state.coverDay = { day: Math.floor(state.hours / 24), cover: plantCover(state) };
+  state.lastTrimHours = state.hours;
+  return { cuttings, from, to: plantCover(state) };
 }
 
 /** 下白點藥（一份標準劑量）。只殺游走期的蟲；對蝦有毒。 */

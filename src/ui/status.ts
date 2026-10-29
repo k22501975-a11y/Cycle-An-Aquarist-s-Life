@@ -1,6 +1,6 @@
 import type { ReportAction } from './morning-report';
 import { DEATH_CAUSE_LABELS } from './labels';
-import { dueMothers, raiseCashStep, creditCost, creditTarget, heaterCreditRefusal, heaterWarmup, SALT_HEAT_C, nearLethalCold, poolHeater, poolTank, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, nextStep, type NextStep, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, starterPackAllCold, starterPackTank, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading, waterLook } from '../sim';
+import { reserveShort, dueMothers, raiseCashStep, creditCost, creditTarget, heaterCreditRefusal, heaterWarmup, SALT_HEAT_C, nearLethalCold, poolHeater, poolTank, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, nextStep, type NextStep, nurseryRefusal, price, HUNGRY, isShrimpSpecies, snailBloom, isLightOn, COMFORT_BAND, habitOf, canClaimStarterPack, starterPackAllCold, starterPackTank, tankLabel, splitAdvice, type SplitPlan, FISH_SPECIES, GAME_SECONDS_PER_DAY, hasVisible, observeSymptoms, QUARANTINE_DAYS, readyForTank, isJuvenile, PLANT_SPECIES, tankStarted, type TankState, type TestKitReading, waterLook } from '../sim';
 
 /**
  * 狀態列與待辦卡要顯示的內容（純函式，不碰 DOM，方便測試）。
@@ -286,7 +286,13 @@ export function guideStep(tanks: TankState[], goal: string): NextStep | null {
   const next = urgent ? null : nextStep(tanks);
   // 室溫撐得住、又還沒錢換，才先說別的事；錢夠了就叫玩家換，不然放到冬天魚會冷死（#394）
   const canWait = (c: { tank: number }) => heaterCanWait(tanks[c.tank]) && (heaterReplacement(tanks[c.tank])?.short ?? 0) > 0;
-  const crisis = urgent ?? (heater && next && (next.target === 'treat' || canWait(heater)) ? undefined : heater);
+  // 空缸的加熱棒不是救急：照 polish-to-9.md §11 買完要剩 BUY_RESERVE 才叫你換（§13.7）；放進魚就又是救急
+  const emptyWait = (c: { tank: number }) => {
+    const t = tanks[c.tank];
+    const r = heaterReplacement(t);
+    return !!r && !t.fish.some((f) => f.alive) && reserveShort(t.economy?.coins ?? 0, r.cost) > 0;
+  };
+  const crisis = urgent ?? (heater && (emptyWait(heater) || (next && (next.target === 'treat' || canWait(heater)))) ? undefined : heater);
   // 新加熱棒還在升溫：沒別的事時任務卡說還要多久（g33）；交單、選育不會被蓋掉好幾天（#410 架構）
   if (!crisis) return next ?? warmupStep(tanks, goal);
   const where = tanks.length > 1 && !/^停電中/.test(crisis.text) ? `${tankLabel(tanks, crisis.tank)}：` : '';

@@ -32,6 +32,7 @@ import {
   takeCutting,
   topUp,
   trimPlant,
+  trimToCover,
   updateDaily,
   useTestKit,
   waterChange,
@@ -147,11 +148,14 @@ export function doDailyTask(tanks: TankState[], id: DailyTaskId, subjectId = dai
     case 'trim':
       for (const t of tanks) for (const p of t.plants) addCuttings(t, p.species, trimPlant(t, p.id));
       break;
+    case 'trimDense':
+      for (const t of tanks) trimToCover(t);
+      break;
     case 'cuttings': {
       // 種回去一株（不賣，訂單可能要插枝）
       const cuttings = economy(home).cuttings;
       const sp = (Object.keys(cuttings) as PlantSpeciesId[]).find((k) => (cuttings[k] ?? 0) > 0);
-      if (sp && takeCutting(home, sp)) addPlant(home, sp, PLANT_SPECIES[sp].cuttingMassG);
+      if (sp && takeCutting(home, sp)) addPlant(home, sp, PLANT_SPECIES[sp].cuttingMassG, true);
       break;
     }
     case 'clutch':

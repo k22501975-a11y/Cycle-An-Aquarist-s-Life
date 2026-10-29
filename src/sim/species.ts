@@ -265,6 +265,8 @@ export interface PlantSpecies {
   maxBiomassG: number;
   /** 一份插枝的重量（g）。 */
   cuttingMassG: number;
+  /** 長成一株在 40L 缸能蓋住多少（0–1，polish-to-9.md §13.1）：莫絲這種又密又低的最好躲，大葉子的小榕最差。 */
+  coverCap: number;
 }
 
 export const PLANT_SPECIES: Record<PlantSpeciesId, PlantSpecies> = {
@@ -279,6 +281,7 @@ export const PLANT_SPECIES: Record<PlantSpeciesId, PlantSpecies> = {
     maxGrowthPerHour: 0.0015,
     maxBiomassG: 20,
     cuttingMassG: 4,
+    coverCap: 0.05,
   },
   rotala: {
     id: 'rotala',
@@ -291,6 +294,7 @@ export const PLANT_SPECIES: Record<PlantSpeciesId, PlantSpecies> = {
     maxGrowthPerHour: 0.015,
     maxBiomassG: 15,
     cuttingMassG: 1,
+    coverCap: 0.1,
   },
   eleocharis: {
     id: 'eleocharis',
@@ -303,6 +307,7 @@ export const PLANT_SPECIES: Record<PlantSpeciesId, PlantSpecies> = {
     maxGrowthPerHour: 0.008,
     maxBiomassG: 12,
     cuttingMassG: 1,
+    coverCap: 0.2,
   },
   glosso: {
     id: 'glosso',
@@ -315,6 +320,7 @@ export const PLANT_SPECIES: Record<PlantSpeciesId, PlantSpecies> = {
     maxGrowthPerHour: 0.012,
     maxBiomassG: 10,
     cuttingMassG: 0.5,
+    coverCap: 0.2,
   },
   hydrocotyle: {
     id: 'hydrocotyle',
@@ -327,6 +333,7 @@ export const PLANT_SPECIES: Record<PlantSpeciesId, PlantSpecies> = {
     maxGrowthPerHour: 0.01,
     maxBiomassG: 14,
     cuttingMassG: 1,
+    coverCap: 0.2,
   },
   moss: {
     id: 'moss',
@@ -339,5 +346,6 @@ export const PLANT_SPECIES: Record<PlantSpeciesId, PlantSpecies> = {
     maxGrowthPerHour: 0.004,
     maxBiomassG: 15,
     cuttingMassG: 2,
+    coverCap: 0.25,
   },
 };

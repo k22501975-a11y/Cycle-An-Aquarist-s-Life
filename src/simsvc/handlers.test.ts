@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, economy, marketItem, receiveFish, simulate } from '../sim';
+import { addFish, economy, marketItem, receiveFish, simulate, TUB_CAPACITY } from '../sim';
 import { newGameState } from '../game/game';
 import { catchUp, parseSave, serializeSave } from '../game/save';
 import { advance, arrivals, BadSave, inspect, verify } from './handlers';
@@ -73,6 +73,22 @@ describe('模擬小服務（L2）', () => {
     gift.gift = undefined;
     const codes = verify(raw, JSON.parse(serializeSave(state, 7, T0)), 0).map((p) => p.code);
     expect(codes).toEqual(['identity_changed', 'gift_removed']);
+  });
+
+  it('上傳檢查：收納箱一個存檔最多 2 個、一個最多 30 尾；箱裡憑空多出的好魚一樣擋（polish-to-9.md §13.7）', () => {
+    const { state, raw } = saveAt(T0);
+    const fish = () => addFish(state, 'guppy', { carriesIch: false, sex: 'male' });
+    const kids = Array.from({ length: TUB_CAPACITY + 1 }, fish);
+    state.fish = state.fish.filter((f) => !kids.includes(f));
+    state.tub = { fish: kids.slice(0, TUB_CAPACITY) };
+    expect(verify(raw, JSON.parse(serializeSave(state, 7, T0)), 0)).toEqual([]);
+    state.tub.fish.push(kids[TUB_CAPACITY]);
+    expect(verify(raw, JSON.parse(serializeSave(state, 7, T0)), 0).map((p) => p.code)).toEqual(['tub_limit']);
+    state.tub.fish.pop();
+    const extra = [newGameState(7), newGameState(8)].map((t) => Object.assign(t, { hours: state.hours, tub: { fish: [] } }));
+    expect(verify(raw, JSON.parse(serializeSave(state, 7, T0, undefined, { tanks: extra, active: 0 })), 0).map((p) => p.code)).toEqual(['tub_limit']);
+    state.tub.fish[0].genome = { ...state.tub.fish[0].genome!, tail: 99 };
+    expect(verify(raw, JSON.parse(serializeSave(state, 7, T0)), 0).map((p) => p.code)).toEqual(['genome_forged']);
   });
 
   it('上傳檢查：新生的魚、死掉的魚不算問題', () => {
