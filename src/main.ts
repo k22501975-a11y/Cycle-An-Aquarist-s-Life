@@ -41,7 +41,7 @@ import { personaChip } from './ui/persona';
 import { dreamCard, dreamStrip, fitDreamStrip } from './ui/dream-card';
 import { openingHud, type OpeningHud } from './ui/opening-hud';
 import { DAILY_SHORT, dailyArt, dailyCard, dailyDoneText } from './ui/daily-card';
-import type { PanelContext, ShopTab } from './ui/panels';
+import type { PanelContext, ShopFocus, ShopTab } from './ui/panels';
 import { Guide } from './ui/guide';
 import { questTray } from './ui/quest-tray';
 import { FIRST_PESTS_TIP, FIRST_TANK_LINE } from './ui/tutorial';
@@ -833,7 +833,7 @@ async function start(): Promise<void> {
   // 過一晚（F2）：跳到隔天早上 8 點，醒來看早上報告；雲端模式時間跟著伺服器走，不能跳
   const sleepBtn = h('button.sleep-btn', { 'aria-label': '過一晚', title: '過一晚：跳到明天早上 8 點，看昨晚發生了什麼', onclick: () => goNight() }, icon(ICONS.moon), h('span.sleep-label', {}, '過一晚'));
   // 商店開在任務要買的那一頁（買水草的任務就直接是水草）
-  const openShop = (tab?: ShopTab) => panelSheet('商店', (p) => p.shopPanel(ctx, tab ?? guide.shopTab ?? 'fish'));
+  const openShop = (tab?: ShopTab, focus?: ShopFocus) => panelSheet('商店', (p) => p.shopPanel(ctx, tab ?? guide.shopTab ?? 'fish', focus));
   const coinsValue = h('b');
   const coinsBtn = h('button.coins', { 'aria-label': '錢包', title: '錢包：點一下打開商店', onclick: () => openShop() }, h('i.coin'), coinsValue);
   // 拿到錢時金幣飛進錢包（F8）
@@ -1371,6 +1371,14 @@ async function start(): Promise<void> {
         if (!spec) return toasts.show('現在買不了加熱棒', 'warn');
         audio.play('quest', false);
         toasts.show(`裝上了${spec.name}，水溫會慢慢回升`);
+        return;
+      }
+      case 'clear_box': {
+        // 選了等快生再放育幼盒、盒子卻被小魚佔著（g41 #457）：小魚慢慢對水搬去別缸，母魚快生了就接著放進盒子
+        const done = game.actAll((tanks) => sim.clearBoxForMom(tanks));
+        if (!done) return toasts.show('現在沒有缸收得了盒裡的小魚', 'warn');
+        audio.play('quest', false);
+        toasts.show(`${done.count} 尾小魚慢慢對水，搬進${sim.tankLabel(game.tanks, done.to)}了，${done.placed ? '媽媽放進育幼盒待產' : '盒子空出來，她快生時會自己放進去'}`);
         return;
       }
       case 'move_fry': {
@@ -1921,9 +1929,9 @@ async function start(): Promise<void> {
         withPanels((p) => p.putSoonInNursery(ctx));
         break;
       case 'shop_plants':
-        // 被吃的是哪一缸就先切過去，種的草才會種在那缸（polish-to-9.md §12.2）
+        // 被吃的是哪一缸就先切過去，種的草才會種在那缸（polish-to-9.md §12.2）；莫絲、香菇草排前面（g41 #458）
         game.switchTo(item.tank);
-        openShop('plants');
+        openShop('plants', 'hide');
         break;
       case 'buy_feeder':
         offerFeeder(item.tank);
@@ -1937,6 +1945,7 @@ async function start(): Promise<void> {
       case 'move_warm':
       case 'buy_heater':
       case 'move_fry':
+      case 'clear_box':
       case 'cycle_tank':
       case 'add_air':
         guide.goNext?.(item.action, item.tank);

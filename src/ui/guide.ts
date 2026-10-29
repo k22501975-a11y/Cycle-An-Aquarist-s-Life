@@ -490,6 +490,7 @@ const NEXT_GLOW: Record<NextTarget, QuestTarget | null> = {
   move_fry: null,
   cycle_tank: null,
   nursery_soon: null,
+  clear_box: null,
   water_change: 'water',
   add_air: null,
 };

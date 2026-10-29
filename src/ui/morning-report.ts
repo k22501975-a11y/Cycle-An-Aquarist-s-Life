@@ -1,5 +1,5 @@
 import { crisisText, type Crisis } from '../game/crisis';
-import { DENSE_COVER, NURSERY_RELEASE_CM, plantCover, soonMother, airPumpPrice, breathless, oxygenFix, BLOOM_NOTE, boxBlocked, fryHome, fryNeedHome, fryPrep, newTankCost, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
+import { boxBlock, boxBlockText, DENSE_COVER, NURSERY_RELEASE_CM, plantCover, soonMother, airPumpPrice, breathless, oxygenFix, BLOOM_NOTE, boxBlocked, fryHome, fryNeedHome, fryPrep, newTankCost, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
 import { addEcho, takeEchoes } from '../sim/choice-echo';
 import { revealCountdown, takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, callName, breederIds, breederName, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
@@ -38,6 +38,7 @@ export type ReportAction =
   | 'buy_tank' // 住不下（C14）選了再買一缸：直接打開 20L 套缸的購買確認（polish-to-9.md §10.2）
   | 'buy_big' // 住不下（C14）選了換大缸：直接打開 90L 套缸的購買確認
   | 'add_air' // 缺氧：打開打氣機，沒有就買一台裝上（oxygen.ts）
+  | 'clear_box' // 選了等快生再放育幼盒、盒子卻被小魚佔著（g41 #457）：一鍵把小魚搬去別缸
   | 'nursery_soon' // 快生（≥ 0.88）的母魚放進空著的育幼盒（小魚被吃那行的第一個建議，polish-to-9.md §12.2 補充）
   | 'shop_plants'; // 小魚被吃、水草不夠密：商店的水草頁（polish-to-9.md §12.2）
 
@@ -80,6 +81,7 @@ export type ReportKind =
   | 'line' // 固定品系（design/strain-fixing.md）：蛇紋出來、每窩的穩定度
   | 'observe' // 平淡早上的小觀察（morning-observe.ts）
   | 'echo' // 選擇的回音（polish-to-9.md §10.0）：選完 3 天內寫出那個選擇的結果
+  | 'box_block' // 夢想窩的媽媽快生了、育幼盒卻被小魚佔著（g41 #457）：排在倒數後面
   | 'countdown' // 夢想窩開獎前 3 天（polish-to-9.md §12.1）：報告開頭「開獎倒數 n 天」加母魚肚子特寫
   | 'quiet';
 
@@ -597,6 +599,13 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   if (progress) items.push({ kind: 'breeding', tank: 0, tone: 'good', text: progress });
   // 開獎倒數（polish-to-9.md §12.1）：夢想窩的母魚 3 天內要生，報告第一行倒數，點了看她
   const countdown = crisis ? null : revealCountdown(tanks);
+  // 選了等快生再放育幼盒、盒子卻被小魚佔著（g41 #457）：開獎前事先說，點了把小魚搬走（搬不走就叫種水草）
+  const block = crisis ? null : boxBlock(tanks);
+  const blockMom = block && allFish(tanks[block.tank]).find((f) => f.id === block.momId);
+  if (block && blockMom) {
+    const go = block.to !== null ? { action: 'clear_box' as const } : plantCover(tanks[block.tank]) < DENSE_COVER ? { action: 'shop_plants' as const, goLabel: '種水草' } : {};
+    items.push({ kind: 'box_block', tank: block.tank, tone: 'warn', text: boxBlockText(tanks, block, callName(blockMom)), subjectId: block.momId, ...go });
+  }
   if (countdown) items.push({ kind: 'countdown', tank: countdown.tank, tone: 'good', text: `開獎倒數 ${countdown.days} 天`, action: 'fish', subjectId: countdown.momId, countdown: { days: countdown.days, momId: countdown.momId } });
   // 選擇的回音（polish-to-9.md §10.0）
   const choices = choiceState(tanks);
@@ -669,6 +678,8 @@ function lineRank(i: ReportItem, lead = false): number {
   if (isPinned(i)) return -1;
   if (i.kind === 'crisis') return 0;
   if (i.kind === 'reveal' || i.kind === 'countdown') return 1;
+  // 盒子被佔著（g41 #457）緊接在倒數後面：不擠掉就來不及搬
+  if (i.kind === 'box_block') return 1.5;
   // 回音（polish-to-9.md §10.5）：第一行回音排在壞消息後面、目標進度前面（#452：排在目標後面幾乎天天被擠掉），
   // 其他的排在目標後面，放不下就收進鈴鐺、隔天再出
   if (i.kind === 'echo') return lead ? 2.5 : 3.5;
@@ -681,7 +692,7 @@ function lineRank(i: ReportItem, lead = false): number {
 /** 報告每一行的圖示分三類（daily-loop.md §2）：要處理的壞消息、目標的進度、好消息。 */
 export function lineGroup(i: ReportItem): 'bad' | 'goal' | 'good' {
   const rank = lineRank(i);
-  return rank <= 0 || rank === 2 ? 'bad' : rank === 1 || rank === 3 ? 'goal' : 'good';
+  return rank <= 0 || rank === 1.5 || rank === 2 ? 'bad' : rank === 1 || rank === 3 ? 'goal' : 'good';
 }
 
 function markOf(i: ReportItem): TankMark | null {

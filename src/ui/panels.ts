@@ -658,6 +658,10 @@ export function plantPanel({ game, sheet, toasts, sound }: PanelContext, plantId
 }
 
 export type ShopTab = 'fish' | 'snails' | 'plants' | 'gear' | 'sell';
+/** 從哪裡帶進商店：'hide' 是小魚被吃那行的「種水草」，莫絲、香菇草排前面標「最好躲」（g41 #458）。 */
+export type ShopFocus = 'hide';
+/** 小魚最好躲的水草（polish-to-9.md §12.2）。 */
+const HIDE_PLANTS: PlantSpeciesId[] = ['moss', 'hydrocotyle'];
 
 /** 付錢做一件事；錢不夠就提示、不做。回傳有沒有買成。 */
 export function purchase(ctx: PanelContext, cost: number, run: (st: TankState) => void, done: string, tone: 'info' | 'warn' = 'info', undo = false): boolean {
@@ -772,7 +776,7 @@ export async function quickBuy(ctx: PanelContext, pick: QuickPick): Promise<void
   if (purchase(ctx, price(`hardscape:${x.id}`), (st) => addHardscape(st, x), `買了一組${x.name}`)) ctx.placeNew?.({ kind: 'hardscape', index: (game.state.equipment.hardscape ?? []).length - 1 });
 }
 
-export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
+export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish', focus?: ShopFocus): Node {
   const { game, sheet, toasts } = ctx;
   // 還沒開缸：設備在開缸時一次挑好，先在商店買會跟開缸重複扣錢（#154 審查）
   if (needsSetup(game.state)) return h('div.stack', {}, h('p.hint', {}, '缸還沒開好。先挑好魚缸和設備，開完缸再來逛商店。'), ctx.openSetup ? button('去開缸', ctx.openSetup, 'primary') : '');
@@ -989,16 +993,28 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish'): Node {
     );
   } else if (tab === 'plants') {
     const cuttings = economy(game.state).cuttings;
+    const hide = focus === 'hide';
+    const all = Object.keys(PLANT_SPECIES) as PlantSpeciesId[];
+    const order = hide ? [...HIDE_PLANTS, ...all.filter((id) => !HIDE_PLANTS.includes(id))] : all;
     content = h(
       'div.stack',
       {},
       advice([
+        ...(hide ? ['小魚被吃：莫絲、香菇草最好躲，種在小魚待的那缸。'] : []),
         '陰性草弱光就能長；陽性草需要強光加 CO₂。',
         game.state.quarantine ? '新水草會先在檢疫盒泡過，比較不會夾帶小螺的卵。' : '店裡的水草常夾帶看不到的扁卷螺卵（第一株幾乎一定有），過一陣子才發現缸裡多了螺。有檢疫盒的話會先泡過。',
       ]),
       cardGrid(
-        ...(Object.keys(PLANT_SPECIES) as PlantSpeciesId[]).map((id) =>
-          shopCard({ art: plantArt(id), name: PLANT_SPECIES[id].name, price: PLANT_PRICES[id], unit: '/盆', chips: [PLANT_SPECIES[id].lightType === 'high' ? '陽性・要強光' : '陰性・弱光可'], actions: [button('種一株', buyPlant(id), 'small')] }),
+        ...order.map((id) =>
+          shopCard({
+            art: plantArt(id),
+            name: PLANT_SPECIES[id].name,
+            price: PLANT_PRICES[id],
+            unit: '/盆',
+            chips: [PLANT_SPECIES[id].lightType === 'high' ? '陽性・要強光' : '陰性・弱光可'],
+            actions: [button('種一株', buyPlant(id), 'small')],
+            ...(hide && HIDE_PLANTS.includes(id) ? { badge: '最好躲', cls: '.recommended' } : {}),
+          }),
         ),
         ...(Object.keys(cuttings) as PlantSpeciesId[])
           .filter((id) => (cuttings[id] ?? 0) > 0)
