@@ -1,5 +1,6 @@
 import { crisisText, type Crisis } from '../game/crisis';
-import { boxBlock, boxBlockText, DENSE_COVER, NURSERY_RELEASE_CM, plantCover, soonMother, airPumpPrice, breathless, oxygenFix, BLOOM_NOTE, boxBlocked, fryHome, fryNeedHome, fryPrep, newTankCost, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
+import { boxBlock, boxBlockText, fishBuybackPrice, tubReady, crowdingRatio, reserveShort, overgrown, DENSE_COVER, NURSERY_RELEASE_CM, plantCover, soonMother, airPumpPrice, breathless, oxygenFix, BLOOM_NOTE, boxBlocked, fryHome, fryNeedHome, fryPrep, newTankCost, cycleMaturity, BELLY_SHOWS, DUE_PREGNANCY, economy, FISH_SPECIES, HUNGRY, isCycled, isJuvenile, isShrimpSpecies, isStarving, orderBoard, price, BIG_WATER_CHANGE, MEASURED_PROBLEM_LEVEL, testWater, pestCount, PLANT_SPECIES, lookalikeLine, needsInsulation, warmMove, suggestedWaterChange, takeGearNote, takeLookalike, tankLabel, usesNursery, waterLook, youngGettingHungry, type FishSpeciesId, type LookalikeCard, type SimEvent, type TankState } from '../sim';
+import { freshBigBrood } from '../sim/brood-water';
 import { addEcho, takeEchoes } from '../sim/choice-echo';
 import { revealCountdown, takeAwayCrowd, takeChoice, takeCrowdNotes, takeMilestones, takeGrowMilestone, takeBellyNotes, takeLineNotes, takeReveal, choiceState, takeSecondBrood, breedingProgress, callName, breederIds, breederName, type ChoiceCard } from '../sim/choices';
 import { deathText, describeEvent, fryEatenText, ichCauseText } from './labels';
@@ -38,6 +39,8 @@ export type ReportAction =
   | 'buy_tank' // 住不下（C14）選了再買一缸：直接打開 20L 套缸的購買確認（polish-to-9.md §10.2）
   | 'buy_big' // 住不下（C14）選了換大缸：直接打開 90L 套缸的購買確認
   | 'add_air' // 缺氧：打開打氣機，沒有就買一台裝上（oxygen.ts）
+  | 'trim_dense' // 長太密（覆蓋 > 80%）的缸剪回約 65%（polish-to-9.md §13.3）
+  | 'sell_tub' // 收納箱裡長到能賣的小魚撈出來賣給阿德（polish-to-9.md §13.7）
   | 'clear_box' // 選了等快生再放育幼盒、盒子卻被小魚佔著（g41 #457）：一鍵把小魚搬去別缸
   | 'nursery_soon' // 快生（≥ 0.88）的母魚放進空著的育幼盒（小魚被吃那行的第一個建議，polish-to-9.md §12.2 補充）
   | 'shop_plants'; // 小魚被吃、水草不夠密：商店的水草頁（polish-to-9.md §12.2）
@@ -81,6 +84,8 @@ export type ReportKind =
   | 'line' // 固定品系（design/strain-fixing.md）：蛇紋出來、每窩的穩定度
   | 'observe' // 平淡早上的小觀察（morning-observe.ts）
   | 'echo' // 選擇的回音（polish-to-9.md §10.0）：選完 3 天內寫出那個選擇的結果
+  | 'tub_ready' // 收納箱的小魚長到能賣了（polish-to-9.md §13.7）
+  | 'plant_dense' // 第一次長太密（polish-to-9.md §13.3）
   | 'box_block' // 夢想窩的媽媽快生了、育幼盒卻被小魚佔著（g41 #457）：排在倒數後面
   | 'countdown' // 夢想窩開獎前 3 天（polish-to-9.md §12.1）：報告開頭「開獎倒數 n 天」加母魚肚子特寫
   | 'quiet';
@@ -322,6 +327,14 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       choiceState(tanks).denseNoted = true;
       push({ kind: 'echo', tone: 'good', text: '水草夠密了，昨晚沒有小魚被吃', echo: '種密水草' });
     }
+    // 第一次長太密（polish-to-9.md §13.3）：說一次晚上會缺氧，點了剪回約 65%
+    if (overgrown(t) && !t.overgrownNoted) {
+      t.overgrownNoted = true;
+      push({ kind: 'plant_dense', tone: 'warn', text: `${tanks.length > 1 ? tankLabel(tanks, index) : ''}水草長太密了，晚上氧氣會不夠`, action: 'trim_dense' });
+    }
+    // 收納箱的小魚長到能賣了（polish-to-9.md §13.7）：點了撈出來賣給阿德
+    const ready = tubReady(t);
+    if (ready.length > 0) push({ kind: 'tub_ready', tone: 'good', text: `${tanks.length > 1 ? `${tankLabel(tanks, index)}旁的` : ''}收納箱有 ${ready.length} 尾長到能賣了，賣給阿德約 ${ready.reduce((a, f) => a + fishBuybackPrice(f), 0)} 元`, action: 'sell_tub', count: ready.length });
     // 育幼盒（#187）：老闆送的、小魚長大自己回主缸
     // 品系那對快生了、照 C15 的選擇自動買了育幼盒（#362）：說一聲錢花到哪
     if (events.some((x) => x.type === 'nursery_gift'))
@@ -393,10 +406,10 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
     // 裝了自動餵食器的缸不再提醒要多餵（daily-loop.md §4），真的餓到消瘦還是要說
     const feeder = !!t.equipment.feeder;
     const twice = !feeder && starving === 0 && living.some((f) => !isShrimpSpecies(f.species) && youngGettingHungry(f));
-    // 連 3 天說要多餵、又買得起：提示裝自動餵食器，點了先看商品卡（daily-loop.md §4、§7）。消瘦那天併進消瘦那行、排最前面
+    // 連 3 天說要多餵、又買得起（照 polish-to-9.md §11 買完要剩 BUY_RESERVE）：提示裝自動餵食器，點了先看商品卡（daily-loop.md §4、§7）。消瘦那天併進消瘦那行、排最前面
     const day = Math.floor(t.hours / 24);
     if (starving > 0 || twice) t.feedWarn = t.feedWarn && t.feedWarn.day === day - 1 ? { day, days: t.feedWarn.days + 1 } : t.feedWarn?.day === day ? t.feedWarn : { day, days: 1 };
-    const feederHint = !feeder && (t.feedWarn?.day === day ? t.feedWarn.days : 0) >= FEEDER_HINT_DAYS && economy(tanks[0]).coins >= price('feeder:auto');
+    const feederHint = !feeder && (t.feedWarn?.day === day ? t.feedWarn.days : 0) >= FEEDER_HINT_DAYS && reserveShort(economy(tanks[0]).coins, price('feeder:auto')) === 0;
     const hint = { kind: 'hungry', tone: 'info', text: `${tanks.length > 1 ? tankLabel(tanks, index) : '這缸'}小魚多，可以裝自動餵食器，一天自動餵兩次（${price('feeder:auto')} 元）`, action: 'buy_feeder' } as const;
     if (starving > 0) {
       // 消瘦永遠排第一行、不收進鈴鐺；種魚在消瘦要寫出名字（midgame.md §7.9）
@@ -426,8 +439,15 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
       const air = fix === 'air_on' ? '打開打氣機' : fix === 'buy_air' ? `加一台打氣機（${airPumpPrice()} 元）` : '';
       const o2 = gasp.o2.toFixed(1);
       const action = fix === 'water' ? 'water_change' : 'add_air';
+      // 只是水草長太密在搶氧（沒有擠缸、沒有大窩，polish-to-9.md §13.5）：同一缸 7 天說一次，叫玩家修剪
+      const plantsOnly = overgrown(t) && crowdingRatio(t) < 1 && !freshBigBrood(t);
       if (gasp.harm) push({ kind: 'oxygen', tone: 'bad', text: `溶氧只剩 ${o2}，魚開始缺氧受傷，${air || '先換水'}`, action, standing: true });
-      else push({ kind: 'oxygen', tone: 'warn', text: `魚在水面喘氣，溶氧 ${o2}，${air ? `可以${air}或換水` : '先換水'}`, action });
+      else if (plantsOnly) {
+        if (t.hours - (t.denseO2NotedHours ?? -Infinity) >= DENSE_O2_NOTE_DAYS * 24) {
+          t.denseO2NotedHours = t.hours;
+          push({ kind: 'oxygen', tone: 'warn', text: `水草長太密，晚上搶氧，魚在水面喘氣（溶氧 ${o2}）`, action: 'trim_dense' });
+        }
+      } else push({ kind: 'oxygen', tone: 'warn', text: `魚在水面喘氣，溶氧 ${o2}，${air ? `可以${air}或換水` : '先換水'}`, action });
     }
     // 水草長了一點（睡前就種著的那幾株，合計長了 1% 以上才寫；沒照光的晚上不會長）
     let plantsBefore = 0;
@@ -603,8 +623,10 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   const block = crisis ? null : boxBlock(tanks);
   const blockMom = block && allFish(tanks[block.tank]).find((f) => f.id === block.momId);
   if (block && blockMom) {
-    const go = block.to !== null ? { action: 'clear_box' as const } : plantCover(tanks[block.tank]) < DENSE_COVER ? { action: 'shop_plants' as const, goLabel: '種水草' } : {};
-    items.push({ kind: 'box_block', tank: block.tank, tone: 'warn', text: boxBlockText(tanks, block, callName(blockMom)), subjectId: block.momId, ...go });
+    // 搬不走、草已經夠密時沒有要做的事，只是提醒（#460 架構 🟡）
+    const dense = block.to === null && plantCover(tanks[block.tank]) >= DENSE_COVER;
+    const go = block.to !== null ? { action: 'clear_box' as const } : !dense ? { action: 'shop_plants' as const, goLabel: '種水草' } : {};
+    items.push({ kind: 'box_block', tank: block.tank, tone: dense ? 'info' : 'warn', text: boxBlockText(tanks, block, callName(blockMom)), subjectId: block.momId, ...go });
   }
   if (countdown) items.push({ kind: 'countdown', tank: countdown.tank, tone: 'good', text: `開獎倒數 ${countdown.days} 天`, action: 'fish', subjectId: countdown.momId, countdown: { days: countdown.days, momId: countdown.momId } });
   // 選擇的回音（polish-to-9.md §10.0）
@@ -627,6 +649,8 @@ export function morningReport(before: Snapshot, tanks: TankState[], sleptHours: 
   return report;
 }
 
+/** 只是水草太密在搶氧：同一缸幾天說一次（polish-to-9.md §13.5）。 */
+export const DENSE_O2_NOTE_DAYS = 7;
 /** 回音擠不進報告最多再延後幾個早上（選完 3 天內一定出，polish-to-9.md §10.0）。 */
 export const ECHO_RETRIES = 2;
 /** 早上報告一次最多幾行重點（daily-loop.md §2），選擇卡另外一行。 */
@@ -692,7 +716,7 @@ function lineRank(i: ReportItem, lead = false): number {
 /** 報告每一行的圖示分三類（daily-loop.md §2）：要處理的壞消息、目標的進度、好消息。 */
 export function lineGroup(i: ReportItem): 'bad' | 'goal' | 'good' {
   const rank = lineRank(i);
-  return rank <= 0 || rank === 1.5 || rank === 2 ? 'bad' : rank === 1 || rank === 3 ? 'goal' : 'good';
+  return rank <= 0 || (rank === 1.5 && i.tone === 'warn') || rank === 2 ? 'bad' : rank === 1 || rank === 3 ? 'goal' : 'good';
 }
 
 function markOf(i: ReportItem): TankMark | null {

@@ -64,9 +64,9 @@ export interface GoalState {
 }
 
 const living = (t: TankState) => t.fish.filter((f) => f.alive);
-/** withBox：連檢疫盒（當產卵盒用）裡的魚也算。 */
+/** withBox：連檢疫盒（當產卵盒用）、收納箱裡的魚也算。 */
 const allFish = (tanks: TankState[], withBox = false) =>
-  tanks.flatMap((t) => [...living(t), ...(withBox ? (t.quarantine?.fish ?? []).filter((f) => f.alive) : [])]);
+  tanks.flatMap((t) => [...living(t), ...(withBox ? [...(t.quarantine?.fish ?? []), ...(t.tub?.fish ?? [])].filter((f) => f.alive) : [])]);
 const bred = (f: Fish) => (f.generation ?? 0) >= 1;
 const STAGES = ['fry', 'juvenile', 'coloring', 'subadult', 'adult', 'old'];
 

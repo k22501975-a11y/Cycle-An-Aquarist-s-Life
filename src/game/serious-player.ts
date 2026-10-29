@@ -1,4 +1,5 @@
 import { newGameState } from './game';
+import { plantUp as plantUpTo, trimDense } from './plant-advice';
 import {
   addCuttings,
   addFish,
@@ -8,6 +9,8 @@ import {
   buyQuarantine,
   BOX_CAPACITY,
   buyTank,
+  sellTub,
+  tubReady,
   checkGoals,
   dismissOrder,
   doseIchMedication,
@@ -34,6 +37,9 @@ import {
   useTestKit,
   waterChange,
   type TankState,
+  DENSE_COVER,
+  overgrown,
+  plantCover,
 } from '../sim';
 
 /** 經濟劇本測試（*.scenario.test.ts）共用的「認真玩家」腳本。 */
@@ -131,6 +137,15 @@ export function seriousPlayer(seed: number, strain: number, takeOrders = false, 
         if (to !== home) for (const id of grown) moveFish(home, to, id);
       }
     }
+    // 照早上報告的水草提示（polish-to-9.md §13.5；這個劇本不產生報告，照報告出那兩行的條件）：
+    // 昨晚有小魚被吃、草不到 60% 就補莫絲（「種水草 ›」）；長太密就剪回 65%（「修剪 ›」、每日小事）
+    tanks.forEach((t, i) => {
+      const eaten = t.events.some((e) => e.type === 'fry_eaten' && e.hours > t.hours - 24);
+      if (eaten && plantCover(t) < DENSE_COVER) plantUpTo(tanks, i);
+      if (overgrown(t)) trimDense(tanks, i);
+      // 收納箱的小魚長到能賣：早上報告會說，照著撈出來賣（§13.7）
+      if (tubReady(t).length > 0) sellTub(tanks, i);
+    });
     if (d === 10) economy(home).coins += 800;
     checkGoals(tanks, d >= 10);
     // 第 21 天：已經買了第二缸，或者手上的錢買得起

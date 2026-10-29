@@ -209,7 +209,7 @@ export const STARTER_PACK_MAX_COINS = 200;
 /** others：同一個玩家的其他缸（多缸時任何一缸還有活魚就不送）。 */
 export function canClaimStarterPack(state: TankState, others: TankState[] = []): boolean {
   const e = economy(state);
-  const anyAlive = [state, ...others].some((t) => t.fish.some((f) => f.alive) || (t.quarantine?.fish ?? []).some((f) => f.alive));
+  const anyAlive = [state, ...others].some((t) => t.fish.some((f) => f.alive) || [...(t.quarantine?.fish ?? []), ...(t.tub?.fish ?? [])].some((f) => f.alive));
   const promised = e.starterPackPromised !== undefined;
   const hadFish = promised || state.events.some((ev) => ev.type === 'fish_died') || state.fish.length > 0;
   const cooled = e.starterPackHours === undefined || state.hours - e.starterPackHours >= STARTER_PACK_COOLDOWN_DAYS * 24;
@@ -223,7 +223,7 @@ export function canClaimStarterPack(state: TankState, others: TankState[] = []):
 export function noteStarterPack(state: TankState): void {
   const e = economy(state);
   const tanks = householdTanks(state);
-  if (tanks.some((t) => t.fish.some((f) => f.alive) || (t.quarantine?.fish ?? []).some((f) => f.alive))) {
+  if (tanks.some((t) => t.fish.some((f) => f.alive) || [...(t.quarantine?.fish ?? []), ...(t.tub?.fish ?? [])].some((f) => f.alive))) {
     delete e.starterPackPromised;
     return;
   }
@@ -512,7 +512,7 @@ const COLORED = new Set(['coloring', 'subadult', 'adult', 'old']);
 /** 每個 tick：自己繁殖的魚（不含蝦）第一次長到轉色期，記進「養到轉色」的累計（#303）。 */
 export function trackRaised(state: TankState): void {
   const breeding = state.purpose === 'breeding';
-  for (const f of [...state.fish, ...(state.quarantine?.fish ?? [])]) {
+  for (const f of [...state.fish, ...(state.quarantine?.fish ?? []), ...(state.tub?.fish ?? [])]) {
     if (!raisedBred(f) || (f.raisedSeen && (!breeding || f.breedingSeen))) continue;
     const e = economy(state);
     if (!f.raisedSeen) {

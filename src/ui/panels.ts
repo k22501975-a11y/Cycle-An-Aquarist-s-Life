@@ -639,7 +639,7 @@ export function plantPanel({ game, sheet, toasts, sound }: PanelContext, plantId
             {},
             button(`全部種回去（${cuttings} 株）`, () => {
               game.act((st) => {
-                for (let i = 0; i < cuttings; i++) if (takeCutting(st, plant.species)) addPlant(st, plant.species, sp.cuttingMassG);
+                for (let i = 0; i < cuttings; i++) if (takeCutting(st, plant.species)) addPlant(st, plant.species, sp.cuttingMassG, true);
               });
               toasts.show(`種了 ${cuttings} 株${sp.name}`);
               sheet.close();
@@ -1028,7 +1028,7 @@ export function shopPanel(ctx: PanelContext, tab: ShopTab = 'fish', focus?: Shop
               actions: [
                 button('種一株', () => {
                   game.act((st) => {
-                    if (takeCutting(st, id)) addPlant(st, id, PLANT_SPECIES[id].cuttingMassG);
+                    if (takeCutting(st, id)) addPlant(st, id, PLANT_SPECIES[id].cuttingMassG, true);
                   });
                   toasts.show(`種了一株${PLANT_SPECIES[id].name}插枝`);
                 }, 'small'),

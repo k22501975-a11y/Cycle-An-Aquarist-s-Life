@@ -251,7 +251,7 @@ export function reservedForPick(state: TankState): Set<number> {
 /** 這缸（連產卵盒裡的）可以拿去交這張單的魚，差的排前面（不會先把最好的魚交出去）；keep 是玩家要留下來的魚。 */
 export function matchingFish(state: TankState, o: ShopOrder, keep: readonly number[] = []): Fish[] {
   const held = reservedForPick(state);
-  return [...state.fish, ...(state.quarantine?.fish ?? [])].filter((f) => fishMatchesOrder(f, o) && !keep.includes(f.id) && !held.has(f.id)).sort((a, b) => a.lengthCm + (a.genome?.tail ?? 0) / 10 - (b.lengthCm + (b.genome?.tail ?? 0) / 10));
+  return [...state.fish, ...(state.quarantine?.fish ?? []), ...(state.tub?.fish ?? [])].filter((f) => fishMatchesOrder(f, o) && !keep.includes(f.id) && !held.has(f.id)).sort((a, b) => a.lengthCm + (a.genome?.tail ?? 0) / 10 - (b.lengthCm + (b.genome?.tail ?? 0) / 10));
 }
 
 /** 這缸拿得出來交單的螺：害蟲小螺留 SNAIL_BREEDERS 隻當種螺（不然交一張單就把缸裡的螺收光，之後再也長不回來）；小蘋果螺全部都能交。 */

@@ -47,7 +47,7 @@ export interface GenomeCheckOptions {
   untraced?: readonly UntracedFish[];
 }
 
-const allFish = (tanks: TankState[]): Fish[] => tanks.flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])]);
+const allFish = (tanks: TankState[]): Fish[] => tanks.flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? []), ...(t.tub?.fish ?? [])]);
 
 /** 基因比對用的字串（不看欄位順序、沒有值的欄位）。 */
 export function genomeKey(g: unknown): string {

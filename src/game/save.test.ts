@@ -24,6 +24,20 @@ describe('存檔', () => {
     expect(file.state).toEqual(state);
   });
 
+  it('收納箱（polish-to-9.md §13.7）：舊存檔沒有就是沒有；箱裡的魚跟缸裡的一樣補上缺的欄位', () => {
+    const old = newGameState(5);
+    const raw = JSON.parse(serializeSave(old, 7, 1000));
+    const read = parseSave(JSON.stringify(raw));
+    expect(read.ok && read.file.state.tub).toBeUndefined();
+    const f = addFish(old, 'guppy', { carriesIch: false });
+    old.fish = [];
+    old.tub = { fish: [f] };
+    const withTub = JSON.parse(serializeSave(old, 7, 1000));
+    delete withTub.state.tub.fish[0].finDamage;
+    const back = parseSave(JSON.stringify(withTub));
+    expect(back.ok && back.file.state.tub?.fish[0].finDamage).toBe(0);
+  });
+
   it('壞掉或版本不對的存檔視為沒有存檔', () => {
     const store = memoryStore();
     store.setItem(SAVE_KEY, '{not json');

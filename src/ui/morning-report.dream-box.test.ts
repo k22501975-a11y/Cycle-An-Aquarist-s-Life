@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, BOX_DUE, boxBlock, buyNurseryBox, clearBoxForMom, createTank, daysToBirth, FILTERS, HEATERS, ID_BLOCK, LIGHTS, nextStep, plantCover, TANKS, type Fish, type TankState } from '../sim';
+import { addFish, addPlant, BOX_DUE, boxBlock, DENSE_COVER, buyNurseryBox, clearBoxForMom, createTank, daysToBirth, FILTERS, HEATERS, ID_BLOCK, LIGHTS, nextStep, plantCover, TANKS, type Fish, type TankState } from '../sim';
 import { choiceState } from '../sim/choices';
-import { morningReport, slimReport, snapshot } from './morning-report';
+import { lineGroup, morningReport, slimReport, snapshot } from './morning-report';
 
 /** 養好水、一公一母孔雀魚的缸。 */
 function tank(seed: number, volume: 'nano20' | 'std40'): TankState {
@@ -15,9 +15,10 @@ function tank(seed: number, volume: 'nano20' | 'std40'): TankState {
  * g41 A 局：主缸水草密，繁殖缸沒草；留種那對在繁殖缸，C15 選了「等快生再放育幼盒」，
  * 繁殖缸的育幼盒卻被上一窩 11 尾小魚佔著。夢想窩剩 days 天生。
  */
-function g41(days: number, homePlants = 20) {
+function g41(days: number, densePlants = true) {
   const home = tank(21, 'std40');
-  addPlant(home, 'moss', homePlants);
+  // 每株最多蓋 35%（polish-to-9.md §13）：種到夠密（≥ DENSE_COVER）
+  if (densePlants) while (plantCover(home) < DENSE_COVER) addPlant(home, 'moss');
   const breeding = tank(22, 'nano20');
   breeding.purpose = 'breeding';
   buyNurseryBox(breeding);
@@ -84,12 +85,22 @@ describe('選了等快生再放育幼盒、盒子卻被小魚佔著（g41 #457�
   });
 
   it('別缸也收不了（有大魚、草不夠密）：說繁殖缸水草多少、按鈕叫玩家種水草，任務卡不出這一步', () => {
-    const { tanks } = g41(3, 0);
+    const { tanks } = g41(3, false);
     const line = night(tanks).items.find((i) => i.kind === 'box_block')!;
     expect(line.text).toMatch(/育幼盒還被 11 尾小魚佔著，別缸也收不了小魚。.+水草才 0%，先種密一點，這窩比較躲得住$/);
     expect(line).toMatchObject({ action: 'shop_plants', goLabel: '種水草', tank: 1 });
     expect(nextStep(tanks)?.target).not.toBe('clear_box');
     expect(clearBoxForMom(tanks)).toBeNull();
+  });
+
+  it('別缸也收不了、但那缸草已經夠密（≥ 60%）：只是提醒，不叫玩家做事（#460 架構 🟡）', () => {
+    const { tanks } = g41(3, false);
+    while (plantCover(tanks[1]) < DENSE_COVER) addPlant(tanks[1], 'moss');
+    const line = night(tanks).items.find((i) => i.kind === 'box_block')!;
+    expect(line.text).toMatch(/別缸也收不了小魚。.+水草 \d+%，這窩大多躲得住$/);
+    expect(line).toMatchObject({ tone: 'info' });
+    expect(line.action).toBeUndefined();
+    expect(lineGroup(line)).toBe('good');
   });
 
   it('還早（超過 4 天）、沒選育幼盒、或盒裡的小魚夠大放得出去：不說', () => {

@@ -1,8 +1,8 @@
 import { breedingFactor, broodFactor } from '../food';
 import { temperatureFactor } from '../chemistry';
 import { chance, nextRandom } from '../random';
-import { FISH_SPECIES, type FishSpeciesId } from '../species';
-import { isJuvenile, recordEvent, type Fish, type TankState } from '../state';
+import { FISH_SPECIES, PLANT_SPECIES, type FishSpeciesId } from '../species';
+import { isJuvenile, recordEvent, type Fish, type Plant, type TankState } from '../state';
 import { crowdingRatio, lifeFraction } from './fauna';
 import { growFish } from '../growth';
 import { tankHabit } from '../acclimation';
@@ -59,25 +59,77 @@ export function sizeRatio(fish: Fish): number {
   return Math.min(1, fish.lengthCm / FISH_SPECIES[fish.species].adultLengthCm);
 }
 
-/** 各種水草讓仔魚躲的效果：莫絲、矮珍珠、牛毛氈這種又密又低的草最好躲，大葉子的小榕最差。 */
-const HIDING_WEIGHT: Partial<Record<string, number>> = { moss: 3, glosso: 3, eleocharis: 3, hydrocotyle: 1.5, rotala: 1, anubias: 0.4 };
 /** 躲藏係數上限：草再密，成魚吃仔魚的機率也只降到原本的三成（design/mvp.md §4.3）。 */
 export const MAX_HIDING = 0.7;
+/** 每株的覆蓋率以這個水量為準（PlantSpecies.coverCap）：缸越小，一株蓋得越多。 */
+const COVER_REF_L = 40;
+/** 不管缸多小，一株成株最多蓋 35%（polish-to-9.md §13.5：小缸不要兩株就長太密）。 */
+export const MAX_PLANT_COVER = 0.35;
+/** 剛種下的小苗是成株的幾成（莫絲 40L 缸約 +10%，polish-to-9.md §13.1）。 */
+export const SEEDLING_COVER = 0.4;
+/** 小苗長到成株要幾天（有水草燈；沒有的話加倍）。 */
+export const MATURE_DAYS = 17;
+/** 一缸的覆蓋率一天最多增加多少（一次種很多株也一樣，§13.1）。 */
+export const COVER_DAY_MAX = 0.15;
+/** 覆蓋率超過這裡算長太密（§13.3）：晚上多耗氧、老葉化掉，該修剪了。 */
+export const OVERGROWN_COVER = 0.8;
 
-/**
- * 躲藏係數 0–0.7：水草越密，仔魚、仔蝦越容易躲過掠食者。
- * 看水草量 ÷ 水量，密草算比較多。
- */
-export function hidingFactor(state: TankState): number {
-  const grams = state.plants.reduce((sum, p) => sum + p.biomassG * (HIDING_WEIGHT[p.species] ?? 1), 0);
-  return MAX_HIDING * (1 - Math.exp(-grams / state.equipment.tank.volumeL / 0.6));
+/** 小苗長到多大了（剛種 SEEDLING_COVER，到 1 是成株；剪短過的可能更低）；沒有 plantedHours 的是成株。沒有水草燈的缸長得慢一倍。 */
+export function plantMaturity(state: TankState, plant: Plant): number {
+  if (plant.plantedHours === undefined) return 1;
+  const days = (state.hours - plant.plantedHours) / 24 / (state.equipment.light?.spec.id === 'planted' ? 1 : 2);
+  return Math.max(0, Math.min(1, SEEDLING_COVER + ((1 - SEEDLING_COVER) * days) / MATURE_DAYS));
 }
 
-/** 水草覆蓋率 0–1（早上報告寫 x%）：躲藏係數占上限的比例。 */
-export const plantCover = (state: TankState): number => hidingFactor(state) / MAX_HIDING;
+/** 這株蓋住多少（0–1）：長到多大，乘上還剩多少葉子（溶掉、剪掉會少）。 */
+export function plantCoverOf(state: TankState, plant: Plant): number {
+  const sp = PLANT_SPECIES[plant.species];
+  const leaves = Math.min(1, plant.biomassG / (sp.cuttingMassG * 2));
+  return Math.min(MAX_PLANT_COVER, (sp.coverCap * COVER_REF_L) / state.equipment.tank.volumeL) * Math.min(leaves, plantMaturity(state, plant));
+}
+
+/** 現在這些草都長成成株的話蓋多少（劇本玩家補草時估算用）。 */
+export function matureCover(state: TankState): number {
+  return Math.min(
+    1,
+    state.plants.reduce((sum, p) => {
+      const sp = PLANT_SPECIES[p.species];
+      return sum + Math.min(MAX_PLANT_COVER, (sp.coverCap * COVER_REF_L) / state.equipment.tank.volumeL) * Math.min(1, p.biomassG / (sp.cuttingMassG * 2));
+    }, 0),
+  );
+}
+
+/** 照現在的草算出來的覆蓋率（還沒套一天的上限）。 */
+export const rawPlantCover = (state: TankState): number => Math.min(1, state.plants.reduce((sum, p) => sum + plantCoverOf(state, p), 0));
+
+/** 水草覆蓋率 0–1（早上報告寫 x%）：每株加起來，一天最多比早上多 COVER_DAY_MAX（polish-to-9.md §13.1）。 */
+export function plantCover(state: TankState): number {
+  const raw = rawPlantCover(state);
+  return state.coverDay ? Math.min(raw, state.coverDay.cover + COVER_DAY_MAX) : raw;
+}
+
+/** 換日時記下今天開始的覆蓋率（updatePlants 每小時叫）。 */
+export function noteCoverDay(state: TankState): void {
+  const day = Math.floor(state.hours / 24);
+  if (state.coverDay?.day !== day) state.coverDay = { day, cover: plantCover(state) };
+}
+
+/** 長太密了（> OVERGROWN_COVER）：該修剪了。 */
+export const overgrown = (state: TankState): boolean => plantCover(state) > OVERGROWN_COVER;
+
+/** 躲藏係數 0–0.7：水草越密，仔魚、仔蝦越容易躲過掠食者（咬鰭、鬥魚追打也看這個）。 */
+export const hidingFactor = (state: TankState): number => MAX_HIDING * plantCover(state);
 /** 覆蓋率到這裡算「夠密」，小魚被吃的機率再減半（polish-to-9.md §12.2）。 */
 export const DENSE_COVER = 0.6;
 export const DENSE_COVER_FACTOR = 0.5;
+/** 水草再密，被吃的機率最多只減 70%（polish-to-9.md §13.2：成魚還是會在草邊巡）。 */
+export const PLANT_SHIELD_FLOOR = 0.3;
+
+/** 水草讓小魚被吃的機率剩幾成（PLANT_SHIELD_FLOOR～1）：越密越少，夠密再減半，最多只減 70%。 */
+export function plantShield(state: TankState): number {
+  const hiding = hidingFactor(state);
+  return Math.max(PLANT_SHIELD_FLOOR, (1 - hiding) * (hiding >= DENSE_COVER * MAX_HIDING ? DENSE_COVER_FACTOR : 1));
+}
 
 export function updatePopulation(state: TankState, dt: number): void {
   const living = state.fish.filter((f) => f.alive);
@@ -93,11 +145,10 @@ export function updatePopulation(state: TankState, dt: number): void {
   }
 
   const hiding = hidingFactor(state);
-  // 草夠密（覆蓋 ≥ 60%）的缸，小魚被吃的機率再減半（polish-to-9.md §12.2：種密了要明顯有用）
-  const dense = hiding >= DENSE_COVER * MAX_HIDING ? DENSE_COVER_FACTOR : 1;
   // 育幼盒裡的魚隔著網子：大魚吃不到、不會咬鰭，盒裡的母魚也吃不到外面的小魚（nursery.ts）
   const open = living.filter((f) => !f.nursery);
-  const eaten = predation(state, open, hiding, dt, dense);
+  // 草夠密（覆蓋 ≥ 60%）再減半（§12.2），但最多只減 70%（§13.2）
+  const eaten = predation(state, open, plantShield(state), dt);
   // 被吃掉的幼體直接從缸裡消失；記一筆事件（同一種一筆），早上報告和通知才知道（#176）
   if (eaten.size > 0) {
     state.fish = state.fish.filter((f) => !eaten.has(f));
@@ -114,9 +165,9 @@ export function updatePopulation(state: TankState, dt: number): void {
 
 /**
  * 成魚會吃嘴巴塞得下的仔魚、仔蝦。剛出生時最危險，長大到超過掠食者嘴巴就安全了。
- * 每隻幼體每小時的被吃機率 = 基礎值 × 掠食壓力 × 體型弱點 × 飢餓加成 × (1 − 躲藏係數)。
+ * 每隻幼體每小時的被吃機率 = 基礎值 × 掠食壓力 × 體型弱點 × 飢餓加成 × 水草保護（plantShield）。
  */
-function predation(state: TankState, living: Fish[], hiding: number, dt: number, dense = 1): Set<Fish> {
+function predation(state: TankState, living: Fish[], shield: number, dt: number): Set<Fish> {
   const eaten = new Set<Fish>();
   const predators = living.filter((f) => FISH_SPECIES[f.species].mouthRatio > 0 && !isJuvenile(f));
   if (predators.length === 0) return eaten;
@@ -139,7 +190,7 @@ function predation(state: TankState, living: Fish[], hiding: number, dt: number,
     const smallness = Math.min(1, Math.max(0, (limit - prey.lengthCm) / Math.max(0.01, limit - sp.birthLengthCm)));
     const hungerBonus = 1 + hunger / count;
     // 跟著媽媽的仔魚：靠近的魚會被趕走
-    const ratePerHour = (sp.juvenilePredationPerDay / 24) * pressure * smallness * hungerBonus * (1 - hiding) * dense * guardedPredationFactor(state, prey);
+    const ratePerHour = (sp.juvenilePredationPerDay / 24) * pressure * smallness * hungerBonus * shield * guardedPredationFactor(state, prey);
     if (chance(state.rng, ratePerHour, dt)) {
       eaten.add(prey);
       // 吃剩的碎屑變成有機廢物。

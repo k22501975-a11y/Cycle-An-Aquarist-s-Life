@@ -8,6 +8,7 @@ import { isCycled } from './processes/nitrogen';
 import { FISH_SPECIES, isShrimpSpecies, PLANT_SPECIES, type PlantSpeciesId } from './species';
 import { tankStarted } from './setup';
 import { crowdingRatio } from './processes/fauna';
+import { overgrown } from './processes/population';
 import { CROWD_WARN } from './split';
 import { ADULT_SIZE, noteAct, type DailyAct, type Fish, type TankState } from './state';
 
@@ -55,6 +56,7 @@ export const DAILY_CATEGORY = {
   topup: 'care',
   nursery: 'care',
   gear: 'care',
+  trimDense: 'care',
   observe: 'observe',
   snail: 'observe',
   shrimp: 'observe',
@@ -210,6 +212,7 @@ export const DAILY_TEXT: Record<DailyTaskId, string> = {
   topup: '把蒸發掉的水補回來',
   nursery: '把快生的母魚放進育幼盒',
   gear: '打開「設備」，看看過濾器和加熱棒',
+  trimDense: '水草長太密了，剪回清爽一點（晚上才不會搶氧）',
   observe: '點一尾魚，看看牠今天怎麼樣',
   snail: '找到缸裡的螺，點牠一下',
   shrimp: '點一隻蝦，看看牠今天怎麼樣',
@@ -274,6 +277,7 @@ const TIMED_TIME = {
   goalFryFed: (t: TankState) => t.lastFedHours,
   water: (t: TankState) => t.lastWaterChangeHours,
   trim: (t: TankState) => t.lastTrimHours,
+  trimDense: (t: TankState) => t.lastTrimHours,
   topup: act('topup'),
   nursery: act('nursery'),
   scape: act('scapeMove'),
@@ -353,6 +357,8 @@ export function eligibleDaily(tanks: TankState[]): DailyTaskId[] {
     topup: any((t) => (t.water.levelL ?? t.equipment.tank.volumeL) <= t.equipment.tank.volumeL * TOPUP_TASK_LEVEL),
     nursery: any((t) => !!t.nurseryBox && dueMothers(t).some((f) => !nurseryRefusal(t, f))),
     gear: true,
+    // 長太密的缸（polish-to-9.md §13.3）
+    trimDense: any(overgrown),
     observe: any(living),
     snail: any(hasSnails),
     shrimp: any((t) => t.fish.some((f) => f.alive && isShrimpSpecies(f.species))),

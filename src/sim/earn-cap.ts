@@ -1,3 +1,4 @@
+import { TRIM_TO_COVER } from './actions';
 import { CHEST_CAP_DAY, CHEST_COINS_CAP, CHEST_COINS_MAX } from './daily';
 import { DAILY_SELL_LIMIT, economy, FISH_PRICES, fishBuybackPrice, guppyBuybackTier, plantBuybackPrice, PLANT_PRICES } from './economy';
 import { GOALS } from './goals';
@@ -38,7 +39,7 @@ function guppyPriceMax(): number {
   return Math.round(FISH_PRICES.guppy * tier * 1.5 * 1.25);
 }
 
-const allFish = (tanks: TankState[]): Fish[] => tanks.flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])]);
+const allFish = (tanks: TankState[]): Fish[] => tanks.flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? []), ...(t.tub?.fish ?? [])]);
 
 /** 這條魚最多換得到多少錢：長成成魚、發色滿的收購價，或交單的單價，取大的。 */
 export function fishEarnCap(f: Fish): number {
@@ -117,10 +118,10 @@ export function earnCap(prev: TankState[], next: TankState[]): EarnCapDetail {
   const sellDays = Math.max(0, Math.ceil(hours / 24 - NEWBORN_SELL_DAYS));
   const newborn = sellDays * DAILY_SELL_LIMIT * Math.min(guppyPriceMax(), Math.round(1.5 * Math.max(GUPPY_PLAIN_ORDER_MAX, ...before.map(fishEarnCap))));
 
-  // 插枝：手上的、上一份每株現在就剪得下來的（剪到上限一半），加上每株每天長出來的。
+  // 插枝：手上的、上一份每株現在就剪得下來的（剪到上限一半，或長太密剪回 65% 時每株最多剪掉的 35%，§13.3），加上每株每天長出來的。
   // 只看上一份（伺服器收過的）：這一份是還沒驗證的，多塞水草不能撐大上限。這段時間才買的草要花錢，剪下來賣也賺不回來
   let plants = 0;
-  for (const t of prev) for (const p of t.plants) if (p.species in PLANT_PRICES) plants += (Math.max(0, p.biomassG - PLANT_SPECIES[p.species].maxBiomassG * 0.5) / PLANT_SPECIES[p.species].cuttingMassG) * cuttingUnit(p.species);
+  for (const t of prev) for (const p of t.plants) if (p.species in PLANT_PRICES) plants += (Math.max(0, p.biomassG - PLANT_SPECIES[p.species].maxBiomassG * 0.5, p.biomassG * (1 - TRIM_TO_COVER)) / PLANT_SPECIES[p.species].cuttingMassG) * cuttingUnit(p.species);
   for (const [sp, n] of Object.entries(pe.cuttings ?? {}) as Array<[PlantSpeciesId, number]>) if (sp in PLANT_PRICES) plants += Math.max(0, n) * cuttingUnit(sp);
   for (const t of prev) for (const p of t.plants) if (p.species in PLANT_PRICES) plants += days * cuttingsPerDay(p.species) * cuttingUnit(p.species);
   plants = Math.ceil(plants);

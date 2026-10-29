@@ -66,6 +66,6 @@ export function removeTankRefusal(tanks: TankState[], index: number): string | n
   const t = tanks[index];
   if (!t) return '沒有這缸';
   if (tanks.length <= 1) return '至少要留一缸';
-  if (t.fish.some((f) => f.alive) || (t.quarantine?.fish ?? []).some((f) => f.alive)) return '缸裡還有活的魚蝦，先移到別缸或賣掉';
+  if (t.fish.some((f) => f.alive) || [...(t.quarantine?.fish ?? []), ...(t.tub?.fish ?? [])].some((f) => f.alive)) return '缸裡還有活的魚蝦，先移到別缸或賣掉';
   return null;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFish, addPlant, FISH_SPECIES, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, canDeliverAnyOrder, emergencySale, orderBoard, starterPackAllCold, moveToWarmTank, moveAndInsulate, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, buyCheapHeater, coldestRoomC, sellFish, creditTarget, heaterCreditRefusal, takeHeaterCredit, fishBuybackPrice, installHeater, noteEarned, type ShopOrder, type TankSpec, type TankState } from '../sim';
+import { addFish, addPlant, FISH_SPECIES, price, canClaimStarterPack, catchPests, comparePartner, markDailyFish, dailyTasks, economy, updateDaily, createTank, feed, FILTERS, HEATERS, LIGHTS, linkTanks, pinchMg, simulate, starterPackTank, TANKS, unplugHeater, canDeliverAnyOrder, emergencySale, orderBoard, starterPackAllCold, moveToWarmTank, moveAndInsulate, needsInsulation, warmMove, warmMoveRefusal, cheapHeater, buyCheapHeater, coldestRoomC, sellFish, creditTarget, heaterCreditRefusal, takeHeaterCredit, fishBuybackPrice, installHeater, noteEarned, BUY_RESERVE, type ShopOrder, type TankSpec, type TankState } from '../sim';
 import { crisisTodos, capsSummary, guideStep, heaterCanWait, lingering, todos, warmMoveStep, wipedOut } from './status';
 import { morningReport, REPORT_LINES, slimReport, snapshot } from './morning-report';
 import { fishName } from './labels';
@@ -264,6 +264,22 @@ describe('拔了插頭的壞加熱棒不卡住任務卡（#388，g26）', () => 
     expect(guideStep(tanks, 'g')).toMatchObject({ target: 'sell', text: `繁殖缸：水溫偏低，加熱棒壞了，換一支要 ${cost} 元（還差 ${cost - 200} 元），賣 3 尾魚給水族店（約 175 元）湊錢（第 1 缸已經滿了，搬不過去）` });
     economy(b).coins = cost;
     expect(guideStep(tanks, 'g')).toMatchObject({ target: 'equipment', tank: 1, text: '繁殖缸：水溫偏低（19.0°C），加熱棒壞了，換一支' });
+  });
+
+  it('空缸的加熱棒：買完剩不到 500 元不叫你換；放進魚又冷就是救急，不管剩多少（polish-to-9.md §13.7）', () => {
+    const { tanks, b } = broke(16);
+    const fish = b.fish;
+    b.fish = [];
+    const cost = price(`heater:${b.equipment.heater!.spec.id}`);
+    economy(b).coins = cost + BUY_RESERVE - 1;
+    expect(guideStep(tanks, 'g')?.text ?? '').not.toContain('加熱棒');
+    economy(b).coins = cost + BUY_RESERVE;
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'equipment', tank: 1, text: '繁殖缸：加熱棒壞了，換一支' });
+    // 有魚的冷缸：錢只夠換也叫你換
+    b.fish = fish;
+    b.insulatedDay = Math.floor(b.hours / 24);
+    economy(b).coins = cost;
+    expect(guideStep(tanks, 'g')).toMatchObject({ target: 'equipment', tank: 1 });
   });
 
   it('這缸沒有魚：先放著', () => {

@@ -96,4 +96,6 @@ export function strainSeed(seed: number): void {
   const early = run.nights.filter((n) => n.day <= 120);
   expect(early.reduce((a, n) => a + n.ichNew, 0), f.log).toBeLessThanOrEqual(2);
   expect(early.filter((n) => n.lowBuy !== undefined).map((n) => `${n.day}:${n.lowBuy}`), f.log).toEqual([]);
+  // polish-to-9.md §13.4：水草長太密晚上搶氧，種魚也不准因此悶死
+  expect(run.nights.reduce((a, n) => a + n.breederSuffocated, 0), f.log).toBe(0);
 }

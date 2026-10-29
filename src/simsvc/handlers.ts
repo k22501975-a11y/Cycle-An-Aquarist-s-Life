@@ -1,5 +1,5 @@
 import { catchUp, parseSave, serializeSave, type SaveFile } from '../game/save';
-import { arrivalStatus, carriedDiseases, DEFAULT_TIME_SCALE, earnCap, economy, forgedGenomes, marketItem, type ArrivalStatus, type Fish, type ForgedFish, type TankState, type UntracedFish } from '../sim';
+import { arrivalStatus, carriedDiseases, DEFAULT_TIME_SCALE, earnCap, economy, forgedGenomes, marketItem, MAX_TUBS, TUB_CAPACITY, type ArrivalStatus, type Fish, type ForgedFish, type TankState, type UntracedFish } from '../sim';
 
 /**
  * 伺服器權威模擬（L2）：Spring Boot 把存檔丟過來，這裡用跟遊戲同一份模擬程式計算。
@@ -11,7 +11,7 @@ import { arrivalStatus, carriedDiseases, DEFAULT_TIME_SCALE, earnCap, economy, f
  */
 
 export interface Problem {
-  code: 'time_ahead' | 'time_back' | 'identity_changed' | 'gift_removed' | 'shipped_fish' | 'coins_jump' | 'genome_forged' | 'lineage_unknown';
+  code: 'time_ahead' | 'time_back' | 'identity_changed' | 'gift_removed' | 'shipped_fish' | 'coins_jump' | 'genome_forged' | 'lineage_unknown' | 'tub_limit';
   message: string;
   /** lineage_unknown：不擋存檔，伺服器記下這尾（編號＋基因），之後不能上架。 */
   fish?: UntracedFish;
@@ -37,8 +37,17 @@ function tanksOf(file: SaveFile): TankState[] {
   return [file.state, ...(file.tanks ?? [])];
 }
 
+/** 收納箱（polish-to-9.md §13.7）：一個存檔最多 MAX_TUBS 個、每個最多 TUB_CAPACITY 尾；箱裡的魚跟缸裡的一樣查身分、來歷、錢。 */
+function tubProblems(file: SaveFile): Problem[] {
+  const tubs = tanksOf(file).filter((t) => t.tub);
+  const problems: Problem[] = [];
+  if (tubs.length > MAX_TUBS) problems.push({ code: 'tub_limit', message: `收納箱最多 ${MAX_TUBS} 個，存檔裡有 ${tubs.length} 個` });
+  if (tubs.some((t) => t.tub!.fish.filter((f) => f.alive).length > TUB_CAPACITY)) problems.push({ code: 'tub_limit', message: `收納箱一個最多放 ${TUB_CAPACITY} 尾` });
+  return problems;
+}
+
 function allFish(file: SaveFile): Fish[] {
-  return tanksOf(file).flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? [])]);
+  return tanksOf(file).flatMap((t) => [...t.fish, ...(t.quarantine?.fish ?? []), ...(t.tub?.fish ?? [])]);
 }
 
 export interface AdvanceResult {
@@ -84,7 +93,7 @@ export function verify(
   if (previousRaw === null || previousRaw === undefined) return verifyAlone(nextRaw, shipped, received, untraced);
   const prev = load(previousRaw);
   const next = load(nextRaw);
-  const problems: Problem[] = [];
+  const problems: Problem[] = [...tubProblems(next)];
 
   // 遊戲時鐘由伺服器統一：遊戲時間最多比現實 × 7 多一點（暫停時會少，沒關係）
   const allowed = (Math.max(0, elapsedMs) / 3_600_000) * DEFAULT_TIME_SCALE * TIME_SLACK_RATIO + TIME_SLACK_HOURS;
@@ -140,9 +149,9 @@ export function verify(
  */
 function verifyAlone(nextRaw: unknown, shipped: readonly ShippedFish[], received: readonly unknown[], untraced: readonly UntracedFish[]): Problem[] {
   const next = load(nextRaw);
-  const problems: Problem[] = [];
+  const problems: Problem[] = [...tubProblems(next)];
   if (!Number.isFinite(economy(next.state).coins)) problems.push({ code: 'coins_jump', message: '存檔裡的錢不是正常的數字' });
-  const empty = { ...next.state, hours: 0, fish: [], quarantine: undefined } as TankState;
+  const empty = { ...next.state, hours: 0, fish: [], quarantine: undefined, tub: undefined } as TankState;
   const known = [...shipped.map((f) => f.genome), ...received];
   problems.push(...genomeProblems(forgedGenomes([empty], tanksOf(next), known, { alone: true, untraced })));
   for (const f of allFish(next)) {

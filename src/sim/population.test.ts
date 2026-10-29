@@ -133,9 +133,9 @@ describe('混養：吃仔魚、吃仔蝦', () => {
       addYoung(base, 'guppy', 40);
       const a = structuredClone(base);
       const b = structuredClone(base);
-      // 一個停在 50% 左右，一個剛過 60%：不加減半，躲藏係數只差一成多
-      addPlant(a, 'moss', 12.5);
-      addPlant(b, 'moss', 20);
+      // 一個停在 45% 左右，一個剛過 60%：不加減半，躲藏係數只差一成多（90L 缸一株成株莫絲約 11%，§13.1）
+      for (let i = 0; i < 4; i++) addPlant(a, 'moss', 20);
+      for (let i = 0; i < 6; i++) addPlant(b, 'moss', 20);
       expect(plantCover(a)).toBeLessThan(DENSE_COVER - 0.05);
       expect(plantCover(b)).toBeGreaterThanOrEqual(DENSE_COVER);
       expect(plantCover(b)).toBeLessThan(DENSE_COVER + 0.1);

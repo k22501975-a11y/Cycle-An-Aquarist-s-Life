@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addBottledBacteria, addFish, addPlant, createTank, FILTERS, HEATERS, LIGHTS, recordEvent, TANKS, type TankState } from '../sim';
+import { addBottledBacteria, addFish, addPlant, createTank, DENSE_COVER, plantCover, FILTERS, HEATERS, LIGHTS, recordEvent, TANKS, type TankState } from '../sim';
 import { morningReport, snapshot } from '../ui/morning-report';
 import { Game, hoursUntilMorning, newGameState } from './game';
 
@@ -86,9 +86,10 @@ describe('「過一晚」（first-10-minutes.md F2）', () => {
   });
 
   it('晚上有小魚被吃：報告寫被吃了幾尾、不寫平安；草不夠密點了去種水草，夠密了點了去檢疫盒（#176、polish-to-9.md §12.2）', () => {
-    for (const [moss, action] of [[0, 'shop_plants'], [20, 'fry_box']] as const) {
+    for (const [dense, action] of [[false, 'shop_plants'], [true, 'fry_box']] as const) {
       const tank = cycledTank();
-      if (moss) addPlant(tank, 'moss', moss);
+      // 成株莫絲種到夠密（≥ 60%，§13.1 每株有上限）
+      while (dense && plantCover(tank) < DENSE_COVER) addPlant(tank, 'moss', 20);
       const game = new Game(tank);
       const before = snapshot(game.tanks);
       game.act((st) => {

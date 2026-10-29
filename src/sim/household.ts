@@ -101,13 +101,16 @@ export const ACCLIMATED_SHOCK_SHARE = 0.25;
  * 身上的病跟著過去（新缸也可能被傳染）。
  */
 export function moveFish(from: TankState, to: TankState, fishId: number, acclimate = false): boolean {
-  const fish = from.fish.find((f) => f.id === fishId && f.alive);
-  if (!fish || from === to) return false;
+  // 收納箱裡的魚（tub.ts）也撈得出來：C17 挑中箱裡的品系小魚時直接搬過去
+  const inTub = from.tub?.fish.find((f) => f.id === fishId && f.alive);
+  const fish = from.fish.find((f) => f.id === fishId && f.alive) ?? inTub;
+  if (!fish || (from === to && !inTub)) return false;
   const dT = Math.abs(from.water.tempC - to.water.tempC);
   const dPh = Math.abs(from.water.ph - to.water.ph);
   const shock = Math.min(0.5, dT * 0.08 + dPh * 0.15) * (acclimate ? ACCLIMATED_SHOCK_SHARE : 1);
   fish.stress = Math.min(1, Math.max(fish.stress, 0.3 + shock));
   from.fish = from.fish.filter((f) => f !== fish);
+  if (inTub) from.tub!.fish = from.tub!.fish.filter((f) => f !== fish);
   // 從育幼盒撈出來換缸：到了新缸就是在缸裡游（#191）
   fish.nursery = undefined;
   fish.arrivedHours = to.hours;
