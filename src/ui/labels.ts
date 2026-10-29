@@ -281,9 +281,10 @@ const pick = (options: string[], day: number) => options[day % options.length];
  * home：另一缸養好水、沒有大魚（fryHome）時的缸名，就叫玩家搬過去；otherTank：有別缸但還不能放（#425）。
  */
 /**
- * plants：這缸的名字和水草覆蓋 %（polish-to-9.md §12.2）：草還不夠密（< 60%）就教玩家種密一點，比撈育幼盒優先。
+ * advice（polish-to-9.md §12.2 補充的順序）：box 是快生（≥ 0.88）、育幼盒又空著的母魚，先叫玩家把她放進去；
+ * plants 是這缸的名字和水草覆蓋 %，草還不夠密（< 60%）就教玩家種密一點，比另一缸養水、撈育幼盒優先。
  */
-export function fryEatenText(state: TankState, count: number, shrimp: boolean, home: string | null = null, otherTank = false, plants: { name: string; pct: number } | null = null): string {
+export function fryEatenText(state: TankState, count: number, shrimp: boolean, home: string | null = null, otherTank = false, advice: { box: string } | { plants: string; pct: number } | null = null): string {
   const day = Math.floor(state.hours / 24);
   const who = shrimp ? '隻小蝦' : '尾小魚';
   const head = `${count} ${who}${pick(shrimp ? ['被魚吃掉了', '沒躲好，被魚叼走了'] : ['被大魚吃掉了', '沒躲好，被成魚吞下去了', '被大魚當點心吃了'], day)}`;
@@ -296,10 +297,12 @@ export function fryEatenText(state: TankState, count: number, shrimp: boolean, h
   const fry = state.fish.filter((f) => f.alive && !f.nursery && isJuvenile(f) && f.lengthCm < NURSERY_RELEASE_CM && !isShrimpSpecies(f.species)).length;
   const due = dueMothers(state).length > 0;
   let tip: string;
-  if (home && !shrimp) {
+  if (advice && 'box' in advice && !shrimp) {
+    tip = `${advice.box}快生了，育幼盒空著，先把她放進去，這一窩就一尾都不會被吃`;
+  } else if (home && !shrimp) {
     tip = pick([`${home}養好水了，把小魚搬過去，那裡沒有大魚會吃牠們`, `小魚搬去${home}就安全了，那邊沒有大魚`], day);
-  } else if (plants && !shrimp) {
-    tip = `${plants.name}水草覆蓋 ${plants.pct}%，再種密一點，小魚比較躲得住（莫絲、香菇草最好躲）`;
+  } else if (advice && 'plants' in advice && !shrimp) {
+    tip = `${advice.plants}水草覆蓋 ${advice.pct}%，再種密一點，小魚比較躲得住（莫絲、香菇草最好躲）`;
   } else if (shrimp) {
     tip = hiding < 0.35
       ? pick(['小蝦最愛躲在莫絲裡，多綁幾團就好', '缸裡能躲的地方太少，莫絲和矮珍珠是小蝦的家'], day)

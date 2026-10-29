@@ -1915,6 +1915,11 @@ async function start(): Promise<void> {
       case 'shop_fish':
         openShop('fish');
         break;
+      case 'nursery_soon':
+        // 小魚被吃那行：快生的母魚放進空著的育幼盒（polish-to-9.md §12.2 補充）；先切到那缸
+        game.switchTo(item.tank);
+        withPanels((p) => p.putSoonInNursery(ctx));
+        break;
       case 'shop_plants':
         // 被吃的是哪一缸就先切過去，種的草才會種在那缸（polish-to-9.md §12.2）
         game.switchTo(item.tank);
