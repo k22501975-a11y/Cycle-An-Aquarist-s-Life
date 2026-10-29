@@ -353,7 +353,7 @@ export function shortNote(short: number): HTMLElement {
   return h('small.bc-short', {}, h('img', { src: `${ART}ui/coin.webp`, alt: '', draggable: 'false' }), `還差 ${short.toLocaleString('zh-TW')} 元`);
 }
 
-/** 選項的圖（public/art/ 底下）：C1 育幼盒／躲水草，C3 繁殖缸／展示缸，C11 分開／一起養。 */
+/** 選項的圖（public/art/ 底下）：C1 育幼盒／躲水草，C3 繁殖缸／展示缸，C11 分開／一起養，C14 收納箱暫養。 */
 export const CHOICE_ART: Record<string, string> = {
   box: 'gear/nursery-box.webp',
   hide: 'scape/plant-moss.webp',
@@ -361,6 +361,8 @@ export const CHOICE_ART: Record<string, string> = {
   display: 'gear/led-planted.webp',
   split: 'gear/nursery-box.webp',
   together: 'gear/tank-empty.webp',
+  // 收納箱暫養（polish-to-9.md §13.7）：透明收納箱＋打氣管＋小加熱棒，放在櫃子上
+  bin: 'gear/storage-bin.webp',
 };
 
 // ── 早上報告的「選育進度」行 ──────────────────────────────
