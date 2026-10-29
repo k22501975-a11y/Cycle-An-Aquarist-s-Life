@@ -15,6 +15,7 @@ import { crowdingRatio } from './processes/fauna';
 import { isCycled } from './processes/nitrogen';
 import { sizeRatio } from './processes/population';
 import { CROWD_WARN, cyclingTank } from './split';
+import { boxMom, COUNTDOWN_DAYS } from './box-block';
 import { bigBrood, freshBigBrood } from './brood-water';
 import { addEcho, BROOD_SUMMARY_DAYS, crowdPct, HIDE_ECHO_DAYS, type Echo } from './choice-echo';
 import { tooSmallForTank } from './quarantine';
@@ -2138,14 +2139,12 @@ function lateHousekeeping(tanks: TankState[], s: ChoiceState): void {
 /**
  * C15 選了等快生再放：快生了就把母魚放進那缸的育幼盒（盒裡放得出去的小魚先放出去）。
  * 開獎之後品系的每一窩也一樣（#359）：留種那對的母魚懷著這對的小孩、快生了就放進去；那缸沒有盒子就照 C15 的選擇買一個。
+ * 開獎前放進去了說一聲（g41 #457：照推薦選了，玩家看不出到底有沒有放）。
  */
 function boxDue(tanks: TankState[], s: ChoiceState): void {
-  const r = s.reveal;
-  if (!r?.box) return;
-  const momId = !r.done ? r.momId : s.pair?.[0];
-  const m = located(tanks).find(({ fish }) => fish.id === momId && fish.alive);
-  if (!m || m.fish.nursery || m.fish.pregnancy < BOX_DUE) return;
-  if (r.done && m.fish.sire?.id !== s.pair![1]) return;
+  const m = boxMom(tanks);
+  if (!m || m.fish.pregnancy < BOX_DUE) return;
+  const r = s.reveal!;
   const t = tanks[m.tank];
   const price = PRICES['nursery:box'] ?? 150;
   if (!t.nurseryBox && r.done && spend(tanks[0], price)) {
@@ -2154,7 +2153,7 @@ function boxDue(tanks: TankState[], s: ChoiceState): void {
   }
   if (!t.nurseryBox) return;
   if (nurseryRefusal(t, m.fish)) releaseNursery(t, t.fish.filter((f) => f.nursery && isJuvenile(f) && f.lengthCm > mouthCm(m.fish)).map((f) => f.id));
-  moveToNursery(t, m.fish.id);
+  if (moveToNursery(t, m.fish.id) && !r.done) addEcho(s, { label: '等快生再放育幼盒', tank: m.tank, due: tanks[0].hours, text: `${callName(m.fish)}快生了，照你選的放進育幼盒待產，這一窩一尾都不會被吃` });
 }
 
 /** 種魚都長大了、母魚還沒懷上：身體差（生病）的話記一天，看是不是白點。 */
@@ -2617,7 +2616,7 @@ function markDreamBrood(tanks: TankState[], s: Readonly<ChoiceState>): void {
 }
 
 /** 開獎前幾天早上報告第一行倒數（polish-to-9.md §12.1）。 */
-export const COUNTDOWN_DAYS = 3;
+export { COUNTDOWN_DAYS };
 
 /** 夢想窩的母魚還有幾天生（無條件進位）；只在 COUNTDOWN_DAYS 天內回傳，其他回 null。 */
 export function revealCountdown(tanks: TankState[]): { momId: number; tank: number; days: number } | null {

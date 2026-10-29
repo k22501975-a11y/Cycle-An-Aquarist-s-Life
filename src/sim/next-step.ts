@@ -5,6 +5,7 @@ import { raiseCashStep } from './raise-cash';
 import { canSalt, SALT_DAYS, saltDaysLeft, saltWorking } from './salt-cure';
 import { HUNGRY } from './readings';
 import { breathless, oxygenFix } from './oxygen';
+import { boxBlock, boxBlockText } from './box-block';
 import { CALM_DAYS, GOALS, goalState, nextGoals, PURPOSE_GOAL_COUNT, raisedCount, type Goal } from './goals';
 import { COLORING_AT, daysToLength, daysUntilSexVisible, growthStage, maxLengthCm, PICK_AFTER_BROOD_DAYS, sexVisible } from './growth';
 import { ID_BLOCK, newTankCost, tankLabel } from './household';
@@ -58,6 +59,7 @@ export type NextTarget =
   | 'buy_heater' // 冬天錢不夠換同款（#404）：買一支撐得住的便宜加熱棒裝上
   | 'move_fry' // 小魚在這缸會被吃、另一缸養好水了（#425）：一鍵把小魚搬過去
   | 'cycle_tank' // 小魚要搬家、新缸還沒養水（#428）：打開「新缸要怎麼養水？」
+  | 'clear_box' // 選了等快生再放育幼盒、盒子卻被小魚佔著（g41 #457）：一鍵把小魚搬去別缸，盒子留給母魚
   | 'nursery_soon' // 育幼盒空著、母魚快生了（polish-to-9.md §9.1）：點一下就把她放進去
   | 'water_change' // 缺氧又沒打氣可加、大窩生在小缸（polish-to-9.md §10 補充）：切到那缸、打開換水
   | 'add_air'; // 缺氧：打開打氣機，沒有就買一台裝上（oxygen.ts）
@@ -400,6 +402,9 @@ export function nextStep(tanks: TankState[]): NextStep | null {
   // 大窩生在小缸：生的那兩天每天換三成水，不然 KH 吃光、氨一晚就衝上去（polish-to-9.md §10 補充）
   const water = broodWaterStep(tanks);
   if (water) return { goal: goal.id, ...water };
+  // 選了等快生再放育幼盒、盒子卻被小魚佔著（g41 #457）：開獎前先把小魚搬走，夢想窩才保得住
+  const block = boxBlock(tanks);
+  if (block && block.to !== null) return { goal: goal.id, text: boxBlockText(tanks, block, block.dream ? '夢想窩的媽媽' : '留種的母魚'), target: 'clear_box', tank: block.tank };
   // 小魚在被吃、別缸已經能收：先搬（g36 #425：第二缸養好水 5 天都空著，小魚被吃 17 尾）
   // C1 選了躲草：3 天內不叫玩家搬小魚、買缸，被吃到剩一半才叫（polish-to-9.md §10.1）
   const fry = hiding(tanks) ? null : (fryMoveStep(tanks) ?? fryPrepStep(tanks));

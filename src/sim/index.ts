@@ -55,6 +55,7 @@ export { breakHeater, HEATER_EXPOSED_LEVEL, HEATER_FAILURE_GAP_DAYS, heaterLiftC
 // mall.ts 不從這裡匯出：只有商城面板和設備面板用，從這裡匯出會被算進開機必載
 export * from './growth';
 export * from './split';
+export { boxBlock, boxBlockText, clearBoxForMom, type BoxBlock } from './box-block';
 export * from './raise-cash';
 export * from './winter-rescue';
 export * from './salt-cure';
