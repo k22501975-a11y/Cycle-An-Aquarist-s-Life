@@ -720,7 +720,38 @@ export interface PlantPainting {
  * 依生物量畫一株水草。紅蝴蝶：一叢有莖草，越往上越紅（強光下的典型顏色）。小榕：綁在小石頭上的寬葉。
  * 溶葉時偏黃褐，葉面長藻時顏色變暗、有斑點。
  */
-export function paintPlant(plant: Plant, hs: number, scale = 1): PlantPainting {
+/** 長太密時有莖草（紅蝴蝶這類陽性草）會一路長到水面；小榕、前景草、莫絲只往旁邊擠（polish-to-9.md §13.3）。 */
+export const reachesSurface = (species: Plant['species']): boolean => PLANT_SPECIES[species].lightType === 'high' && !LOW_PLANTS[species];
+
+/**
+ * 長太密的老葉（polish-to-9.md §13.3）：下半部偏黃褐、散著幾片枯黃的葉斑。
+ * 用 source-atop 只畫在已經有葉子的地方；(x, y, w, h) 是草在畫布上的範圍。
+ */
+function ageLeaves(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, rand: () => number, hs: number): void {
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-atop';
+  const old = ctx.createLinearGradient(0, y + h, 0, y + h * 0.35);
+  old.addColorStop(0, 'rgba(140,110,44,0.62)');
+  old.addColorStop(1, 'rgba(140,110,44,0)');
+  ctx.fillStyle = old;
+  ctx.fillRect(x, y, w, h);
+  // 擠在一起照不到光：整株暗一點
+  ctx.fillStyle = 'rgba(8,36,30,0.16)';
+  ctx.fillRect(x, y, w, h);
+  for (let i = 0; i < 22; i++) {
+    const bx = x + rand() * w;
+    const by = y + h * (0.4 + rand() * 0.6);
+    const r = (3 + rand() * 4) * hs;
+    ctx.fillStyle = i % 3 === 0 ? 'rgba(222,196,88,0.85)' : 'rgba(132,90,36,0.85)';
+    ctx.beginPath();
+    ctx.ellipse(bx, by, r, r * 0.55, rand() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** crowded：這缸長太密了（覆蓋率 > 80%，§13.3），畫得擠一點、帶老葉。 */
+export function paintPlant(plant: Plant, hs: number, scale = 1, crowded = false): PlantPainting {
   const sp = PLANT_SPECIES[plant.species];
   const size = Math.min(2.2, plant.biomassG / sp.maxBiomassG + 0.25);
   const melting = plant.growthRate < -0.0002;
@@ -767,12 +798,19 @@ export function paintPlant(plant: Plant, hs: number, scale = 1): PlantPainting {
         t.fill();
       }
     }
+    if (crowded) ageLeaves(t, 0, 0, dw, dh, rand, hs);
     const shade = t.createLinearGradient(0, 0, 0, dh);
     shade.addColorStop(0, 'rgba(200,245,255,0.08)');
     shade.addColorStop(0.6, 'rgba(20,80,90,0)');
     shade.addColorStop(1, 'rgba(5,30,30,0.45)');
     t.fillStyle = shade;
     t.fillRect(0, 0, dw, dh);
+    // 長太密：後面再擠兩叢（左右錯開、矮一點），看起來一整片塞滿
+    if (crowded) {
+      ctx.globalAlpha = 0.9;
+      for (const [k, s] of [[-0.24, 0.86], [0.22, 0.92]] as const) ctx.drawImage(tmp, -dw / 2 + dw * k, -dh * 0.98 * s, dw, dh * s);
+      ctx.globalAlpha = 1;
+    }
     ctx.drawImage(tmp, -dw / 2, -dh * 0.98, dw, dh);
     return { texture: canvasTexture(canvas, true, scale), anchorX: ax, anchorY: ay };
   }
@@ -827,6 +865,7 @@ export function paintPlant(plant: Plant, hs: number, scale = 1): PlantPainting {
     // 綁著的小青龍石
     paintSeiryu(ctx, 0, 4 * hs, hs * 0.5, [-55, 0, -32, -50, 8, -60, 40, -34, 55, 0], [[8, -60, 2, -4]], plant.id);
   }
+  if (crowded) ageLeaves(ctx, -ax, -ay, W, H, rand, hs);
   return { texture: canvasTexture(canvas, true, scale), anchorX: ax, anchorY: ay };
 }
 

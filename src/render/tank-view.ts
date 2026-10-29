@@ -1,5 +1,5 @@
 import { BlurFilter, ColorMatrixFilter, Container, FederatedPointerEvent, Graphics, Sprite, Texture, TilingSprite } from 'pixi.js';
-import { crowdingRatio, waterLook, isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, personalitySpec, phenotype, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
+import { crowdingRatio, waterLook, isShrimpSpecies, FISH_SPECIES, PLANT_SPECIES, colorProgress, isGuarding, PARENTAL, growthStage, isCo2Injecting, isJuvenile, isLightOn, sexVisible, lookVariant, observeSymptoms, personalitySpec, phenotype, plantCover, plantPlacement, sizeRatio, tankSize, type Fish, type TankState, type TestKitReading } from '../sim';
 import { appearance, FishRig, type FishForm } from './fish-art';
 import { newToneFrame, PaintedRig, paintedArtVersion, femaleKey, paintedKey, paintedTexture, resolvePaintedKey } from './painted';
 import { SetupShow, type SetupStep } from './setup-show';
@@ -21,7 +21,7 @@ import { quantizeTone } from './tone';
 import { crowdLook, gaspsAtSurface, type CrowdLook } from './crowd-look';
 import { clampPan, fitCamera, maxSpan, zoomAt, type Camera } from './camera';
 import { type QualitySpec, qualitySpec } from './quality';
-import { causticsTexture, MOCKUP_PX_PER_CM, paintBackdrop, paintDriftwood, paintFront, paintPlant, paintVignette, rayTexture } from './scenery';
+import { causticsTexture, MOCKUP_PX_PER_CM, paintBackdrop, paintDriftwood, paintFront, paintPlant, paintVignette, rayTexture, reachesSurface } from './scenery';
 import type { GlApplication } from './gl-app';
 import { bellyScaleY, drawGravidSpot, HEAVY_ACTIVITY, HEAVY_HIDE, pregnancyStage, type PregnancyStage } from './pregnancy-look';
 
@@ -59,6 +59,14 @@ interface PlantView {
   seenBiomass: number;
   /** 早上報告說的那株草：草後面一圈暖黃的光（spotlight）。 */
   spotGlow?: Sprite;
+  /** 長太密（§13.3）：畫上去的是不是擠的樣子；crowd 是長到水面的程度 0–1（慢慢變）。 */
+  drawnCrowded: boolean;
+  crowd: number;
+  /** 長太密時貼在水面上的幾片葉子。 */
+  mat?: Graphics;
+  /** 剛修剪完（§13.3）：一圈清爽的淡綠光還剩幾秒。 */
+  freshT: number;
+  freshGlow?: Sprite;
 }
 
 /** 剪下來的插枝：往上飄、慢慢淡出（玩家把它撈起來）。 */
@@ -100,6 +108,10 @@ function tubeLabelTexture(text: string): Texture {
   return canvasTexture(canvas, false, scale);
 }
 const CUTTING_SECONDS = 2.6;
+/** 覆蓋率超過這個算長太密（polish-to-9.md §13.3）：草擠、有老葉、長到水面。 */
+const OVERGROWN_COVER = 0.8;
+/** 修剪完草變清爽：淡綠光持續的秒數。 */
+const FRESH_SECONDS = 2.4;
 /** 躲草的小魚鑽出草叢時閃一下的秒數（§12.2）。 */
 const FRY_FLASH = 0.45;
 /** 懷著夢想窩的母魚最遠游到哪個景深（0 最遠、1 最近）：不退到造景後面。 */
@@ -264,6 +276,8 @@ export class TankView {
   private plants = new Map<number, PlantView>();
   /** 蝦能爬的草（#273）：每格畫草時更新。 */
   private perches: Array<{ x: number; top: number }> = [];
+  /** 上一格看到的缸和它是不是長太密（判斷剛剪完，§13.3）。 */
+  private crowdSeen: { state: TankState; crowded: boolean } | null = null;
   /** 小魚能躲的草（§10.1）：前中後景的草都算，水平位置和葉子頂端的高度。 */
   private covers: Array<{ x: number; top: number }> = [];
   private food: FoodParticle[] = [];
@@ -623,7 +637,7 @@ export class TankView {
     if (this.reportSpot && (this.reportSpot.t += dt) > SPOT_SECONDS) this.reportSpot = null;
     this.syncFish(state, dt);
     this.drawParty(dt);
-    this.syncPlants(state);
+    this.syncPlants(state, dt);
     this.drawOps(dt);
     this.drawGear(state);
     this.animateLight(state, dt);
@@ -1162,6 +1176,13 @@ export class TankView {
       const sx = Math.round(left + (right - left - cw) * this.rand());
       const { canvas, ctx } = makeCanvas(cw, h);
       ctx.drawImage(src, sx, top, cw, h, 0, 0, cw, h);
+      // 切下來的邊淡出成橢圓，不要留方方的切口（長太密剪很大一段時特別明顯，§13.3）
+      const fade = ctx.createRadialGradient(cw / 2, h / 2, 0, cw / 2, h / 2, Math.max(cw, h) / 2);
+      fade.addColorStop(0.55, 'rgba(0,0,0,1)');
+      fade.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.fillStyle = fade;
+      ctx.fillRect(0, 0, cw, h);
       const s = new Sprite(canvasTexture(canvas));
       s.anchor.set(0.5, 1);
       const k = tall / h;
@@ -2081,10 +2102,15 @@ export class TankView {
     }
   }
 
-  private syncPlants(state: TankState): void {
+  private syncPlants(state: TankState, dt: number): void {
     const present = new Set(state.plants.map((p) => p.id));
+    // 長太密（§13.3）；同一缸從太密剪回來，整缸的草亮一下變清爽（換缸不算）
+    const crowded = plantCover(state) > OVERGROWN_COVER;
+    const trimmed = this.crowdSeen?.state === state && this.crowdSeen.crowded && !crowded;
+    this.crowdSeen = { state, crowded };
     for (const [id, view] of this.plants) {
       if (!present.has(id)) {
+        view.mat?.destroy();
         view.rig?.destroy();
         view.holder.destroy({ children: true });
         this.plants.delete(id);
@@ -2096,7 +2122,7 @@ export class TankView {
     for (const plant of state.plants) {
       let view = this.plants.get(plant.id);
       if (!view) {
-        view = { holder: new Container(), rig: null, drawnBiomass: -1, drawnAlgae: -1, drawnMelting: false, drawnRes: 0, seenBiomass: -1 };
+        view = { holder: new Container(), rig: null, drawnBiomass: -1, drawnAlgae: -1, drawnMelting: false, drawnRes: 0, seenBiomass: -1, drawnCrowded: crowded, crowd: crowded ? 1 : 0, freshT: 0 };
         this.plants.set(plant.id, view);
       }
       // 剛剪過：從目前的圖切下葉尖當插枝飄走（要在重畫、舊圖被銷毀之前）
@@ -2109,9 +2135,11 @@ export class TankView {
         view.drawnRes !== this.pixelRatio ||
         Math.abs(view.drawnBiomass - plant.biomassG) > 0.05 * Math.max(1, plant.biomassG) ||
         Math.abs(view.drawnAlgae - plant.leafAlgae) > 0.05 ||
-        view.drawnMelting !== melting
+        view.drawnMelting !== melting ||
+        view.drawnCrowded !== crowded
       ) {
-        const painting = paintPlant(plant, this.hs, Math.max(1, Math.min(this.pixelRatio, 2)));
+        const painting = paintPlant(plant, this.hs, Math.max(1, Math.min(this.pixelRatio, 2)), crowded);
+        view.drawnCrowded = crowded;
         view.rig?.destroy();
         view.rig = new PlantMesh(painting.texture, painting.anchorX, painting.anchorY);
         view.holder.addChild(view.rig.mesh);
@@ -2127,7 +2155,19 @@ export class TankView {
       if (view.holder.parent !== layer) layer.addChild(view.holder);
       const x = this.scape.dragX({ kind: 'plant', id: plant.id }) ?? this.bounds.width * place.x;
       view.holder.position.set(x, this.bounds.bottom + (14 + look.dy) * this.hs);
-      view.holder.scale.set(place.flip ? -look.scale : look.scale, look.scale);
+      // 長太密（§13.3）：莖草往上長到貼著水面；小榕、前景草、莫絲往旁邊擠。剪完慢慢縮回來
+      view.crowd += ((crowded ? 1 : 0) - view.crowd) * Math.min(1, dt * 0.8);
+      const surfaceY = this.bounds.surface + 4 * this.hs;
+      // 葉頂大約在貼圖高度的七成（上面留了搖擺的空間），拉到葉頂碰到水面
+      const leafH = Math.max(1, view.rig!.mesh.texture.height * 0.7) * look.scale;
+      const up = reachesSurface(plant.species);
+      const reach = up ? Math.min(2.4, Math.max(1, (view.holder.y - surfaceY) / leafH)) : 1.1;
+      const sy = 1 + (reach - 1) * view.crowd;
+      const sx = 1 + (up ? 0.12 : 0.25) * view.crowd;
+      view.holder.scale.set((place.flip ? -look.scale : look.scale) * sx, look.scale * sy);
+      if (up && view.crowd > 0.02) this.drawMat(view, layer, x, surfaceY, plant.id);
+      else if (view.mat) view.mat.visible = false;
+      if (trimmed) view.freshT = FRESH_SECONDS;
       // 蝦爬得到的高度：圖上面留了搖擺的空間，葉子大概到圖高的七成（後景的草被前景擋住，不爬）
       const stem = { x, top: view.holder.y - view.rig!.mesh.texture.height * look.scale * 0.7 };
       if (place.layer !== 'back') this.perches.push(stem);
@@ -2153,7 +2193,45 @@ export class TankView {
         view.spotGlow.height = tall * 1.3;
         view.spotGlow.alpha = spot;
       }
+      // 剛修剪完：整株後面一圈淡綠的光，慢慢退掉（§13.3：剪完明顯變清爽）
+      if (view.freshT > 0) {
+        view.freshT = Math.max(0, view.freshT - dt);
+        if (!view.freshGlow) {
+          view.freshGlow = new Sprite(softDotTexture());
+          view.freshGlow.anchor.set(0.5);
+          view.freshGlow.blendMode = 'add';
+          view.freshGlow.tint = 0xd6ffd8;
+          view.holder.addChildAt(view.freshGlow, 0);
+        }
+        const { mesh } = view.rig!;
+        const k = view.freshT / FRESH_SECONDS;
+        view.freshGlow.visible = true;
+        view.freshGlow.position.set(mesh.x + mesh.texture.width / 2, mesh.y + tall * 0.6);
+        view.freshGlow.width = mesh.texture.width * 1.6;
+        view.freshGlow.height = tall * 1.1;
+        view.freshGlow.alpha = 0.75 * k;
+      } else if (view.freshGlow) view.freshGlow.visible = false;
     }
+  }
+
+  /** 長太密的莖草貼在水面上的幾片葉子（§13.3），淡進淡出跟著 crowd。 */
+  private drawMat(view: PlantView, layer: Container, x: number, y: number, seed: number): void {
+    if (!view.mat) {
+      const g = new Graphics();
+      const hs = this.hs;
+      for (let i = 0; i < 7; i++) {
+        const dx = (((i * 0.618 + seed * 0.37) % 1) - 0.5) * 70 * hs;
+        const len = (10 + ((i * 7 + seed) % 5) * 2) * hs;
+        const c = i % 3 === 0 ? 0x8a9a3a : 0x3f8a3e;
+        g.ellipse(dx, ((i * 3) % 4) * hs, len, len * 0.28).fill({ color: c, alpha: 0.85 });
+        g.moveTo(dx - len * 0.8, ((i * 3) % 4) * hs).lineTo(dx + len * 0.8, ((i * 3) % 4) * hs).stroke({ color: 0x24522a, width: Math.max(0.6, 0.8 * hs), alpha: 0.5 });
+      }
+      view.mat = g;
+    }
+    if (view.mat.parent !== layer) layer.addChild(view.mat);
+    view.mat.visible = true;
+    view.mat.position.set(x + Math.sin(this.time * 0.7 + seed) * 2 * this.hs, y);
+    view.mat.alpha = view.crowd;
   }
 
 
